@@ -6,8 +6,8 @@ use cu29::logstream::{
     ContinuousDecoder, ContinuousReceiveEvent, ContinuousSenderConfig, CuStreamTx, CuStreamTxError,
     DensityThreshold, EncodingSymbolId, FecScheme, FecSymbolKind, Field, FiniteObjectDecoder,
     FiniteObjectLimits, FiniteObjectSenderConfig, Lane, LogStreamSenderConfig, ReceiverLimits,
-    RecordKind, RecoverySenderConfig, RlcConfig, StreamIdentity, WirePacket, decode_anchor,
-    decode_copperlist, decode_record, encode_record,
+    RecordKind, RecoverySenderConfig, RlcConfig, StreamIdentity, WirePacket, decode_copperlist,
+    decode_record, decode_recovery_point, encode_record,
 };
 use cu29::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -215,15 +215,15 @@ fn generated_runtime_streams_without_local_copperlist_logging() -> CuResult<()> 
         .map(|record| decode_record(record).unwrap())
         .find(|record| record.kind == RecordKind::KeyFrame)
         .expect("generated runtime should stream its keyframe");
-    let anchor = object_records
+    let recovery_point = object_records
         .iter()
         .map(|record| decode_record(record).unwrap())
-        .find(|record| record.kind == RecordKind::Anchor)
-        .map(|record| decode_anchor(record.payload).unwrap())
-        .expect("generated runtime should stream its anchor");
-    assert_eq!(anchor.copperlist_id, 0);
-    assert!(anchor.references_keyframe(keyframe));
-    assert!(anchor.references_manifest(decode_record(&manifest).unwrap()));
+        .find(|record| record.kind == RecordKind::RecoveryPoint)
+        .map(|record| decode_recovery_point(record.payload).unwrap())
+        .expect("generated runtime should stream its recovery point");
+    assert_eq!(recovery_point.copperlist_id, 0);
+    assert!(recovery_point.references_keyframe(keyframe));
+    assert!(recovery_point.references_manifest(decode_record(&manifest).unwrap()));
     Ok(())
 }
 
@@ -261,7 +261,7 @@ fn sender_config(identity: StreamIdentity) -> CuResult<LogStreamSenderConfig> {
                 repair_symbols_per_block: 8,
             },
             manifest_record: manifest.clone(),
-            anchor_interval: 1,
+            recovery_interval: 1,
         },
     })
 }

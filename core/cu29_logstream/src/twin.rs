@@ -138,7 +138,7 @@ enum Input<P: CopperListTuple> {
         identity: StreamIdentity,
         received_at: Instant,
     },
-    Anchor(KeyFrame),
+    RecoveryPoint(KeyFrame),
 }
 struct Work<P: CopperListTuple> {
     input: Input<P>,
@@ -154,8 +154,8 @@ struct Pending<P: CopperListTuple> {
 /// iteration; only successfully reconstructed results enter the UI ring.
 /// Payload verification is opt-in through `verify-reconstruction`.
 /// Storage bounds are `capacity` queued events, `capacity` pending captures,
-/// one pending anchor and one executing frame, in addition to the telemetry ring.
-/// Overflow invalidates replay until an admitted matching anchor, never archival.
+/// one pending recovery point and one executing frame, in addition to the telemetry ring.
+/// Overflow invalidates replay until an admitted matching recovery point, never archival.
 #[doc(hidden)]
 pub struct TwinWorker<P: CopperListTuple, S> {
     sender: Option<SyncSender<Work<P>>>,
@@ -194,7 +194,7 @@ impl<P: CaptureDataSet + Send + 'static, S: TwinReceiverStatus> TwinWorker<P, S>
                 let mut current_generation = 0;
                 let mut pending: std::collections::VecDeque<Pending<P>> =
                     std::collections::VecDeque::with_capacity(capacity.get());
-                let mut anchor: Option<KeyFrame> = None;
+                let mut recovery_point: Option<KeyFrame> = None;
                 let mut receiver_status = publisher.status();
                 loop {
                     if let Some(status) = pending_status.pop() {
@@ -204,7 +204,7 @@ impl<P: CaptureDataSet + Send + 'static, S: TwinReceiverStatus> TwinWorker<P, S>
                     if current_generation != latest_generation {
                         twin.recover();
                         pending.clear();
-                        anchor = None;
+                        recovery_point = None;
                         current_generation = latest_generation;
                     }
                     twin.status.queue_overflows = drops.load(Ordering::Relaxed);
@@ -215,7 +215,7 @@ impl<P: CaptureDataSet + Send + 'static, S: TwinReceiverStatus> TwinWorker<P, S>
                             if current_generation != latest {
                                 twin.recover();
                                 pending.clear();
-                                anchor = None;
+                                recovery_point = None;
                                 current_generation = latest;
                             }
                             if work.generation != current_generation {
@@ -238,18 +238,18 @@ impl<P: CaptureDataSet + Send + 'static, S: TwinReceiverStatus> TwinWorker<P, S>
                                         received_at,
                                     });
                                 }
-                                Input::Anchor(frame) => {
-                                    if anchor
+                                Input::RecoveryPoint(frame) => {
+                                    if recovery_point
                                         .as_ref()
                                         .is_none_or(|old| old.culistid < frame.culistid)
                                     {
-                                        anchor = Some(frame);
+                                        recovery_point = Some(frame);
                                     }
                                 }
                             }
                             while let Some(first) = pending.front() {
                                 if twin.next != Some(first.capture.copperlist.id) {
-                                    let Some(frame) = &anchor else {
+                                    let Some(frame) = &recovery_point else {
                                         break;
                                     };
                                     let Some(position) = pending.iter().position(|item| {
@@ -260,10 +260,10 @@ impl<P: CaptureDataSet + Send + 'static, S: TwinReceiverStatus> TwinWorker<P, S>
                                     pending.drain(..position);
                                 }
                                 let item = pending.pop_front().unwrap();
-                                let keyframe = if anchor.as_ref().is_some_and(|frame| {
+                                let keyframe = if recovery_point.as_ref().is_some_and(|frame| {
                                     frame.culistid == item.capture.copperlist.id
                                 }) {
-                                    anchor.take()
+                                    recovery_point.take()
                                 } else {
                                     None
                                 };
@@ -320,8 +320,8 @@ impl<P: CaptureDataSet + Send + 'static, S: TwinReceiverStatus> TwinWorker<P, S>
     ) -> crate::Result<()> {
         match event {
             crate::SessionEvent::Manifest(_) | crate::SessionEvent::Gap { .. } => self.recover(),
-            crate::SessionEvent::VerifiedAnchor { keyframe, .. } => {
-                self.anchor(crate::decode_keyframe(keyframe.decoded()?.payload)?)
+            crate::SessionEvent::VerifiedRecoveryPoint { keyframe, .. } => {
+                self.recovery_point(crate::decode_keyframe(keyframe.decoded()?.payload)?)
             }
             crate::SessionEvent::ContinuousRecord { identity, .. } => {
                 if let Some(capture) = capture {
@@ -345,10 +345,10 @@ impl<P: CaptureDataSet + Send + 'static, S: TwinReceiverStatus> TwinWorker<P, S>
             received_at,
         });
     }
-    /// Accept only keyframes from the session router's VerifiedAnchor event.
+    /// Accept only keyframes from the session router's VerifiedRecoveryPoint event.
     /// Control objects may arrive before or after their captured boundary.
-    pub fn anchor(&self, frame: KeyFrame) {
-        self.send(Input::Anchor(frame));
+    pub fn recovery_point(&self, frame: KeyFrame) {
+        self.send(Input::RecoveryPoint(frame));
     }
     fn send(&self, input: Input<P>) {
         let work = Work {

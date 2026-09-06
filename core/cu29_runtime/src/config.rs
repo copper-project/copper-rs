@@ -1514,7 +1514,8 @@ pub struct LogStreamDestinationConfig {
     pub transport: LogStreamTransportConfig,
     pub link: LogStreamLinkConfig,
     pub fec: LogStreamFecConfig,
-    pub content: LogStreamContentConfig,
+    /// Recovery interval in CopperLists; a nonzero multiple of logging.keyframe_interval.
+    pub recovery_interval: u32,
     pub max_record_bytes: u64,
 }
 
@@ -1582,14 +1583,6 @@ impl LogStreamRepairDensity {
 pub struct LogStreamObjectFecConfig {
     pub max_object_bytes: u64,
     pub repair_symbols_per_block: u32,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct LogStreamContentConfig {
-    pub archive: bool,
-    pub live_viz: bool,
-    pub anchor_interval: u32,
 }
 
 /// Declarative definition of a bridge component with a list of channels.
@@ -2420,20 +2413,13 @@ impl CuConfig {
                     destination.id
                 )));
             }
-            if destination.content.anchor_interval == 0
+            if destination.recovery_interval == 0
                 || !destination
-                    .content
-                    .anchor_interval
+                    .recovery_interval
                     .is_multiple_of(keyframe_interval)
             {
                 return Err(CuError::from(format!(
-                    "log_streaming destination '{}' anchor_interval must be a nonzero multiple of logging.keyframe_interval ({keyframe_interval})",
-                    destination.id
-                )));
-            }
-            if !destination.content.archive && !destination.content.live_viz {
-                return Err(CuError::from(format!(
-                    "log_streaming destination '{}' must enable archive or live_viz content",
+                    "log_streaming destination '{}' recovery_interval must be a nonzero multiple of logging.keyframe_interval ({keyframe_interval})",
                     destination.id
                 )));
             }
@@ -2566,7 +2552,7 @@ pub struct LoggingConfig {
     ///
     /// Without another generated keyframe consumer, this is a compile-time application
     /// property and `#[copper_runtime]` emits no capture calls when it is `false`.
-    /// A log-stream destination independently requests keyframe capture for anchors.
+    /// A log-stream destination independently requests keyframe capture for recovery points.
     #[serde(default = "default_as_true", skip_serializing_if = "Clone::clone")]
     pub enable_keyframe_logging: bool,
 
@@ -6499,11 +6485,7 @@ mod tests {
                                 repair_symbols_per_block: 8,
                             ),
                         ),
-                        content: (
-                            archive: true,
-                            live_viz: true,
-                            anchor_interval: 100,
-                        ),
+                        recovery_interval: 100,
                         max_record_bytes: 65536,
                     ),
                 ],
@@ -6555,7 +6537,7 @@ mod tests {
                             repair_symbols_per_block: 8,
                         ),
                     ),
-                    content: (archive: true, live_viz: false, anchor_interval: 100),
+                    recovery_interval: 100,
                     max_record_bytes: 65536,
                 )],
             ),

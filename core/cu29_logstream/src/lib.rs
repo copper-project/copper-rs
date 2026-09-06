@@ -55,9 +55,8 @@ pub use error::{Error, Result};
 #[cfg(feature = "std")]
 pub use manifest::new_session_id;
 pub use manifest::{
-    ApplicationOutputSchema, ApplicationSchema, LogStreamPlan, ResolvedContentPolicy,
-    ResolvedContinuousFec, ResolvedObjectFec, ResolvedRlcField, SESSION_MANIFEST_VERSION,
-    SessionManifest,
+    ApplicationOutputSchema, ApplicationSchema, LogStreamPlan, ResolvedContinuousFec,
+    ResolvedObjectFec, ResolvedRlcField, SESSION_MANIFEST_VERSION, SessionManifest,
 };
 pub use object::{
     FiniteObjectDecoder, FiniteObjectEncoder, FiniteObjectLimits, FiniteObjectRecoveryStats,
@@ -66,8 +65,8 @@ pub use object::{
 pub use pacing::{PacingConfig, RECOVERY_REPEAT_INTERVAL, SenderCore, SenderStats};
 pub use record::{DecodedRecord, RecordKind, decode_record, encode_record};
 pub use recovery::{
-    Anchor, decode_anchor, decode_keyframe, encode_anchor, encode_keyframe,
-    encode_keyframe_and_anchor,
+    RecoveryPoint, decode_keyframe, decode_recovery_point, encode_keyframe,
+    encode_keyframe_and_recovery_point, encode_recovery_point,
 };
 pub use rlc::{
     ContinuousDecoder, ContinuousEncoder, ContinuousReceiveEvent, ContinuousRecoveryStats,
@@ -78,7 +77,7 @@ pub use router::{SessionEvent, SessionRouter, SessionRouterLimits, SessionRouter
 pub use sender::{
     ContinuousCopperListSink, ContinuousSenderConfig, ContinuousSenderStats,
     DEFAULT_MAX_SYMBOL_SIZE, DEFAULT_MAX_WINDOW_SYMBOLS, DefaultContinuousCopperListSink,
-    KeyFrameAnchorSink, LogStreamSenderConfig, RecoverySenderConfig, RecoverySenderStats,
+    LogStreamSenderConfig, RecoveryPointSink, RecoverySenderConfig, RecoverySenderStats,
 };
 pub use stream::{
     CuFeedbackRx, CuFeedbackTx, CuStreamRx, CuStreamRxError, CuStreamTx, CuStreamTxError, OneWay,

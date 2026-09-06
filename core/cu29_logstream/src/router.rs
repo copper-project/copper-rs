@@ -12,7 +12,7 @@ pub struct SessionRouterLimits {
     pub max_sessions: usize,
     /// Per-session pre-manifest datagrams, each bounded by MAX_SYMBOL_SIZE + header.
     pub max_startup_packets: usize,
-    /// Completed keyframe/anchor records retained per session, in addition to FEC storage.
+    /// Completed keyframe/recovery point records retained per session, in addition to FEC storage.
     pub max_recovery_records: usize,
     pub max_pending_events: usize,
     pub max_record_bytes: usize,
@@ -34,10 +34,10 @@ pub struct SessionRouterStats {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SessionEvent {
     Manifest(SessionManifest),
-    /// Emitted only after the anchor, manifest and keyframe agree by digest and id.
-    VerifiedAnchor {
+    /// Emitted only after the recovery point, manifest and keyframe agree by digest and id.
+    VerifiedRecoveryPoint {
         identity: StreamIdentity,
-        anchor: crate::Anchor,
+        recovery_point: crate::RecoveryPoint,
         keyframe: RecoveredRecord,
     },
     ContinuousRecord {
@@ -78,7 +78,7 @@ struct RoutedSession<
     manifest_record: Option<RecoveredRecord>,
     startup: Vec<Vec<u8>>,
     recovery: Vec<RecoveredRecord>,
-    last_anchor: Option<u64>,
+    last_recovery_point: Option<u64>,
     delivered_record: bool,
     continuous: Option<ContinuousDecoder<MAX_SYMBOL_SIZE, MAX_WINDOW_SYMBOLS, MAX_EQUATIONS>>,
 }
@@ -197,7 +197,7 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
                     manifest_record: None,
                     startup: Vec::with_capacity(self.limits.max_startup_packets),
                     recovery: Vec::with_capacity(self.limits.max_recovery_records),
-                    last_anchor: None,
+                    last_recovery_point: None,
                     delivered_record: false,
                     continuous: None,
                 });
@@ -251,7 +251,9 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
                                 }
                             }
                             ContinuousReceiveEvent::Gap(mut gap) => {
-                                if !session.delivered_record && session.last_anchor.is_none() {
+                                if !session.delivered_record
+                                    && session.last_recovery_point.is_none()
+                                {
                                     gap.reason = crate::GapReason::LateJoin;
                                 }
                                 SessionEvent::Gap {
@@ -327,14 +329,14 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
                     crate::RecordKind::KeyFrame => {
                         crate::decode_keyframe(decoded.payload)?;
                     }
-                    crate::RecordKind::Anchor => {
-                        crate::decode_anchor(decoded.payload)?;
+                    crate::RecordKind::RecoveryPoint => {
+                        crate::decode_recovery_point(decoded.payload)?;
                     }
                     _ => {}
                 }
                 if matches!(
                     decoded.kind,
-                    crate::RecordKind::KeyFrame | crate::RecordKind::Anchor
+                    crate::RecordKind::KeyFrame | crate::RecordKind::RecoveryPoint
                 ) {
                     if session.recovery.len() == self.limits.max_recovery_records {
                         session.recovery.remove(0);
@@ -375,7 +377,7 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
                         }
                     }
                     ContinuousReceiveEvent::Gap(mut gap) => {
-                        if !*delivered && session.last_anchor.is_none() {
+                        if !*delivered && session.last_recovery_point.is_none() {
                             gap.reason = crate::GapReason::LateJoin;
                         }
                         SessionEvent::Gap {
@@ -399,63 +401,64 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
         let mut candidate = None;
         for record in &session.recovery {
             let decoded = record.decoded()?;
-            if decoded.kind != crate::RecordKind::Anchor {
+            if decoded.kind != crate::RecordKind::RecoveryPoint {
                 continue;
             }
-            let anchor = crate::decode_anchor(decoded.payload)?;
-            if anchor.copperlist_id != decoded.object_id
-                || !anchor.references_manifest(manifest.decoded()?)
+            let recovery_point = crate::decode_recovery_point(decoded.payload)?;
+            if recovery_point.copperlist_id != decoded.object_id
+                || !recovery_point.references_manifest(manifest.decoded()?)
                 || session
-                    .last_anchor
-                    .is_some_and(|last| anchor.copperlist_id <= last)
+                    .last_recovery_point
+                    .is_some_and(|last| recovery_point.copperlist_id <= last)
             {
                 continue;
             }
             for keyframe in &session.recovery {
                 let decoded = keyframe.decoded()?;
-                if anchor.references_keyframe(decoded)
-                    && crate::decode_keyframe(decoded.payload)?.culistid == anchor.copperlist_id
+                if recovery_point.references_keyframe(decoded)
+                    && crate::decode_keyframe(decoded.payload)?.culistid
+                        == recovery_point.copperlist_id
                     && candidate.as_ref().is_none_or(
-                        |(previous, _): &(crate::Anchor, RecoveredRecord)| {
-                            previous.copperlist_id < anchor.copperlist_id
+                        |(previous, _): &(crate::RecoveryPoint, RecoveredRecord)| {
+                            previous.copperlist_id < recovery_point.copperlist_id
                         },
                     )
                 {
-                    candidate = Some((anchor.clone(), keyframe.clone()));
+                    candidate = Some((recovery_point.clone(), keyframe.clone()));
                 }
             }
         }
-        let Some((anchor, keyframe)) = candidate else {
+        let Some((recovery_point, keyframe)) = candidate else {
             return Ok(());
         };
         let decoder = session.continuous.as_mut().expect("manifest accepted");
         let next = decoder.next_object_id();
-        let needed = 1 + usize::from(anchor.copperlist_id > next);
+        let needed = 1 + usize::from(recovery_point.copperlist_id > next);
         if self.pending.len() + needed > self.limits.max_pending_events {
             return Err(Error::TooManyRecords {
                 actual: self.pending.len() + needed,
                 maximum: self.limits.max_pending_events,
             });
         }
-        if anchor.copperlist_id > next {
+        if recovery_point.copperlist_id > next {
             self.pending.push(SessionEvent::Gap {
                 identity: session.identity,
                 gap: crate::CopperListGap {
                     first_id: next,
-                    last_id: anchor.copperlist_id - 1,
+                    last_id: recovery_point.copperlist_id - 1,
                     reason: if session.delivered_record {
-                        crate::GapReason::AnchorRecovery
+                        crate::GapReason::RecoveryPoint
                     } else {
                         crate::GapReason::LateJoin
                     },
                 },
             });
-            decoder.resume_at(anchor.copperlist_id);
+            decoder.resume_at(recovery_point.copperlist_id);
         }
-        session.last_anchor = Some(anchor.copperlist_id);
-        self.pending.push(SessionEvent::VerifiedAnchor {
+        session.last_recovery_point = Some(recovery_point.copperlist_id);
+        self.pending.push(SessionEvent::VerifiedRecoveryPoint {
             identity: session.identity,
-            anchor,
+            recovery_point,
             keyframe,
         });
         Ok(())

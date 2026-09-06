@@ -312,7 +312,7 @@ where
     }
 
     fn nearest_keyframe(&self, target_culistid: u64) -> Option<KeyFrame> {
-        nearest_replay_anchor(&self.keyframes, target_culistid)
+        nearest_replay_keyframe(&self.keyframes, target_culistid)
     }
 
     fn restore_keyframe(&mut self, kf: &KeyFrame) -> CuResult<()> {
@@ -1126,7 +1126,7 @@ where
     Ok((sections, keyframes, total_entries))
 }
 
-fn nearest_replay_anchor(keyframes: &[KeyFrame], target_culistid: u64) -> Option<KeyFrame> {
+fn nearest_replay_keyframe(keyframes: &[KeyFrame], target_culistid: u64) -> Option<KeyFrame> {
     keyframes
         .iter()
         .filter(|kf| kf.culistid <= target_culistid)
@@ -1147,21 +1147,21 @@ mod tests {
     }
 
     #[test]
-    fn replay_anchor_selects_nearest_keyframe_at_or_before_target() {
+    fn replay_keyframe_selects_nearest_keyframe_at_or_before_target() {
         let keyframes = [keyframe(0), keyframe(100), keyframe(500)];
 
-        let anchor = nearest_replay_anchor(&keyframes, 533).expect("replay anchor");
+        let keyframe = nearest_replay_keyframe(&keyframes, 533).expect("replay keyframe");
 
-        assert_eq!(anchor.culistid, 500);
+        assert_eq!(keyframe.culistid, 500);
     }
 
     #[test]
-    fn replay_anchor_uses_nearest_available_nonzero_keyframe() {
+    fn replay_keyframe_uses_nearest_available_nonzero_keyframe() {
         let keyframes = [keyframe(100), keyframe(500), keyframe(900)];
 
-        let anchor = nearest_replay_anchor(&keyframes, 533).expect("replay anchor");
+        let keyframe = nearest_replay_keyframe(&keyframes, 533).expect("replay keyframe");
 
-        assert_eq!(anchor.culistid, 500);
-        assert!(nearest_replay_anchor(&keyframes, 99).is_none());
+        assert_eq!(keyframe.culistid, 500);
+        assert!(nearest_replay_keyframe(&keyframes, 99).is_none());
     }
 }

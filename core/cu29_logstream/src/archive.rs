@@ -83,9 +83,9 @@ impl<P: CopperListTuple> NativeArchive<P> {
         if manifest.version != crate::SESSION_MANIFEST_VERSION {
             return Err(Error::UnsupportedManifestVersion(manifest.version));
         }
-        if manifest.application_schema != expected_schema || !manifest.plan.content.archive {
+        if manifest.application_schema != expected_schema {
             return Err(Error::InvalidConfig(
-                "archive requires the matching application schema and archive content policy",
+                "archive requires the matching application schema",
             ));
         }
         if section_bytes == 0 || section_bytes > slab_bytes {
@@ -135,7 +135,7 @@ impl<P: CopperListTuple> NativeArchive<P> {
 
     /// Validates a typed CopperList once, appends its original canonical bytes,
     /// and returns the typed value for an in-process consumer. Keyframes are
-    /// archived only after the router has verified their anchor references.
+    /// archived only after the router has verified their recovery point references.
     pub fn accept(&mut self, event: &SessionEvent) -> Result<Option<CopperList<P>>> {
         self.accept_capture(event)
             .map(|capture| capture.map(|c| c.copperlist))
@@ -160,7 +160,7 @@ impl<P: CopperListTuple> NativeArchive<P> {
             SessionEvent::ContinuousRecord { identity, .. }
             | SessionEvent::Gap { identity, .. }
             | SessionEvent::Object { identity, .. }
-            | SessionEvent::VerifiedAnchor { identity, .. } => *identity,
+            | SessionEvent::VerifiedRecoveryPoint { identity, .. } => *identity,
         };
         if identity != self.identity {
             return Err(Error::InconsistentObject);
@@ -203,7 +203,7 @@ impl<P: CopperListTuple> NativeArchive<P> {
                     crate::GapReason::RlcWindowExpired => SourceGapReason::RlcWindowExpired,
                     crate::GapReason::SessionEnded => SourceGapReason::SessionEnded,
                     crate::GapReason::LateJoin => SourceGapReason::LateJoin,
-                    crate::GapReason::AnchorRecovery => SourceGapReason::AnchorRecovery,
+                    crate::GapReason::RecoveryPoint => SourceGapReason::RecoveryPoint,
                 };
                 self.continuity
                     .log(&StreamContinuityRecord::Gap {
@@ -214,14 +214,17 @@ impl<P: CopperListTuple> NativeArchive<P> {
                     .map_err(io_error)?;
                 self.next_id = next;
             }
-            SessionEvent::VerifiedAnchor {
-                anchor, keyframe, ..
+            SessionEvent::VerifiedRecoveryPoint {
+                recovery_point,
+                keyframe,
+                ..
             } => {
                 let decoded = keyframe.decoded()?;
                 let manifest_record = self.manifest.encode_record()?;
-                if !anchor.references_manifest(crate::decode_record(&manifest_record)?)
-                    || !anchor.references_keyframe(decoded)
-                    || crate::decode_keyframe(decoded.payload)?.culistid != anchor.copperlist_id
+                if !recovery_point.references_manifest(crate::decode_record(&manifest_record)?)
+                    || !recovery_point.references_keyframe(decoded)
+                    || crate::decode_keyframe(decoded.payload)?.culistid
+                        != recovery_point.copperlist_id
                 {
                     return Err(Error::InconsistentObject);
                 }
@@ -229,13 +232,13 @@ impl<P: CopperListTuple> NativeArchive<P> {
                     .log(&CanonicalEntry(decoded.payload))
                     .map_err(io_error)?;
                 let record = crate::encode_record(
-                    RecordKind::Anchor,
-                    anchor.copperlist_id,
-                    &crate::encode_anchor(anchor)?,
+                    RecordKind::RecoveryPoint,
+                    recovery_point.copperlist_id,
+                    &crate::encode_recovery_point(recovery_point)?,
                 )?;
                 self.continuity
-                    .log(&StreamContinuityRecord::Anchor {
-                        copperlist_id: anchor.copperlist_id,
+                    .log(&StreamContinuityRecord::RecoveryPoint {
+                        copperlist_id: recovery_point.copperlist_id,
                         record,
                     })
                     .map_err(io_error)?;

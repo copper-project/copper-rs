@@ -120,7 +120,7 @@ fn main() -> CuResult<()> {
             .find(|k| k.culistid == capture.copperlist.id);
         let list = twin
             .reconstruct(capture, keyframe)?
-            .ok_or_else(|| CuError::from("Missing replay anchor"))?;
+            .ok_or_else(|| CuError::from("Missing replay keyframe"))?;
         if let Some(keyframe) = keyframe {
             states.log(keyframe)?;
         }

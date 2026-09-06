@@ -37,11 +37,7 @@
                         repair_symbols_per_block: 8,
                     ),
                 ),
-                content: (
-                    archive: true,
-                    live_viz: true,
-                    anchor_interval: 100,
-                ),
+                recovery_interval: 100,
                 max_record_bytes: 65536,
             ),
         ],

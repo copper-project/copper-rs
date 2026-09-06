@@ -341,21 +341,17 @@ pub cu29_runtime::config::IncludesConfig::when: core::option::Option<cu29_runtim
 pub struct cu29_runtime::config::InstanceConfigSetOperation
 pub cu29_runtime::config::InstanceConfigSetOperation::path: alloc::string::String
 pub cu29_runtime::config::InstanceConfigSetOperation::value: cu29_runtime::config::ComponentConfig
-pub struct cu29_runtime::config::LogStreamContentConfig
-pub cu29_runtime::config::LogStreamContentConfig::anchor_interval: u32
-pub cu29_runtime::config::LogStreamContentConfig::archive: bool
-pub cu29_runtime::config::LogStreamContentConfig::live_viz: bool
 pub struct cu29_runtime::config::LogStreamContinuousFecConfig
 pub cu29_runtime::config::LogStreamContinuousFecConfig::field: cu29_runtime::config::LogStreamRlcField
 pub cu29_runtime::config::LogStreamContinuousFecConfig::repair_density: cu29_runtime::config::LogStreamRepairDensity
 pub cu29_runtime::config::LogStreamContinuousFecConfig::repair_every_source_symbols: u16
 pub cu29_runtime::config::LogStreamContinuousFecConfig::window_symbols: u16
 pub struct cu29_runtime::config::LogStreamDestinationConfig
-pub cu29_runtime::config::LogStreamDestinationConfig::content: cu29_runtime::config::LogStreamContentConfig
 pub cu29_runtime::config::LogStreamDestinationConfig::fec: cu29_runtime::config::LogStreamFecConfig
 pub cu29_runtime::config::LogStreamDestinationConfig::id: alloc::string::String
 pub cu29_runtime::config::LogStreamDestinationConfig::link: cu29_runtime::config::LogStreamLinkConfig
 pub cu29_runtime::config::LogStreamDestinationConfig::max_record_bytes: u64
+pub cu29_runtime::config::LogStreamDestinationConfig::recovery_interval: u32
 pub cu29_runtime::config::LogStreamDestinationConfig::transport: cu29_runtime::config::LogStreamTransportConfig
 pub struct cu29_runtime::config::LogStreamFecConfig
 pub cu29_runtime::config::LogStreamFecConfig::continuous: cu29_runtime::config::LogStreamContinuousFecConfig
@@ -624,8 +620,8 @@ pub fn cu29_runtime::context::CuContextBuilder::instance_id(self, instance_id: u
 pub fn cu29_runtime::context::CuContextBuilder::task_ids(self, task_ids: &'static [&'static str]) -> Self
 pub mod cu29_runtime::continuity
 pub enum cu29_runtime::continuity::SourceGapReason
-pub cu29_runtime::continuity::SourceGapReason::AnchorRecovery
 pub cu29_runtime::continuity::SourceGapReason::LateJoin
+pub cu29_runtime::continuity::SourceGapReason::RecoveryPoint
 pub cu29_runtime::continuity::SourceGapReason::RlcWindowExpired
 pub cu29_runtime::continuity::SourceGapReason::SessionEnded
 impl cu_bincode::enc::Encode for cu29_runtime::continuity::SourceGapReason
@@ -635,9 +631,6 @@ pub fn cu29_runtime::continuity::SourceGapReason::borrow_decode<__D: cu_bincode:
 impl<__Context> cu_bincode::de::Decode<__Context> for cu29_runtime::continuity::SourceGapReason
 pub fn cu29_runtime::continuity::SourceGapReason::decode<__D: cu_bincode::de::Decoder<Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
 pub enum cu29_runtime::continuity::StreamContinuityRecord
-pub cu29_runtime::continuity::StreamContinuityRecord::Anchor
-pub cu29_runtime::continuity::StreamContinuityRecord::Anchor::copperlist_id: u64
-pub cu29_runtime::continuity::StreamContinuityRecord::Anchor::record: alloc::vec::Vec<u8>
 pub cu29_runtime::continuity::StreamContinuityRecord::Finished
 pub cu29_runtime::continuity::StreamContinuityRecord::Finished::next_copperlist_id: u64
 pub cu29_runtime::continuity::StreamContinuityRecord::Gap
@@ -646,6 +639,9 @@ pub cu29_runtime::continuity::StreamContinuityRecord::Gap::last_id: u64
 pub cu29_runtime::continuity::StreamContinuityRecord::Gap::reason: cu29_runtime::continuity::SourceGapReason
 pub cu29_runtime::continuity::StreamContinuityRecord::Manifest
 pub cu29_runtime::continuity::StreamContinuityRecord::Manifest::record: alloc::vec::Vec<u8>
+pub cu29_runtime::continuity::StreamContinuityRecord::RecoveryPoint
+pub cu29_runtime::continuity::StreamContinuityRecord::RecoveryPoint::copperlist_id: u64
+pub cu29_runtime::continuity::StreamContinuityRecord::RecoveryPoint::record: alloc::vec::Vec<u8>
 impl cu_bincode::enc::Encode for cu29_runtime::continuity::StreamContinuityRecord
 pub fn cu29_runtime::continuity::StreamContinuityRecord::encode<__E: cu_bincode::enc::Encoder>(&self, encoder: &mut __E) -> core::result::Result<(), cu_bincode::error::EncodeError>
 impl<'__de, __Context> cu_bincode::de::BorrowDecode<'__de, __Context> for cu29_runtime::continuity::StreamContinuityRecord

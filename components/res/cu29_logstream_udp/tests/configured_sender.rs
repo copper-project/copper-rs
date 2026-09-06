@@ -88,11 +88,11 @@ fn configured_runtime_bootstraps_over_udp_in_actual_arrival_order() -> CuResult<
     );
     let mut archive: Option<cu29_logstream::NativeArchive<default::CuStampedDataSet>> = None;
     let mut expected_payloads = Vec::new();
-    let mut verified_anchor_seen = false;
+    let mut verified_recovery_point_seen = false;
     let mut ids = Vec::new();
     let mut manifest_seen = false;
     let mut keyframe_seen = false;
-    let mut anchor_seen = false;
+    let mut recovery_point_seen = false;
     let mut gaps = Vec::new();
     let mut emit = |event| {
         if let SessionEvent::Manifest(manifest) = &event {
@@ -153,11 +153,11 @@ fn configured_runtime_bootstraps_over_udp_in_actual_arrival_order() -> CuResult<
             }
             SessionEvent::Object { record, .. } => match record.decoded().unwrap().kind {
                 RecordKind::KeyFrame => keyframe_seen = true,
-                RecordKind::Anchor => anchor_seen = true,
+                RecordKind::RecoveryPoint => recovery_point_seen = true,
                 _ => {}
             },
             SessionEvent::Gap { gap, .. } => gaps.push(gap),
-            SessionEvent::VerifiedAnchor { .. } => verified_anchor_seen = true,
+            SessionEvent::VerifiedRecoveryPoint { .. } => verified_recovery_point_seen = true,
         }
         Ok::<(), core::convert::Infallible>(())
     };
@@ -199,8 +199,10 @@ fn configured_runtime_bootstraps_over_udp_in_actual_arrival_order() -> CuResult<
                 if source_received && let Some(bootstrap) = bootstrap.as_mut() {
                     bootstrap
                         .receive_datagram(&packet[..len], |event| {
-                            if let SessionEvent::VerifiedAnchor { anchor, .. } = event {
-                                recovery_received |= anchor.copperlist_id >= id;
+                            if let SessionEvent::VerifiedRecoveryPoint { recovery_point, .. } =
+                                event
+                            {
+                                recovery_received |= recovery_point.copperlist_id >= id;
                             }
                             Ok::<(), core::convert::Infallible>(())
                         })
@@ -227,10 +229,10 @@ fn configured_runtime_bootstraps_over_udp_in_actual_arrival_order() -> CuResult<
         }
     }
 
-    assert!(manifest_seen && keyframe_seen && anchor_seen);
+    assert!(manifest_seen && keyframe_seen && recovery_point_seen);
     assert_eq!(router.stats().sessions_discovered, 1);
     assert_eq!(router.stats().malformed_datagrams, 0);
-    assert!(verified_anchor_seen);
+    assert!(verified_recovery_point_seen);
     let source_ids: std::collections::BTreeSet<_> = traffic
         .iter()
         .filter_map(|packet| {

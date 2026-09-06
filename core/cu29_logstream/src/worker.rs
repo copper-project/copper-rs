@@ -230,7 +230,7 @@ where
     } else {
         clock.clone()
     };
-    let interval = config.recovery.anchor_interval;
+    let interval = config.recovery.recovery_interval;
     let drain_time = config.pacing.max_latency;
     let mut core = SenderCore::new(config, clock.now(), reserved)
         .map_err(|error| CuError::from(error.to_string()))?;

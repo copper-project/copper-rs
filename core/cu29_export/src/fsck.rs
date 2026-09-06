@@ -410,11 +410,13 @@ where
                                     last_id,
                                     reason,
                                 } => println!("Source gap {first_id}..={last_id}: {reason:?}"),
-                                cu29::continuity::StreamContinuityRecord::Anchor {
+                                cu29::continuity::StreamContinuityRecord::RecoveryPoint {
                                     copperlist_id,
                                     ..
                                 } => {
-                                    println!("Verified stream anchor at CopperList {copperlist_id}")
+                                    println!(
+                                        "Verified stream recovery point at CopperList {copperlist_id}"
+                                    )
                                 }
                                 _ => {}
                             }
