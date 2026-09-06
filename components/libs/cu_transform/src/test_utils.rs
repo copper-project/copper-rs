@@ -28,12 +28,12 @@ where
     let zero = T::zero();
     let one = T::one();
 
-    // Note: glam uses column-major order, so translation is in the last row
+    // Note: matrices are row-major, so translation is in the last column
     Transform3D::from_matrix([
-        [one, zero, zero, zero],
-        [zero, one, zero, zero],
-        [zero, zero, one, zero],
-        [x, y, z, one],
+        [one, zero, zero, x],
+        [zero, one, zero, y],
+        [zero, zero, one, z],
+        [zero, zero, zero, one],
     ])
 }
 
@@ -53,10 +53,10 @@ where
     let one = T::one();
     let neg_one = -one;
 
-    // Note: glam uses column-major order
+    // Note: matrices are row-major (R(z, 90°) = [[0, -1, 0], [1, 0, 0], [0, 0, 1]])
     Transform3D::from_matrix([
-        [zero, one, zero, zero],
-        [neg_one, zero, zero, zero],
+        [zero, neg_one, zero, zero],
+        [one, zero, zero, zero],
         [zero, zero, one, zero],
         [zero, zero, zero, one],
     ])
@@ -68,8 +68,8 @@ where
     T: Copy + std::fmt::Debug + Default + 'static,
 {
     let mat = transform.to_matrix();
-    // Note: glam uses column-major order, so translation is in the last row
-    (mat[3][0], mat[3][1], mat[3][2])
+    // Note: matrices are row-major, so translation is in the last column
+    (mat[0][3], mat[1][3], mat[2][3])
 }
 
 /// Set translation components on a transform
@@ -79,9 +79,9 @@ where
     T: Copy + std::fmt::Debug + Default + 'static,
 {
     let mut mat = transform.to_matrix();
-    // Note: glam uses column-major order, so translation is in the last row
-    mat[3][0] = x;
-    mat[3][1] = y;
-    mat[3][2] = z;
+    // Note: matrices are row-major, so translation is in the last column
+    mat[0][3] = x;
+    mat[1][3] = y;
+    mat[2][3] = z;
     *transform = Transform3D::from_matrix(mat);
 }

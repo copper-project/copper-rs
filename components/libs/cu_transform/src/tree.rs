@@ -794,10 +794,10 @@ mod tests {
         let mut tree = TransformTree::<f32>::new();
 
         let matrix = [
-            [1.0, 0.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0, 0.0],
-            [0.0, 0.0, 1.0, 0.0],
-            [2.0, 3.0, 4.0, 1.0],
+            [1.0, 0.0, 0.0, 2.0],
+            [0.0, 1.0, 0.0, 3.0],
+            [0.0, 0.0, 1.0, 4.0],
+            [0.0, 0.0, 0.0, 1.0],
         ];
         let tf = make_stamped(
             "world",
@@ -835,10 +835,10 @@ mod tests {
             "base",
             ts,
             Transform3D::from_matrix([
-                [1.0, 0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0, 1.0],
                 [0.0, 1.0, 0.0, 0.0],
                 [0.0, 0.0, 1.0, 0.0],
-                [1.0, 0.0, 0.0, 1.0],
+                [0.0, 0.0, 0.0, 1.0],
             ]),
         );
 
@@ -847,8 +847,8 @@ mod tests {
             "arm",
             ts,
             Transform3D::from_matrix([
-                [0.0, 1.0, 0.0, 0.0],
-                [-1.0, 0.0, 0.0, 0.0],
+                [0.0, -1.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0, 0.0],
                 [0.0, 0.0, 1.0, 0.0],
                 [0.0, 0.0, 0.0, 1.0],
             ]),
@@ -860,9 +860,9 @@ mod tests {
             ts,
             Transform3D::from_matrix([
                 [1.0, 0.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 2.0],
                 [0.0, 0.0, 1.0, 0.0],
-                [0.0, 2.0, 0.0, 1.0],
+                [0.0, 0.0, 0.0, 1.0],
             ]),
         );
 
@@ -878,8 +878,8 @@ mod tests {
 
         let mat = transform.to_matrix();
         assert_approx_eq(mat[0][0], 0.0, epsilon, "mat_0_0");
-        assert_approx_eq(mat[1][0], -1.0, epsilon, "mat_1_0");
-        assert_approx_eq(mat[0][1], 1.0, epsilon, "mat_0_1");
+        assert_approx_eq(mat[1][0], 1.0, epsilon, "mat_1_0");
+        assert_approx_eq(mat[0][1], -1.0, epsilon, "mat_0_1");
         assert_approx_eq(mat[1][1], 0.0, epsilon, "mat_1_1");
 
         assert_approx_eq(get_translation(&transform).0, 0.0, epsilon, "translation_x");
@@ -904,8 +904,8 @@ mod tests {
             .lookup_transform("gripper", "world", ts, &clock)
             .unwrap();
         let inv_mat = inverse.to_matrix();
-        assert_approx_eq(inv_mat[1][0], 1.0, epsilon, "inv_mat_1_0");
-        assert_approx_eq(inv_mat[0][1], -1.0, epsilon, "inv_mat_0_1");
+        assert_approx_eq(inv_mat[1][0], -1.0, epsilon, "inv_mat_1_0");
+        assert_approx_eq(inv_mat[0][1], 1.0, epsilon, "inv_mat_0_1");
         assert_approx_eq(get_translation(&inverse).0, -3.0, epsilon, "translation_x");
         assert_approx_eq(get_translation(&inverse).1, 0.0, epsilon, "translation_y");
 
@@ -933,10 +933,10 @@ mod tests {
             "b",
             ts,
             Transform3D::from_matrix([
-                [1.0, 0.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0, 0.0],
-                [0.0, 0.0, 1.0, 0.0],
-                [1.0, 2.0, 3.0, 1.0],
+                [1.0, 0.0, 0.0, 1.0],
+                [0.0, 1.0, 0.0, 2.0],
+                [0.0, 0.0, 1.0, 3.0],
+                [0.0, 0.0, 0.0, 1.0],
             ]),
         );
 
@@ -970,10 +970,10 @@ mod tests {
             "robot",
             ts,
             Transform3D::from_matrix([
-                [1.0, 0.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0, 0.0],
-                [0.0, 0.0, 1.0, 0.0],
-                [1.0, 2.0, 3.0, 1.0],
+                [1.0, 0.0, 0.0, 1.0],
+                [0.0, 1.0, 0.0, 2.0],
+                [0.0, 0.0, 1.0, 3.0],
+                [0.0, 0.0, 0.0, 1.0],
             ]),
         );
 
@@ -982,10 +982,10 @@ mod tests {
             "camera",
             ts,
             Transform3D::from_matrix([
-                [0.0, 1.0, 0.0, 0.0],
-                [-1.0, 0.0, 0.0, 0.0],
-                [0.0, 0.0, 1.0, 0.0],
-                [0.5, 0.0, 0.2, 1.0],
+                [0.0, -1.0, 0.0, 0.5],
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.2],
+                [0.0, 0.0, 0.0, 1.0],
             ]),
         );
 
@@ -1000,8 +1000,8 @@ mod tests {
 
         let mat = transform.to_matrix();
         assert_approx_eq(mat[0][0], 0.0, epsilon, "mat_0_0");
-        assert_approx_eq(mat[1][0], -1.0, epsilon, "mat_1_0");
-        assert_approx_eq(mat[0][1], 1.0, epsilon, "mat_0_1");
+        assert_approx_eq(mat[1][0], 1.0, epsilon, "mat_1_0");
+        assert_approx_eq(mat[0][1], -1.0, epsilon, "mat_0_1");
         assert_approx_eq(mat[1][1], 0.0, epsilon, "mat_1_1");
 
         assert_approx_eq(
@@ -1047,10 +1047,10 @@ mod tests {
             "base",
             CuTime::from_nanos(2_000_000_000),
             Transform3D::from_matrix([
-                [1.0, 0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0, 1.0],
                 [0.0, 1.0, 0.0, 0.0],
                 [0.0, 0.0, 1.0, 0.0],
-                [1.0, 0.0, 0.0, 1.0],
+                [0.0, 0.0, 0.0, 1.0],
             ]),
         );
 
@@ -1072,9 +1072,9 @@ mod tests {
             CuTime::from_nanos(2_000_000_000),
             Transform3D::from_matrix([
                 [1.0, 0.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 2.0],
                 [0.0, 0.0, 1.0, 0.0],
-                [0.0, 2.0, 0.0, 1.0],
+                [0.0, 0.0, 0.0, 1.0],
             ]),
         );
 
@@ -1119,10 +1119,10 @@ mod tests {
             "sensor",
             ts1,
             Transform3D::from_matrix([
-                [0.0, 1.0, 0.0, 0.0],
-                [-1.0, 0.0, 0.0, 0.0],
+                [0.0, -1.0, 0.0, 1.0],
+                [1.0, 0.0, 0.0, 0.0],
                 [0.0, 0.0, 1.0, 0.0],
-                [1.0, 0.0, 0.0, 1.0],
+                [0.0, 0.0, 0.0, 1.0],
             ]),
         );
 
@@ -1131,10 +1131,10 @@ mod tests {
             "base",
             ts2,
             Transform3D::from_matrix([
-                [1.0, 0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0, 1.0],
                 [0.0, 1.0, 0.0, 0.0],
                 [0.0, 0.0, 1.0, 0.0],
-                [1.0, 0.0, 0.0, 1.0],
+                [0.0, 0.0, 0.0, 1.0],
             ]),
         );
 
@@ -1143,10 +1143,10 @@ mod tests {
             "sensor",
             ts2,
             Transform3D::from_matrix([
-                [0.0, 1.0, 0.0, 0.0],
-                [-1.0, 0.0, 0.0, 0.0],
+                [0.0, -1.0, 0.0, 1.0],
+                [1.0, 0.0, 0.0, 0.0],
                 [0.0, 0.0, 1.0, 0.0],
-                [1.0, 0.0, 0.0, 1.0],
+                [0.0, 0.0, 0.0, 1.0],
             ]),
         );
 
@@ -1197,8 +1197,8 @@ mod tests {
             "base",
             ts2,
             Transform3D::from_matrix([
-                [0.0, 1.0, 0.0, 0.0],
-                [-1.0, 0.0, 0.0, 0.0],
+                [0.0, -1.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0, 0.0],
                 [0.0, 0.0, 1.0, 0.0],
                 [0.0, 0.0, 0.0, 1.0],
             ]),
@@ -1209,10 +1209,10 @@ mod tests {
             "sensor",
             ts1,
             Transform3D::from_matrix([
-                [1.0, 0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0, 1.0],
                 [0.0, 1.0, 0.0, 0.0],
                 [0.0, 0.0, 1.0, 0.0],
-                [1.0, 0.0, 0.0, 1.0],
+                [0.0, 0.0, 0.0, 1.0],
             ]),
         );
 
@@ -1221,10 +1221,10 @@ mod tests {
             "sensor",
             ts2,
             Transform3D::from_matrix([
-                [1.0, 0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0, 1.0],
                 [0.0, 1.0, 0.0, 0.0],
                 [0.0, 0.0, 1.0, 0.0],
-                [1.0, 0.0, 0.0, 1.0],
+                [0.0, 0.0, 0.0, 1.0],
             ]),
         );
 
@@ -1241,7 +1241,7 @@ mod tests {
         let epsilon = 0.1;
         assert_approx_eq(vel.angular[0], 0.0, epsilon, "angular_velocity_0");
         assert_approx_eq(vel.angular[1], 0.0, epsilon, "angular_velocity_1");
-        assert_approx_eq(vel.angular[2], -1.0, epsilon, "angular_velocity_2");
+        assert_approx_eq(vel.angular[2], 1.0, epsilon, "angular_velocity_2");
 
         assert!(!vel.linear[0].is_nan());
         assert!(!vel.linear[1].is_nan());
@@ -1275,10 +1275,10 @@ mod tests {
             "robot",
             ts2,
             Transform3D::from_matrix([
-                [1.0, 0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0, 2.0],
                 [0.0, 1.0, 0.0, 0.0],
                 [0.0, 0.0, 1.0, 0.0],
-                [2.0, 0.0, 0.0, 1.0],
+                [0.0, 0.0, 0.0, 1.0],
             ]),
         );
 
@@ -1343,10 +1343,10 @@ mod tests {
             "robot",
             ts2,
             Transform3D::from_matrix([
-                [1.0, 0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0, 1.0],
                 [0.0, 1.0, 0.0, 0.0],
                 [0.0, 0.0, 1.0, 0.0],
-                [1.0, 0.0, 0.0, 1.0],
+                [0.0, 0.0, 0.0, 1.0],
             ]),
         );
 
@@ -1355,10 +1355,10 @@ mod tests {
             "robot",
             ts3,
             Transform3D::from_matrix([
-                [1.0, 0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0, 3.0],
                 [0.0, 1.0, 0.0, 0.0],
                 [0.0, 0.0, 1.0, 0.0],
-                [3.0, 0.0, 0.0, 1.0],
+                [0.0, 0.0, 0.0, 1.0],
             ]),
         );
 
