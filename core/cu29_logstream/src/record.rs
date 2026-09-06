@@ -16,7 +16,7 @@ pub enum RecordKind {
     StructuredLog = 3,
     Lifecycle = 4,
     Gap = 5,
-    Anchor = 6,
+    RecoveryPoint = 6,
 }
 
 impl TryFrom<u8> for RecordKind {
@@ -30,7 +30,7 @@ impl TryFrom<u8> for RecordKind {
             3 => Ok(Self::StructuredLog),
             4 => Ok(Self::Lifecycle),
             5 => Ok(Self::Gap),
-            6 => Ok(Self::Anchor),
+            6 => Ok(Self::RecoveryPoint),
             _ => Err(Error::UnknownRecordKind(value)),
         }
     }

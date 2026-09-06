@@ -559,7 +559,7 @@ fn read_next_entry<T: Decode<()>>(src: &mut impl Read) -> Option<T> {
     }
 }
 
-/// Reads received archive provenance, inclusive source gaps and verified anchors.
+/// Reads received archive provenance, inclusive source gaps and verified recovery points.
 pub fn stream_continuity_reader(
     mut src: impl Read,
 ) -> impl Iterator<Item = cu29::continuity::StreamContinuityRecord> {

@@ -126,7 +126,7 @@ fn a_payload_hidden_in_a_capture_is_rejected() {
 
 #[cfg(feature = "verify-reconstruction")]
 #[test]
-fn divergence_suppresses_frames_until_a_matching_anchor() {
+fn divergence_suppresses_frames_until_a_matching_recovery_point() {
     let _serial = SERIAL.lock().unwrap();
     let (lists, keyframes) = fixture();
     let mut twin = LiveTwin::<Twin>::new().unwrap();
@@ -195,7 +195,7 @@ fn replay_queue_overflow_invalidates_in_flight_output_without_blocking_capture()
         sender_id: 41,
     };
     worker.submit(capture(&lists[0]), identity, std::time::Instant::now());
-    worker.anchor(keyframes[0].clone());
+    worker.recovery_point(keyframes[0].clone());
     ENTERED.wait(); // The replay worker is blocked inside task execution.
     for list in &lists[1..4] {
         worker.submit(capture(list), identity, std::time::Instant::now());
@@ -212,7 +212,7 @@ fn replay_queue_overflow_invalidates_in_flight_output_without_blocking_capture()
 }
 
 #[test]
-fn recovery_discards_captures_waiting_for_an_old_anchor() {
+fn recovery_discards_captures_waiting_for_an_old_recovery_point() {
     let _serial = SERIAL.lock().unwrap();
     let (lists, keyframes) = fixture();
     let (publisher, mut reader) = cu29_logstream::telemetry::telemetry_channel(
@@ -251,7 +251,7 @@ fn recovery_discards_captures_waiting_for_an_old_anchor() {
         );
         std::thread::sleep(std::time::Duration::from_millis(1));
     }
-    worker.anchor(keyframes[0].clone());
+    worker.recovery_point(keyframes[0].clone());
     drop(worker);
     assert!(reader.try_read().is_none(), "old capture survived recovery");
     assert_eq!(reader.status().twin.reconstructed, 0);

@@ -4,7 +4,7 @@ Run a deterministic Copper graph in one process and collect its native execution
 log in another over localhost UDP. The graph is `counter → sum → derived`. Counter and sum are transmitted; derived
 is reconstructed live from the same Copper task implementation.
 
-Each `log_streaming.destinations` entry sets `anchor_interval` directly alongside
+Each `log_streaming.destinations` entry sets `recovery_interval` directly alongside
 `transport`, `link`, `fec`, and `max_record_bytes`. The interval counts CopperLists
 and must be a nonzero multiple of `logging.keyframe_interval`. The sender streams
 the same records for archival and live viewing; receiver code selects how to use
@@ -32,7 +32,7 @@ example's `logs/` and prints its path.
 | --- | --- |
 | `clean` | All 256 CopperLists match the onboard payloads and metadata. |
 | `loss` | Discard the source packets for CopperList 20; RLC repairs recover it with no semantic gap. |
-| `outage` | Discard a contiguous arrival interval beginning at CopperList 32 and ending before 160, including control traffic. Missing history remains explicit and a verified anchor enables recovery. |
+| `outage` | Discard a contiguous arrival interval beginning at CopperList 32 and ending before 160, including control traffic. Missing history remains explicit and a verified recovery point enables recovery. |
 | `late` | A separate probe receiver archives through CopperList 64 and exits; a fresh receiver then starts with no prior session state. Its archive contains a `LateJoin` prefix gap. |
 | `idle` | Drop all traffic for the first 300 ms, produce only CL0, and keep the sender alive with no new captures. Periodic recovery restores the complete one-record archive. |
 | `restart` | Close the first receiver after CopperList 64, leave it offline briefly, and launch a new process while the sender continues. The new archive reports unavailable history. |
@@ -46,7 +46,7 @@ is still recoverable from retained history. Exact recovery IDs still depend on
 host scheduling; verification checks the resulting continuity.
 
 The headless status display reports received packets, the latest archived
-CopperList, latest verified anchor, gap count, and demo packet drops. Received
+CopperList, latest verified recovery point, gap count, and demo packet drops. Received
 files have separate paths for each receiver lifetime.
 
 ## Native telemetry screen
@@ -62,7 +62,7 @@ just sender 127.0.0.1:7447 logs/sender-2.copper
 ```
 
 The Ratatui screen shows counter/sum values, a counter chart, packet and frame
-age, archive progress, verified anchors, source gap ranges, and reader overwrites.
+age, archive progress, verified recovery points, source gap ranges, and reader overwrites.
 **Space** pauses consumption; wait a second and resume to see missed samples
 while the archive count keeps advancing. **q**, Escape, or Ctrl-C closes the
 receiver and finalizes its archive. The sender is a separate process. After the
@@ -158,7 +158,7 @@ permit a shared bidirectional carrier or separate explicitly configured endpoint
 
 The demo graph is `counter -> sum -> derived`. The ordinary `Derived` Copper task
 computes `sum % 256` on the robot and in generated ground-side replay. Its payload
-is never transmitted, including repeated anchor boundaries and FEC repairs. The
+is never transmitted, including repeated recovery point boundaries and FEC repairs. The
 robot's onboard log contains the full output for comparison. Ratatui explicitly
 labels the derived value **reconstructed locally; payload not transmitted**.
 
@@ -199,7 +199,7 @@ that reader never blocks recording. Dropping the twin stops and joins its worker
 without running a twin. Each handle accepts one sender session and a fresh log path.
 The default receiver supports the 1200-byte-MTU, 64-symbol streaming profile, with
 4 KiB records and 64 KiB recovery objects. It retains 32 replay events, 32 pending
-captures, one anchor, one executing frame and 64 display frames; payload storage and
+captures, one recovery point, one executing frame and 64 display frames; payload storage and
 thread/runtime allocations are additional. `with_frame_capacity` changes display retention.
 
 Production sends the existing native CopperList format with selected payloads omitted.
@@ -207,11 +207,11 @@ The native codec already carries original/captured presence. There is no proof e
 per-list verification allocation, or new continuity record. The archive writes the
 received native bytes before replay and never stores synthesized outputs. The unreleased
 session manifest stays at **version 1** and binds the reconstruction ABI to the graph.
-Packet framing, FEC and anchor recovery are unchanged.
+Packet framing, FEC and recovery from a recovery point are unchanged.
 
 Copper restores keyframes, injects captured inputs, executes reconstructible tasks and
 restores sender metadata before downstream tasks run. Existing source gaps and replay
-queue overflows require a matching recovery anchor. These continuity checks are separate
+queue overflows require a matching recovery point. These continuity checks are separate
 from checking whether deterministic task code produced the right result. The generated
 ground runtime disables its own logging and transport transmitters; its archive is owned
 by the twin receiver.
@@ -226,7 +226,7 @@ receiver rejects debug trailers explicitly; a verification receiver also accepts
 captures and labels them Reconstructed, never Verified.
 
 Only debug captures that pass comparison are labeled Verified. A mismatch suppresses
-reconstructed frames until the next matching anchor; native recording continues. Debug
+reconstructed frames until the next matching recovery point; native recording continues. Debug
 digests are consumed live and do not add archive sections or change offline log readers.
 Use `just dashboard-verify` and `just sender-verify` to run the development checks.
 `just resim` reconstructs ordinary capture archives offline; the demo's verification

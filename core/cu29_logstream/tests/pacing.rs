@@ -21,7 +21,7 @@ fn config() -> LogStreamSenderConfig {
             max_object_bytes: 4096,
             repair_symbols_per_block: 2,
         },
-        anchor_interval: 1,
+        recovery_interval: 1,
         max_record_bytes: 4096,
     };
     plan.sender_config(
@@ -101,7 +101,7 @@ fn shared_budget_burst_and_queue_pressure_are_bounded() {
     assert!(core.stats().expired_packets > 0);
     assert!(core.stats().queue_peak * 1200 < config.pacing.memory_budget_bytes);
     // Check every observed time interval, including same-timestamp bursts and
-    // mixed source, repair, manifest, and anchor packets.
+    // mixed source, repair, manifest, and recovery point packets.
     for first in 0..tx.packets.len() {
         let mut bytes = 0_u128;
         for last in first..tx.packets.len() {
@@ -157,7 +157,7 @@ fn missed_bootstrap_recovers_during_idle_without_new_captures() {
             .any(|e| matches!(e, SessionEvent::Manifest(_)))
     );
     assert!(events.iter().any(
-        |e| matches!(e, SessionEvent::VerifiedAnchor { anchor, .. } if anchor.copperlist_id == 32)
+        |e| matches!(e, SessionEvent::VerifiedRecoveryPoint { recovery_point, .. } if recovery_point.copperlist_id == 32)
     ));
     assert!(events.iter().any(
         |e| matches!(e, SessionEvent::Gap { gap, .. } if gap.first_id == 0 && gap.last_id == 31)
@@ -196,7 +196,7 @@ fn independently_ordered_workers_pair_bounded_recovery_records() {
         for id in 0..2 {
             assert!(tx.packets.iter().any(|(_, p)| {
                 let h = WirePacket::decode(p).unwrap().header;
-                h.record_kind == RecordKind::Anchor && h.object_id == id
+                h.record_kind == RecordKind::RecoveryPoint && h.object_id == id
             }));
         }
     }
@@ -271,13 +271,15 @@ fn recovery_never_overtakes_older_queued_source_records() {
     core.accept_record(&kf(32), clock.now()).unwrap();
     let mut tx = Capture::default();
     advance(&mut core, &mut tx, &clock, &mock, 0, 600);
-    let anchor = tx
+    let recovery_point = tx
         .packets
         .iter()
-        .position(|(_, p)| WirePacket::decode(p).unwrap().header.record_kind == RecordKind::Anchor)
+        .position(|(_, p)| {
+            WirePacket::decode(p).unwrap().header.record_kind == RecordKind::RecoveryPoint
+        })
         .unwrap();
     for id in 0..32 {
-        assert!(tx.packets[..anchor].iter().any(|(_, p)| {
+        assert!(tx.packets[..recovery_point].iter().any(|(_, p)| {
             let h = WirePacket::decode(p).unwrap().header;
             h.record_kind == RecordKind::CopperList
                 && h.symbol_kind == FecSymbolKind::Source

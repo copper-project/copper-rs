@@ -125,10 +125,10 @@ fn verify(sender: &Path, received: &Path, expect: Expectation, iterations: u64) 
             _ => None,
         })
         .collect();
-    let anchors: Vec<_> = continuity
+    let recovery_points: Vec<_> = continuity
         .iter()
         .filter_map(|entry| match entry {
-            StreamContinuityRecord::Anchor { copperlist_id, .. } => Some(*copperlist_id),
+            StreamContinuityRecord::RecoveryPoint { copperlist_id, .. } => Some(*copperlist_id),
             _ => None,
         })
         .collect();
@@ -196,13 +196,13 @@ fn verify(sender: &Path, received: &Path, expect: Expectation, iterations: u64) 
         Expectation::Outage => {
             !gaps.is_empty()
                 && gaps.iter().any(|&(first, _, _)| first > 0)
-                && anchors.iter().any(|&id| id >= 160)
+                && recovery_points.iter().any(|&id| id >= 160)
                 && next == iterations
         }
         Expectation::Late => {
             gaps.iter()
                 .any(|&(first, _, reason)| first == 0 && reason == SourceGapReason::LateJoin)
-                && anchors.iter().any(|&id| id > 0)
+                && recovery_points.iter().any(|&id| id > 0)
                 && next == iterations
         }
         Expectation::Prefix => gaps.is_empty() && next >= 65 && next < iterations,
@@ -211,10 +211,10 @@ fn verify(sender: &Path, received: &Path, expect: Expectation, iterations: u64) 
         return Err(format!("Archive does not satisfy {expect:?}").into());
     }
     println!(
-        "Verified {} received CopperLists against onboard payloads and timestamps; {} explicit gaps, {} verified anchors ({expect:?}).",
+        "Verified {} received CopperLists against onboard payloads and timestamps; {} explicit gaps, {} verified recovery points ({expect:?}).",
         ground.len(),
         gaps.len(),
-        anchors.len()
+        recovery_points.len()
     );
     Ok(())
 }

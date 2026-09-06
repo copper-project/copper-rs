@@ -2,7 +2,7 @@ use crate::rlc::RepairSchedule;
 use crate::{
     ContinuousEncoder, CuStreamTx, CuStreamTxError, Error, FiniteObjectEncoder,
     FiniteObjectSenderConfig, Lane, PACKET_HEADER_LEN, RecordKind, Result, StreamIdentity,
-    decode_record, encode_copperlist_record_into, encode_keyframe_and_anchor,
+    decode_record, encode_copperlist_record_into, encode_keyframe_and_recovery_point,
 };
 use alloc::{boxed::Box, string::ToString, vec, vec::Vec};
 use core::{fmt::Debug, marker::PhantomData};
@@ -34,16 +34,16 @@ pub struct ContinuousSenderConfig {
     pub repair_density: DensityThreshold,
 }
 
-/// Finite-object recovery policy and the canonical manifest record repeated at every anchor.
+/// Finite-object recovery policy and the canonical manifest record repeated at every recovery point.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RecoverySenderConfig {
     pub finite: FiniteObjectSenderConfig,
     pub manifest_record: Vec<u8>,
-    /// CopperList interval between transmitted keyframe/anchor groups.
-    pub anchor_interval: u32,
+    /// CopperList interval between transmitted keyframe/recovery point groups.
+    pub recovery_interval: u32,
 }
 
-/// Complete sender configuration for continuous CopperLists and restart anchors.
+/// Complete sender configuration for continuous CopperLists and recovery points.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LogStreamSenderConfig {
     pub pacing: crate::PacingConfig,
@@ -69,8 +69,10 @@ impl LogStreamSenderConfig {
                 "recovery configuration requires a manifest record",
             ));
         }
-        if self.recovery.anchor_interval == 0 {
-            return Err(Error::InvalidConfig("anchor interval must be nonzero"));
+        if self.recovery.recovery_interval == 0 {
+            return Err(Error::InvalidConfig(
+                "recovery point interval must be nonzero",
+            ));
         }
         Ok(())
     }
@@ -86,7 +88,7 @@ pub struct ContinuousSenderStats {
     pub datagrams_dropped: u64,
 }
 
-/// Sender counters for repeated manifests, keyframes, and anchors.
+/// Sender counters for repeated manifests, keyframes, and recovery points.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct RecoverySenderStats {
     pub keyframes_encoded: u64,
@@ -95,22 +97,23 @@ pub struct RecoverySenderStats {
     pub datagrams_dropped: u64,
 }
 
-/// Immediate, unpaced keyframe sink for codec tests and custom drivers.
+/// Immediate, unpaced sink emitting keyframes and their recovery points.
+/// Intended for codec tests and custom drivers.
 /// Generated applications use `scheduled_sinks` to share a destination budget.
-pub struct KeyFrameAnchorSink<T: CuStreamTx> {
+pub struct RecoveryPointSink<T: CuStreamTx> {
     transport: T,
     encoder: FiniteObjectEncoder,
     manifest_record: Vec<u8>,
     manifest_object_id: u64,
     manifest_record_digest: [u8; 32],
-    anchor_interval: u32,
+    recovery_interval: u32,
     stats: RecoverySenderStats,
 }
 
-impl<T: CuStreamTx> Debug for KeyFrameAnchorSink<T> {
+impl<T: CuStreamTx> Debug for RecoveryPointSink<T> {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         formatter
-            .debug_struct("KeyFrameAnchorSink")
+            .debug_struct("RecoveryPointSink")
             .field("transport", &self.transport)
             .field("config", &self.encoder.config())
             .field("stats", &self.stats)
@@ -118,10 +121,12 @@ impl<T: CuStreamTx> Debug for KeyFrameAnchorSink<T> {
     }
 }
 
-impl<T: CuStreamTx> KeyFrameAnchorSink<T> {
+impl<T: CuStreamTx> RecoveryPointSink<T> {
     pub fn new(transport: T, config: RecoverySenderConfig) -> Result<Self> {
-        if config.anchor_interval == 0 {
-            return Err(Error::InvalidConfig("anchor interval must be nonzero"));
+        if config.recovery_interval == 0 {
+            return Err(Error::InvalidConfig(
+                "recovery point interval must be nonzero",
+            ));
         }
         let manifest = decode_record(&config.manifest_record)?;
         if manifest.kind != RecordKind::Manifest {
@@ -137,7 +142,7 @@ impl<T: CuStreamTx> KeyFrameAnchorSink<T> {
             manifest_record: config.manifest_record,
             manifest_object_id,
             manifest_record_digest,
-            anchor_interval: config.anchor_interval,
+            recovery_interval: config.recovery_interval,
             stats: RecoverySenderStats::default(),
         })
     }
@@ -189,15 +194,15 @@ fn emit_finite_record<T: CuStreamTx>(
     Ok(())
 }
 
-impl<T: CuStreamTx> WriteStream<KeyFrame> for KeyFrameAnchorSink<T> {
+impl<T: CuStreamTx> WriteStream<KeyFrame> for RecoveryPointSink<T> {
     fn log(&mut self, keyframe: &KeyFrame) -> CuResult<()> {
         if !keyframe
             .culistid
-            .is_multiple_of(u64::from(self.anchor_interval))
+            .is_multiple_of(u64::from(self.recovery_interval))
         {
             return Ok(());
         }
-        let (keyframe_record, anchor_record) = encode_keyframe_and_anchor(
+        let (keyframe_record, recovery_point_record) = encode_keyframe_and_recovery_point(
             keyframe,
             self.manifest_object_id,
             self.manifest_record_digest,
@@ -210,7 +215,7 @@ impl<T: CuStreamTx> WriteStream<KeyFrame> for KeyFrameAnchorSink<T> {
             &self.manifest_record,
         )
         .and_then(|()| self.emit_record(&keyframe_record))
-        .and_then(|()| self.emit_record(&anchor_record))
+        .and_then(|()| self.emit_record(&recovery_point_record))
         .map_err(|error| CuError::from(error.to_string()))?;
         self.stats.keyframes_encoded = self.stats.keyframes_encoded.saturating_add(1);
         Ok(())

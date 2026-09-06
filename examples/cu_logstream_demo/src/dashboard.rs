@@ -84,7 +84,7 @@ impl View {
     fn draw(&self, frame: &mut ratatui::Frame<'_>, status: Status, overwritten: u64, path: &str) {
         use cu29_logstream::twin::ReconstructionState;
         let reconstruction = match status.twin.state {
-            ReconstructionState::Waiting => "Waiting for anchor",
+            ReconstructionState::Waiting => "Waiting for recovery point",
             ReconstructionState::Recovering => "Recovering",
             ReconstructionState::Reconstructed => "Reconstructed locally",
             ReconstructionState::Verified => "Verified (developer checks)",
@@ -180,10 +180,10 @@ impl View {
                     age(status.last_packet)
                 )),
                 Line::from(format!(
-                    "Archived: {}    Latest CL: {}    Verified anchor: {}",
+                    "Archived: {}    Latest CL: {}    Verified recovery point: {}",
                     status.archived,
                     number(status.latest),
-                    number(status.anchor)
+                    number(status.recovery_point)
                 )),
                 Line::from(format!(
                     "Source gaps: {}    Replay queue drops: {}",

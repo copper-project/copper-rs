@@ -5,8 +5,8 @@ use cu_fec::{DensityThreshold, RepairParameters};
 use cu29_logstream::{
     ContinuousDecoder, ContinuousEncoder, ContinuousReceiveEvent, EncodingSymbolId, Field,
     FiniteObjectDecoder, FiniteObjectEncoder, FiniteObjectLimits, FiniteObjectSenderConfig, Lane,
-    ReceiverLimits, RecordKind, RlcConfig, StreamIdentity, WirePacket, decode_anchor,
-    decode_keyframe, decode_record, encode_keyframe_and_anchor, encode_record,
+    ReceiverLimits, RecordKind, RlcConfig, StreamIdentity, WirePacket, decode_keyframe,
+    decode_record, decode_recovery_point, encode_keyframe_and_recovery_point, encode_record,
 };
 use cu29_runtime::curuntime::KeyFrame;
 
@@ -108,7 +108,7 @@ fn finite_object_consumer_failure_retains_the_record_for_retry() {
 }
 
 #[test]
-fn keyframe_and_anchor_recover_independently_and_bind_by_digest() {
+fn keyframe_and_recovery_point_recover_independently_and_bind_by_digest() {
     let manifest = encode_record(RecordKind::Manifest, 9, b"resolved-session-plan").unwrap();
     let manifest_digest = decode_record(&manifest).unwrap().digest;
     let keyframe = KeyFrame {
@@ -118,15 +118,17 @@ fn keyframe_and_anchor_recover_independently_and_bind_by_digest() {
             .map(|index| (index as u8).wrapping_mul(17))
             .collect(),
     };
-    let (keyframe_record, anchor_record) =
-        encode_keyframe_and_anchor(&keyframe, 9, manifest_digest).unwrap();
+    let (keyframe_record, recovery_point_record) =
+        encode_keyframe_and_recovery_point(&keyframe, 9, manifest_digest).unwrap();
 
     let mut encoder = encoder();
     let mut datagrams = Vec::new();
     encoder
         .push_record(&keyframe_record, &mut datagrams)
         .unwrap();
-    encoder.push_record(&anchor_record, &mut datagrams).unwrap();
+    encoder
+        .push_record(&recovery_point_record, &mut datagrams)
+        .unwrap();
     datagrams.reverse();
     datagrams.retain(|datagram| {
         let packet = WirePacket::decode(datagram).unwrap();
@@ -150,27 +152,27 @@ fn keyframe_and_anchor_recover_independently_and_bind_by_digest() {
         .map(|bytes| decode_record(bytes).unwrap())
         .find(|record| record.kind == RecordKind::KeyFrame)
         .unwrap();
-    let recovered_anchor = recovered
+    let recovery_point_record = recovered
         .iter()
         .map(|bytes| decode_record(bytes).unwrap())
-        .find(|record| record.kind == RecordKind::Anchor)
+        .find(|record| record.kind == RecordKind::RecoveryPoint)
         .unwrap();
     let decoded_keyframe = decode_keyframe(recovered_keyframe.payload).unwrap();
-    let anchor = decode_anchor(recovered_anchor.payload).unwrap();
+    let recovery_point = decode_recovery_point(recovery_point_record.payload).unwrap();
 
     assert_eq!(decoded_keyframe.culistid, 4_200);
     assert_eq!(decoded_keyframe.serialized_tasks, keyframe.serialized_tasks);
-    assert_eq!(anchor.copperlist_id, 4_200);
-    assert!(anchor.references_keyframe(recovered_keyframe));
-    assert!(anchor.references_manifest(decode_record(&manifest).unwrap()));
+    assert_eq!(recovery_point.copperlist_id, 4_200);
+    assert!(recovery_point.references_keyframe(recovered_keyframe));
+    assert!(recovery_point.references_manifest(decode_record(&manifest).unwrap()));
 }
 
 #[test]
-fn a_late_receiver_restarts_the_continuous_stream_at_the_anchor() {
+fn a_late_receiver_restarts_the_continuous_stream_at_the_recovery_point() {
     const MAX_RLC_SYMBOL_SIZE: usize = 192;
     const WINDOW_SYMBOLS: usize = 64;
     const MAX_EQUATIONS: usize = 32;
-    const ANCHOR_ID: u64 = 12;
+    const RECOVERY_POINT_ID: u64 = 12;
     const LAST_ID: u64 = 20;
 
     let rlc = RlcConfig::new(160, WINDOW_SYMBOLS, Field::Gf256).unwrap();
@@ -203,24 +205,25 @@ fn a_late_receiver_restarts_the_continuous_stream_at_the_anchor() {
     continuous_datagrams.retain(|datagram| {
         let packet = WirePacket::decode(datagram).unwrap();
         packet.header.symbol_kind == cu29_logstream::FecSymbolKind::Repair
-            || packet.header.object_id >= ANCHOR_ID
+            || packet.header.object_id >= RECOVERY_POINT_ID
     });
 
     let manifest = encode_record(RecordKind::Manifest, 1, b"late-join-manifest").unwrap();
     let keyframe = KeyFrame {
-        culistid: ANCHOR_ID,
+        culistid: RECOVERY_POINT_ID,
         timestamp: Default::default(),
         serialized_tasks: b"CUKF\x01".to_vec(),
     };
-    let (keyframe_record, anchor_record) =
-        encode_keyframe_and_anchor(&keyframe, 1, decode_record(&manifest).unwrap().digest).unwrap();
+    let (keyframe_record, recovery_point_record) =
+        encode_keyframe_and_recovery_point(&keyframe, 1, decode_record(&manifest).unwrap().digest)
+            .unwrap();
     let mut objects = encoder();
     let mut object_datagrams = Vec::new();
     objects
         .push_record(&keyframe_record, &mut object_datagrams)
         .unwrap();
     objects
-        .push_record(&anchor_record, &mut object_datagrams)
+        .push_record(&recovery_point_record, &mut object_datagrams)
         .unwrap();
     object_datagrams.reverse();
 
@@ -234,13 +237,13 @@ fn a_late_receiver_restarts_the_continuous_stream_at_the_anchor() {
             })
             .unwrap();
     }
-    let anchor = recovered_objects
+    let recovery_point = recovered_objects
         .iter()
         .map(|record| decode_record(record).unwrap())
-        .find(|record| record.kind == RecordKind::Anchor)
-        .map(|record| decode_anchor(record.payload).unwrap())
+        .find(|record| record.kind == RecordKind::RecoveryPoint)
+        .map(|record| decode_recovery_point(record.payload).unwrap())
         .unwrap();
-    assert_eq!(anchor.copperlist_id, ANCHOR_ID);
+    assert_eq!(recovery_point.copperlist_id, RECOVERY_POINT_ID);
 
     let mut receiver =
         ContinuousDecoder::<MAX_RLC_SYMBOL_SIZE, WINDOW_SYMBOLS, MAX_EQUATIONS>::new(
@@ -248,7 +251,7 @@ fn a_late_receiver_restarts_the_continuous_stream_at_the_anchor() {
             Lane::ReplayCritical,
             rlc,
             MAX_EQUATIONS,
-            anchor.copperlist_id,
+            recovery_point.copperlist_id,
             ReceiverLimits::new(1_024, WINDOW_SYMBOLS),
         )
         .unwrap();
@@ -268,5 +271,8 @@ fn a_late_receiver_restarts_the_continuous_stream_at_the_anchor() {
             .unwrap();
     }
     assert!(gaps.is_empty());
-    assert_eq!(recovered_ids, (ANCHOR_ID..=LAST_ID).collect::<Vec<_>>());
+    assert_eq!(
+        recovered_ids,
+        (RECOVERY_POINT_ID..=LAST_ID).collect::<Vec<_>>()
+    );
 }

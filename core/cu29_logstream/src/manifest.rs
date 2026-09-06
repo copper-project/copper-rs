@@ -29,7 +29,7 @@ pub struct LogStreamPlan {
     pub continuous: ResolvedContinuousFec,
     pub objects: ResolvedObjectFec,
     /// Recovery interval in CopperLists.
-    pub anchor_interval: u32,
+    pub recovery_interval: u32,
     pub max_record_bytes: u64,
 }
 
@@ -177,7 +177,7 @@ impl LogStreamPlan {
                 max_object_bytes: config.fec.objects.max_object_bytes,
                 repair_symbols_per_block: config.fec.objects.repair_symbols_per_block,
             },
-            anchor_interval: config.anchor_interval,
+            recovery_interval: config.recovery_interval,
             max_record_bytes: config.max_record_bytes,
         };
         plan.validate()?;
@@ -214,7 +214,7 @@ impl LogStreamPlan {
             || self.continuous.repair_every_source_symbols == 0
             || self.objects.max_object_bytes == 0
             || self.objects.repair_symbols_per_block == 0
-            || self.anchor_interval == 0
+            || self.recovery_interval == 0
             || self.max_record_bytes == 0
         {
             return Err(Error::InvalidConfig(
@@ -298,7 +298,7 @@ impl LogStreamPlan {
                     repair_symbols_per_block: self.objects.repair_symbols_per_block,
                 },
                 manifest_record: manifest,
-                anchor_interval: self.anchor_interval,
+                recovery_interval: self.recovery_interval,
             },
         })
     }

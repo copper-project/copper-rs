@@ -35,7 +35,7 @@ pub enum CuTwinRecordingState {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct CuTwinStatus {
     pub latest: Option<u64>,
-    pub anchor: Option<u64>,
+    pub recovery_point: Option<u64>,
     pub gaps: usize,
     pub packets: usize,
     pub archived: u64,
@@ -153,7 +153,7 @@ impl<A: LiveReplay, R: CuStreamRx + 'static> CuTwinBuilder<A, R> {
                             router
                                 .receive_datagram(bytes, |event| {
                                     // Recovery objects can arrive before the manifest.
-                                    // The router retains them and emits VerifiedAnchor
+                                    // The router retains them and emits VerifiedRecoveryPoint
                                     // once their manifest/keyframe references agree.
                                     if matches!(event, SessionEvent::Object { .. }) {
                                         return Ok(());
@@ -182,8 +182,12 @@ impl<A: LiveReplay, R: CuStreamRx + 'static> CuTwinBuilder<A, R> {
                                     }
                                     match event {
                                         SessionEvent::Gap { .. } => status.gaps += 1,
-                                        SessionEvent::VerifiedAnchor { anchor, .. } => {
-                                            status.anchor = Some(anchor.copperlist_id)
+                                        SessionEvent::VerifiedRecoveryPoint {
+                                            recovery_point,
+                                            ..
+                                        } => {
+                                            status.recovery_point =
+                                                Some(recovery_point.copperlist_id)
                                         }
                                         _ => {}
                                     }

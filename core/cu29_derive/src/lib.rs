@@ -4604,7 +4604,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 .as_ref()
                 .is_none_or(|logging| logging.enable_keyframe_logging && logging.enable_task_logging);
             // A ground-side simulation may disable local output entirely while
-            // retaining the generated freeze/thaw plan for received anchors.
+            // retaining the generated freeze/thaw plan for received recovery points.
             if configured_keyframe_logging != #local_keyframe_logging_enabled
                 && !(#sim_mode && #logstream_enabled && !configured_keyframe_logging) {
                 return Err(CuError::from(format!(
@@ -6178,7 +6178,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             logstream_enabled.then(|| quote! { logstream: self.logstream, });
         let builder_with_logstream_method = logstream_enabled.then(|| {
             quote! {
-                /// Adds a nonblocking CopperList plus keyframe/anchor packet resource.
+                /// Adds a nonblocking CopperList plus keyframe/recovery point packet resource.
                 ///
                 /// One sender worker owns the endpoint and schedules both semantic lanes
                 /// against the same budget. Physical pacing uses a running RobotClock,

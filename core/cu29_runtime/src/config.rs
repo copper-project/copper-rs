@@ -1515,7 +1515,7 @@ pub struct LogStreamDestinationConfig {
     pub link: LogStreamLinkConfig,
     pub fec: LogStreamFecConfig,
     /// Recovery interval in CopperLists; a nonzero multiple of logging.keyframe_interval.
-    pub anchor_interval: u32,
+    pub recovery_interval: u32,
     pub max_record_bytes: u64,
 }
 
@@ -2413,13 +2413,13 @@ impl CuConfig {
                     destination.id
                 )));
             }
-            if destination.anchor_interval == 0
+            if destination.recovery_interval == 0
                 || !destination
-                    .anchor_interval
+                    .recovery_interval
                     .is_multiple_of(keyframe_interval)
             {
                 return Err(CuError::from(format!(
-                    "log_streaming destination '{}' anchor_interval must be a nonzero multiple of logging.keyframe_interval ({keyframe_interval})",
+                    "log_streaming destination '{}' recovery_interval must be a nonzero multiple of logging.keyframe_interval ({keyframe_interval})",
                     destination.id
                 )));
             }
@@ -2552,7 +2552,7 @@ pub struct LoggingConfig {
     ///
     /// Without another generated keyframe consumer, this is a compile-time application
     /// property and `#[copper_runtime]` emits no capture calls when it is `false`.
-    /// A log-stream destination independently requests keyframe capture for anchors.
+    /// A log-stream destination independently requests keyframe capture for recovery points.
     #[serde(default = "default_as_true", skip_serializing_if = "Clone::clone")]
     pub enable_keyframe_logging: bool,
 
@@ -6485,7 +6485,7 @@ mod tests {
                                 repair_symbols_per_block: 8,
                             ),
                         ),
-                        anchor_interval: 100,
+                        recovery_interval: 100,
                         max_record_bytes: 65536,
                     ),
                 ],
@@ -6537,7 +6537,7 @@ mod tests {
                             repair_symbols_per_block: 8,
                         ),
                     ),
-                    anchor_interval: 100,
+                    recovery_interval: 100,
                     max_record_bytes: 65536,
                 )],
             ),

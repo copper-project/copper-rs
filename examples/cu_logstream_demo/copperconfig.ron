@@ -46,7 +46,7 @@
                         repair_symbols_per_block: 2,
                     ),
                 ),
-                anchor_interval: 16,
+                recovery_interval: 16,
                 max_record_bytes: 4096,
             ),
         ],

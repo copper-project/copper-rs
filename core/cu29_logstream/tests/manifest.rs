@@ -34,7 +34,7 @@ fn destination() -> LogStreamDestinationConfig {
                 repair_symbols_per_block: 8,
             },
         },
-        anchor_interval: 100,
+        recovery_interval: 100,
         max_record_bytes: 65_536,
     }
 }
@@ -71,7 +71,7 @@ fn config_resolves_to_sender_config_and_versioned_manifest() {
     assert_eq!(manifest.application_schema, schema());
     assert_eq!(sender.continuous.fec.symbol_size(), 1128);
     assert_eq!(sender.continuous.fec.window_symbols(), 64);
-    assert_eq!(sender.recovery.anchor_interval, 100);
+    assert_eq!(sender.recovery.recovery_interval, 100);
 }
 
 #[test]

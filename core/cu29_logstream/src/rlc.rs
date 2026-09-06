@@ -47,8 +47,8 @@ pub enum GapReason {
     RlcWindowExpired,
     /// History unavailable before a verified late-join boundary.
     LateJoin,
-    /// Recovery advanced to a verified anchor after an outage.
-    AnchorRecovery,
+    /// Recovery advanced to a verified recovery point after an outage.
+    RecoveryPoint,
     /// The caller finalized the session before the range could be recovered.
     SessionEnded,
 }

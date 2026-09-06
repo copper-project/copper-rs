@@ -35,7 +35,7 @@ fn destination() -> LogStreamDestinationConfig {
                 repair_symbols_per_block: 8,
             },
         },
-        anchor_interval: 100,
+        recovery_interval: 100,
         max_record_bytes: 65_536,
     }
 }
@@ -158,10 +158,13 @@ fn objects(sender: &cu29_logstream::LogStreamSenderConfig, boundary: u64) -> [Ve
         timestamp: Default::default(),
         serialized_tasks: vec![1, 2, 3],
     };
-    let (keyframe, anchor) =
-        cu29_logstream::encode_keyframe_and_anchor(&keyframe, decoded.object_id, decoded.digest)
-            .unwrap();
-    [manifest, &keyframe, &anchor].map(|record| {
+    let (keyframe, recovery_point) = cu29_logstream::encode_keyframe_and_recovery_point(
+        &keyframe,
+        decoded.object_id,
+        decoded.digest,
+    )
+    .unwrap();
+    [manifest, &keyframe, &recovery_point].map(|record| {
         let mut packets = Vec::new();
         FiniteObjectEncoder::new(sender.recovery.finite)
             .unwrap()
@@ -276,7 +279,7 @@ fn late_join_verifies_all_control_object_arrival_orders_and_releases_buffered_bo
         assert_eq!(
             events
                 .iter()
-                .filter(|event| matches!(event, SessionEvent::VerifiedAnchor { .. }))
+                .filter(|event| matches!(event, SessionEvent::VerifiedRecoveryPoint { .. }))
                 .count(),
             1
         );
@@ -307,7 +310,7 @@ fn wrong_digest_or_keyframe_boundary_never_authorizes_a_restart() {
             &cu29_logstream::encode_keyframe(&keyframe).unwrap(),
         )
         .unwrap();
-        let mut anchor = cu29_logstream::Anchor {
+        let mut recovery_point = cu29_logstream::RecoveryPoint {
             manifest_object_id: manifest.object_id,
             manifest_record_digest: manifest.digest,
             copperlist_id: 100,
@@ -317,15 +320,15 @@ fn wrong_digest_or_keyframe_boundary_never_authorizes_a_restart() {
                 .digest,
         };
         if !wrong_boundary {
-            anchor.keyframe_record_digest[0] ^= 1;
+            recovery_point.keyframe_record_digest[0] ^= 1;
         }
-        let anchor_record = encode_record(
-            RecordKind::Anchor,
+        let recovery_point_record = encode_record(
+            RecordKind::RecoveryPoint,
             100,
-            &cu29_logstream::encode_anchor(&anchor).unwrap(),
+            &cu29_logstream::encode_recovery_point(&recovery_point).unwrap(),
         )
         .unwrap();
-        for record in [keyframe_record, anchor_record] {
+        for record in [keyframe_record, recovery_point_record] {
             let mut packets = Vec::new();
             FiniteObjectEncoder::new(sender.recovery.finite)
                 .unwrap()
@@ -337,7 +340,7 @@ fn wrong_digest_or_keyframe_boundary_never_authorizes_a_restart() {
         assert!(
             !events
                 .iter()
-                .any(|event| matches!(event, SessionEvent::VerifiedAnchor { .. }))
+                .any(|event| matches!(event, SessionEvent::VerifiedRecoveryPoint { .. }))
         );
     }
 }
@@ -353,7 +356,7 @@ fn outage_recovery_and_terminal_gap_are_explicit_and_consumer_failure_is_retryab
     let mut failed = false;
     for packet in &control[2] {
         let result = router.receive_datagram(packet, |event| {
-            if matches!(event, SessionEvent::VerifiedAnchor { .. }) {
+            if matches!(event, SessionEvent::VerifiedRecoveryPoint { .. }) {
                 return Err("archive unavailable");
             }
             events.push(event);
@@ -371,7 +374,7 @@ fn outage_recovery_and_terminal_gap_are_explicit_and_consumer_failure_is_retryab
             Ok::<(), ()>(())
         })
         .unwrap();
-    assert!(events.iter().any(|event| matches!(event, SessionEvent::Gap { gap, .. } if gap.first_id == 1 && gap.last_id == 99 && gap.reason == cu29_logstream::GapReason::AnchorRecovery)));
+    assert!(events.iter().any(|event| matches!(event, SessionEvent::Gap { gap, .. } if gap.first_id == 1 && gap.last_id == 99 && gap.reason == cu29_logstream::GapReason::RecoveryPoint)));
     router
         .finish_through(sender.continuous.identity, 102, |event| {
             events.push(event);

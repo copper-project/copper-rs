@@ -46,9 +46,9 @@ preserves the received payloads and timestamps.
   repairs, and recovery packets. The budget counts Copper packet bytes, excluding
   UDP/IP or other carrier overhead. Replay and recovery share byte-deficit
   scheduling with weights 3:1; unused capacity is available to either lane.
-- Manifest and latest complete keyframe/anchor/boundary recovery repeat on a
+- Manifest and latest complete keyframe/recovery point/boundary recovery repeat on a
   250 ms local deadline, with overlapping requests coalesced. A pending bundle
-  finishes before a newer one replaces it. New anchors wait for older queued
+  finishes before a newer one replaces it. New recovery points wait for older queued
   source packets to be attempted or expired, preventing avoidable receiver gaps. No new task capture is required.
 - Pacing uses `RobotClock` and requires no robot/receiver time synchronization.
   Generated real-link senders select a running clock when application time is
@@ -132,7 +132,7 @@ test clock. Production real-time handoff is unchanged.
 
 `SenderCore` is available without `std`; callers provide `CuTime` from their
 RobotClock and drive `poll` themselves. The std driver owns thread wakeups.
-Immediate `ContinuousCopperListSink` and `KeyFrameAnchorSink` remain available
+Immediate `ContinuousCopperListSink` and `RecoveryPointSink` remain available
 for codec tests/custom integration and do not enforce pacing themselves.
 
 Run `just logstream-pacing-check` for scheduler, worker lifecycle, and UDP demo
@@ -142,7 +142,7 @@ checks, including recovery after the entire initial bootstrap transmission is lo
 
 The demo graph is `counter -> sum -> derived`. The ordinary `Derived` Copper task
 computes `sum % 256` on the robot and in generated ground-side replay. Its payload
-is never transmitted, including repeated anchor boundaries and FEC repairs. The
+is never transmitted, including repeated recovery point boundaries and FEC repairs. The
 robot's onboard log contains the full output for comparison. Ratatui explicitly
 labels the derived value **reconstructed locally; payload not transmitted**.
 
@@ -183,7 +183,7 @@ that reader never blocks recording. Dropping the twin stops and joins its worker
 without running a twin. Each handle accepts one sender session and a fresh log path.
 The default receiver supports the 1200-byte-MTU, 64-symbol streaming profile, with
 4 KiB records and 64 KiB recovery objects. It retains 32 replay events, 32 pending
-captures, one anchor, one executing frame and 64 display frames; payload storage and
+captures, one recovery point, one executing frame and 64 display frames; payload storage and
 thread/runtime allocations are additional. `with_frame_capacity` changes display retention.
 
 Production sends the existing native CopperList format with selected payloads omitted.
@@ -191,11 +191,11 @@ The native codec already carries original/captured presence. There is no proof e
 per-list verification allocation, or new continuity record. The archive writes the
 received native bytes before replay and never stores synthesized outputs. The unreleased
 session manifest stays at **version 1** and binds the reconstruction ABI to the graph.
-Packet framing, FEC and anchor recovery are unchanged.
+Packet framing, FEC and recovery from a recovery point are unchanged.
 
 Copper restores keyframes, injects captured inputs, executes reconstructible tasks and
 restores sender metadata before downstream tasks run. Existing source gaps and replay
-queue overflows require a matching recovery anchor. These continuity checks are separate
+queue overflows require a matching recovery point. These continuity checks are separate
 from checking whether deterministic task code produced the right result. The generated
 ground runtime disables its own logging and transport transmitters; its archive is owned
 by the twin receiver.
@@ -210,7 +210,7 @@ receiver rejects debug trailers explicitly; a verification receiver also accepts
 captures and labels them Reconstructed, never Verified.
 
 Only debug captures that pass comparison are labeled Verified. A mismatch suppresses
-reconstructed frames until the next matching anchor; native recording continues. Debug
+reconstructed frames until the next matching recovery point; native recording continues. Debug
 digests are consumed live and do not add archive sections or change offline log readers.
 Use `just dashboard-verify` and `just sender-verify` to run the development checks.
 `just resim` reconstructs ordinary capture archives offline; the demo's verification

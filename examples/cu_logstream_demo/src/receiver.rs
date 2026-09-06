@@ -176,10 +176,10 @@ pub fn run(options: &ReceiverOptions) -> Result<()> {
         return Err("Impairment scenario did not discard any packets".into());
     }
     println!(
-        "packets={} archived={:?} verified_anchor={:?} gaps={} demo_drops={}",
+        "packets={} archived={:?} verified_recovery_point={:?} gaps={} demo_drops={}",
         status.packets,
         status.latest,
-        status.anchor,
+        status.recovery_point,
         status.gaps,
         impairment.dropped.load(Ordering::Relaxed)
     );

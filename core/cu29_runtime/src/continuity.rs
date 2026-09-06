@@ -8,7 +8,8 @@ pub enum SourceGapReason {
     RlcWindowExpired,
     SessionEnded,
     LateJoin,
-    AnchorRecovery,
+    /// Missing history skipped when resuming at a verified recovery point.
+    RecoveryPoint,
 }
 
 /// Stored in `UnifiedLogType::StreamContinuity`. Ranges are inclusive.
@@ -22,8 +23,8 @@ pub enum StreamContinuityRecord {
         last_id: u64,
         reason: SourceGapReason,
     },
-    /// Verified keyframe/manifest references, retained as canonical anchor bytes.
-    Anchor { copperlist_id: u64, record: Vec<u8> },
+    /// Verified keyframe/manifest references, retained as canonical recovery point bytes.
+    RecoveryPoint { copperlist_id: u64, record: Vec<u8> },
     /// Explicit receiver finalization, not a claim about an unobserved sender tail.
     Finished { next_copperlist_id: u64 },
 }

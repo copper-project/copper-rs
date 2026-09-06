@@ -2,8 +2,9 @@
 
 use crate::rlc::RepairSchedule;
 use crate::{
-    Anchor, ContinuousEncoder, CuStreamTx, CuStreamTxError, Error, FiniteObjectEncoder,
-    LogStreamSenderConfig, RecordKind, Result, decode_record, encode_anchor, encode_record,
+    ContinuousEncoder, CuStreamTx, CuStreamTxError, Error, FiniteObjectEncoder,
+    LogStreamSenderConfig, RecordKind, RecoveryPoint, Result, decode_record, encode_record,
+    encode_recovery_point,
 };
 use alloc::{boxed::Box, vec, vec::Vec};
 use cu29_clock::{CuDuration, CuTime};
@@ -291,7 +292,7 @@ impl SenderCore {
             RecordKind::CopperList => {
                 let retain = decoded
                     .object_id
-                    .is_multiple_of(u64::from(self.config.recovery.anchor_interval));
+                    .is_multiple_of(u64::from(self.config.recovery.recovery_interval));
                 let slot = if retain {
                     Some(Self::reserve(
                         &mut self.pending_cl,
@@ -325,15 +326,15 @@ impl SenderCore {
             RecordKind::KeyFrame => {
                 if !decoded
                     .object_id
-                    .is_multiple_of(u64::from(self.config.recovery.anchor_interval))
+                    .is_multiple_of(u64::from(self.config.recovery.recovery_interval))
                 {
                     return Ok(());
                 }
                 let manifest = decode_record(&self.config.recovery.manifest_record)?;
-                let anchor = encode_record(
-                    RecordKind::Anchor,
+                let recovery_point = encode_record(
+                    RecordKind::RecoveryPoint,
                     decoded.object_id,
-                    &encode_anchor(&Anchor {
+                    &encode_recovery_point(&RecoveryPoint {
                         manifest_object_id: manifest.object_id,
                         manifest_record_digest: manifest.digest,
                         copperlist_id: decoded.object_id,
@@ -342,7 +343,7 @@ impl SenderCore {
                     })?,
                 )?;
                 let slot = Self::reserve(&mut self.pending_kf, decoded.object_id, &mut self.stats);
-                for bytes in [record, anchor.as_slice()] {
+                for bytes in [record, recovery_point.as_slice()] {
                     self.finite.push_record_with(bytes, |packet| {
                         if !self.pending_kf[slot]
                             .packets
@@ -396,7 +397,7 @@ impl SenderCore {
             .enumerate()
             .filter_map(|(cl, entry)| {
                 let id = entry.id?;
-                // An anchor must not make the receiver skip older source packets
+                // A recovery point must not make the receiver skip older source packets
                 // still waiting in our own queue. Expiry releases this fence too.
                 if self.data.len > 0 && self.data.ids[self.data.head] < id {
                     return None;
