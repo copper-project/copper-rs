@@ -1,8 +1,8 @@
 # UDP log streaming demo
 
 Run a deterministic Copper graph in one process and collect its native execution
-log in another over localhost UDP. The graph is `counter → accumulator`: both
-tasks freeze their state, and every output retains the sender's timestamps.
+log in another over localhost UDP. The graph is `counter → sum → derived`. Counter and sum are transmitted; derived
+is reconstructed live from the same Copper task implementation.
 
 From this directory:
 
@@ -107,14 +107,14 @@ Use the printed log base from an automated run with these recipes:
 just cl logs/received.copper
 just fsck logs/received.copper
 just resim logs/received.copper logs/replay.copper
-just resim-debug logs/received.copper logs/debug-replay.copper
+just resim-debug logs/replay.copper logs/debug-replay.copper
 ```
 
 The replay binary uses Copper's standard `--log-base`, `--replay-log-base`, and
 `--debug-base` contract. Remote debug creates separate replay outputs per session.
-Recorded replay preserves captured outputs and checks missing CopperList ranges
-against keyframes before advancing. It does not perform hybrid reconstruction.
-The replay output is compared with the received CopperLists byte for byte.
+Offline replay injects captured outputs and reconstructs the omitted derived output.
+The verification tool compares full reconstructed outputs and sender metadata against
+the onboard log.
 Offline replay drains pending output before each iteration and aligns generated
 CopperList IDs at recovery boundaries. Production task execution remains nonblocking.
 The sender/replay slabs are 16 MiB to accommodate the runtime's existing 10 MiB
@@ -141,10 +141,89 @@ buffer budget excludes thread stacks, channel/allocator bookkeeping, and bounded
 RaptorQ scratch allocations; see the [sender docs](../../core/cu29_logstream).
 Memory-bounded recovery cannot recover expired history, and receiver shutdown
 does not establish the sender's unobserved tail. Full-capture native archival
-requires the matching application schema. Feedback, live deterministic
-reconstruction, mission dispatch, and serial are later
-milestones. The host telemetry buffer and optional `tui` feature are available
+requires the matching application schema. Feedback, mission dispatch, and serial remain later milestones. The host telemetry buffer and optional `tui` feature are available
 now. Run `just logstream-telemetry-check` at the root for notification/overrun
 tests, archive comparisons with fast/stalled/disconnected readers, terminal
 rendering, and all existing loss/recovery/replay scenarios. Feedback interfaces
 permit a shared bidirectional carrier or separate explicitly configured endpoints.
+
+## Live Copper twin
+
+The demo graph is `counter -> sum -> derived`. The ordinary `Derived` Copper task
+computes `sum % 256` on the robot and in generated ground-side replay. Its payload
+is never transmitted, including repeated anchor boundaries and FEC repairs. The
+robot's onboard log contains the full output for comparison. Ratatui explicitly
+labels the derived value **reconstructed locally; payload not transmitted**.
+
+Declare the static contract in the same RON used by the robot and ground build:
+
+```ron
+(id: "derived", type: "tasks::Derived",
+ streaming: (replay: reconstruct, replay_abi: 1)),
+```
+
+The task implements `CuCrossPlatformDeterministic` with `REPLAY_ABI = 1`. This is
+an explicit promise of deterministic behavior and no external side effects.
+Sources and bridge receives stay captured. Reconstruction currently supports
+ordinary synchronous tasks using the lossless native compressed codec; background,
+anytime, custom codec and selective handle policies are rejected for this path.
+
+A ground station declares `#[copper_runtime(config = "copperconfig.ron", sim_mode = true)]`.
+The generated application exposes a twin builder:
+
+```rust,ignore
+let (mut twin, mut frames) = Ground::twin(rx)
+    .with_log_path("logs/received.copper")
+    .spawn()?;
+
+// On the UI or analysis thread:
+frames.wait_timeout(std::time::Duration::from_millis(50));
+while let Some(update) = frames.try_read() {
+    render(&update.frame.copperlist);
+}
+let status = twin.stop()?;
+```
+
+`rx` is any `CuStreamRx`, such as the receive half of a UDP resource. Copper owns
+session routing, native recording, the bounded replay worker, status publication,
+and shutdown. The caller owns the frame reader and presentation. Pausing or dropping
+that reader never blocks recording. Dropping the twin stops and joins its workers;
+`stop()` also reports receiver errors and final counters. `archive_only()` records
+without running a twin. Each handle accepts one sender session and a fresh log path.
+The default receiver supports the 1200-byte-MTU, 64-symbol streaming profile, with
+4 KiB records and 64 KiB recovery objects. It retains 32 replay events, 32 pending
+captures, one anchor, one executing frame and 64 display frames; payload storage and
+thread/runtime allocations are additional. `with_frame_capacity` changes display retention.
+
+Production sends the existing native CopperList format with selected payloads omitted.
+The native codec already carries original/captured presence. There is no proof envelope,
+per-list verification allocation, or new continuity record. The archive writes the
+received native bytes before replay and never stores synthesized outputs. The unreleased
+session manifest stays at **version 1** and binds the reconstruction ABI to the graph.
+Packet framing, FEC and anchor recovery are unchanged.
+
+Copper restores keyframes, injects captured inputs, executes reconstructible tasks and
+restores sender metadata before downstream tasks run. Existing source gaps and replay
+queue overflows require a matching recovery anchor. These continuity checks are separate
+from checking whether deterministic task code produced the right result. The generated
+ground runtime disables its own logging and transport transmitters; its archive is owned
+by the twin receiver.
+
+Reconstruction correctness checks are **entirely opt-in**, even in debug Rust builds.
+Enable `cu29/logstream-verify` (the demo calls it `verify-reconstruction`) on both ends
+for development. Only this feature compiles in hashing and a fixed 32-byte digest trailer
+covering the omitted outputs and their payload presence. Hashing runs on the existing
+sender output worker and the ground replay worker, using borrowed payloads with no
+intermediate allocation. Production captures have no trailer or digest storage. A normal
+receiver rejects debug trailers explicitly; a verification receiver also accepts normal
+captures and labels them Reconstructed, never Verified.
+
+Only debug captures that pass comparison are labeled Verified. A mismatch suppresses
+reconstructed frames until the next matching anchor; native recording continues. Debug
+digests are consumed live and do not add archive sections or change offline log readers.
+Use `just dashboard-verify` and `just sender-verify` to run the development checks.
+`just resim` reconstructs ordinary capture archives offline; the demo's verification
+command compares the result against the full onboard log.
+
+Run `just logstream-twin-check` for allocation/native-format checks, both verification
+modes, worker lifecycle, reader isolation, and the UDP loss/recovery/replay scenarios.

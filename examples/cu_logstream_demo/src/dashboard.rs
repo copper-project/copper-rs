@@ -4,7 +4,7 @@ use crate::{
     receiver::{self, ReceiverOptions},
 };
 use cu_logstream_demo::telemetry::{Frame, RecordingState, Status};
-use cu29_logstream::telemetry::{TelemetryReader, telemetry_channel};
+use cu29_logstream::telemetry::TelemetryReader;
 use ratatui::{
     crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
     layout::{Constraint, Layout},
@@ -15,8 +15,6 @@ use ratatui::{
 use std::{
     collections::VecDeque,
     io::IsTerminal,
-    sync::atomic::{AtomicBool, Ordering},
-    thread,
     time::{Duration, Instant},
 };
 
@@ -29,6 +27,7 @@ struct View {
     paused: bool,
     counter: Option<u64>,
     sum: Option<u64>,
+    derived: Option<u64>,
     displayed: Option<u64>,
     missed: u64,
     frame_age: Option<Instant>,
@@ -66,6 +65,12 @@ impl View {
                 .get_sum_output()
                 .payload()
                 .map(|sample| sample.0);
+            self.derived = frame
+                .copperlist
+                .msgs
+                .get_derived_output()
+                .payload()
+                .map(|sample| sample.0);
             // This history policy belongs to this widget, not the backend.
             if let Some(counter) = self.counter {
                 if self.history.len() == CHART_CAPACITY {
@@ -77,6 +82,22 @@ impl View {
     }
 
     fn draw(&self, frame: &mut ratatui::Frame<'_>, status: Status, overwritten: u64, path: &str) {
+        use cu29_logstream::twin::ReconstructionState;
+        let reconstruction = match status.twin.state {
+            ReconstructionState::Waiting => "Waiting for anchor",
+            ReconstructionState::Recovering => "Recovering",
+            ReconstructionState::Reconstructed => "Reconstructed locally",
+            ReconstructionState::Verified => "Verified (developer checks)",
+            ReconstructionState::Diverged => "DIVERGED",
+        };
+        let derived = if matches!(
+            status.twin.state,
+            ReconstructionState::Reconstructed | ReconstructionState::Verified
+        ) {
+            number(self.derived)
+        } else {
+            "—".into()
+        };
         if frame.area().height < 20 || frame.area().width < 50 {
             let [header, body] =
                 Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(frame.area());
@@ -92,14 +113,14 @@ impl View {
             );
             frame.render_widget(Line::from(" 😼 ").right_aligned(), mascot);
             frame.render_widget(Paragraph::new(format!(
-                "Counter: {}   Sum: {}\nArchived: {}   Gaps: {}\nUI missed: {}\nSpace: pause/resume   q: quit",
+                "Counter: {}   Sum: {}\nDerived: {derived} (local)\nPayload NOT transmitted\n{reconstruction}\nArchived: {}   Gaps: {}\nUI missed: {}\nSpace: pause/resume   q: quit",
                 number(self.counter), number(self.sum), status.archived, status.gaps, self.missed,
             )), body);
             return;
         }
         let [header, values, chart, health, footer] = Layout::vertical([
             Constraint::Length(3),
-            Constraint::Length(4),
+            Constraint::Length(6),
             Constraint::Min(3),
             Constraint::Length(7),
             Constraint::Length(3),
@@ -134,13 +155,13 @@ impl View {
         );
         frame.render_widget(
             Paragraph::new(format!(
-                "Counter: {}     Sum: {}\nDisplayed CopperList: {}     Frame age: {}",
+                "Counter: {}     Sum: {}\nDerived: {derived} — reconstructed locally; payload not transmitted\n{reconstruction}\nDisplayed CopperList: {}     Frame age: {}",
                 number(self.counter),
                 number(self.sum),
                 number(self.displayed),
                 age(self.frame_age)
             ))
-            .block(Block::bordered().title("Typed robot outputs")),
+            .block(Block::bordered().title("Captured inputs + Copper twin output")),
             values,
         );
         let history: Vec<_> = self.history.iter().copied().collect();
@@ -165,8 +186,8 @@ impl View {
                     number(status.anchor)
                 )),
                 Line::from(format!(
-                    "Source gap ranges: {}    Demo packet drops: {}",
-                    status.gaps, status.dropped
+                    "Source gaps: {}    Replay queue drops: {}",
+                    status.gaps, status.twin.queue_overflows
                 )),
                 Line::from(format!(
                     "UI missed: {}    Buffer overwrites: {}    Capacity: {BUFFER_CAPACITY}",
@@ -198,76 +219,60 @@ pub fn run(options: ReceiverOptions) -> Result<()> {
             "Dashboard needs a terminal; use the receiver command for headless recording".into(),
         );
     }
-    let (mut publisher, mut reader) =
-        telemetry_channel(BUFFER_CAPACITY.try_into().unwrap(), Status::default());
-    let stop = AtomicBool::new(false);
-    thread::scope(|scope| -> Result<()> {
-        let worker = scope.spawn(|| {
-            let result = receiver::run(&options, Some(&mut publisher), &stop)
-                .map_err(|error| error.to_string());
-            if result.is_err() {
-                let mut status = publisher.status();
-                status.state = RecordingState::Failed;
-                publisher.set_status(status);
+    let (mut twin, mut reader, _) = receiver::start(&options)?;
+    let ui_result: std::io::Result<()> = ratatui::run(|terminal| {
+        let mut view = View {
+            history: VecDeque::with_capacity(CHART_CAPACITY),
+            ..Default::default()
+        };
+        let mut redraw = Instant::now();
+        loop {
+            // Paused/closed views only service keyboard/age timers. Live views
+            // wait for backend notification, with the same keyboard deadline.
+            if view.paused || reader.is_closed() {
+                event::poll(UI_TICK)?;
+            } else {
+                reader.wait_timeout(UI_TICK);
             }
-            // Closure wakes the UI even if no CopperList was ever received.
-            drop(publisher);
-            result
-        });
-        let ui_result: std::io::Result<()> = ratatui::run(|terminal| {
-            let mut view = View {
-                history: VecDeque::with_capacity(CHART_CAPACITY),
-                ..Default::default()
-            };
-            let mut redraw = Instant::now();
-            loop {
-                // Paused/closed views only service keyboard/age timers. Live views
-                // wait for backend notification, with the same keyboard deadline.
-                if view.paused || reader.is_closed() {
-                    event::poll(UI_TICK)?;
-                } else {
-                    reader.wait_timeout(UI_TICK);
-                }
-                while event::poll(Duration::ZERO)? {
-                    if let Event::Key(key) = event::read()?
-                        && key.kind == KeyEventKind::Press
-                    {
-                        match key.code {
-                            KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
-                            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                                return Ok(());
-                            }
-                            KeyCode::Char(' ') => {
-                                view.paused = !view.paused;
-                                redraw = Instant::now();
-                            }
-                            _ => {}
+            while event::poll(Duration::ZERO)? {
+                if let Event::Key(key) = event::read()?
+                    && key.kind == KeyEventKind::Press
+                {
+                    match key.code {
+                        KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
+                        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            return Ok(());
                         }
+                        KeyCode::Char(' ') => {
+                            view.paused = !view.paused;
+                            redraw = Instant::now();
+                        }
+                        _ => {}
                     }
                 }
-                view.consume(&mut reader);
-                let status = reader.status();
-                if Instant::now() >= redraw {
-                    terminal.draw(|frame| {
-                        view.draw(
-                            frame,
-                            status,
-                            reader.overwritten(),
-                            &options.log_base.display().to_string(),
-                        )
-                    })?;
-                    redraw = Instant::now() + UI_TICK;
-                }
-                if reader.is_closed() && status.state == RecordingState::Failed {
-                    return Ok(());
-                }
             }
-        });
-        stop.store(true, Ordering::Release);
-        let receiver_result = worker.join().map_err(|_| "Receiver thread panicked")?;
-        ui_result?;
-        receiver_result.map_err(Into::into)
-    })
+            view.consume(&mut reader);
+            let status = reader.status();
+            if Instant::now() >= redraw {
+                terminal.draw(|frame| {
+                    view.draw(
+                        frame,
+                        status,
+                        reader.overwritten(),
+                        &options.log_base.display().to_string(),
+                    )
+                })?;
+                redraw = Instant::now() + UI_TICK;
+            }
+            if reader.is_closed() && status.state == RecordingState::Failed {
+                return Ok(());
+            }
+        }
+    });
+    let receiver_result = twin.stop();
+    ui_result?;
+    receiver_result?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -300,6 +305,11 @@ mod tests {
                 .map(|cell| cell.symbol())
                 .collect();
             assert!(screen.contains("VIEW PAUSED"));
+            assert!(screen.contains(if width == 100 {
+                "payload not transmitted"
+            } else {
+                "Payload NOT transmitted"
+            }));
             if width == 100 {
                 assert!(screen.contains("Archived: 200"));
                 assert!(screen.contains("UI missed: 73"));

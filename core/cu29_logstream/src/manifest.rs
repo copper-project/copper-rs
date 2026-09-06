@@ -63,6 +63,8 @@ pub struct ResolvedContentPolicy {
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
 pub struct ApplicationSchema {
     pub outputs: Vec<ApplicationOutputSchema>,
+    /// Per-output deterministic ABI; empty means full capture.
+    pub reconstruction: Vec<Option<u32>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
@@ -75,6 +77,7 @@ pub struct ApplicationOutputSchema {
 impl ApplicationSchema {
     pub fn from_output_specs(specs: &[TaskOutputSpec]) -> Self {
         Self {
+            reconstruction: Vec::new(),
             outputs: specs
                 .iter()
                 .map(|spec| ApplicationOutputSchema {

@@ -33,7 +33,10 @@ fn config() -> LogStreamSenderConfig {
             session_id: *b"paced-session001",
             sender_id: 1,
         },
-        ApplicationSchema { outputs: vec![] },
+        ApplicationSchema {
+            outputs: vec![],
+            reconstruction: vec![],
+        },
     )
     .unwrap()
 }

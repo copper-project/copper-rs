@@ -1106,6 +1106,24 @@ impl AnytimeConfig {
     }
 }
 
+/// Whether a task output is transmitted or deterministically recomputed on the ground.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum StreamReplay {
+    #[default]
+    Capture,
+    Reconstruct,
+}
+
+/// Static streaming contract for an ordinary deterministic task.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default)]
+#[serde(deny_unknown_fields)]
+pub struct NodeStreaming {
+    #[serde(default)]
+    pub replay: StreamReplay,
+    pub replay_abi: Option<u32>,
+}
+
 /// A node in the configuration graph.
 /// A node represents a Task in the system Graph.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -1161,6 +1179,9 @@ pub struct Node {
     #[serde(skip_serializing_if = "Option::is_none")]
     logging: Option<NodeLogging>,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
+    streaming: Option<NodeStreaming>,
+
     /// Node role in the runtime graph (normal task or bridge endpoint).
     #[serde(skip, default)]
     flavor: Flavor,
@@ -1186,6 +1207,7 @@ impl Node {
             anytime: None,
             run_in_sim: None,
             logging: None,
+            streaming: None,
             flavor: Flavor::Task,
             nc_outputs: Vec::new(),
             nc_output_orders: Vec::new(),
@@ -1304,6 +1326,11 @@ impl Node {
             .as_ref()
             .map(NodeLogging::handle_content)
             .unwrap_or_default()
+    }
+
+    #[allow(dead_code)]
+    pub fn streaming(&self) -> NodeStreaming {
+        self.streaming.unwrap_or_default()
     }
 
     #[allow(dead_code)]
