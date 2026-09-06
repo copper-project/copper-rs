@@ -371,7 +371,12 @@ where
 }
 
 impl<T: Copy + Debug + Default + 'static> Transform3D<T> {
-    /// Create a transform from a 4x4 matrix
+    /// Creates a homogeneous 4x4 transform indexed as `mat[row][column]`.
+    /// Each inner array is a row; points are column vectors (`p_out = mat * p_in`).
+    /// Translation is `[mat[0][3], mat[1][3], mat[2][3]]`; the last row must be `[0, 0, 0, 1]`.
+    /// The convention is backend-independent: callers must not transpose for glam.
+    /// Glam/Rerun adapters repack into columns internally; the fallback stores rows directly.
+    /// Nalgebra/faer adapters copy by `(row, column)`, independent of storage order.
     pub fn from_matrix(mat: [[T; 4]; 4]) -> Self {
         #[cfg(feature = "glam")]
         {
@@ -385,7 +390,9 @@ impl<T: Copy + Debug + Default + 'static> Transform3D<T> {
         }
     }
 
-    /// Get the transform as a 4x4 matrix
+    /// Returns a homogeneous 4x4 matrix indexed as `mat[row][column]`.
+    /// Each inner array is a row, with translation in the last column, regardless of backend.
+    /// Uses the same column-vector convention as [`Self::from_matrix`].
     pub fn to_matrix(self) -> [[T; 4]; 4] {
         #[cfg(feature = "glam")]
         {
