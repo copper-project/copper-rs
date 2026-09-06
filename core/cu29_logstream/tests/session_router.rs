@@ -4,9 +4,9 @@ use cu29_logstream::{
     SessionRouterLimits, StreamIdentity, encode_record,
 };
 use cu29_runtime::config::{
-    LogStreamContentConfig, LogStreamContinuousFecConfig, LogStreamDestinationConfig,
-    LogStreamFecConfig, LogStreamLinkConfig, LogStreamObjectFecConfig, LogStreamRepairDensity,
-    LogStreamRlcField, LogStreamTransportConfig,
+    LogStreamContinuousFecConfig, LogStreamDestinationConfig, LogStreamFecConfig,
+    LogStreamLinkConfig, LogStreamObjectFecConfig, LogStreamRepairDensity, LogStreamRlcField,
+    LogStreamTransportConfig,
 };
 
 fn destination() -> LogStreamDestinationConfig {
@@ -35,11 +35,7 @@ fn destination() -> LogStreamDestinationConfig {
                 repair_symbols_per_block: 8,
             },
         },
-        content: LogStreamContentConfig {
-            archive: true,
-            live_viz: true,
-            anchor_interval: 100,
-        },
+        anchor_interval: 100,
         max_record_bytes: 65_536,
     }
 }

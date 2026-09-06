@@ -28,7 +28,8 @@ pub struct LogStreamPlan {
     pub burst_packets: u32,
     pub continuous: ResolvedContinuousFec,
     pub objects: ResolvedObjectFec,
-    pub content: ResolvedContentPolicy,
+    /// Recovery interval in CopperLists.
+    pub anchor_interval: u32,
     pub max_record_bytes: u64,
 }
 
@@ -50,13 +51,6 @@ pub enum ResolvedRlcField {
 pub struct ResolvedObjectFec {
     pub max_object_bytes: u64,
     pub repair_symbols_per_block: u32,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode)]
-pub struct ResolvedContentPolicy {
-    pub archive: bool,
-    pub live_viz: bool,
-    pub anchor_interval: u32,
 }
 
 /// Minimal application schema required to interpret recovered CopperList slots.
@@ -183,11 +177,7 @@ impl LogStreamPlan {
                 max_object_bytes: config.fec.objects.max_object_bytes,
                 repair_symbols_per_block: config.fec.objects.repair_symbols_per_block,
             },
-            content: ResolvedContentPolicy {
-                archive: config.content.archive,
-                live_viz: config.content.live_viz,
-                anchor_interval: config.content.anchor_interval,
-            },
+            anchor_interval: config.anchor_interval,
             max_record_bytes: config.max_record_bytes,
         };
         plan.validate()?;
@@ -224,16 +214,11 @@ impl LogStreamPlan {
             || self.continuous.repair_every_source_symbols == 0
             || self.objects.max_object_bytes == 0
             || self.objects.repair_symbols_per_block == 0
-            || self.content.anchor_interval == 0
+            || self.anchor_interval == 0
             || self.max_record_bytes == 0
         {
             return Err(Error::InvalidConfig(
                 "resolved stream plan contains a zero bound",
-            ));
-        }
-        if !self.content.archive && !self.content.live_viz {
-            return Err(Error::InvalidConfig(
-                "resolved stream plan selects no content consumer",
             ));
         }
         DensityThreshold::new(self.continuous.repair_density)?;
@@ -313,7 +298,7 @@ impl LogStreamPlan {
                     repair_symbols_per_block: self.objects.repair_symbols_per_block,
                 },
                 manifest_record: manifest,
-                anchor_interval: self.content.anchor_interval,
+                anchor_interval: self.anchor_interval,
             },
         })
     }

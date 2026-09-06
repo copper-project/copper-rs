@@ -21,11 +21,7 @@ fn config() -> LogStreamSenderConfig {
             max_object_bytes: 4096,
             repair_symbols_per_block: 2,
         },
-        content: ResolvedContentPolicy {
-            archive: true,
-            live_viz: false,
-            anchor_interval: 1,
-        },
+        anchor_interval: 1,
         max_record_bytes: 4096,
     };
     plan.sender_config(

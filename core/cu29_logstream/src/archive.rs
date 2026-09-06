@@ -83,9 +83,9 @@ impl<P: CopperListTuple> NativeArchive<P> {
         if manifest.version != crate::SESSION_MANIFEST_VERSION {
             return Err(Error::UnsupportedManifestVersion(manifest.version));
         }
-        if manifest.application_schema != expected_schema || !manifest.plan.content.archive {
+        if manifest.application_schema != expected_schema {
             return Err(Error::InvalidConfig(
-                "archive requires the matching application schema and archive content policy",
+                "archive requires the matching application schema",
             ));
         }
         if section_bytes == 0 || section_bytes > slab_bytes {

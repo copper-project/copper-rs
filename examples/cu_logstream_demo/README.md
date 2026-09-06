@@ -4,6 +4,13 @@ Run a deterministic Copper graph in one process and collect its native execution
 log in another over localhost UDP. The graph is `counter → sum → derived`. Counter and sum are transmitted; derived
 is reconstructed live from the same Copper task implementation.
 
+Each `log_streaming.destinations` entry sets `anchor_interval` directly alongside
+`transport`, `link`, `fec`, and `max_record_bytes`. The interval counts CopperLists
+and must be a nonzero multiple of `logging.keyframe_interval`. The sender streams
+the same records for archival and live viewing; receiver code selects how to use
+them. The generated twin always writes its capture archive, and `.archive_only()`
+disables task reconstruction.
+
 From this directory:
 
 ```sh
