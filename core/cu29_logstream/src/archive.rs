@@ -2,7 +2,8 @@
 
 use crate::capture::CapturedList;
 use crate::{
-    ApplicationSchema, Error, RecordKind, Result, SessionEvent, SessionManifest, StreamIdentity,
+    ApplicationSchema, Error, ReceivedManifest, RecordKind, Result, SessionEvent, SessionEventRef,
+    StreamIdentity,
 };
 use bincode::{
     Encode,
@@ -37,7 +38,8 @@ pub struct NativeArchive<P: CopperListTuple> {
     keyframes: NativeStream,
     continuity: NativeStream,
     identity: StreamIdentity,
-    manifest: SessionManifest,
+    manifest_digest: [u8; 32],
+    manifest_object_id: u64,
     next_id: u64,
     poisoned: bool,
     payload: PhantomData<P>,
@@ -56,14 +58,14 @@ impl<P: CopperListTuple> NativeArchive<P> {
     /// The section size must fit the largest accepted canonical entry.
     pub fn new(
         path: &Path,
-        manifest: SessionManifest,
+        received: &ReceivedManifest,
         slab_bytes: usize,
         section_bytes: usize,
     ) -> Result<Self> {
         let expected = ApplicationSchema::from_output_specs(P::get_output_specs());
         Self::new_checked(
             path,
-            manifest,
+            received,
             slab_bytes,
             section_bytes,
             expected,
@@ -73,12 +75,13 @@ impl<P: CopperListTuple> NativeArchive<P> {
 
     fn new_checked(
         path: &Path,
-        manifest: SessionManifest,
+        received: &ReceivedManifest,
         slab_bytes: usize,
         section_bytes: usize,
         expected_schema: ApplicationSchema,
         decode: ArchiveDecoder<P>,
     ) -> Result<Self> {
+        let manifest = received.manifest();
         manifest.plan.validate()?;
         if manifest.version != crate::SESSION_MANIFEST_VERSION {
             return Err(Error::UnsupportedManifestVersion(manifest.version));
@@ -118,7 +121,8 @@ impl<P: CopperListTuple> NativeArchive<P> {
             continuity: NativeStream::new(UnifiedLogType::StreamContinuity, logger, section_bytes)
                 .map_err(io_error)?,
             identity: manifest.identity,
-            manifest,
+            manifest_digest: received.record().decoded().digest,
+            manifest_object_id: received.record().decoded().object_id,
             next_id: 0,
             poisoned: false,
             payload: PhantomData,
@@ -127,7 +131,7 @@ impl<P: CopperListTuple> NativeArchive<P> {
         archive
             .continuity
             .log(&StreamContinuityRecord::Manifest {
-                record: archive.manifest.encode_record()?,
+                record: received.record().bytes(),
             })
             .map_err(io_error)?;
         Ok(archive)
@@ -136,12 +140,12 @@ impl<P: CopperListTuple> NativeArchive<P> {
     /// Validates a typed CopperList once, appends its original canonical bytes,
     /// and returns the typed value for an in-process consumer. Keyframes are
     /// archived only after the router has verified their recovery point references.
-    pub fn accept(&mut self, event: &SessionEvent) -> Result<Option<CopperList<P>>> {
+    pub fn accept(&mut self, event: &SessionEventRef<'_>) -> Result<Option<CopperList<P>>> {
         self.accept_capture(event)
             .map(|capture| capture.map(|c| c.copperlist))
     }
 
-    fn accept_capture(&mut self, event: &SessionEvent) -> Result<Option<CapturedList<P>>> {
+    fn accept_capture(&mut self, event: &SessionEventRef<'_>) -> Result<Option<CapturedList<P>>> {
         if self.poisoned {
             return Err(Error::InvalidConfig(
                 "archive failed; close it before continuing",
@@ -154,9 +158,9 @@ impl<P: CopperListTuple> NativeArchive<P> {
         result
     }
 
-    fn accept_inner(&mut self, event: &SessionEvent) -> Result<Option<CapturedList<P>>> {
+    fn accept_inner(&mut self, event: &SessionEventRef<'_>) -> Result<Option<CapturedList<P>>> {
         let identity = match event {
-            SessionEvent::Manifest(manifest) => manifest.identity,
+            SessionEvent::Manifest(manifest) => manifest.manifest().identity,
             SessionEvent::ContinuousRecord { identity, .. }
             | SessionEvent::Gap { identity, .. }
             | SessionEvent::Object { identity, .. }
@@ -167,12 +171,14 @@ impl<P: CopperListTuple> NativeArchive<P> {
         }
         match event {
             SessionEvent::Manifest(manifest) => {
-                if manifest != &self.manifest {
+                if manifest.record().decoded().digest != self.manifest_digest
+                    || manifest.record().decoded().object_id != self.manifest_object_id
+                {
                     return Err(Error::InconsistentObject);
                 }
             }
             SessionEvent::ContinuousRecord { record, .. } => {
-                let decoded = record.decoded()?;
+                let decoded = record.decoded();
                 if decoded.kind != RecordKind::CopperList || decoded.object_id != self.next_id {
                     return Err(Error::InconsistentObject);
                 }
@@ -206,7 +212,7 @@ impl<P: CopperListTuple> NativeArchive<P> {
                     crate::GapReason::RecoveryPoint => SourceGapReason::RecoveryPoint,
                 };
                 self.continuity
-                    .log(&StreamContinuityRecord::Gap {
+                    .log(&StreamContinuityRecord::<&[u8]>::Gap {
                         first_id: gap.first_id,
                         last_id: gap.last_id,
                         reason,
@@ -216,30 +222,29 @@ impl<P: CopperListTuple> NativeArchive<P> {
             }
             SessionEvent::VerifiedRecoveryPoint {
                 recovery_point,
+                recovery_record,
                 keyframe,
                 ..
             } => {
-                let decoded = keyframe.decoded()?;
-                let manifest_record = self.manifest.encode_record()?;
-                if !recovery_point.references_manifest(crate::decode_record(&manifest_record)?)
+                let decoded = keyframe.decoded();
+                if recovery_point.manifest_record_digest != self.manifest_digest
+                    || recovery_point.manifest_object_id != self.manifest_object_id
                     || !recovery_point.references_keyframe(decoded)
-                    || crate::decode_keyframe(decoded.payload)?.culistid
-                        != recovery_point.copperlist_id
+                    || keyframe.keyframe_id() != Some(recovery_point.copperlist_id)
+                    || recovery_record.decoded().kind != RecordKind::RecoveryPoint
+                    || recovery_record.decoded().object_id != recovery_point.copperlist_id
+                    || crate::decode_recovery_point(recovery_record.decoded().payload)?
+                        != *recovery_point
                 {
                     return Err(Error::InconsistentObject);
                 }
                 self.keyframes
                     .log(&CanonicalEntry(decoded.payload))
                     .map_err(io_error)?;
-                let record = crate::encode_record(
-                    RecordKind::RecoveryPoint,
-                    recovery_point.copperlist_id,
-                    &crate::encode_recovery_point(recovery_point)?,
-                )?;
                 self.continuity
                     .log(&StreamContinuityRecord::RecoveryPoint {
                         copperlist_id: recovery_point.copperlist_id,
-                        record,
+                        record: recovery_record.bytes(),
                     })
                     .map_err(io_error)?;
             }
@@ -255,7 +260,7 @@ impl<P: CopperListTuple> NativeArchive<P> {
             return Err(Error::InvalidConfig("archive failed before finalization"));
         }
         self.continuity
-            .log(&StreamContinuityRecord::Finished {
+            .log(&StreamContinuityRecord::<&[u8]>::Finished {
                 next_copperlist_id: self.next_id,
             })
             .map_err(io_error)
@@ -273,13 +278,13 @@ pub struct CaptureArchive<P: crate::capture::CaptureDataSet>(NativeArchive<P>);
 impl<P: crate::capture::CaptureDataSet> CaptureArchive<P> {
     pub fn new(
         path: &Path,
-        manifest: SessionManifest,
+        received: &ReceivedManifest,
         slab_bytes: usize,
         section_bytes: usize,
     ) -> Result<Self> {
         Ok(Self(NativeArchive::new_checked(
             path,
-            manifest,
+            received,
             slab_bytes,
             section_bytes,
             P::stream_schema(),
@@ -288,7 +293,7 @@ impl<P: crate::capture::CaptureDataSet> CaptureArchive<P> {
     }
     pub fn accept(
         &mut self,
-        event: &SessionEvent,
+        event: &SessionEventRef<'_>,
     ) -> Result<Option<crate::capture::CapturedList<P>>> {
         self.0.accept_capture(event)
     }

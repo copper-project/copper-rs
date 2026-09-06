@@ -93,3 +93,20 @@ fn decode_exact<T: Decode<()>>(payload: &[u8], name: &'static str) -> Result<T> 
     }
     Ok(value)
 }
+
+/// Reads keyframe metadata while borrowing its task-state bytes.
+pub(crate) fn keyframe_id(payload: &[u8]) -> Result<u64> {
+    #[derive(bincode::BorrowDecode)]
+    struct View<'a> {
+        culistid: u64,
+        _timestamp: cu29_clock::CuTime,
+        _tasks: &'a [u8],
+    }
+    let (view, used): (View<'_>, usize) =
+        bincode::borrow_decode_from_slice(payload, bincode::config::standard())
+            .map_err(|e| Error::Codec(e.to_string()))?;
+    if used != payload.len() {
+        return Err(Error::Codec("keyframe has trailing bytes".into()));
+    }
+    Ok(view.culistid)
+}
