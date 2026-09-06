@@ -35,31 +35,31 @@ browser. The simulator runs beside a live view of the Copper task graph and late
   <tr>
     <td width="50%" valign="top">
       <a href="https://cdn.copper-robotics.com/demo/balancebot/index.html">
-        <img src="doc/static/demo-balancebot-browser.png" alt="BalanceBot browser demo" width="100%" />
+        <img src="https://raw.githubusercontent.com/copper-project/copper-rs/master/doc/static/demo-balancebot-browser.png" alt="BalanceBot browser demo" width="100%" />
       </a>
       <br />
       <strong><a href="https://cdn.copper-robotics.com/demo/balancebot/index.html">BalanceBot</a></strong>
       <br />
       A self-balancing robot simulation using the application that runs on Raspberry Pi hardware.
       <br />
-      <a href="examples/cu_rp_balancebot">Source code</a>
+      <a href="https://github.com/copper-project/extra-examples/tree/master/examples/cu_rp_balancebot">Source code</a>
     </td>
     <td width="50%" valign="top">
       <a href="https://cdn.copper-robotics.com/demo/flight-controller/index.html">
-        <img src="doc/static/demo-flight-controller-browser.png" alt="Flight controller browser demo" width="100%" />
+        <img src="https://raw.githubusercontent.com/copper-project/copper-rs/master/doc/static/demo-flight-controller-browser.png" alt="Flight controller browser demo" width="100%" />
       </a>
       <br />
       <strong><a href="https://cdn.copper-robotics.com/demo/flight-controller/index.html">Flight Controller</a></strong>
       <br />
       A quadcopter simulation using the control stack deployed on STM32H7 flight hardware.
       <br />
-      <a href="examples/cu_flight_controller">Source code</a>
+      <a href="https://github.com/copper-project/extra-examples/tree/master/examples/cu_flight_controller">Source code</a>
     </td>
   </tr>
 </table>
 <p>Watch more robots built with Copper in the
 <a href="https://youtu.be/weV_JYaUsmo">community showcase</a>, or explore the
-<a href="benchmarks/">cross-framework benchmarks</a>.</p>
+<a href="https://github.com/copper-project/copper-rs/tree/master/benchmarks">cross-framework benchmarks</a>.</p>
 <h3 id="build-your-first-copper-app"><a class="doc-anchor" href="#build-your-first-copper-app">§</a>Build Your First Copper App</h3>
 <p>Install the latest stable Rust toolchain, then:</p>
 <div class="example-wrap"><pre class="language-bash"><code>cargo install cargo-cunew
@@ -72,14 +72,14 @@ first messages and records <code>logs/hello-copper.copper</code>. Start with
 also provides helpers for logs, CopperLists, topology (<code>just dag</code>), the exact
 generated process schedule (<code>just plan</code>), post-execution timing from the default
 Copper log (<code>just plan-log</code>), and replay.</p>
-<h3 id="how-copper-fits-together"><a class="doc-anchor" href="#how-copper-fits-together">§</a>How Copper Fits Together</h3><div class="example-wrap"><pre class="language-mermaid"><code>flowchart LR
-    Config[&quot;copperconfig.ron&lt;br/&gt;Static task graph&quot;]
-    Generate[&quot;#[copper_runtime]&lt;br/&gt;Compile-time generation&quot;]
-    Runtime[&quot;Deterministic runtime&lt;br/&gt;Zero-alloc hot path&quot;]
-    Log[&quot;Unified .copper log&quot;]
-    Tools[&quot;Replay · Export · Inspect&quot;]
-
-    Config --&gt; Generate --&gt; Runtime --&gt; Log --&gt; Tools</code></pre></div>
+<h3 id="how-copper-fits-together"><a class="doc-anchor" href="#how-copper-fits-together">§</a>How Copper Fits Together</h3><div><table><thead><tr><th>Stage</th><th>What happens</th></tr></thead><tbody>
+<tr><td><strong>Declare</strong></td><td>Define the static task graph in <code>copperconfig.ron</code>.</td></tr>
+<tr><td><strong>Generate</strong></td><td><code>#[copper_runtime]</code> wires the graph at compile time.</td></tr>
+<tr><td><strong>Run</strong></td><td>Execute deterministically with a zero-allocation hot path.</td></tr>
+<tr><td><strong>Record</strong></td><td>Capture messages, timing, and state in a unified <code>.copper</code> log.</td></tr>
+<tr><td><strong>Inspect</strong></td><td>Replay a recorded run, export its data, and inspect its state.</td></tr>
+</tbody></table>
+</div>
 <p>The robot is a static thing: Copper turns its declared graph into a purpose-built
 runtime, then records messages, timing, and state into one replayable log.</p>
 <h3 id="explore-copper"><a class="doc-anchor" href="#explore-copper">§</a>Explore Copper</h3><table>
@@ -93,7 +93,7 @@ runtime, then records messages, timing, and state into one replayable log.</p>
   </tr>
   <tr>
     <td><strong>Go deeper</strong></td>
-    <td><a href="examples/">Examples</a> · <a href="https://copper-project.github.io/copper-rs-book/logging-replay.html">Logging and replay</a> · <a href="https://copper-project.github.io/copper-rs/Python-Support">Python support</a></td>
+    <td><a href="https://github.com/copper-project/copper-rs/tree/master/examples">Examples</a> · <a href="https://copper-project.github.io/copper-rs-book/logging-replay.html">Logging and replay</a> · <a href="https://copper-project.github.io/copper-rs/Python-Support">Python support</a></td>
   </tr>
   <tr>
     <td><strong>Project</strong></td>
@@ -101,7 +101,7 @@ runtime, then records messages, timing, and state into one replayable log.</p>
   </tr>
   <tr>
     <td><strong>Community</strong></td>
-    <td><a href="CONTRIBUTING.md">Contributing</a> · <a href="https://github.com/copper-project/copper-rs/discussions">GitHub Discussions</a> · <a href="https://discord.gg/VkCG7Sb9Kw">Discord</a></td>
+    <td><a href="https://github.com/copper-project/copper-rs/blob/master/CONTRIBUTING.md">Contributing</a> · <a href="https://github.com/copper-project/copper-rs/discussions">GitHub Discussions</a> · <a href="https://discord.gg/VkCG7Sb9Kw">Discord</a></td>
   </tr>
 </table></div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="app/index.html" title="mod cu29_runtime::app">app</a></dt><dt><a class="mod" href="config/index.html" title="mod cu29_runtime::config">config</a></dt><dd>This module defines the configuration of the copper runtime.
 The configuration is a directed graph where nodes are tasks and edges are connections between tasks.
