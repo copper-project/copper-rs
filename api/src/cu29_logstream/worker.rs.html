@@ -230,7 +230,7 @@
 <a href=#230 id=230 data-nosnippet>230</a>    } <span class="kw">else </span>{
 <a href=#231 id=231 data-nosnippet>231</a>        clock.clone()
 <a href=#232 id=232 data-nosnippet>232</a>    };
-<a href=#233 id=233 data-nosnippet>233</a>    <span class="kw">let </span>interval = config.recovery.anchor_interval;
+<a href=#233 id=233 data-nosnippet>233</a>    <span class="kw">let </span>interval = config.recovery.recovery_interval;
 <a href=#234 id=234 data-nosnippet>234</a>    <span class="kw">let </span>drain_time = config.pacing.max_latency;
 <a href=#235 id=235 data-nosnippet>235</a>    <span class="kw">let </span><span class="kw-2">mut </span>core = SenderCore::new(config, clock.now(), reserved)
 <a href=#236 id=236 data-nosnippet>236</a>        .map_err(|error| CuError::from(error.to_string()))<span class="question-mark">?</span>;

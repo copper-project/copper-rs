@@ -4604,7 +4604,7 @@
 <a href=#4604 id=4604 data-nosnippet>4604</a>                .as_ref()
 <a href=#4605 id=4605 data-nosnippet>4605</a>                .is_none_or(|logging| logging.enable_keyframe_logging &amp;&amp; logging.enable_task_logging);
 <a href=#4606 id=4606 data-nosnippet>4606</a>            <span class="comment">// A ground-side simulation may disable local output entirely while
-<a href=#4607 id=4607 data-nosnippet>4607</a>            // retaining the generated freeze/thaw plan for received anchors.
+<a href=#4607 id=4607 data-nosnippet>4607</a>            // retaining the generated freeze/thaw plan for received recovery points.
 <a href=#4608 id=4608 data-nosnippet>4608</a>            </span><span class="kw">if </span>configured_keyframe_logging != #local_keyframe_logging_enabled
 <a href=#4609 id=4609 data-nosnippet>4609</a>                &amp;&amp; !(#sim_mode &amp;&amp; #logstream_enabled &amp;&amp; !configured_keyframe_logging) {
 <a href=#4610 id=4610 data-nosnippet>4610</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(<span class="macro">format!</span>(
@@ -6178,7 +6178,7 @@
 <a href=#6178 id=6178 data-nosnippet>6178</a>            logstream_enabled.then(|| <span class="macro">quote!</span> { logstream: <span class="self">self</span>.logstream, });
 <a href=#6179 id=6179 data-nosnippet>6179</a>        <span class="kw">let </span>builder_with_logstream_method = logstream_enabled.then(|| {
 <a href=#6180 id=6180 data-nosnippet>6180</a>            <span class="macro">quote!</span> {
-<a href=#6181 id=6181 data-nosnippet>6181</a>                <span class="doccomment">/// Adds a nonblocking CopperList plus keyframe/anchor packet resource.
+<a href=#6181 id=6181 data-nosnippet>6181</a>                <span class="doccomment">/// Adds a nonblocking CopperList plus keyframe/recovery point packet resource.
 <a href=#6182 id=6182 data-nosnippet>6182</a>                ///
 <a href=#6183 id=6183 data-nosnippet>6183</a>                /// One sender worker owns the endpoint and schedules both semantic lanes
 <a href=#6184 id=6184 data-nosnippet>6184</a>                /// against the same budget. Physical pacing uses a running RobotClock,

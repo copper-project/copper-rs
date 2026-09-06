@@ -312,7 +312,7 @@
 <a href=#312 id=312 data-nosnippet>312</a>    }
 <a href=#313 id=313 data-nosnippet>313</a>
 <a href=#314 id=314 data-nosnippet>314</a>    <span class="kw">fn </span>nearest_keyframe(<span class="kw-2">&amp;</span><span class="self">self</span>, target_culistid: u64) -&gt; <span class="prelude-ty">Option</span>&lt;KeyFrame&gt; {
-<a href=#315 id=315 data-nosnippet>315</a>        nearest_replay_anchor(<span class="kw-2">&amp;</span><span class="self">self</span>.keyframes, target_culistid)
+<a href=#315 id=315 data-nosnippet>315</a>        nearest_replay_keyframe(<span class="kw-2">&amp;</span><span class="self">self</span>.keyframes, target_culistid)
 <a href=#316 id=316 data-nosnippet>316</a>    }
 <a href=#317 id=317 data-nosnippet>317</a>
 <a href=#318 id=318 data-nosnippet>318</a>    <span class="kw">fn </span>restore_keyframe(<span class="kw-2">&amp;mut </span><span class="self">self</span>, kf: <span class="kw-2">&amp;</span>KeyFrame) -&gt; CuResult&lt;()&gt; {
@@ -1126,7 +1126,7 @@
 <a href=#1126 id=1126 data-nosnippet>1126</a>    <span class="prelude-val">Ok</span>((sections, keyframes, total_entries))
 <a href=#1127 id=1127 data-nosnippet>1127</a>}
 <a href=#1128 id=1128 data-nosnippet>1128</a>
-<a href=#1129 id=1129 data-nosnippet>1129</a><span class="kw">fn </span>nearest_replay_anchor(keyframes: <span class="kw-2">&amp;</span>[KeyFrame], target_culistid: u64) -&gt; <span class="prelude-ty">Option</span>&lt;KeyFrame&gt; {
+<a href=#1129 id=1129 data-nosnippet>1129</a><span class="kw">fn </span>nearest_replay_keyframe(keyframes: <span class="kw-2">&amp;</span>[KeyFrame], target_culistid: u64) -&gt; <span class="prelude-ty">Option</span>&lt;KeyFrame&gt; {
 <a href=#1130 id=1130 data-nosnippet>1130</a>    keyframes
 <a href=#1131 id=1131 data-nosnippet>1131</a>        .iter()
 <a href=#1132 id=1132 data-nosnippet>1132</a>        .filter(|kf| kf.culistid &lt;= target_culistid)
@@ -1147,22 +1147,22 @@
 <a href=#1147 id=1147 data-nosnippet>1147</a>    }
 <a href=#1148 id=1148 data-nosnippet>1148</a>
 <a href=#1149 id=1149 data-nosnippet>1149</a>    <span class="attr">#[test]
-<a href=#1150 id=1150 data-nosnippet>1150</a>    </span><span class="kw">fn </span>replay_anchor_selects_nearest_keyframe_at_or_before_target() {
+<a href=#1150 id=1150 data-nosnippet>1150</a>    </span><span class="kw">fn </span>replay_keyframe_selects_nearest_keyframe_at_or_before_target() {
 <a href=#1151 id=1151 data-nosnippet>1151</a>        <span class="kw">let </span>keyframes = [keyframe(<span class="number">0</span>), keyframe(<span class="number">100</span>), keyframe(<span class="number">500</span>)];
 <a href=#1152 id=1152 data-nosnippet>1152</a>
-<a href=#1153 id=1153 data-nosnippet>1153</a>        <span class="kw">let </span>anchor = nearest_replay_anchor(<span class="kw-2">&amp;</span>keyframes, <span class="number">533</span>).expect(<span class="string">"replay anchor"</span>);
+<a href=#1153 id=1153 data-nosnippet>1153</a>        <span class="kw">let </span>keyframe = nearest_replay_keyframe(<span class="kw-2">&amp;</span>keyframes, <span class="number">533</span>).expect(<span class="string">"replay keyframe"</span>);
 <a href=#1154 id=1154 data-nosnippet>1154</a>
-<a href=#1155 id=1155 data-nosnippet>1155</a>        <span class="macro">assert_eq!</span>(anchor.culistid, <span class="number">500</span>);
+<a href=#1155 id=1155 data-nosnippet>1155</a>        <span class="macro">assert_eq!</span>(keyframe.culistid, <span class="number">500</span>);
 <a href=#1156 id=1156 data-nosnippet>1156</a>    }
 <a href=#1157 id=1157 data-nosnippet>1157</a>
 <a href=#1158 id=1158 data-nosnippet>1158</a>    <span class="attr">#[test]
-<a href=#1159 id=1159 data-nosnippet>1159</a>    </span><span class="kw">fn </span>replay_anchor_uses_nearest_available_nonzero_keyframe() {
+<a href=#1159 id=1159 data-nosnippet>1159</a>    </span><span class="kw">fn </span>replay_keyframe_uses_nearest_available_nonzero_keyframe() {
 <a href=#1160 id=1160 data-nosnippet>1160</a>        <span class="kw">let </span>keyframes = [keyframe(<span class="number">100</span>), keyframe(<span class="number">500</span>), keyframe(<span class="number">900</span>)];
 <a href=#1161 id=1161 data-nosnippet>1161</a>
-<a href=#1162 id=1162 data-nosnippet>1162</a>        <span class="kw">let </span>anchor = nearest_replay_anchor(<span class="kw-2">&amp;</span>keyframes, <span class="number">533</span>).expect(<span class="string">"replay anchor"</span>);
+<a href=#1162 id=1162 data-nosnippet>1162</a>        <span class="kw">let </span>keyframe = nearest_replay_keyframe(<span class="kw-2">&amp;</span>keyframes, <span class="number">533</span>).expect(<span class="string">"replay keyframe"</span>);
 <a href=#1163 id=1163 data-nosnippet>1163</a>
-<a href=#1164 id=1164 data-nosnippet>1164</a>        <span class="macro">assert_eq!</span>(anchor.culistid, <span class="number">500</span>);
-<a href=#1165 id=1165 data-nosnippet>1165</a>        <span class="macro">assert!</span>(nearest_replay_anchor(<span class="kw-2">&amp;</span>keyframes, <span class="number">99</span>).is_none());
+<a href=#1164 id=1164 data-nosnippet>1164</a>        <span class="macro">assert_eq!</span>(keyframe.culistid, <span class="number">500</span>);
+<a href=#1165 id=1165 data-nosnippet>1165</a>        <span class="macro">assert!</span>(nearest_replay_keyframe(<span class="kw-2">&amp;</span>keyframes, <span class="number">99</span>).is_none());
 <a href=#1166 id=1166 data-nosnippet>1166</a>    }
 <a href=#1167 id=1167 data-nosnippet>1167</a>}
 </code></pre></div></section></main></body></html>

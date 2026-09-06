@@ -16,7 +16,7 @@
 <a href=#16 id=16 data-nosnippet>16</a>    StructuredLog = <span class="number">3</span>,
 <a href=#17 id=17 data-nosnippet>17</a>    Lifecycle = <span class="number">4</span>,
 <a href=#18 id=18 data-nosnippet>18</a>    Gap = <span class="number">5</span>,
-<a href=#19 id=19 data-nosnippet>19</a>    Anchor = <span class="number">6</span>,
+<a href=#19 id=19 data-nosnippet>19</a>    RecoveryPoint = <span class="number">6</span>,
 <a href=#20 id=20 data-nosnippet>20</a>}
 <a href=#21 id=21 data-nosnippet>21</a>
 <a href=#22 id=22 data-nosnippet>22</a><span class="kw">impl </span>TryFrom&lt;u8&gt; <span class="kw">for </span>RecordKind {
@@ -30,7 +30,7 @@
 <a href=#30 id=30 data-nosnippet>30</a>            <span class="number">3 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="self">Self</span>::StructuredLog),
 <a href=#31 id=31 data-nosnippet>31</a>            <span class="number">4 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="self">Self</span>::Lifecycle),
 <a href=#32 id=32 data-nosnippet>32</a>            <span class="number">5 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="self">Self</span>::Gap),
-<a href=#33 id=33 data-nosnippet>33</a>            <span class="number">6 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="self">Self</span>::Anchor),
+<a href=#33 id=33 data-nosnippet>33</a>            <span class="number">6 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="self">Self</span>::RecoveryPoint),
 <a href=#34 id=34 data-nosnippet>34</a>            <span class="kw">_ </span>=&gt; <span class="prelude-val">Err</span>(Error::UnknownRecordKind(value)),
 <a href=#35 id=35 data-nosnippet>35</a>        }
 <a href=#36 id=36 data-nosnippet>36</a>    }
