@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["decode_capture","encode_capture_record_into"],"struct":["CaptureView","CapturedList"],"trait":["CaptureDataSet"]};
