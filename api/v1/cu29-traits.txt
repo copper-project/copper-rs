@@ -140,6 +140,8 @@ pub fn cu29_traits::TaskOutputSpec::payload_type_path(&self) -> &'static str
 pub const cu29_traits::COMPACT_STRING_CAPACITY: usize
 pub trait cu29_traits::CopperListTuple: cu_bincode::enc::Encode + cu_bincode::de::Decode<()> + core::fmt::Debug + serde_core::ser::Serialize + cu29_traits::ErasedCuStampedDataSet + cu29_traits::MatchingTasks + core::default::Default
 impl<T> cu29_traits::CopperListTuple for T where T: cu_bincode::enc::Encode + cu_bincode::de::Decode<()> + core::fmt::Debug + serde_core::ser::Serialize + cu29_traits::ErasedCuStampedDataSet + cu29_traits::MatchingTasks + core::default::Default
+pub trait cu29_traits::CuCrossPlatformDeterministic
+pub const cu29_traits::CuCrossPlatformDeterministic::REPLAY_ABI: u32
 pub trait cu29_traits::CuMsgMetadataTrait
 pub fn cu29_traits::CuMsgMetadataTrait::origin(&self) -> core::option::Option<&cu29_traits::CuMsgOrigin>
 pub fn cu29_traits::CuMsgMetadataTrait::process_time(&self) -> cu29_clock::PartialCuTimeRange

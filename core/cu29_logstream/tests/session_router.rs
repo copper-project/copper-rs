@@ -52,7 +52,13 @@ fn manifest_bootstraps_continuous_decoder_without_out_of_band_fec_config() {
     };
     let plan = LogStreamPlan::resolve(&destination()).unwrap();
     let sender = plan
-        .sender_config(identity, ApplicationSchema { outputs: vec![] })
+        .sender_config(
+            identity,
+            ApplicationSchema {
+                outputs: vec![],
+                reconstruction: vec![],
+            },
+        )
         .unwrap();
 
     let mut finite = FiniteObjectEncoder::new(sender.recovery.finite).unwrap();
@@ -126,7 +132,13 @@ fn setup() -> (
     };
     let sender = LogStreamPlan::resolve(&destination())
         .unwrap()
-        .sender_config(identity, ApplicationSchema { outputs: vec![] })
+        .sender_config(
+            identity,
+            ApplicationSchema {
+                outputs: vec![],
+                reconstruction: vec![],
+            },
+        )
         .unwrap();
     let router = SessionRouter::new(SessionRouterLimits {
         max_sessions: 1,
