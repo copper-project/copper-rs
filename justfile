@@ -164,6 +164,11 @@ test:
 	cargo +stable nextest run --all-targets --workspace {{WORKSPACE_EXCLUDES}}
 	cargo +stable nextest run --no-default-features
 
+# DAG rendering, resource usage labels, and config parsing regressions.
+dag-check:
+	cargo +stable clippy -p cu29-runtime --bin cu29-rendercfg -- --deny warnings
+	cargo +stable test -p cu29-runtime --bin cu29-rendercfg
+
 # UDP carrier contracts and generated sender/session-router localhost integration.
 logstream-udp-check:
 	cargo +stable clippy -p cu29-logstream-udp --all-targets --features runtime-integration -- --deny warnings
