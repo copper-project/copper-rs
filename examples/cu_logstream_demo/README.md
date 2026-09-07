@@ -73,10 +73,11 @@ come exclusively from reconstructed Copper task outputs.
 The screen follows `cu_tuimon` with numbered tabs and command badges. **1** selects
 Live, **2** selects Health, and **Tab** cycles between them. In Health, **hjkl**
 or the arrow keys scroll the details, including the archive path and recovery counters.
-A warm graphite background and ivory text anchor the palette: received values use
-muted sage, reconstructed values and trails use copper, warnings use amber, and
-failures use soft red. Tabs and command badges share the same warm neutral colors,
-independent of the terminal palette.
+The dashboard uses the official [Catppuccin Mocha palette](https://github.com/catppuccin/palette):
+green for received values, mauve for reconstruction, yellow for warnings, and red
+for failures. Text, tabs, and trails use Mocha's named colors; the main background
+preserves the terminal's default black or transparency.
+Teal, sky, and sapphire accents are omitted.
 **Space** pauses consumption; wait a second and resume to see missed samples
 while the archive count keeps advancing. **q**, Escape, or Ctrl-C closes the
 receiver and finalizes its archive. The sender is a separate process. After the

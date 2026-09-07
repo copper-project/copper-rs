@@ -28,18 +28,19 @@ const CHART_CAPACITY: usize = 120;
 const TRAIL_CAPACITY: usize = 1200; // One 12-second loop at 100 Hz, UI storage only.
 const UI_TICK: Duration = Duration::from_millis(50);
 
-// Warm graphite and copper, with restrained semantic status colors.
-const BG: Color = Color::Rgb(24, 22, 21);
-const FG: Color = Color::Rgb(231, 222, 211);
-const MUTED: Color = Color::Rgb(149, 137, 125);
-const SAGE: Color = Color::Rgb(166, 184, 150);
-const COPPER: Color = Color::Rgb(224, 157, 112);
-const AMBER: Color = Color::Rgb(228, 191, 117);
-const ERROR: Color = Color::Rgb(222, 119, 112);
-const BAR: Color = Color::Rgb(31, 28, 26);
-const ACTIVE: Color = Color::Rgb(99, 65, 47);
-const INACTIVE: Color = Color::Rgb(46, 41, 37);
-const TRAIL_COLORS: [Color; 3] = [Color::Rgb(87, 58, 43), Color::Rgb(143, 94, 66), COPPER];
+// Official Catppuccin Mocha colors; omit teal, sky, and sapphire accents.
+// https://github.com/catppuccin/palette/blob/main/palette.json
+const BG: Color = Color::Reset; // Preserve the terminal's black/transparent background.
+const FG: Color = Color::Rgb(205, 214, 244); // Text
+const MUTED: Color = Color::Rgb(147, 153, 178); // Overlay 2
+const GREEN: Color = Color::Rgb(166, 227, 161);
+const MAUVE: Color = Color::Rgb(203, 166, 247);
+const YELLOW: Color = Color::Rgb(249, 226, 175);
+const RED: Color = Color::Rgb(243, 139, 168);
+const BAR: Color = Color::Rgb(24, 24, 37); // Mantle
+const ACTIVE: Color = Color::Rgb(88, 91, 112); // Surface 2
+const INACTIVE: Color = Color::Rgb(49, 50, 68); // Surface 0
+const TRAIL_COLORS: [Color; 3] = [ACTIVE, MUTED, MAUVE];
 
 #[derive(Default)]
 struct View {
@@ -146,11 +147,11 @@ impl View {
             frame.area(),
         );
         let (reconstruction, twin_color) = match status.twin.state {
-            ReconstructionState::Waiting => ("Waiting for recovery point", AMBER),
-            ReconstructionState::Recovering => ("Recovering", AMBER),
-            ReconstructionState::Reconstructed => ("Reconstructed locally", COPPER),
-            ReconstructionState::Verified => ("Verified (developer checks)", SAGE),
-            ReconstructionState::Diverged => ("DIVERGED", ERROR),
+            ReconstructionState::Waiting => ("Waiting for recovery point", YELLOW),
+            ReconstructionState::Recovering => ("Recovering", YELLOW),
+            ReconstructionState::Reconstructed => ("Reconstructed locally", MAUVE),
+            ReconstructionState::Verified => ("Verified (developer checks)", GREEN),
+            ReconstructionState::Diverged => ("DIVERGED", RED),
         };
         let tip = if matches!(
             status.twin.state,
@@ -161,17 +162,17 @@ impl View {
             "—".into()
         };
         let (recording, recording_color) = match status.state {
-            RecordingState::Waiting => ("Waiting for robot", AMBER),
-            RecordingState::Recording => ("Recording", SAGE),
+            RecordingState::Waiting => ("Waiting for robot", YELLOW),
+            RecordingState::Recording => ("Recording", GREEN),
             RecordingState::Closed => ("Archive closed", MUTED),
-            RecordingState::Failed => ("RECEIVER ERROR", ERROR),
+            RecordingState::Failed => ("RECEIVER ERROR", RED),
         };
         let view_state = if self.paused {
             "VIEW PAUSED"
         } else {
             "LIVE VIEW"
         };
-        let view_color = if self.paused { AMBER } else { COPPER };
+        let view_color = if self.paused { YELLOW } else { MAUVE };
         let [header, body, footer] = Layout::vertical([
             Constraint::Length(1),
             Constraint::Min(0),
@@ -241,7 +242,7 @@ impl View {
                 state,
             );
             let lines = self.health_lines(status, overwritten, path);
-            let block = panel("Stream health · recording continues while paused", COPPER);
+            let block = panel("Stream health · recording continues while paused", MAUVE);
             let inner = block.inner(details);
             self.health_scroll.0 = self
                 .health_scroll
@@ -274,22 +275,22 @@ impl View {
                     ]),
                     Line::from(
                         [
-                            metric("Shoulder", angle(self.angles.map(|a| a.shoulder)), SAGE),
-                            metric("Elbow", angle(self.angles.map(|a| a.elbow)), SAGE),
+                            metric("Shoulder", angle(self.angles.map(|a| a.shoulder)), GREEN),
+                            metric("Elbow", angle(self.angles.map(|a| a.elbow)), GREEN),
                         ]
                         .concat(),
                     ),
                     Line::from(
                         [
-                            metric("Tip", tip, COPPER),
-                            vec![Span::styled("(local)", Style::default().fg(COPPER))],
+                            metric("Tip", tip, MAUVE),
+                            vec![Span::styled("(local)", Style::default().fg(MAUVE))],
                         ]
                         .concat(),
                     ),
-                    Line::from(value("Payload NOT transmitted", COPPER)),
+                    Line::from(value("Payload NOT transmitted", MAUVE)),
                     Line::from(
                         [
-                            metric("Archived", status.archived, SAGE),
+                            metric("Archived", status.archived, GREEN),
                             metric("Gaps", status.gaps, warning(status.gaps > 0)),
                         ]
                         .concat(),
@@ -315,9 +316,9 @@ impl View {
                 ]),
                 Line::from(
                     [
-                        metric("Shoulder", angle(self.angles.map(|a| a.shoulder)), SAGE),
-                        metric("Elbow", angle(self.angles.map(|a| a.elbow)), SAGE),
-                        metric("Tip", &tip, COPPER),
+                        metric("Shoulder", angle(self.angles.map(|a| a.shoulder)), GREEN),
+                        metric("Elbow", angle(self.angles.map(|a| a.elbow)), GREEN),
+                        metric("Tip", &tip, MAUVE),
                     ]
                     .concat(),
                 ),
@@ -325,7 +326,7 @@ impl View {
                     value(reconstruction, twin_color),
                     Span::styled(
                         " · pose payload not transmitted",
-                        Style::default().fg(COPPER),
+                        Style::default().fg(MAUVE),
                     ),
                 ]),
                 Line::from(
@@ -336,7 +337,7 @@ impl View {
                     .concat(),
                 ),
             ])
-            .block(panel("Captured inputs + Copper twin output", COPPER)),
+            .block(panel("Captured inputs + Copper twin output", MAUVE)),
             values,
         );
         let [encoder_charts, arm] =
@@ -370,22 +371,22 @@ impl View {
                 Sparkline::default()
                     .data(samples)
                     .max(u64::from(FULL_TURN))
-                    .block(panel(title, SAGE).title_bottom(format!("Angle: {}", angle(reading))))
-                    .style(Style::default().fg(SAGE)),
+                    .block(panel(title, GREEN).title_bottom(format!("Angle: {}", angle(reading))))
+                    .style(Style::default().fg(GREEN)),
                 area,
             );
         }
         self.draw_arm(
             frame,
             arm,
-            if self.paused { AMBER } else { twin_color },
+            if self.paused { YELLOW } else { twin_color },
             &tip,
         );
         frame.render_widget(
             Paragraph::new(vec![
                 Line::from(
                     [
-                        metric("Archived", status.archived, SAGE),
+                        metric("Archived", status.archived, GREEN),
                         metric("Source gaps", status.gaps, warning(status.gaps > 0)),
                         metric(
                             "Replay drops",
@@ -401,7 +402,7 @@ impl View {
                         metric("Last packet", age(status.last_packet), FG),
                         vec![Span::styled(
                             "2: stream details",
-                            Style::default().fg(AMBER),
+                            Style::default().fg(YELLOW),
                         )],
                     ]
                     .concat(),
@@ -467,7 +468,7 @@ impl View {
                         y - 0.2,
                         Span::styled(
                             "Task re-executed on ground · pose not transmitted",
-                            Style::default().fg(COPPER),
+                            Style::default().fg(MAUVE),
                         ),
                     );
                     if tip == "—" {
@@ -484,29 +485,29 @@ impl View {
 
     fn health_lines(&self, status: Status, overwritten: u64, path: &str) -> Vec<Line<'static>> {
         vec![
-            Line::from(metric("Packets", status.packets, COPPER)),
+            Line::from(metric("Packets", status.packets, MAUVE)),
             Line::from(metric("Last packet", age(status.last_packet), FG)),
-            Line::from(metric("Archived", status.archived, SAGE)),
-            Line::from(metric("Latest CL", number(status.latest), SAGE)),
+            Line::from(metric("Archived", status.archived, GREEN)),
+            Line::from(metric("Latest CL", number(status.latest), GREEN)),
             Line::from(metric(
                 "Verified recovery point",
                 number(status.recovery_point),
-                COPPER,
+                MAUVE,
             )),
             Line::from(metric("Source gaps", status.gaps, warning(status.gaps > 0))),
             Line::from(metric(
                 "Reconstructed frames",
                 status.twin.reconstructed,
-                COPPER,
+                MAUVE,
             )),
-            Line::from(metric("Verified frames", status.twin.verified, SAGE)),
+            Line::from(metric("Verified frames", status.twin.verified, GREEN)),
             Line::from(metric(
                 "Divergences",
                 status.twin.divergences,
                 if status.twin.divergences > 0 {
-                    ERROR
+                    RED
                 } else {
-                    SAGE
+                    GREEN
                 },
             )),
             Line::from(metric(
@@ -557,7 +558,7 @@ fn metric(label: &str, data: impl ToString, color: Color) -> Vec<Span<'static>> 
 }
 
 fn warning(present: bool) -> Color {
-    if present { AMBER } else { SAGE }
+    if present { YELLOW } else { GREEN }
 }
 
 fn badge(key: &str, label: &str, bg: Color) -> Vec<Span<'static>> {
@@ -566,7 +567,7 @@ fn badge(key: &str, label: &str, bg: Color) -> Vec<Span<'static>> {
         Span::styled(
             format!(" {key} "),
             Style::default()
-                .fg(AMBER)
+                .fg(YELLOW)
                 .bg(bg)
                 .add_modifier(Modifier::BOLD),
         ),
@@ -742,8 +743,8 @@ mod tests {
             .draw(|frame| view.draw(frame, status, 0, "logs/test.copper"))
             .unwrap();
         let buffer = terminal.backend().buffer();
-        assert_eq!(buffer[(0, 1)].fg, ERROR);
-        assert_eq!(buffer[(0, 2)].fg, ERROR);
+        assert_eq!(buffer[(0, 1)].fg, RED);
+        assert_eq!(buffer[(0, 2)].fg, RED);
         assert_eq!(buffer[(49, 5)].bg, BG);
         for _ in 0..20 {
             view.key(KeyCode::Down);
