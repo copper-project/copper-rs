@@ -73,7 +73,10 @@ pub use rlc::{
     CopperListGap, GapReason, ReceiveError, ReceiverLimits, ReceiverOccupancy, RecoveredRecord,
     StreamIdentity,
 };
-pub use router::{SessionEvent, SessionRouter, SessionRouterLimits, SessionRouterStats};
+pub use router::{
+    ReceivedManifest, SessionEvent, SessionEventRef, SessionRouter, SessionRouterLimits,
+    SessionRouterStats,
+};
 pub use sender::{
     ContinuousCopperListSink, ContinuousSenderConfig, ContinuousSenderStats,
     DEFAULT_MAX_SYMBOL_SIZE, DEFAULT_MAX_WINDOW_SYMBOLS, DefaultContinuousCopperListSink,
@@ -85,5 +88,5 @@ pub use stream::{
 };
 pub use wire::{
     FecScheme, FecSymbolKind, Lane, PACKET_HEADER_LEN, WIRE_VERSION, WireHeader, WirePacket,
-    encode_packet_into,
+    WirePacketRef, encode_packet_into,
 };

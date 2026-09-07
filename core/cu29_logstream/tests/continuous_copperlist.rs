@@ -25,9 +25,7 @@ enum ObservedEvent {
 
 fn observe_event(event: ContinuousReceiveEvent<'_>) -> ObservedEvent {
     match event {
-        ContinuousReceiveEvent::Record(record) => {
-            ObservedEvent::Record(record.decoded().unwrap().object_id)
-        }
+        ContinuousReceiveEvent::Record(record) => ObservedEvent::Record(record.decoded().object_id),
         ContinuousReceiveEvent::Gap(gap) => ObservedEvent::Gap(gap),
     }
 }
@@ -177,9 +175,9 @@ fn partial_copperlists_survive_a_deterministically_simulated_bad_link() {
     for expected in &source {
         let recovered = recovered_records
             .iter()
-            .find(|record| record.decoded().unwrap().object_id == expected.id)
+            .find(|record| record.decoded().object_id == expected.id)
             .expect("every partial CopperList should be recovered");
-        let decoded_record = recovered.decoded().unwrap();
+        let decoded_record = recovered.decoded();
         let decoded: CopperList<PartialDataSet> =
             decode_copperlist(decoded_record.payload).unwrap();
         assert_eq!(decoded.id, expected.id);
@@ -431,7 +429,7 @@ fn receiver_runs_past_many_windows_with_bounded_state_and_wrapping_sequences() {
                 .receive_datagram(datagram, |event| {
                     match event {
                         ContinuousReceiveEvent::Record(record) => {
-                            record_ids.push(record.decoded().unwrap().object_id);
+                            record_ids.push(record.decoded().object_id);
                         }
                         ContinuousReceiveEvent::Gap(gap) => panic!("unexpected gap: {gap:?}"),
                     }
@@ -582,7 +580,7 @@ fn consumer_failure_leaves_the_record_available_for_retry() {
     decoder
         .drain_events(|event| {
             if let ContinuousReceiveEvent::Record(record) = event {
-                retried_id = Some(record.decoded().unwrap().object_id);
+                retried_id = Some(record.decoded().object_id);
             }
             Ok::<(), core::convert::Infallible>(())
         })

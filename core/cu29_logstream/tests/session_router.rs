@@ -93,7 +93,7 @@ fn manifest_bootstraps_continuous_decoder_without_out_of_band_fec_config() {
     for packet in manifest_packets {
         router
             .receive_datagram(&packet, |event| {
-                events.push(event);
+                events.push(event.to_owned());
                 Ok::<(), ()>(())
             })
             .unwrap();
@@ -104,7 +104,7 @@ fn manifest_bootstraps_continuous_decoder_without_out_of_band_fec_config() {
     for packet in continuous_packets {
         router
             .receive_datagram(&packet, |event| {
-                events.push(event);
+                events.push(event.to_owned());
                 Ok::<(), ()>(())
             })
             .unwrap();
@@ -207,7 +207,7 @@ fn receive(
     for packet in packets {
         router
             .receive_datagram(packet, |event| {
-                events.push(event);
+                events.push(event.to_owned());
                 Ok::<(), ()>(())
             })
             .unwrap();
@@ -218,9 +218,7 @@ fn ids(events: &[SessionEvent]) -> Vec<u64> {
     events
         .iter()
         .filter_map(|event| match event {
-            SessionEvent::ContinuousRecord { record, .. } => {
-                Some(record.decoded().unwrap().object_id)
-            }
+            SessionEvent::ContinuousRecord { record, .. } => Some(record.decoded().object_id),
             _ => None,
         })
         .collect()
@@ -359,7 +357,7 @@ fn outage_recovery_and_terminal_gap_are_explicit_and_consumer_failure_is_retryab
             if matches!(event, SessionEvent::VerifiedRecoveryPoint { .. }) {
                 return Err("archive unavailable");
             }
-            events.push(event);
+            events.push(event.to_owned());
             Ok(())
         });
         if result.is_err() {
@@ -370,14 +368,14 @@ fn outage_recovery_and_terminal_gap_are_explicit_and_consumer_failure_is_retryab
     assert!(failed);
     router
         .drain_events(&mut |event| {
-            events.push(event);
+            events.push(event.to_owned());
             Ok::<(), ()>(())
         })
         .unwrap();
     assert!(events.iter().any(|event| matches!(event, SessionEvent::Gap { gap, .. } if gap.first_id == 1 && gap.last_id == 99 && gap.reason == cu29_logstream::GapReason::RecoveryPoint)));
     router
         .finish_through(sender.continuous.identity, 102, |event| {
-            events.push(event);
+            events.push(event.to_owned());
             Ok::<(), ()>(())
         })
         .unwrap();
@@ -396,11 +394,292 @@ fn startup_overflow_is_bounded_and_never_claims_a_complete_session() {
     assert_eq!(ids(&events), (0..8).collect::<Vec<_>>());
     router
         .finish_through(sender.continuous.identity, 11, |event| {
-            events.push(event);
+            events.push(event.to_owned());
             Ok::<(), ()>(())
         })
         .unwrap();
     assert!(
         matches!(events.last(), Some(SessionEvent::Gap { gap, .. }) if gap.first_id == 8 && gap.last_id == 11)
     );
+}
+
+struct CountingAllocator;
+thread_local! {
+    static ALLOCATIONS: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+}
+unsafe impl std::alloc::GlobalAlloc for CountingAllocator {
+    unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
+        let _ = ALLOCATIONS.try_with(|count| {
+            if let Some(value) = count.get() {
+                count.set(Some(value + 1));
+            }
+        });
+        unsafe { std::alloc::System.alloc(layout) }
+    }
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
+        unsafe { std::alloc::System.dealloc(ptr, layout) }
+    }
+    unsafe fn realloc(&self, ptr: *mut u8, layout: std::alloc::Layout, size: usize) -> *mut u8 {
+        let _ = ALLOCATIONS.try_with(|count| {
+            if let Some(value) = count.get() {
+                count.set(Some(value + 1));
+            }
+        });
+        unsafe { std::alloc::System.realloc(ptr, layout, size) }
+    }
+}
+#[global_allocator]
+static ALLOCATOR: CountingAllocator = CountingAllocator;
+
+fn count_allocations(run: impl FnOnce()) -> usize {
+    ALLOCATIONS.with(|count| count.set(Some(0)));
+    run();
+    ALLOCATIONS.with(|count| count.replace(None).unwrap())
+}
+
+#[test]
+fn warmed_router_reuses_record_buffers_with_reordering_and_consumer_retries() {
+    let (sender, mut router) = setup();
+    receive(&mut router, &objects(&sender, 0)[0], &mut Vec::new());
+    let mut encoder = ContinuousEncoder::<1128, 64>::new(
+        sender.continuous.identity,
+        0,
+        sender.continuous.lane,
+        sender.continuous.fec,
+        sender.continuous.max_record_bytes,
+        EncodingSymbolId::new(0),
+    )
+    .unwrap();
+    let packets: Vec<Vec<Vec<u8>>> = (0..200)
+        .map(|id| {
+            // Warm both buffers at the maximum size, then vary lengths and fragment counts.
+            let size = if id < 2 {
+                4096
+            } else {
+                [80, 2048, 4096][id as usize % 3]
+            };
+            let record = encode_record(RecordKind::CopperList, id, &vec![id as u8; size]).unwrap();
+            let mut packets = Vec::new();
+            encoder.push_record(&record, &mut packets).unwrap();
+            packets
+        })
+        .collect();
+    let mut next = 0;
+    let mut retry_pointer = None;
+    let mut deliver_pair = |pair: &[Vec<Vec<u8>>]| {
+        // Complete the later record first, forcing two concurrent assembly buffers.
+        for packet in pair[1].iter().chain(&pair[0]) {
+            let result = router.receive_datagram(packet, |event| {
+                if let SessionEvent::ContinuousRecord { record, .. } = event {
+                    assert_eq!(record.decoded().object_id, next);
+                    retry_pointer = Some(record.bytes().as_ptr());
+                    return Err("retry");
+                }
+                Ok(())
+            });
+            if let Err(cu29_logstream::ReceiveError::Consumer("retry")) = result {
+                router
+                    .drain_events(&mut |event| {
+                        if let SessionEvent::ContinuousRecord { record, .. } = event {
+                            if let Some(pointer) = retry_pointer.take() {
+                                assert_eq!(record.bytes().as_ptr(), pointer);
+                            }
+                            let decoded = record.decoded();
+                            assert_eq!(decoded.object_id, next);
+                            assert!(decoded.payload.iter().all(|byte| *byte == next as u8));
+                            next += 1;
+                        }
+                        Ok::<(), ()>(())
+                    })
+                    .unwrap();
+            } else {
+                result.unwrap();
+            }
+        }
+    };
+    deliver_pair(&packets[..2]);
+    let allocations = count_allocations(|| {
+        for pair in packets[2..].as_chunks::<2>().0 {
+            deliver_pair(pair);
+        }
+    });
+    assert_eq!(next, 200);
+    assert_eq!(allocations, 0, "steady-state receive and retry allocated");
+}
+
+#[test]
+fn recovery_delivery_retries_borrow_the_same_verified_control_records() {
+    let (sender, mut router) = setup();
+    let control = objects(&sender, 100);
+    receive(&mut router, &control[0], &mut Vec::new());
+    receive(&mut router, &control[1], &mut Vec::new());
+    let mut pointers = None;
+    for packet in &control[2] {
+        let result = router.receive_datagram(packet, |event| {
+            if let SessionEvent::VerifiedRecoveryPoint {
+                recovery_record,
+                keyframe,
+                ..
+            } = event
+            {
+                pointers = Some((recovery_record.bytes().as_ptr(), keyframe.bytes().as_ptr()));
+                return Err("retry");
+            }
+            Ok(())
+        });
+        if result.is_err() {
+            break;
+        }
+    }
+    let pointers = pointers.expect("recovery event");
+    let mut delivered = false;
+    let allocations = count_allocations(|| {
+        router
+            .drain_events(&mut |event| {
+                if let SessionEvent::VerifiedRecoveryPoint {
+                    recovery_record,
+                    keyframe,
+                    ..
+                } = event
+                {
+                    assert_eq!(
+                        (recovery_record.bytes().as_ptr(), keyframe.bytes().as_ptr()),
+                        pointers
+                    );
+                    assert_eq!(keyframe.keyframe_id(), Some(100));
+                    delivered = true;
+                }
+                Ok::<(), ()>(())
+            })
+            .unwrap();
+    });
+    assert!(delivered);
+    assert_eq!(allocations, 0);
+}
+
+#[derive(Debug, Default, bincode::Encode, bincode::Decode, serde::Serialize)]
+struct EmptyDataSet;
+impl cu29_traits::ErasedCuStampedDataSet for EmptyDataSet {
+    fn cumsgs(&self) -> Vec<&dyn cu29_traits::ErasedCuStampedData> {
+        Vec::new()
+    }
+}
+impl cu29_traits::MatchingTasks for EmptyDataSet {
+    fn get_all_task_ids() -> &'static [&'static str] {
+        &[]
+    }
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn archive_writes_recovery_bytes_without_allocating() {
+    let (sender, mut router) = setup();
+    let logs = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../examples/cu_logstream_demo/logs");
+    std::fs::create_dir_all(&logs).unwrap();
+    let path = logs.join(format!("receiver-buffers-{}.copper", std::process::id()));
+    let mut archive = None;
+    let mut recovery_written = false;
+    for packets in objects(&sender, 0) {
+        for packet in packets {
+            router
+                .receive_datagram(&packet, |event| {
+                    if let SessionEvent::Manifest(manifest) = &event {
+                        archive = Some(
+                            cu29_logstream::NativeArchive::<EmptyDataSet>::new(
+                                &path,
+                                manifest,
+                                1024 * 1024,
+                                64 * 1024,
+                            )
+                            .unwrap(),
+                        );
+                    }
+                    if matches!(event, SessionEvent::VerifiedRecoveryPoint { .. }) {
+                        let allocations = count_allocations(|| {
+                            archive.as_mut().unwrap().accept(&event).unwrap();
+                        });
+                        assert_eq!(
+                            allocations, 0,
+                            "archive re-encoded recovery bytes or copied task state"
+                        );
+                        recovery_written = true;
+                    }
+                    Ok::<(), ()>(())
+                })
+                .unwrap();
+        }
+    }
+    assert!(recovery_written);
+    archive.unwrap().finish().unwrap();
+}
+
+#[test]
+fn continuity_records_support_borrowed_writes_and_owned_reads() {
+    use cu29_runtime::continuity::StreamContinuityRecord;
+    let payload = [42; 400];
+    let records = [
+        StreamContinuityRecord::Manifest {
+            record: payload.as_slice(),
+        },
+        StreamContinuityRecord::RecoveryPoint {
+            copperlist_id: 100,
+            record: payload.as_slice(),
+        },
+    ];
+    for record in records {
+        let mut bytes = [0; 512];
+        let mut len = 0;
+        let allocations = count_allocations(|| {
+            len = bincode::encode_into_slice(&record, &mut bytes, bincode::config::standard())
+                .unwrap();
+            let (decoded, used): (StreamContinuityRecord<&[u8]>, _) =
+                bincode::borrow_decode_from_slice(&bytes[..len], bincode::config::standard())
+                    .unwrap();
+            assert_eq!(used, len);
+            assert_eq!(decoded, record);
+        });
+        assert_eq!(allocations, 0);
+        let (owned, used): (StreamContinuityRecord, _) =
+            bincode::decode_from_slice(&bytes[..len], bincode::config::standard()).unwrap();
+        assert_eq!(used, len);
+        let owned_bytes = bincode::encode_to_vec(owned, bincode::config::standard()).unwrap();
+        assert_eq!(owned_bytes, bytes[..len]);
+    }
+}
+
+#[test]
+fn drain_processes_symbols_accepted_before_a_consumer_failure() {
+    use cu29_logstream::{ContinuousDecoder, ContinuousReceiveEvent, ReceiveError, ReceiverLimits};
+    let (sender, _) = setup();
+    let packets = continuous(&sender, 0..2);
+    let mut decoder = ContinuousDecoder::<1128, 64, 64>::new(
+        sender.continuous.identity,
+        sender.continuous.lane,
+        sender.continuous.fec,
+        64,
+        0,
+        ReceiverLimits::new(65_536, 64),
+    )
+    .unwrap();
+    for packet in packets {
+        assert_eq!(
+            decoder.receive_datagram(&packet, |_| Err("retry")),
+            Err(ReceiveError::Consumer("retry"))
+        );
+    }
+    // The second packet reached FEC, but delivery of record 0 interrupted its assembly.
+    // No further datagram is needed to assemble and deliver record 1.
+    let mut next = 0;
+    decoder
+        .drain_events(|event| {
+            let ContinuousReceiveEvent::Record(record) = event else {
+                panic!("unexpected gap")
+            };
+            assert_eq!(record.decoded().object_id, next);
+            next += 1;
+            Ok::<(), ()>(())
+        })
+        .unwrap();
+    assert_eq!(next, 2);
 }

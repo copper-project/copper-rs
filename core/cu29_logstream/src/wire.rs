@@ -91,7 +91,8 @@ pub struct WireHeader {
     pub fragment_count: u32,
 }
 
-/// One validated wire symbol and its FEC payload.
+/// Owned packet for callers that retain or edit payloads.
+/// Receiver parsing uses [`WirePacketRef`] to borrow the datagram instead.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WirePacket {
     pub header: WireHeader,
@@ -107,6 +108,23 @@ impl WirePacket {
     }
 
     pub fn decode(bytes: &[u8]) -> Result<Self> {
+        let packet = WirePacketRef::decode(bytes)?;
+        Ok(Self {
+            header: packet.header,
+            payload: packet.payload.to_vec(),
+        })
+    }
+}
+
+/// Validated packet view borrowing the transport's receive buffer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WirePacketRef<'a> {
+    pub header: WireHeader,
+    pub payload: &'a [u8],
+}
+
+impl<'a> WirePacketRef<'a> {
+    pub fn decode(bytes: &'a [u8]) -> Result<Self> {
         if bytes.len() < PACKET_HEADER_LEN {
             return Err(Error::TruncatedPacket);
         }
@@ -153,7 +171,7 @@ impl WirePacket {
                 fec_metadata,
                 fragment_count: u32::from_be_bytes(bytes[60..64].try_into().unwrap()),
             },
-            payload: bytes[PACKET_HEADER_LEN..].to_vec(),
+            payload: &bytes[PACKET_HEADER_LEN..],
         })
     }
 }

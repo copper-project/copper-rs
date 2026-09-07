@@ -159,10 +159,10 @@ impl<A: LiveReplay, R: CuStreamRx + 'static> CuTwinBuilder<A, R> {
                                         return Ok(());
                                     }
                                     if let SessionEvent::Manifest(manifest) = &event {
-                                        status.identity = Some(manifest.identity);
+                                        status.identity = Some(manifest.manifest().identity);
                                         archive = Some(CaptureArchive::<A::DataSet>::new(
                                             &path,
-                                            manifest.clone(),
+                                            manifest,
                                             SLAB_BYTES,
                                             SECTION_BYTES,
                                         )?);

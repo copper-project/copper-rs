@@ -137,7 +137,7 @@ fn generated_runtime_binds_configured_transport_and_emits_manifest() -> CuResult
     for packet in control_packets.into_iter().chain(continuous_packets) {
         router
             .receive_datagram(&packet, |event| {
-                events.push(event);
+                events.push(event.to_owned());
                 Ok::<(), core::convert::Infallible>(())
             })
             .map_err(|error| CuError::from(format!("{error:?}")))?;

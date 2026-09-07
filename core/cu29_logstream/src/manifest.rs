@@ -115,6 +115,10 @@ impl SessionManifest {
 
     pub fn decode_record(record: &[u8]) -> Result<Self> {
         let record = decode_semantic_record(record)?;
+        Self::from_decoded(record)
+    }
+
+    pub(crate) fn from_decoded(record: crate::DecodedRecord<'_>) -> Result<Self> {
         if record.kind != RecordKind::Manifest {
             return Err(Error::InvalidConfig("record is not a session manifest"));
         }

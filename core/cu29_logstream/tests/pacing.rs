@@ -146,7 +146,7 @@ fn missed_bootstrap_recovers_during_idle_without_new_captures() {
     for (_, packet) in tx.packets {
         router
             .receive_datagram(&packet, |event| {
-                events.push(event);
+                events.push(event.to_owned());
                 Ok::<_, ()>(())
             })
             .unwrap();

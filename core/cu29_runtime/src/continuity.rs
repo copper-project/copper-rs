@@ -13,18 +13,19 @@ pub enum SourceGapReason {
 }
 
 /// Stored in `UnifiedLogType::StreamContinuity`. Ranges are inclusive.
+/// Writers use borrowed byte slices; readers choose owned storage when required.
 /// Gaps remain missing history even when a later keyframe permits state replay.
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
-pub enum StreamContinuityRecord {
+pub enum StreamContinuityRecord<B = Vec<u8>> {
     /// Canonical, versioned semantic manifest bytes bind identity, plan and schema.
-    Manifest { record: Vec<u8> },
+    Manifest { record: B },
     Gap {
         first_id: u64,
         last_id: u64,
         reason: SourceGapReason,
     },
     /// Verified keyframe/manifest references, retained as canonical recovery point bytes.
-    RecoveryPoint { copperlist_id: u64, record: Vec<u8> },
+    RecoveryPoint { copperlist_id: u64, record: B },
     /// Explicit receiver finalization, not a claim about an unobserved sender tail.
     Finished { next_copperlist_id: u64 },
 }
