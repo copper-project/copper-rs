@@ -3,7 +3,7 @@ mod dashboard;
 mod receiver;
 
 use clap::{Parser, Subcommand, ValueEnum};
-use cu_logstream_demo::{ITERATIONS, read_lists, tasks::Sample};
+use cu_logstream_demo::{ITERATIONS, read_lists, tasks::JointAngles};
 use cu29::bincode;
 use cu29::continuity::{SourceGapReason, StreamContinuityRecord};
 use cu29::prelude::*;
@@ -16,7 +16,7 @@ use std::{
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
 #[derive(Parser)]
-#[command(about = "Stream a deterministic counter → accumulator graph over UDP")]
+#[command(about = "Stream joint encoders and reconstruct a robot arm over UDP")]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -93,8 +93,7 @@ fn verify(sender: &Path, received: &Path, expect: Expectation, iterations: u64) 
     }
     for (id, list) in onboard.iter().enumerate() {
         if list.id != id as u64
-            || list.msgs.get_counter_output().payload() != Some(&Sample(list.id))
-            || list.msgs.get_sum_output().payload() != Some(&Sample(list.id * (list.id + 1) / 2))
+            || list.msgs.get_encoders_output().payload() != Some(&JointAngles::at_tick(list.id))
         {
             return Err(format!("Unexpected deterministic graph output at {id}").into());
         }
@@ -142,21 +141,18 @@ fn verify(sender: &Path, received: &Path, expect: Expectation, iterations: u64) 
             return Err("Archive marks a received record as missing".into());
         }
         let expected = &onboard[list.id as usize];
-        if list.msgs.get_derived_output().payload().is_some() {
-            return Err("Derived payload was transmitted".into());
+        if list.msgs.get_kinematics_output().payload().is_some() {
+            return Err("Arm pose payload was transmitted".into());
         }
-        for (actual, expected) in [
-            (
-                list.msgs.get_counter_output(),
-                expected.msgs.get_counter_output(),
-            ),
-            (list.msgs.get_sum_output(), expected.msgs.get_sum_output()),
-        ] {
-            if bincode::encode_to_vec(actual, bincode::config::standard())?
-                != bincode::encode_to_vec(expected, bincode::config::standard())?
-            {
-                return Err(format!("Captured input or metadata mismatch at {}", list.id).into());
-            }
+        if bincode::encode_to_vec(list.msgs.get_encoders_output(), bincode::config::standard())?
+            != bincode::encode_to_vec(
+                expected.msgs.get_encoders_output(),
+                bincode::config::standard(),
+            )?
+        {
+            return Err(
+                format!("Captured encoder input or metadata mismatch at {}", list.id).into(),
+            );
         }
         next = list.id + 1;
     }

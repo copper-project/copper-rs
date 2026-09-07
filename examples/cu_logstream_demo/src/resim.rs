@@ -46,7 +46,7 @@ fn main() -> CuResult<()> {
     if let Some(debug_base) = cli.debug_base {
         if cu_logstream_demo::read_lists(&cli.log_base)?
             .iter()
-            .any(|list| list.msgs.get_derived_output().payload().is_none())
+            .any(|list| list.msgs.get_kinematics_output().payload().is_none())
         {
             return Err(
                 "Run just resim first, then use resim-debug on the reconstructed full log".into(),

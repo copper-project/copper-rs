@@ -3,14 +3,19 @@ use crate::{
     Result,
     receiver::{self, ReceiverOptions},
 };
+use cu_logstream_demo::tasks::{ArmPose, FULL_TURN, JointAngles};
 use cu_logstream_demo::telemetry::{Frame, RecordingState, Status};
 use cu29_logstream::telemetry::TelemetryReader;
 use ratatui::{
     crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
-    layout::{Constraint, Layout},
+    layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
+    symbols::Marker,
     text::{Line, Span},
-    widgets::{Block, BorderType, Paragraph, Sparkline},
+    widgets::{
+        Block, BorderType, Paragraph, Sparkline,
+        canvas::{Canvas, Circle, Line as CanvasLine, Points},
+    },
 };
 use std::{
     collections::VecDeque,
@@ -20,6 +25,7 @@ use std::{
 
 const BUFFER_CAPACITY: usize = 64;
 const CHART_CAPACITY: usize = 120;
+const TRAIL_CAPACITY: usize = 1200; // One 12-second loop at 100 Hz, UI storage only.
 const UI_TICK: Duration = Duration::from_millis(50);
 
 // Match cu_tuimon's explicit RGB palette and tab/command chrome.
@@ -39,15 +45,14 @@ struct View {
     paused: bool,
     health_tab: bool,
     health_scroll: (u16, u16),
-    counter: Option<u64>,
-    sum: Option<u64>,
-    derived: Option<u64>,
+    angles: Option<JointAngles>,
+    pose: Option<ArmPose>,
     displayed: Option<u64>,
     missed: u64,
     frame_age: Option<Instant>,
     session: Option<cu29_logstream::StreamIdentity>,
-    history: VecDeque<u64>,
-    derived_history: VecDeque<u64>,
+    history: VecDeque<JointAngles>,
+    trail: VecDeque<[f64; 2]>,
 }
 
 impl View {
@@ -62,44 +67,44 @@ impl View {
             };
             let frame = update.frame;
             self.missed += update.missed;
-            if self.session != Some(frame.identity) {
-                self.history.clear();
-                self.derived_history.clear();
-                self.session = Some(frame.identity);
+            self.accept(frame);
+        }
+    }
+
+    fn accept(&mut self, frame: &Frame) {
+        if self.session != Some(frame.identity) {
+            self.history.clear();
+            self.trail.clear();
+            self.session = Some(frame.identity);
+        } else if self.displayed.and_then(|id| id.checked_add(1)) != Some(frame.copperlist.id) {
+            // Never draw an invented trajectory across dropped/missed frames.
+            self.trail.clear();
+        }
+        self.displayed = Some(frame.copperlist.id);
+        self.frame_age = Some(frame.received_at);
+        self.angles = frame
+            .copperlist
+            .msgs
+            .get_encoders_output()
+            .payload()
+            .copied();
+        self.pose = frame
+            .copperlist
+            .msgs
+            .get_kinematics_output()
+            .payload()
+            .copied();
+        if let Some(angles) = self.angles {
+            if self.history.len() == CHART_CAPACITY {
+                self.history.pop_front();
             }
-            self.displayed = Some(frame.copperlist.id);
-            self.frame_age = Some(frame.received_at);
-            self.counter = frame
-                .copperlist
-                .msgs
-                .get_counter_output()
-                .payload()
-                .map(|sample| sample.0);
-            self.sum = frame
-                .copperlist
-                .msgs
-                .get_sum_output()
-                .payload()
-                .map(|sample| sample.0);
-            self.derived = frame
-                .copperlist
-                .msgs
-                .get_derived_output()
-                .payload()
-                .map(|sample| sample.0);
-            // This history policy belongs to this widget, not the backend.
-            if let Some(counter) = self.counter {
-                if self.history.len() == CHART_CAPACITY {
-                    self.history.pop_front();
-                }
-                self.history.push_back(counter);
+            self.history.push_back(angles);
+        }
+        if let Some(pose) = self.pose {
+            if self.trail.len() == TRAIL_CAPACITY {
+                self.trail.pop_front();
             }
-            if let Some(derived) = self.derived {
-                if self.derived_history.len() == CHART_CAPACITY {
-                    self.derived_history.pop_front();
-                }
-                self.derived_history.push_back(derived);
-            }
+            self.trail.push_back(pose.tip);
         }
     }
 
@@ -146,11 +151,11 @@ impl View {
             ReconstructionState::Verified => ("Verified (developer checks)", GREEN),
             ReconstructionState::Diverged => ("DIVERGED", RED),
         };
-        let derived = if matches!(
+        let tip = if matches!(
             status.twin.state,
             ReconstructionState::Reconstructed | ReconstructionState::Verified
         ) {
-            number(self.derived)
+            position(self.pose.map(|pose| pose.tip))
         } else {
             "—".into()
         };
@@ -268,14 +273,14 @@ impl View {
                     ]),
                     Line::from(
                         [
-                            metric("Counter", number(self.counter), GREEN),
-                            metric("Sum", number(self.sum), GREEN),
+                            metric("Shoulder", angle(self.angles.map(|a| a.shoulder)), GREEN),
+                            metric("Elbow", angle(self.angles.map(|a| a.elbow)), GREEN),
                         ]
                         .concat(),
                     ),
                     Line::from(
                         [
-                            metric("Modulo", derived, CYAN),
+                            metric("Tip", tip, CYAN),
                             vec![Span::styled("(local)", Style::default().fg(CYAN))],
                         ]
                         .concat(),
@@ -309,15 +314,15 @@ impl View {
                 ]),
                 Line::from(
                     [
-                        metric("Counter", number(self.counter), GREEN),
-                        metric("Sum", number(self.sum), GREEN),
-                        metric("Modulo", &derived, CYAN),
+                        metric("Shoulder", angle(self.angles.map(|a| a.shoulder)), GREEN),
+                        metric("Elbow", angle(self.angles.map(|a| a.elbow)), GREEN),
+                        metric("Tip", &tip, CYAN),
                     ]
                     .concat(),
                 ),
                 Line::from(vec![
                     value(reconstruction, twin_color),
-                    Span::styled(" · payload not transmitted", Style::default().fg(CYAN)),
+                    Span::styled(" · pose payload not transmitted", Style::default().fg(CYAN)),
                 ]),
                 Line::from(
                     [
@@ -330,51 +335,47 @@ impl View {
             .block(panel("Captured inputs + Copper twin output", CYAN)),
             values,
         );
-        let [counter_chart, derived_chart] =
-            Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
+        let [encoder_charts, arm] =
+            Layout::horizontal([Constraint::Percentage(40), Constraint::Percentage(60)])
                 .areas(charts);
-        // Show the newest samples when the terminal is narrower than the history.
-        let history: Vec<_> = self
-            .history
-            .iter()
-            .skip(
-                self.history
-                    .len()
-                    .saturating_sub(counter_chart.width.saturating_sub(2) as usize),
-            )
-            .copied()
-            .collect();
-        let derived_history: Vec<_> = self
-            .derived_history
-            .iter()
-            .skip(
-                self.derived_history
-                    .len()
-                    .saturating_sub(derived_chart.width.saturating_sub(2) as usize),
-            )
-            .copied()
-            .collect();
-        frame.render_widget(
-            Sparkline::default()
-                .data(&history)
-                .block(
-                    panel("Counter · received", GREEN)
-                        .title_bottom(format!("Value: {}", number(self.counter))),
-                )
-                .style(Style::default().fg(GREEN)),
-            counter_chart,
+        let [shoulder_chart, elbow_chart] =
+            Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)])
+                .areas(encoder_charts);
+        let visible = self.history.iter().skip(
+            self.history
+                .len()
+                .saturating_sub(encoder_charts.width.saturating_sub(2) as usize),
         );
-        let chart_color = if self.paused { YELLOW } else { twin_color };
-        frame.render_widget(
-            Sparkline::default()
-                .data(&derived_history)
-                .max(255)
-                .block(
-                    panel("Modulo · reconstructed locally", chart_color)
-                        .title_bottom(format!("Value: {derived} (sum % 256)")),
-                )
-                .style(Style::default().fg(chart_color)),
-            derived_chart,
+        let shoulder: Vec<_> = visible.clone().map(|a| u64::from(a.shoulder)).collect();
+        let elbow: Vec<_> = visible.map(|a| u64::from(a.elbow)).collect();
+        for (area, title, samples, reading) in [
+            (
+                shoulder_chart,
+                "Shoulder · received",
+                &shoulder,
+                self.angles.map(|a| a.shoulder),
+            ),
+            (
+                elbow_chart,
+                "Elbow · received",
+                &elbow,
+                self.angles.map(|a| a.elbow),
+            ),
+        ] {
+            frame.render_widget(
+                Sparkline::default()
+                    .data(samples)
+                    .max(u64::from(FULL_TURN))
+                    .block(panel(title, GREEN).title_bottom(format!("Angle: {}", angle(reading))))
+                    .style(Style::default().fg(GREEN)),
+                area,
+            );
+        }
+        self.draw_arm(
+            frame,
+            arm,
+            if self.paused { YELLOW } else { twin_color },
+            &tip,
         );
         frame.render_widget(
             Paragraph::new(vec![
@@ -404,6 +405,73 @@ impl View {
             ])
             .block(panel("Recording health", MUTED)),
             health,
+        );
+    }
+
+    fn draw_arm(&self, frame: &mut ratatui::Frame<'_>, area: Rect, color: Color, tip: &str) {
+        let block = panel("Robot arm · reconstructed locally", color)
+            .title_bottom(format!("Tip: {tip} · meters"));
+        let inner = block.inner(area);
+        // Terminal cells are approximately twice as tall as they are wide.
+        let aspect = f64::from(inner.width.max(1)) / (2.0 * f64::from(inner.height.max(1)));
+        let x = 1.85 * aspect.max(1.0);
+        let y = 1.85 / aspect.min(1.0);
+        let trail: Vec<_> = self.trail.iter().map(|p| (p[0], p[1])).collect();
+        frame.render_widget(
+            Canvas::default()
+                .block(block)
+                .background_color(BG)
+                .marker(Marker::Braille)
+                .x_bounds([-x, x])
+                .y_bounds([-y, y])
+                .paint(|ctx| {
+                    // Fade old recorded points. No interpolation or forward kinematics in the UI.
+                    let chunk_size = trail.len().div_ceil(3).max(1);
+                    for (index, points) in trail.chunks(chunk_size).enumerate() {
+                        ctx.draw(&Points {
+                            coords: points,
+                            color: [Color::Rgb(0, 65, 65), Color::Rgb(0, 115, 115), CYAN][index],
+                        });
+                    }
+                    ctx.layer();
+                    if let Some(pose) = self.pose {
+                        ctx.draw(&CanvasLine {
+                            x1: 0.0,
+                            y1: 0.0,
+                            x2: pose.elbow[0],
+                            y2: pose.elbow[1],
+                            color,
+                        });
+                        ctx.draw(&CanvasLine {
+                            x1: pose.elbow[0],
+                            y1: pose.elbow[1],
+                            x2: pose.tip[0],
+                            y2: pose.tip[1],
+                            color,
+                        });
+                        for point in [[0.0, 0.0], pose.elbow, pose.tip] {
+                            ctx.draw(&Circle {
+                                x: point[0],
+                                y: point[1],
+                                radius: 0.04,
+                                color: FG,
+                            });
+                        }
+                    }
+                    ctx.print(
+                        -x + 0.1,
+                        y - 0.2,
+                        Span::styled("Only joint angles transmitted", Style::default().fg(CYAN)),
+                    );
+                    if tip == "—" {
+                        ctx.print(
+                            -x + 0.1,
+                            -y + 0.2,
+                            Span::styled("Waiting · last pose held", Style::default().fg(color)),
+                        );
+                    }
+                }),
+            area,
         );
     }
 
@@ -501,6 +569,13 @@ fn badge(key: &str, label: &str, bg: Color) -> Vec<Span<'static>> {
     ]
 }
 
+fn angle(value: Option<u16>) -> String {
+    value.map_or_else(|| "—".into(), |v| format!("{:.1}°", f64::from(v) / 100.0))
+}
+fn position(value: Option<[f64; 2]>) -> String {
+    value.map_or_else(|| "—".into(), |p| format!("({:+.2}, {:+.2})", p[0], p[1]))
+}
+
 fn number(value: Option<u64>) -> String {
     value.map_or_else(|| "—".into(), |v| v.to_string())
 }
@@ -521,7 +596,7 @@ pub fn run(options: ReceiverOptions) -> Result<()> {
     let ui_result: std::io::Result<()> = ratatui::run(|terminal| {
         let mut view = View {
             history: VecDeque::with_capacity(CHART_CAPACITY),
-            derived_history: VecDeque::with_capacity(CHART_CAPACITY),
+            trail: VecDeque::with_capacity(TRAIL_CAPACITY),
             ..Default::default()
         };
         let mut redraw = Instant::now();
@@ -573,10 +648,54 @@ mod tests {
     use ratatui::{Terminal, backend::TestBackend};
 
     #[test]
+    fn trail_uses_received_poses_and_breaks_at_gaps_and_new_sessions() {
+        let mut frame = Frame {
+            identity: cu29_logstream::StreamIdentity {
+                session_id: [1; 16],
+                sender_id: 41,
+            },
+            received_at: Instant::now(),
+            copperlist: cu_logstream_demo::List::default(),
+        };
+        // Deliberately unrelated angles/positions: the UI must draw the task output.
+        frame
+            .copperlist
+            .msgs
+            .0
+            .0
+            .set_payload(JointAngles::default());
+        frame.copperlist.msgs.0.1.set_payload(ArmPose {
+            elbow: [0.0, 1.0],
+            tip: [0.5, 1.0],
+        });
+        let mut view = View::default();
+        view.accept(&frame);
+        frame.copperlist.id = 1;
+        view.accept(&frame);
+        assert_eq!(view.trail, [[0.5, 1.0]; 2]);
+        frame.copperlist.id = 3;
+        view.accept(&frame);
+        assert_eq!(view.trail.len(), 1);
+        frame.identity.session_id = [2; 16];
+        view.accept(&frame);
+        assert_eq!(view.trail.len(), 1);
+        assert_eq!(view.history.len(), 1);
+        for id in 4..1300 {
+            frame.copperlist.id = id;
+            view.accept(&frame);
+        }
+        assert_eq!(view.trail.len(), TRAIL_CAPACITY);
+        assert_eq!(view.history.len(), CHART_CAPACITY);
+    }
+
+    #[test]
     fn tabs_scroll_and_pause_preserve_the_live_view() {
         let mut view = View {
-            derived: Some(42),
-            derived_history: VecDeque::from([1, 42]),
+            pose: Some(ArmPose {
+                elbow: [1.0, 0.0],
+                tip: [1.65, 0.0],
+            }),
+            trail: VecDeque::from([[1.65, 0.0]]),
             ..Default::default()
         };
         assert!(!view.key(KeyCode::Char('2')));
@@ -591,8 +710,8 @@ mod tests {
         assert_eq!(view.health_scroll, (0, 0));
         view.key(KeyCode::Tab);
         assert!(!view.health_tab);
-        assert_eq!(view.derived, Some(42));
-        assert_eq!(view.derived_history, [1, 42]);
+        assert_eq!(view.pose.unwrap().tip, [1.65, 0.0]);
+        assert_eq!(view.trail, [[1.65, 0.0]]);
         view.key(KeyCode::BackTab);
         view.key(KeyCode::Char('1'));
         assert!(!view.health_tab);
@@ -637,11 +756,14 @@ mod tests {
     }
 
     #[test]
-    fn reconstructed_modulo_is_graphed_on_the_right() {
+    fn reconstructed_arm_is_drawn_on_the_right() {
         let mut terminal = Terminal::new(TestBackend::new(100, 26)).unwrap();
         let mut view = View {
-            derived: Some(255),
-            derived_history: VecDeque::from([0, 64, 128, 255]),
+            pose: Some(ArmPose {
+                elbow: [1.0, 0.0],
+                tip: [1.0, 0.65],
+            }),
+            trail: VecDeque::from([[1.1, 0.5], [1.0, 0.65]]),
             ..Default::default()
         };
         let mut status = Status {
@@ -654,16 +776,21 @@ mod tests {
             .unwrap();
         let buffer = terminal.backend().buffer();
         let right: String = (7..21)
-            .flat_map(|y| (50..100).map(move |x| buffer[(x, y)].symbol()))
+            .flat_map(|y| (40..100).map(move |x| buffer[(x, y)].symbol()))
             .collect();
-        assert!(right.contains("Modulo · reconstructed locally"));
-        assert!(right.contains("Value: 255 (sum % 256)"));
+        assert!(right.contains("Robot arm · reconstructed locally"));
+        assert!(right.contains("Tip: (+1.00, +0.65)"));
         let left: String = (7..21)
-            .flat_map(|y| (0..50).map(move |x| buffer[(x, y)].symbol()))
+            .flat_map(|y| (0..40).map(move |x| buffer[(x, y)].symbol()))
             .collect();
-        assert!(left.contains("Counter · received"));
-        assert!(left.contains("Value: —"));
-        assert!(right.contains('█'));
+        assert!(left.contains("Shoulder · received"));
+        assert!(left.contains("Angle: —"));
+        assert!(
+            right
+                .chars()
+                .any(|c| ('\u{2801}'..='\u{28ff}').contains(&c))
+        );
+        assert!(right.contains("Only joint angles transmitted"));
     }
 
     #[test]
