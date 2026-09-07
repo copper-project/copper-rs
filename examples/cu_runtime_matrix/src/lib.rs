@@ -103,11 +103,6 @@ fn take_trace() -> Vec<TraceEntry> {
     TRACE_LOG.lock().unwrap().drain(..).collect()
 }
 
-#[cfg(test)]
-fn trace_len() -> usize {
-    TRACE_LOG.lock().unwrap().len()
-}
-
 fn param_u64(config: Option<&ComponentConfig>, key: &str, default: u64) -> CuResult<u64> {
     Ok(config
         .and_then(|cfg| cfg.get::<u64>(key).ok().flatten())
@@ -1492,14 +1487,11 @@ mod tests {
     use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader};
     use serde_json::Value;
     use std::path::Path;
-    use std::time::Duration;
 
     static TEST_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
     const TEST_EMIT_LIMIT: u64 = 8;
     const TEST_COMPUTE_WORDS: usize = 64;
     const TEST_COMPUTE_ROUNDS: u32 = 2;
-    const MAX_BG_SETTLE_ITERS: u64 = 32;
-    const BG_STABLE_PASSES: usize = 4;
     const TRACE_FIXTURE_KEYFRAME_INTERVAL: u32 = 1;
 
     #[derive(Debug, Clone, PartialEq)]
@@ -1609,37 +1601,26 @@ mod tests {
             .expect("background output limit should fit in usize")
     }
 
-    fn settle_background_trace(
-        mission: MissionArg,
-        app: &mut MissionApp,
-        clock_mock: &RobotClockMock,
-    ) -> CuResult<()> {
-        let base_iter = TEST_EMIT_LIMIT
-            .saturating_add(u64::try_from(mission.drain_iterations()).expect("drain fits"));
-        let mut last_len = trace_len();
-        let mut stable_passes = 0usize;
-
-        for extra in 0..MAX_BG_SETTLE_ITERS {
-            clock_mock.set_value(
-                DEFAULT_CLOCK_STEP_TICKS.saturating_mul(base_iter.saturating_add(extra)),
+    fn drain_background_workers(app: &mut MissionApp) {
+        let pools = match app {
+            MissionApp::OneToManyBackground(app) => &app.copper_runtime_mut().thread_pools,
+            MissionApp::ManyToOneBackground(app) => &app.copper_runtime_mut().thread_pools,
+            MissionApp::ManyToManyBackground(app) => &app.copper_runtime_mut().thread_pools,
+            MissionApp::BridgeFanoutBackground(app) => &app.copper_runtime_mut().thread_pools,
+            _ => return,
+        };
+        for pool in pools.iter().flatten() {
+            // The fixture's jobs do not spawn more jobs. Drain queued work first,
+            // including jobs injected from outside the pool. Then visit every
+            // worker to wait for jobs that were already running. A broadcast on
+            // its own can run before externally injected jobs have been picked up.
+            pool.install(
+                || {
+                    while cu29::rayon::yield_now() == Some(cu29::rayon::Yield::Executed) {}
+                },
             );
-            app.run_one_iteration()?;
-            std::thread::yield_now();
-            std::thread::sleep(Duration::from_millis(1));
-
-            let len = trace_len();
-            if len > 0 && len == last_len {
-                stable_passes = stable_passes.saturating_add(1);
-                if stable_passes >= BG_STABLE_PASSES {
-                    break;
-                }
-            } else {
-                stable_passes = 0;
-                last_len = len;
-            }
+            pool.broadcast(|_| {});
         }
-
-        Ok(())
     }
 
     fn assert_sampled_progress(
@@ -1894,7 +1875,10 @@ mod tests {
         mission: MissionArg,
         mutate_config: impl FnOnce(&mut cu29::config::CuConfig),
     ) -> CuResult<(Vec<TraceEntry>, Vec<NormalizedCopperList>)> {
-        let tmp_dir = tempfile::TempDir::new()
+        let log_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("logs");
+        std::fs::create_dir_all(&log_dir)
+            .map_err(|err| CuError::new_with_cause("failed to create test log dir", err))?;
+        let tmp_dir = tempfile::TempDir::new_in(log_dir)
             .map_err(|err| CuError::new_with_cause("failed to create temp test dir", err))?;
         let log_path = tmp_dir.path().join(format!("{}.copper", mission.as_str()));
         let (clock, clock_mock) = RobotClock::mock();
@@ -1919,14 +1903,10 @@ mod tests {
         for iter in 0..total_iterations {
             clock_mock.set_value(DEFAULT_CLOCK_STEP_TICKS.saturating_mul(iter));
             app.run_one_iteration()?;
-            std::thread::yield_now();
-            if mission.uses_background() {
-                std::thread::sleep(Duration::from_millis(1));
-            }
-        }
-        if mission.uses_background() {
-            settle_background_trace(mission, &mut app, &clock_mock)?;
-            std::thread::sleep(Duration::from_millis(5));
+            // Keep the mock clock fixed until this step's background jobs have
+            // committed. Wall-clock sleeps let paired branches sample different
+            // sequences under load, which can leave the sink with no matching pair.
+            drain_background_workers(&mut app);
         }
         app.stop_all_tasks()?;
         drop(app);
@@ -1950,6 +1930,31 @@ mod tests {
                 mission
             );
         }
+    }
+
+    #[test]
+    fn background_trace_matches_with_uneven_worker_load() {
+        let _guard = TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        let mission = MissionArg::ManyToManyBackground;
+        let (trace, _) = run_mission_trace_and_logs_with(mission, |config| {
+            let graph = config.get_graph_mut(Some(mission.as_str())).unwrap();
+            let right = graph
+                .node_indices()
+                .into_iter()
+                .map(|index| u32::try_from(index.index()).unwrap())
+                .find(|index| graph.get_node(*index).unwrap().get_id() == "mtm_delay_right_bg")
+                .expect("right background task");
+            // Make one branch take much longer than the old 1 ms sleep budget.
+            // Both branches must still publish at the same logical clock step.
+            graph
+                .get_node_mut(right)
+                .unwrap()
+                .set_param("compute_rounds", 10_000u64);
+        })
+        .expect("run mission with uneven background work");
+        assert_eq!(trace, mission.expected_trace(TEST_EMIT_LIMIT));
     }
 
     #[test]
