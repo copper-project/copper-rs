@@ -8,9 +8,9 @@ use cu29_logstream::telemetry::TelemetryReader;
 use ratatui::{
     crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
     layout::{Constraint, Layout},
-    style::{Color, Style},
-    text::Line,
-    widgets::{Block, Paragraph, Sparkline},
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
+    widgets::{Block, BorderType, Paragraph, Sparkline},
 };
 use std::{
     collections::VecDeque,
@@ -22,9 +22,23 @@ const BUFFER_CAPACITY: usize = 64;
 const CHART_CAPACITY: usize = 120;
 const UI_TICK: Duration = Duration::from_millis(50);
 
+// Match cu_tuimon's explicit RGB palette and tab/command chrome.
+const BG: Color = Color::Rgb(0, 0, 0);
+const FG: Color = Color::Rgb(221, 221, 221);
+const MUTED: Color = Color::Rgb(118, 118, 118);
+const GREEN: Color = Color::Rgb(25, 203, 0);
+const CYAN: Color = Color::Rgb(13, 205, 205);
+const YELLOW: Color = Color::Rgb(255, 208, 128);
+const RED: Color = Color::Rgb(242, 32, 31);
+const BAR: Color = Color::Rgb(16, 18, 20);
+const ACTIVE: Color = Color::Rgb(56, 110, 120);
+const INACTIVE: Color = Color::Rgb(40, 44, 52);
+
 #[derive(Default)]
 struct View {
     paused: bool,
+    health_tab: bool,
+    health_scroll: (u16, u16),
     counter: Option<u64>,
     sum: Option<u64>,
     derived: Option<u64>,
@@ -33,6 +47,7 @@ struct View {
     frame_age: Option<Instant>,
     session: Option<cu29_logstream::StreamIdentity>,
     history: VecDeque<u64>,
+    derived_history: VecDeque<u64>,
 }
 
 impl View {
@@ -49,6 +64,7 @@ impl View {
             self.missed += update.missed;
             if self.session != Some(frame.identity) {
                 self.history.clear();
+                self.derived_history.clear();
                 self.session = Some(frame.identity);
             }
             self.displayed = Some(frame.copperlist.id);
@@ -78,17 +94,57 @@ impl View {
                 }
                 self.history.push_back(counter);
             }
+            if let Some(derived) = self.derived {
+                if self.derived_history.len() == CHART_CAPACITY {
+                    self.derived_history.pop_front();
+                }
+                self.derived_history.push_back(derived);
+            }
         }
     }
 
-    fn draw(&self, frame: &mut ratatui::Frame<'_>, status: Status, overwritten: u64, path: &str) {
+    fn key(&mut self, code: KeyCode) -> bool {
+        match code {
+            KeyCode::Char('1') => self.health_tab = false,
+            KeyCode::Char('2') => self.health_tab = true,
+            KeyCode::Tab | KeyCode::BackTab => self.health_tab = !self.health_tab,
+            KeyCode::Char(' ') => self.paused = !self.paused,
+            KeyCode::Char('j') | KeyCode::Down if self.health_tab => {
+                self.health_scroll.0 = self.health_scroll.0.saturating_add(1);
+            }
+            KeyCode::Char('k') | KeyCode::Up if self.health_tab => {
+                self.health_scroll.0 = self.health_scroll.0.saturating_sub(1);
+            }
+            KeyCode::Char('h') | KeyCode::Left if self.health_tab => {
+                self.health_scroll.1 = self.health_scroll.1.saturating_sub(5);
+            }
+            KeyCode::Char('l') | KeyCode::Right if self.health_tab => {
+                self.health_scroll.1 = self.health_scroll.1.saturating_add(5);
+            }
+            KeyCode::Char('q') | KeyCode::Esc => return true,
+            _ => {}
+        }
+        false
+    }
+
+    fn draw(
+        &mut self,
+        frame: &mut ratatui::Frame<'_>,
+        status: Status,
+        overwritten: u64,
+        path: &str,
+    ) {
         use cu29_logstream::twin::ReconstructionState;
-        let reconstruction = match status.twin.state {
-            ReconstructionState::Waiting => "Waiting for recovery point",
-            ReconstructionState::Recovering => "Recovering",
-            ReconstructionState::Reconstructed => "Reconstructed locally",
-            ReconstructionState::Verified => "Verified (developer checks)",
-            ReconstructionState::Diverged => "DIVERGED",
+        frame.render_widget(
+            Block::default().style(Style::default().fg(FG).bg(BG)),
+            frame.area(),
+        );
+        let (reconstruction, twin_color) = match status.twin.state {
+            ReconstructionState::Waiting => ("Waiting for recovery point", YELLOW),
+            ReconstructionState::Recovering => ("Recovering", YELLOW),
+            ReconstructionState::Reconstructed => ("Reconstructed locally", CYAN),
+            ReconstructionState::Verified => ("Verified (developer checks)", GREEN),
+            ReconstructionState::Diverged => ("DIVERGED", RED),
         };
         let derived = if matches!(
             status.twin.state,
@@ -98,109 +154,351 @@ impl View {
         } else {
             "—".into()
         };
-        if frame.area().height < 20 || frame.area().width < 50 {
-            let [header, body] =
-                Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(frame.area());
-            let [title, mascot] =
-                Layout::horizontal([Constraint::Min(0), Constraint::Length(4)]).areas(header);
-            frame.render_widget(
-                Line::from(if self.paused {
-                    "VIEW PAUSED"
-                } else {
-                    "LIVE VIEW"
-                }),
-                title,
-            );
-            frame.render_widget(Line::from(" 😼 ").right_aligned(), mascot);
-            frame.render_widget(Paragraph::new(format!(
-                "Counter: {}   Sum: {}\nDerived: {derived} (local)\nPayload NOT transmitted\n{reconstruction}\nArchived: {}   Gaps: {}\nUI missed: {}\nSpace: pause/resume   q: quit",
-                number(self.counter), number(self.sum), status.archived, status.gaps, self.missed,
-            )), body);
-            return;
-        }
-        let [header, values, chart, health, footer] = Layout::vertical([
-            Constraint::Length(3),
-            Constraint::Length(6),
-            Constraint::Min(3),
-            Constraint::Length(7),
-            Constraint::Length(3),
+        let (recording, recording_color) = match status.state {
+            RecordingState::Waiting => ("Waiting for robot", YELLOW),
+            RecordingState::Recording => ("Recording", GREEN),
+            RecordingState::Closed => ("Archive closed", MUTED),
+            RecordingState::Failed => ("RECEIVER ERROR", RED),
+        };
+        let view_state = if self.paused {
+            "VIEW PAUSED"
+        } else {
+            "LIVE VIEW"
+        };
+        let view_color = if self.paused { YELLOW } else { CYAN };
+        let [header, body, footer] = Layout::vertical([
+            Constraint::Length(1),
+            Constraint::Min(0),
+            Constraint::Length(1),
         ])
         .areas(frame.area());
-        let recording = match status.state {
-            RecordingState::Waiting => "Waiting for robot",
-            RecordingState::Recording => "Recording",
-            RecordingState::Closed => "Archive closed",
-            RecordingState::Failed => "RECEIVER ERROR",
-        };
+        let compact = frame.area().height < 20 || frame.area().width < 70;
+        let [tabs, mascot] =
+            Layout::horizontal([Constraint::Min(0), Constraint::Length(4)]).areas(header);
+        let mut tab_spans = vec![Span::raw(" ")];
+        tab_spans.extend(badge(
+            "1",
+            "LIVE",
+            if self.health_tab { INACTIVE } else { ACTIVE },
+        ));
+        tab_spans.extend(badge(
+            "2",
+            "HEALTH",
+            if self.health_tab { ACTIVE } else { INACTIVE },
+        ));
+        if !compact {
+            tab_spans.push(Span::styled(
+                " Copper · UDP ground station",
+                Style::default().fg(FG),
+            ));
+        }
         frame.render_widget(
-            Paragraph::new(format!(
-                "{recording}  |  {}",
-                if self.paused {
-                    "VIEW PAUSED"
-                } else {
-                    "LIVE VIEW"
-                }
-            ))
-            .block(
-                Block::bordered()
-                    .title("Copper · UDP ground station")
-                    .title(Line::from(" 😼 ").right_aligned()),
-            )
-            .style(Style::default().fg(if self.paused {
-                Color::Yellow
-            } else {
-                Color::Cyan
-            })),
-            header,
+            Paragraph::new(Line::from(tab_spans)).style(Style::default().bg(BAR)),
+            tabs,
         );
         frame.render_widget(
-            Paragraph::new(format!(
-                "Counter: {}     Sum: {}\nDerived: {derived} — reconstructed locally; payload not transmitted\n{reconstruction}\nDisplayed CopperList: {}     Frame age: {}",
-                number(self.counter),
-                number(self.sum),
-                number(self.displayed),
-                age(self.frame_age)
-            ))
-            .block(Block::bordered().title("Captured inputs + Copper twin output")),
+            Line::from(" 😼 ")
+                .right_aligned()
+                .style(Style::default().bg(BAR)),
+            mascot,
+        );
+        let mut commands = vec![Span::raw(" ")];
+        if !compact {
+            commands.extend(badge("1-2", "Tabs", Color::Rgb(86, 114, 98)));
+        }
+        commands.extend(badge(
+            "Space",
+            if self.paused { "Resume" } else { "Pause" },
+            Color::Rgb(92, 102, 150),
+        ));
+        if self.health_tab && !compact {
+            commands.extend(badge("hjkl/↑↓←→", "Scroll", Color::Rgb(92, 102, 150)));
+        }
+        commands.extend(badge("q", "Quit", Color::Rgb(124, 118, 76)));
+        frame.render_widget(
+            Paragraph::new(Line::from(commands)).style(Style::default().bg(BAR)),
+            footer,
+        );
+
+        if self.health_tab {
+            let [state, details] =
+                Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).areas(body);
+            frame.render_widget(
+                Paragraph::new(vec![
+                    Line::from(vec![
+                        value(recording, recording_color),
+                        Span::raw("  |  "),
+                        value(view_state, view_color),
+                    ]),
+                    Line::from(value(reconstruction, twin_color)),
+                ]),
+                state,
+            );
+            let lines = self.health_lines(status, overwritten, path);
+            let block = panel("Stream health · recording continues while paused", CYAN);
+            let inner = block.inner(details);
+            self.health_scroll.0 = self
+                .health_scroll
+                .0
+                .min(lines.len().saturating_sub(inner.height as usize) as u16);
+            self.health_scroll.1 = self.health_scroll.1.min(
+                lines
+                    .iter()
+                    .map(Line::width)
+                    .max()
+                    .unwrap_or(0)
+                    .saturating_sub(inner.width as usize)
+                    .min(u16::MAX as usize) as u16,
+            );
+            frame.render_widget(
+                Paragraph::new(lines)
+                    .scroll(self.health_scroll)
+                    .block(block),
+                details,
+            );
+            return;
+        }
+        if compact {
+            frame.render_widget(
+                Paragraph::new(vec![
+                    Line::from(vec![
+                        value(view_state, view_color),
+                        Span::raw(" · "),
+                        value(recording, recording_color),
+                    ]),
+                    Line::from(
+                        [
+                            metric("Counter", number(self.counter), GREEN),
+                            metric("Sum", number(self.sum), GREEN),
+                        ]
+                        .concat(),
+                    ),
+                    Line::from(
+                        [
+                            metric("Modulo", derived, CYAN),
+                            vec![Span::styled("(local)", Style::default().fg(CYAN))],
+                        ]
+                        .concat(),
+                    ),
+                    Line::from(value("Payload NOT transmitted", CYAN)),
+                    Line::from(
+                        [
+                            metric("Archived", status.archived, GREEN),
+                            metric("Gaps", status.gaps, warning(status.gaps > 0)),
+                        ]
+                        .concat(),
+                    ),
+                    Line::from(value(reconstruction, twin_color)),
+                ]),
+                body,
+            );
+            return;
+        }
+        let [values, charts, health] = Layout::vertical([
+            Constraint::Length(6),
+            Constraint::Min(3),
+            Constraint::Length(4),
+        ])
+        .areas(body);
+        frame.render_widget(
+            Paragraph::new(vec![
+                Line::from(vec![
+                    value(recording, recording_color),
+                    Span::raw("  |  "),
+                    value(view_state, view_color),
+                ]),
+                Line::from(
+                    [
+                        metric("Counter", number(self.counter), GREEN),
+                        metric("Sum", number(self.sum), GREEN),
+                        metric("Modulo", &derived, CYAN),
+                    ]
+                    .concat(),
+                ),
+                Line::from(vec![
+                    value(reconstruction, twin_color),
+                    Span::styled(" · payload not transmitted", Style::default().fg(CYAN)),
+                ]),
+                Line::from(
+                    [
+                        metric("Displayed CL", number(self.displayed), FG),
+                        metric("Frame age", age(self.frame_age), FG),
+                    ]
+                    .concat(),
+                ),
+            ])
+            .block(panel("Captured inputs + Copper twin output", CYAN)),
             values,
         );
-        let history: Vec<_> = self.history.iter().copied().collect();
+        let [counter_chart, derived_chart] =
+            Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
+                .areas(charts);
+        // Show the newest samples when the terminal is narrower than the history.
+        let history: Vec<_> = self
+            .history
+            .iter()
+            .skip(
+                self.history
+                    .len()
+                    .saturating_sub(counter_chart.width.saturating_sub(2) as usize),
+            )
+            .copied()
+            .collect();
+        let derived_history: Vec<_> = self
+            .derived_history
+            .iter()
+            .skip(
+                self.derived_history
+                    .len()
+                    .saturating_sub(derived_chart.width.saturating_sub(2) as usize),
+            )
+            .copied()
+            .collect();
         frame.render_widget(
             Sparkline::default()
                 .data(&history)
-                .block(Block::bordered().title("Counter · last 120 consumed samples"))
-                .style(Style::default().fg(Color::Green)),
-            chart,
+                .block(
+                    panel("Counter · received", GREEN)
+                        .title_bottom(format!("Value: {}", number(self.counter))),
+                )
+                .style(Style::default().fg(GREEN)),
+            counter_chart,
+        );
+        let chart_color = if self.paused { YELLOW } else { twin_color };
+        frame.render_widget(
+            Sparkline::default()
+                .data(&derived_history)
+                .max(255)
+                .block(
+                    panel("Modulo · reconstructed locally", chart_color)
+                        .title_bottom(format!("Value: {derived} (sum % 256)")),
+                )
+                .style(Style::default().fg(chart_color)),
+            derived_chart,
         );
         frame.render_widget(
             Paragraph::new(vec![
-                Line::from(format!(
-                    "Packets: {}    Last packet: {}",
-                    status.packets,
-                    age(status.last_packet)
-                )),
-                Line::from(format!(
-                    "Archived: {}    Latest CL: {}    Verified recovery point: {}",
-                    status.archived,
-                    number(status.latest),
-                    number(status.recovery_point)
-                )),
-                Line::from(format!(
-                    "Source gaps: {}    Replay queue drops: {}",
-                    status.gaps, status.twin.queue_overflows
-                )),
-                Line::from(format!(
-                    "UI missed: {}    Buffer overwrites: {}    Capacity: {BUFFER_CAPACITY}",
-                    self.missed, overwritten
-                )),
-                Line::from(format!("Archive: {path}")),
+                Line::from(
+                    [
+                        metric("Archived", status.archived, GREEN),
+                        metric("Source gaps", status.gaps, warning(status.gaps > 0)),
+                        metric(
+                            "Replay drops",
+                            status.twin.queue_overflows,
+                            warning(status.twin.queue_overflows > 0),
+                        ),
+                    ]
+                    .concat(),
+                ),
+                Line::from(
+                    [
+                        metric("UI missed", self.missed, warning(self.missed > 0)),
+                        metric("Last packet", age(status.last_packet), FG),
+                        vec![Span::styled(
+                            "2: stream details",
+                            Style::default().fg(YELLOW),
+                        )],
+                    ]
+                    .concat(),
+                ),
             ])
-            .block(Block::bordered().title("Recording continues while the view is paused")),
+            .block(panel("Recording health", MUTED)),
             health,
         );
-        frame.render_widget(Paragraph::new("Space: pause/resume view   q: close receiver\nReceived history may have gaps; an unobserved sender tail is unknown.")
-            .block(Block::bordered()), footer);
     }
+
+    fn health_lines(&self, status: Status, overwritten: u64, path: &str) -> Vec<Line<'static>> {
+        vec![
+            Line::from(metric("Packets", status.packets, CYAN)),
+            Line::from(metric("Last packet", age(status.last_packet), FG)),
+            Line::from(metric("Archived", status.archived, GREEN)),
+            Line::from(metric("Latest CL", number(status.latest), GREEN)),
+            Line::from(metric(
+                "Verified recovery point",
+                number(status.recovery_point),
+                CYAN,
+            )),
+            Line::from(metric("Source gaps", status.gaps, warning(status.gaps > 0))),
+            Line::from(metric(
+                "Reconstructed frames",
+                status.twin.reconstructed,
+                CYAN,
+            )),
+            Line::from(metric("Verified frames", status.twin.verified, GREEN)),
+            Line::from(metric(
+                "Divergences",
+                status.twin.divergences,
+                if status.twin.divergences > 0 {
+                    RED
+                } else {
+                    GREEN
+                },
+            )),
+            Line::from(metric(
+                "Replay queue drops",
+                status.twin.queue_overflows,
+                warning(status.twin.queue_overflows > 0),
+            )),
+            Line::from(metric("UI missed", self.missed, warning(self.missed > 0))),
+            Line::from(metric(
+                "Buffer overwrites",
+                overwritten,
+                warning(overwritten > 0),
+            )),
+            Line::from(metric("Buffer capacity", BUFFER_CAPACITY, FG)),
+            Line::from(metric("Archive", path, FG)),
+            Line::from(""),
+            Line::from(Span::styled(
+                "Received history may have gaps; an unobserved sender tail is unknown.",
+                Style::default().fg(MUTED),
+            )),
+        ]
+    }
+}
+
+fn panel(title: &str, color: Color) -> Block<'_> {
+    Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(MUTED))
+        .title(Span::styled(
+            title,
+            Style::default().fg(color).add_modifier(Modifier::BOLD),
+        ))
+}
+
+fn value(text: impl ToString, color: Color) -> Span<'static> {
+    Span::styled(
+        text.to_string(),
+        Style::default().fg(color).add_modifier(Modifier::BOLD),
+    )
+}
+
+fn metric(label: &str, data: impl ToString, color: Color) -> Vec<Span<'static>> {
+    vec![
+        Span::styled(format!("{label}: "), Style::default().fg(FG)),
+        value(data, color),
+        Span::raw("   "),
+    ]
+}
+
+fn warning(present: bool) -> Color {
+    if present { YELLOW } else { GREEN }
+}
+
+fn badge(key: &str, label: &str, bg: Color) -> Vec<Span<'static>> {
+    vec![
+        Span::styled("", Style::default().fg(bg).bg(BAR)),
+        Span::styled(
+            format!(" {key} "),
+            Style::default()
+                .fg(YELLOW)
+                .bg(bg)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(format!("{label} "), Style::default().fg(FG).bg(bg)),
+        Span::styled("", Style::default().fg(bg).bg(BAR)),
+        Span::styled(" ", Style::default().bg(BAR)),
+    ]
 }
 
 fn number(value: Option<u64>) -> String {
@@ -223,6 +521,7 @@ pub fn run(options: ReceiverOptions) -> Result<()> {
     let ui_result: std::io::Result<()> = ratatui::run(|terminal| {
         let mut view = View {
             history: VecDeque::with_capacity(CHART_CAPACITY),
+            derived_history: VecDeque::with_capacity(CHART_CAPACITY),
             ..Default::default()
         };
         let mut redraw = Instant::now();
@@ -238,17 +537,13 @@ pub fn run(options: ReceiverOptions) -> Result<()> {
                 if let Event::Key(key) = event::read()?
                     && key.kind == KeyEventKind::Press
                 {
-                    match key.code {
-                        KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
-                        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            return Ok(());
-                        }
-                        KeyCode::Char(' ') => {
-                            view.paused = !view.paused;
-                            redraw = Instant::now();
-                        }
-                        _ => {}
+                    if key.code == KeyCode::Char('c')
+                        && key.modifiers.contains(KeyModifiers::CONTROL)
+                        || view.key(key.code)
+                    {
+                        return Ok(());
                     }
+                    redraw = Instant::now();
                 }
             }
             view.consume(&mut reader);
@@ -264,9 +559,6 @@ pub fn run(options: ReceiverOptions) -> Result<()> {
                 })?;
                 redraw = Instant::now() + UI_TICK;
             }
-            if reader.is_closed() && status.state == RecordingState::Failed {
-                return Ok(());
-            }
         }
     });
     let receiver_result = twin.stop();
@@ -281,10 +573,104 @@ mod tests {
     use ratatui::{Terminal, backend::TestBackend};
 
     #[test]
+    fn tabs_scroll_and_pause_preserve_the_live_view() {
+        let mut view = View {
+            derived: Some(42),
+            derived_history: VecDeque::from([1, 42]),
+            ..Default::default()
+        };
+        assert!(!view.key(KeyCode::Char('2')));
+        assert!(view.health_tab);
+        view.key(KeyCode::Char(' '));
+        view.key(KeyCode::Char('j'));
+        view.key(KeyCode::Right);
+        assert!(view.paused);
+        assert_eq!(view.health_scroll, (1, 5));
+        view.key(KeyCode::Up);
+        view.key(KeyCode::Char('h'));
+        assert_eq!(view.health_scroll, (0, 0));
+        view.key(KeyCode::Tab);
+        assert!(!view.health_tab);
+        assert_eq!(view.derived, Some(42));
+        assert_eq!(view.derived_history, [1, 42]);
+        view.key(KeyCode::BackTab);
+        view.key(KeyCode::Char('1'));
+        assert!(!view.health_tab);
+        assert!(view.key(KeyCode::Char('q')));
+    }
+
+    #[test]
+    fn health_colors_errors_and_scrolls_to_archive_on_small_terminals() {
+        let mut terminal = Terminal::new(TestBackend::new(50, 12)).unwrap();
+        let mut view = View {
+            health_tab: true,
+            ..Default::default()
+        };
+        let mut status = Status {
+            state: RecordingState::Failed,
+            gaps: 3,
+            ..Default::default()
+        };
+        status.twin.state = cu29_logstream::twin::ReconstructionState::Diverged;
+        terminal
+            .draw(|frame| view.draw(frame, status, 0, "logs/test.copper"))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        assert_eq!(buffer[(0, 1)].fg, RED);
+        assert_eq!(buffer[(0, 2)].fg, RED);
+        assert_eq!(buffer[(49, 5)].bg, BG);
+        for _ in 0..20 {
+            view.key(KeyCode::Down);
+        }
+        terminal
+            .draw(|frame| view.draw(frame, status, 0, "logs/test.copper"))
+            .unwrap();
+        let screen: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(screen.contains("Archive: logs/test.copper"));
+        assert!(screen.contains("Quit"));
+    }
+
+    #[test]
+    fn reconstructed_modulo_is_graphed_on_the_right() {
+        let mut terminal = Terminal::new(TestBackend::new(100, 26)).unwrap();
+        let mut view = View {
+            derived: Some(255),
+            derived_history: VecDeque::from([0, 64, 128, 255]),
+            ..Default::default()
+        };
+        let mut status = Status {
+            state: RecordingState::Recording,
+            ..Default::default()
+        };
+        status.twin.state = cu29_logstream::twin::ReconstructionState::Reconstructed;
+        terminal
+            .draw(|frame| view.draw(frame, status, 0, "logs/test.copper"))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let right: String = (7..21)
+            .flat_map(|y| (50..100).map(move |x| buffer[(x, y)].symbol()))
+            .collect();
+        assert!(right.contains("Modulo · reconstructed locally"));
+        assert!(right.contains("Value: 255 (sum % 256)"));
+        let left: String = (7..21)
+            .flat_map(|y| (0..50).map(move |x| buffer[(x, y)].symbol()))
+            .collect();
+        assert!(left.contains("Counter · received"));
+        assert!(left.contains("Value: —"));
+        assert!(right.contains('█'));
+    }
+
+    #[test]
     fn pause_and_recording_status_are_visible_even_on_small_terminals() {
         for (width, height) in [(100, 26), (30, 8)] {
             let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
-            let view = View {
+            let mut view = View {
                 paused: true,
                 missed: 73,
                 ..Default::default()

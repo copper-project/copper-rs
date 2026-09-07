@@ -62,8 +62,14 @@ just dashboard
 just sender
 ```
 
-The Ratatui screen shows counter/sum values, a counter chart, packet and frame
-age, archive progress, verified recovery points, source gap ranges, and reader overwrites.
+The Ratatui screen shows counter/sum values, a received counter chart on the left,
+and a live `sum % 256` chart on the right with its local reconstruction status.
+The modulo chart uses reconstructed task outputs and a fixed 0–255 scale.
+The screen follows `cu_tuimon` with numbered tabs and command badges. **1** selects
+Live, **2** selects Health, and **Tab** cycles between them. In Health, **hjkl**
+or the arrow keys scroll the details, including the archive path and recovery counters.
+Received values are green, reconstructed values cyan, warnings amber, and failures
+red, on an explicit dark background independent of the terminal palette.
 **Space** pauses consumption; wait a second and resume to see missed samples
 while the archive count keeps advancing. **q**, Escape, or Ctrl-C closes the
 receiver and finalizes its archive. The sender is a separate process. After the
