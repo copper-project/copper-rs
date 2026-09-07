@@ -26,6 +26,7 @@ const DEFAULT_LOG_CAPACITY: usize = 1_024;
 #[derive(Clone)]
 pub struct MonitorModel {
     pub(crate) inner: Arc<MonitorModelInner>,
+    pub(crate) streams: Option<Arc<[cu29::monitoring::LogStreamMonitor]>>,
 }
 
 pub(crate) struct MonitorModelInner {
@@ -45,6 +46,12 @@ pub(crate) struct MonitorModelInner {
 }
 
 impl MonitorModel {
+    /// Attach immutable stream handles once, before cloning the model into a UI thread.
+    pub fn with_runtime(mut self, runtime: &cu29::monitoring::CuMonitoringRuntime) -> Self {
+        self.streams = runtime.log_streams();
+        self
+    }
+
     pub fn from_metadata(metadata: &CuMonitoringMetadata) -> Self {
         Self::from_parts_with_identity(
             metadata.components(),
@@ -77,6 +84,7 @@ impl MonitorModel {
         copperlist_stats.set_info(copperlist_info);
 
         Self {
+            streams: None,
             inner: Arc::new(MonitorModelInner {
                 components,
                 topology,

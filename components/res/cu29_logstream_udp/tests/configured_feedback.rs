@@ -7,6 +7,34 @@ use cu29_logstream::{
     CuStreamRx, FiniteObjectLimits, RecordKind, SessionEvent, SessionRouter, SessionRouterLimits,
 };
 use std::time::{Duration, Instant};
+thread_local! {
+    static STREAMS: std::cell::RefCell<Option<std::sync::Arc<[cu29::monitoring::LogStreamMonitor]>>> = const { std::cell::RefCell::new(None) };
+}
+struct StreamProbe;
+impl cu29::monitoring::CuMonitor for StreamProbe {
+    fn new(
+        _: cu29::monitoring::CuMonitoringMetadata,
+        runtime: cu29::monitoring::CuMonitoringRuntime,
+    ) -> CuResult<Self> {
+        STREAMS.with(|streams| *streams.borrow_mut() = runtime.log_streams());
+        Ok(Self)
+    }
+    fn process_copperlist(
+        &self,
+        _: &CuContext,
+        _: cu29::monitoring::CopperListView<'_>,
+    ) -> CuResult<()> {
+        Ok(())
+    }
+    fn process_error(
+        &self,
+        _: cu29::monitoring::ComponentId,
+        _: cu29::monitoring::CuComponentState,
+        _: &CuError,
+    ) -> cu29::monitoring::Decision {
+        cu29::monitoring::Decision::Shutdown
+    }
+}
 #[copper_runtime(config = "tests/configured_feedback.ron")]
 struct FeedbackApp {}
 
@@ -89,6 +117,16 @@ fn configured_feedback_resource_is_owned_and_advertised() -> CuResult<()> {
     drop(running.stop()?);
     assert_eq!(sent, 100);
     assert!(reports_sent >= 4);
+    STREAMS.with(|streams| {
+        let streams = streams.borrow();
+        let monitors = streams.as_ref().expect("generated monitor handles");
+        assert_eq!(monitors.len(), 1);
+        assert_eq!(monitors[0].destination, "ground");
+        let snapshot = monitors[0].snapshot();
+        assert!(snapshot.packets_sent > 0);
+        assert!(snapshot.feedback.unwrap().reports > 0);
+        assert!(snapshot.stopped);
+    });
     Ok(())
 }
 

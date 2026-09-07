@@ -1382,6 +1382,10 @@ pub enum cu29_runtime::monitoring::Decision
 pub cu29_runtime::monitoring::Decision::Abort
 pub cu29_runtime::monitoring::Decision::Ignore
 pub cu29_runtime::monitoring::Decision::Shutdown
+pub enum cu29_runtime::monitoring::LogStreamFeedbackState
+pub cu29_runtime::monitoring::LogStreamFeedbackState::Active
+pub cu29_runtime::monitoring::LogStreamFeedbackState::Stale
+pub cu29_runtime::monitoring::LogStreamFeedbackState::Waiting
 #[repr(transparent)] pub struct cu29_runtime::monitoring::ComponentId(_)
 impl cu29_runtime::monitoring::ComponentId
 pub const cu29_runtime::monitoring::ComponentId::INVALID: Self
@@ -1488,6 +1492,7 @@ pub fn cu29_runtime::monitoring::CuMonitoringMetadata::with_subsystem_id(self, s
 pub struct cu29_runtime::monitoring::CuMonitoringRuntime
 impl cu29_runtime::monitoring::CuMonitoringRuntime
 pub fn cu29_runtime::monitoring::CuMonitoringRuntime::execution_probe(&self) -> &cu29_runtime::monitoring::MonitorExecutionProbe
+pub fn cu29_runtime::monitoring::CuMonitoringRuntime::log_streams(&self) -> core::option::Option<alloc::sync::Arc<[cu29_runtime::monitoring::LogStreamMonitor]>>
 pub fn cu29_runtime::monitoring::CuMonitoringRuntime::new(execution_probe: cu29_runtime::monitoring::MonitorExecutionProbe) -> Self
 pub fn cu29_runtime::monitoring::CuMonitoringRuntime::register_panic_action<F>(&self, callback: F) -> cu29_runtime::monitoring::PanicHookRegistration where F: core::ops::function::Fn(&cu29_runtime::monitoring::PanicReport) -> core::option::Option<i32> + core::marker::Send + core::marker::Sync + 'static
 pub fn cu29_runtime::monitoring::CuMonitoringRuntime::register_panic_cleanup<F>(&self, callback: F) -> cu29_runtime::monitoring::PanicHookRegistration where F: core::ops::function::Fn(&cu29_runtime::monitoring::PanicReport) + core::marker::Send + core::marker::Sync + 'static
@@ -1524,6 +1529,49 @@ pub fn cu29_runtime::monitoring::LiveStatistics::percentile(&self, percentile: f
 pub fn cu29_runtime::monitoring::LiveStatistics::record(&mut self, value: u64)
 pub fn cu29_runtime::monitoring::LiveStatistics::reset(&mut self)
 pub fn cu29_runtime::monitoring::LiveStatistics::stdev(&self) -> f64
+pub struct cu29_runtime::monitoring::LogStreamFeedbackStats
+pub cu29_runtime::monitoring::LogStreamFeedbackStats::age: core::option::Option<cu29_clock::CuDuration>
+pub cu29_runtime::monitoring::LogStreamFeedbackStats::buffered_records: u32
+pub cu29_runtime::monitoring::LogStreamFeedbackStats::bytes_per_second: u64
+pub cu29_runtime::monitoring::LogStreamFeedbackStats::duplicate_packets: u64
+pub cu29_runtime::monitoring::LogStreamFeedbackStats::effective_repair_every_source_symbols: u16
+pub cu29_runtime::monitoring::LogStreamFeedbackStats::expired_records: u64
+pub cu29_runtime::monitoring::LogStreamFeedbackStats::failed: bool
+pub cu29_runtime::monitoring::LogStreamFeedbackStats::finalized_symbols: u64
+pub cu29_runtime::monitoring::LogStreamFeedbackStats::invalid_packets: u64
+pub cu29_runtime::monitoring::LogStreamFeedbackStats::invalid_reports: u64
+pub cu29_runtime::monitoring::LogStreamFeedbackStats::latest_copperlist: core::option::Option<u64>
+pub cu29_runtime::monitoring::LogStreamFeedbackStats::loss_basis_points: u16
+pub cu29_runtime::monitoring::LogStreamFeedbackStats::packets_per_second: u64
+pub cu29_runtime::monitoring::LogStreamFeedbackStats::rates_available: bool
+pub cu29_runtime::monitoring::LogStreamFeedbackStats::record_capacity: u32
+pub cu29_runtime::monitoring::LogStreamFeedbackStats::recovery_basis_points: u16
+pub cu29_runtime::monitoring::LogStreamFeedbackStats::rejected_reports: u64
+pub cu29_runtime::monitoring::LogStreamFeedbackStats::reports: u64
+pub cu29_runtime::monitoring::LogStreamFeedbackStats::source_metrics_available: bool
+pub cu29_runtime::monitoring::LogStreamFeedbackStats::state: cu29_runtime::monitoring::LogStreamFeedbackState
+pub struct cu29_runtime::monitoring::LogStreamMonitor
+pub cu29_runtime::monitoring::LogStreamMonitor::baseline_repair_every_source_symbols: usize
+pub cu29_runtime::monitoring::LogStreamMonitor::bitrate_bps: u64
+pub cu29_runtime::monitoring::LogStreamMonitor::destination: compact_str::CompactString
+impl cu29_runtime::monitoring::LogStreamMonitor
+pub fn cu29_runtime::monitoring::LogStreamMonitor::new(destination: &str, bitrate_bps: u64, baseline: usize, source: impl cu29_runtime::monitoring::LogStreamStatsSource + 'static) -> Self
+pub fn cu29_runtime::monitoring::LogStreamMonitor::snapshot(&self) -> cu29_runtime::monitoring::LogStreamStats
+pub struct cu29_runtime::monitoring::LogStreamStats
+pub cu29_runtime::monitoring::LogStreamStats::bytes_sent: u64
+pub cu29_runtime::monitoring::LogStreamStats::expired_packets: u64
+pub cu29_runtime::monitoring::LogStreamStats::failed: bool
+pub cu29_runtime::monitoring::LogStreamStats::feedback: core::option::Option<cu29_runtime::monitoring::LogStreamFeedbackStats>
+pub cu29_runtime::monitoring::LogStreamStats::inbox_drops: u64
+pub cu29_runtime::monitoring::LogStreamStats::packets_sent: u64
+pub cu29_runtime::monitoring::LogStreamStats::queue_drops: u64
+pub cu29_runtime::monitoring::LogStreamStats::queue_peak: usize
+pub cu29_runtime::monitoring::LogStreamStats::recovery_rounds: u64
+pub cu29_runtime::monitoring::LogStreamStats::recovery_superseded: u64
+pub cu29_runtime::monitoring::LogStreamStats::sampled_at: cu29_clock::CuTime
+pub cu29_runtime::monitoring::LogStreamStats::shutdown_drops: u64
+pub cu29_runtime::monitoring::LogStreamStats::stopped: bool
+pub cu29_runtime::monitoring::LogStreamStats::transport_drops: u64
 pub struct cu29_runtime::monitoring::MonitorComponentMetadata
 impl cu29_runtime::monitoring::MonitorComponentMetadata
 pub const fn cu29_runtime::monitoring::MonitorComponentMetadata::id(&self) -> &'static str
@@ -1657,6 +1705,8 @@ pub fn (M0, M1)::process_error(&self, component_id: cu29_runtime::monitoring::Co
 pub fn (M0, M1)::process_panic(&self, panic_message: &str)
 pub fn (M0, M1)::start(&mut self, ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn (M0, M1)::stop(&mut self, ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub trait cu29_runtime::monitoring::LogStreamStatsSource: core::fmt::Debug + core::marker::Send + core::marker::Sync
+pub fn cu29_runtime::monitoring::LogStreamStatsSource::snapshot(&self) -> cu29_runtime::monitoring::LogStreamStats
 pub fn cu29_runtime::monitoring::build_monitor_topology(config: &cu29_runtime::config::CuConfig, mission: &str) -> cu29_traits::CuResult<cu29_runtime::monitoring::MonitorTopology>
 pub fn cu29_runtime::monitoring::global_allocated_bytes() -> core::option::Option<usize>
 pub fn cu29_runtime::monitoring::global_deallocated_bytes() -> core::option::Option<usize>

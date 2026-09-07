@@ -477,3 +477,76 @@ where
         SenderMonitor(shared),
     ))
 }
+
+impl SenderMonitor {
+    /// Transfer a read-only worker handle into generated monitoring metadata.
+    pub fn into_runtime_monitor(
+        self,
+        destination: &str,
+        bitrate_bps: u64,
+        baseline: usize,
+    ) -> cu29_runtime::monitoring::LogStreamMonitor {
+        cu29_runtime::monitoring::LogStreamMonitor::new(destination, bitrate_bps, baseline, self)
+    }
+}
+impl cu29_runtime::monitoring::LogStreamStatsSource for SenderMonitor {
+    fn snapshot(&self) -> cu29_runtime::monitoring::LogStreamStats {
+        use cu29_runtime::monitoring::{
+            LogStreamFeedbackState, LogStreamFeedbackStats, LogStreamStats,
+        };
+        let snapshot = SenderMonitor::snapshot(self);
+        let stats = snapshot.stats;
+        LogStreamStats {
+            sampled_at: snapshot.sampled_at,
+            packets_sent: stats.packets_sent,
+            bytes_sent: stats.bytes_sent,
+            queue_drops: stats.queue_drops,
+            expired_packets: stats.expired_packets,
+            transport_drops: stats.transport_drops,
+            inbox_drops: snapshot.inbox_drops,
+            shutdown_drops: stats.shutdown_drops,
+            recovery_rounds: stats.recovery_rounds,
+            recovery_superseded: stats.recovery_superseded,
+            queue_peak: stats.queue_peak,
+            stopped: snapshot.stopped,
+            failed: snapshot.failed,
+            feedback: snapshot.feedback.map(|feedback| {
+                let report = feedback.report.unwrap_or_default();
+                LogStreamFeedbackStats {
+                    state: match feedback.state {
+                        crate::feedback::FeedbackState::Waiting => LogStreamFeedbackState::Waiting,
+                        crate::feedback::FeedbackState::Active => LogStreamFeedbackState::Active,
+                        crate::feedback::FeedbackState::Stale => LogStreamFeedbackState::Stale,
+                    },
+                    age: feedback.last_received.map(|last| {
+                        CuDuration::from_nanos(
+                            snapshot
+                                .sampled_at
+                                .as_nanos()
+                                .saturating_sub(last.as_nanos()),
+                        )
+                    }),
+                    failed: snapshot.feedback_failed,
+                    reports: feedback.accepted_reports,
+                    rejected_reports: feedback.rejected_reports,
+                    invalid_reports: feedback.invalid_reports,
+                    rates_available: feedback.receiver_rates_available,
+                    source_metrics_available: feedback.source_metrics_available,
+                    bytes_per_second: feedback.receiver_bytes_per_second,
+                    packets_per_second: feedback.receiver_packets_per_second,
+                    finalized_symbols: report.sources.finalized,
+                    loss_basis_points: feedback.source_loss_basis_points,
+                    recovery_basis_points: feedback.source_recovery_basis_points,
+                    buffered_records: report.buffered_records,
+                    record_capacity: report.record_capacity,
+                    latest_copperlist: report.latest_copperlist,
+                    effective_repair_every_source_symbols: feedback
+                        .effective_repair_every_source_symbols,
+                    invalid_packets: report.invalid_packets,
+                    duplicate_packets: report.duplicate_packets,
+                    expired_records: report.expired_records,
+                }
+            }),
+        }
+    }
+}

@@ -108,6 +108,8 @@ fn stale_duplicate_wrong_session_and_competing_receivers_do_not_refresh_health()
     c.receive(foreign, time(2600));
     assert_eq!(c.snapshot().accepted_reports, 2);
     assert_eq!(c.snapshot().report.unwrap().receiver_id, [3; 16]);
+    assert!(!c.snapshot().receiver_rates_available);
+    assert!(!c.snapshot().source_metrics_available);
 }
 #[test]
 fn reporting_only_idle_and_cadence_never_reduce_protection() {

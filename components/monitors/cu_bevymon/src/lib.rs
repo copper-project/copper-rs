@@ -39,9 +39,9 @@ impl CuBevyMon {
 }
 
 impl CuMonitor for CuBevyMon {
-    fn new(metadata: CuMonitoringMetadata, _runtime: CuMonitoringRuntime) -> CuResult<Self> {
+    fn new(metadata: CuMonitoringMetadata, runtime: CuMonitoringRuntime) -> CuResult<Self> {
         Ok(Self {
-            model: MonitorModel::from_metadata(&metadata),
+            model: MonitorModel::from_metadata(&metadata).with_runtime(&runtime),
             log_capture: None,
         })
     }

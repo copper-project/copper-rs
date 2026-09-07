@@ -106,6 +106,8 @@ tempfile = { workspace = true }
 
 [features]
 default = ["std"]
+# Optional worker handles; absent from monitoring contexts when streaming is disabled.
+logstream-monitoring = ["std"]
 defmt = ["cu29-log/defmt", "cu29-log-derive/defmt", "cu29-traits/defmt"]
 cuda = ["dep:cudarc"]
 macro_debug = []

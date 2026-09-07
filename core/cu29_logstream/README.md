@@ -282,3 +282,19 @@ stay fixed. Feedback failure never stops capture or autonomous recovery; snapsho
 
 Loss excludes the active coding window and unseen history/tails. Invalid packets do not prove corruption;
 CRC is not authentication. Reports and adaptation stay on stream workers. Run `just logstream-feedback-check`.
+
+### TUI bandwidth panel
+
+The console monitor's BW tab includes `Telemetry / TX` panels for each configured destination.
+One-way panels show actual submitted Copper bytes/packets, the configured budget, drops by cause,
+recovery activity, and baseline FEC. These are local submissions, not delivery acknowledgements.
+
+Two-way panels additionally show feedback state/age, receiver throughput, finalized source loss and
+FEC recovery, receiver buffer/progress counters, and the effective repair interval. Waiting, stale,
+and failed feedback show `n/a` for receiver measurements. Arrow keys or `hjkl` scroll the BW content
+horizontally and vertically on small terminals or when several destinations are configured.
+
+Generated apps attach read-only worker handles through `CuMonitoringRuntime`. Console and Bevy monitors
+pass those handles to the shared TUI model; custom monitor frontends can use `runtime.log_streams()`.
+Snapshots are published on sender workers and sampled by the presentation thread. The task path gains
+no monitoring callbacks, serialization, or synchronization. Run `just logstream-monitor-check`.

@@ -1,5 +1,6 @@
 mod model;
 mod palette;
+mod stream_panel;
 mod tui_nodes;
 mod ui;
 

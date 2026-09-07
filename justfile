@@ -199,6 +199,12 @@ logstream-feedback-check:
 	cargo +stable test -p cu29 --features logstream --test logstream_runtime
 	just logstream-udp-check
 
+# TUI stream snapshots/rates and generated monitor wiring, including feedback.
+logstream-monitor-check:
+	cargo +stable clippy -p cu-tuimon -p cu-consolemon -p cu-bevymon --all-targets -- --deny warnings
+	cargo +stable test -p cu-tuimon -p cu-consolemon
+	just logstream-feedback-check
+
 # Runnable two-process UDP scenarios, archive comparison, and recorded replay.
 logstream-demo-check:
 	cargo +stable clippy -p cu-logstream-demo --all-targets --features replay -- --deny warnings
