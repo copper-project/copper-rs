@@ -2033,6 +2033,66 @@ impl CuGraph {
         Ok(msg_order.into_iter().map(|(_, msg)| msg).collect())
     }
 
+    /// Channel-aware variant of [`CuGraph::get_node_output_msg_types_by_id`].
+    ///
+    /// Returns each distinct output port as `(msg_type, src_channel)`, where
+    /// `src_channel` is `None` for ordinary task ports and `Some(id)` for
+    /// bridge-channel ports. Unlike the msg-only variant, two ports sharing the
+    /// same message type but living on different bridge channels are kept as
+    /// separate entries, preserving their relative ordering (see #791).
+    #[allow(dead_code)]
+    pub fn get_node_output_ports_by_id(
+        &self,
+        node_id: NodeId,
+    ) -> CuResult<Vec<(String, Option<String>)>> {
+        let mut edge_ids = self.get_src_edges(node_id)?;
+        edge_ids.sort();
+
+        let node = self
+            .get_node(node_id)
+            .ok_or_else(|| CuError::from(format!("Node id {node_id} not found")))?;
+
+        let mut port_order: Vec<(usize, String, Option<String>)> = Vec::new();
+        let mut record_port = |msg: String, channel: Option<String>, order: usize| {
+            if let Some((existing_order, _, _)) = port_order
+                .iter_mut()
+                .find(|(_, m, c)| *m == msg && *c == channel)
+            {
+                if order < *existing_order {
+                    *existing_order = order;
+                }
+                return;
+            }
+            port_order.push((order, msg, channel));
+        };
+
+        for edge_id in edge_ids {
+            let Some(edge) = self.edge(edge_id) else {
+                continue;
+            };
+            let order = if edge.order == usize::MAX {
+                edge_id
+            } else {
+                edge.order
+            };
+            record_port(edge.msg.clone(), edge.src_channel.clone(), order);
+        }
+
+        for (msg, order) in node.nc_outputs_with_order() {
+            record_port(msg.clone(), None, order);
+        }
+
+        port_order.sort_by(
+            |(order_a, msg_a, ch_a), (order_b, msg_b, ch_b)| {
+                order_a
+                    .cmp(order_b)
+                    .then_with(|| msg_a.cmp(msg_b))
+                    .then_with(|| ch_a.cmp(ch_b))
+            },
+        );
+        Ok(port_order.into_iter().map(|(_, msg, ch)| (msg, ch)).collect())
+    }
+
     #[allow(dead_code)]
     pub fn get_node_input_msg_type(&self, node_id: &str) -> Option<String> {
         self.get_node_input_msg_types(node_id)

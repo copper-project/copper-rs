@@ -478,16 +478,18 @@ pub(crate) fn plan_from_order(graph: &CuGraph, order: &StepOrder) -> CuResult<Cu
 
         match task_type {
             CuTaskType::Source => {
-                let msg_types = graph.get_node_output_msg_types_by_id(id)?;
-                if msg_types.is_empty() {
+                let ports = graph.get_node_output_ports_by_id(id)?;
+                if ports.is_empty() {
                     return Err(CuError::from(format!(
                         "Source node '{}' has no declared outputs",
                         node_ref.get_id()
                     )));
                 }
+                let (msg_types, src_channels) = ports.into_iter().unzip();
                 output_msg_pack = Some(CuOutputPack {
                     culist_index: next_culist_output_index,
                     msg_types,
+                    src_channels,
                 });
                 next_culist_output_index += 1;
             }
@@ -495,20 +497,23 @@ pub(crate) fn plan_from_order(graph: &CuGraph, order: &StepOrder) -> CuResult<Cu
                 output_msg_pack = Some(CuOutputPack {
                     culist_index: next_culist_output_index,
                     msg_types: Vec::from(["()".to_string()]),
+                    src_channels: vec![None],
                 });
                 next_culist_output_index += 1;
             }
             CuTaskType::Regular => {
-                let msg_types = graph.get_node_output_msg_types_by_id(id)?;
-                if msg_types.is_empty() {
+                let ports = graph.get_node_output_ports_by_id(id)?;
+                if ports.is_empty() {
                     return Err(CuError::from(format!(
                         "Regular node '{}' has no declared outputs",
                         node_ref.get_id()
                     )));
                 }
+                let (msg_types, src_channels) = ports.into_iter().unzip();
                 output_msg_pack = Some(CuOutputPack {
                     culist_index: next_culist_output_index,
                     msg_types,
+                    src_channels,
                 });
                 next_culist_output_index += 1;
             }
@@ -556,10 +561,12 @@ fn collect_step_inputs(
             ))
         })?;
         let msg_type = edge.msg.as_str();
+        let src_channel = edge.src_channel.as_deref();
         let src_port = output_pack
             .msg_types
             .iter()
-            .position(|msg| msg == msg_type)
+            .zip(output_pack.src_channels.iter())
+            .position(|(msg, ch)| msg == msg_type && ch.as_deref() == src_channel)
             .unwrap_or_else(|| {
                 panic!("Missing output port for message type '{msg_type}' on node {pid}")
             });
@@ -1697,6 +1704,7 @@ mod tests {
                     }
                     output_msg_pack = Some(CuOutputPack {
                         culist_index: next_culist_output_index,
+                        src_channels: vec![None; msg_types.len()],
                         msg_types,
                     });
                     next_culist_output_index += 1;
@@ -1740,6 +1748,7 @@ mod tests {
                     output_msg_pack = Some(CuOutputPack {
                         culist_index: next_culist_output_index,
                         msg_types: Vec::from(["()".to_string()]),
+                        src_channels: vec![None],
                     });
                     next_culist_output_index += 1;
                 }
@@ -1788,6 +1797,7 @@ mod tests {
                     }
                     output_msg_pack = Some(CuOutputPack {
                         culist_index: next_culist_output_index,
+                        src_channels: vec![None; msg_types.len()],
                         msg_types,
                     });
                     next_culist_output_index += 1;
