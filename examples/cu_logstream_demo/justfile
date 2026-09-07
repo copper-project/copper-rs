@@ -3,6 +3,10 @@ root := "../.."
 # Run the clean two-process demo and verify both native logs.
 default: (run "clean")
 
+# Render and open the encoder-to-kinematics task graph.
+dag:
+    cargo +stable run -p cu29-runtime --bin cu29-rendercfg -- --open copperconfig.ron
+
 build:
     cargo +stable build -p cu-logstream-demo --features replay --bins
 

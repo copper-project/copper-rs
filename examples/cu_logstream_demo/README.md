@@ -15,6 +15,7 @@ disables task reconstruction.
 From this directory:
 
 ```sh
+just dag
 just
 just run loss
 just run outage
