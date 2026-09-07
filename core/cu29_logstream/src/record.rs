@@ -2,7 +2,7 @@ use crate::{Error, Result};
 use alloc::vec::Vec;
 
 const RECORD_MAGIC: [u8; 4] = *b"CUSR";
-const RECORD_VERSION: u8 = 1;
+const RECORD_VERSION: u8 = 2;
 pub const RECORD_HEADER_LEN: usize = 56;
 const RECORD_DIGEST_OFFSET: usize = 24;
 
@@ -148,6 +148,17 @@ fn record_digest(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn previous_record_version_is_rejected_before_payload_decode() {
+        let mut record = encode_record(RecordKind::CopperList, 42, &[42]).unwrap();
+        assert_eq!(record[4], 2);
+        record[4] = 1;
+        assert!(matches!(
+            decode_record(&record),
+            Err(Error::UnsupportedVersion(1))
+        ));
+    }
 
     #[test]
     fn record_digest_binds_identity_and_payload() {

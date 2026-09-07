@@ -4179,7 +4179,6 @@ fn copperlist_snapshot<P: CopperListTuple + 'static>(
 
     Ok(json!({
         "cl": cl.id,
-        "state": format!("{}", cl.get_state()),
         "ts_ns": time_of(cl).map(|t| t.as_nanos()),
         "messages": entries,
         "raw_bincode_hex": raw,
@@ -5625,6 +5624,17 @@ mod tests {
         fn cumsgs(&self) -> Vec<&dyn ErasedCuStampedData> {
             Vec::new()
         }
+    }
+
+    #[test]
+    fn copperlist_snapshot_omits_runtime_state() {
+        let mut list = crate::copperlist::CopperList::new(7, AliasPayloadCopperList);
+        list.change_state(crate::copperlist::CopperListState::Processing);
+        let snapshot =
+            super::copperlist_snapshot(&list, &|_| None, true, true, true, false, None).unwrap();
+        assert!(snapshot.get("state").is_none());
+        assert_eq!(snapshot["cl"], 7);
+        assert_eq!(snapshot["raw_bincode_hex"], "07");
     }
 
     impl MatchingTasks for AliasPayloadCopperList {

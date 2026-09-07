@@ -110,7 +110,7 @@ pub fn encode_capture_record_into<P: CaptureDataSet>(
     }
     let (header, payload) = output.split_at_mut(header_len);
     let len = bincode::encode_into_slice(
-        (list.id, list.get_state(), CaptureView(&list.msgs)),
+        (list.id, CaptureView(&list.msgs)),
         payload,
         bincode::config::standard(),
     )

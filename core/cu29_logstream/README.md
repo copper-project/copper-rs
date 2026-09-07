@@ -186,7 +186,11 @@ The default receiver supports the 1200-byte-MTU, 64-symbol streaming profile, wi
 captures, one recovery point, one executing frame and 64 display frames; payload storage and
 thread/runtime allocations are additional. `with_frame_capacity` changes display retention.
 
-Production sends the existing native CopperList format with selected payloads omitted.
+Production sends the native CopperList format with selected payloads omitted.
+Record framing version 2 carries `id` followed by `msgs`, without the runtime-only
+lifecycle state. Updated endpoints reject older record versions; archived unified
+logs use format version 2. The compressed metadata bytes are unchanged by moving
+ULEB128 timestamp-delta and backreference encoding into `cu-bincode` 2.1.
 The native codec already carries original/captured presence. There is no proof envelope,
 per-list verification allocation, or new continuity record. The archive writes the
 received native bytes before replay and never stores synthesized outputs. The unreleased
