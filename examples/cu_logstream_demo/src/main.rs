@@ -9,7 +9,6 @@ use cu29::continuity::{SourceGapReason, StreamContinuityRecord};
 use cu29::prelude::*;
 use std::{
     error::Error,
-    fs,
     net::SocketAddr,
     path::{Path, PathBuf},
 };
@@ -69,17 +68,8 @@ enum Expectation {
 }
 
 fn prepare_log(path: &Path) -> Result<()> {
-    let first = cu29::replay::first_slab_path(path)?;
-    if first.exists() || path.exists() {
-        return Err(format!(
-            "Log already exists: {}. Choose a new log base.",
-            path.display()
-        )
-        .into());
-    }
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
+    // Demo reruns replace all old slabs, including the tail of longer runs.
+    cu29::replay::remove_log_family(path)?;
     Ok(())
 }
 

@@ -19,7 +19,7 @@ run scenario="clean": build
 
 check: (run "all")
 
-# Start these in separate terminals, choosing fresh output paths for each run.
+# Start these in separate terminals. Existing output logs are replaced on each run.
 sender remote="127.0.0.1:7447" log="logs/sender.copper" iterations="6000": build
     {{root}}/target/debug/cu-logstream-demo sender --remote {{remote}} --log-base {{log}} --iterations {{iterations}}
 

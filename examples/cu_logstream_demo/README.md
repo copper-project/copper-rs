@@ -53,12 +53,13 @@ files have separate paths for each receiver lifetime.
 
 From this directory, start `just dashboard`, then `just sender` in another
 terminal. The manual sender runs for about a minute; automated scenarios keep
-256 iterations. Choose fresh log paths when repeating a run:
+256 iterations. Sender, receiver, and dashboard replace existing logs at their
+selected log base on each run, so the same commands can be repeated:
 
 ```sh
-just dashboard 127.0.0.1:7447 logs/dashboard-2.copper
+just dashboard
 # In another terminal:
-just sender 127.0.0.1:7447 logs/sender-2.copper
+just sender
 ```
 
 The Ratatui screen shows counter/sum values, a counter chart, packet and frame
