@@ -729,20 +729,24 @@ fn collect_resource_catalog(
         .collect();
     let mut catalog: HashMap<String, BTreeSet<String>> = HashMap::new();
 
+    let mut collect_path = |path: &str| -> CuResult<()> {
+        let (bundle_id, resource_name) = parse_resource_path(path)?;
+        if !bundle_ids.contains(&bundle_id) {
+            return Err(CuError::from(format!(
+                "Resource '{}' references unknown bundle '{}'",
+                path, bundle_id
+            )));
+        }
+        catalog.entry(bundle_id).or_default().insert(resource_name);
+        Ok(())
+    };
     let mut collect_graph = |graph: &config::CuGraph| -> CuResult<()> {
         for (_, node) in graph.get_all_nodes() {
             let Some(resources) = node.get_resources() else {
                 continue;
             };
             for path in resources.values() {
-                let (bundle_id, resource_name) = parse_resource_path(path)?;
-                if !bundle_ids.contains(&bundle_id) {
-                    return Err(CuError::from(format!(
-                        "Resource '{}' references unknown bundle '{}'",
-                        path, bundle_id
-                    )));
-                }
-                catalog.entry(bundle_id).or_default().insert(resource_name);
+                collect_path(path)?;
             }
         }
         Ok(())
@@ -754,6 +758,12 @@ fn collect_resource_catalog(
             for graph in graphs.values() {
                 collect_graph(graph)?;
             }
+        }
+    }
+
+    if let Some(streaming) = &config.log_streaming {
+        for destination in &streaming.destinations {
+            collect_path(&destination.transport.resource)?;
         }
     }
 
@@ -775,7 +785,7 @@ fn build_resource_tables(
     section: &SectionRef<'_>,
     resource_catalog: &HashMap<String, BTreeSet<String>>,
 ) -> CuResult<Vec<ResourceTable>> {
-    let owners_by_bundle = collect_graph_resource_owners(section.graph)?;
+    let owners_by_bundle = collect_resource_owners(config, section.graph)?;
     let mission_id = section.mission_id.as_deref();
     let mut tables = Vec::new();
 
@@ -948,7 +958,8 @@ fn build_perf_table(perf: &PerfStats) -> ResourceTable {
     ResourceTable { table, size }
 }
 
-fn collect_graph_resource_owners(
+fn collect_resource_owners(
+    config: &config::CuConfig,
     graph: &config::CuGraph,
 ) -> CuResult<HashMap<String, HashMap<String, Vec<ResourceOwner>>>> {
     let mut owners: HashMap<String, HashMap<String, Vec<ResourceOwner>>> = HashMap::new();
@@ -958,7 +969,10 @@ fn collect_graph_resource_owners(
         };
         let owner = ResourceOwner {
             name: node.get_id(),
-            flavor: node.get_flavor(),
+            kind: match node.get_flavor() {
+                config::Flavor::Task => ResourceOwnerKind::Task,
+                config::Flavor::Bridge => ResourceOwnerKind::Bridge,
+            },
         };
         for path in resources.values() {
             let (bundle_id, resource_name) = parse_resource_path(path)?;
@@ -968,6 +982,21 @@ fn collect_graph_resource_owners(
                 .entry(resource_name)
                 .or_default()
                 .push(owner.clone());
+        }
+    }
+
+    if let Some(streaming) = &config.log_streaming {
+        for destination in &streaming.destinations {
+            let (bundle_id, resource_name) = parse_resource_path(&destination.transport.resource)?;
+            owners
+                .entry(bundle_id)
+                .or_default()
+                .entry(resource_name)
+                .or_default()
+                .push(ResourceOwner {
+                    name: format!("logstream ({})", destination.id),
+                    kind: ResourceOwnerKind::System,
+                });
         }
     }
 
@@ -981,19 +1010,8 @@ fn collect_graph_resource_owners(
 }
 
 fn dedup_owners(owners: &mut Vec<ResourceOwner>) {
-    owners.sort_by(|a, b| {
-        flavor_rank(a.flavor)
-            .cmp(&flavor_rank(b.flavor))
-            .then_with(|| a.name.cmp(&b.name))
-    });
-    owners.dedup_by(|a, b| a.flavor == b.flavor && a.name == b.name);
-}
-
-fn flavor_rank(flavor: config::Flavor) -> u8 {
-    match flavor {
-        config::Flavor::Task => 0,
-        config::Flavor::Bridge => 1,
-    }
+    owners.sort_by(|a, b| a.kind.cmp(&b.kind).then_with(|| a.name.cmp(&b.name)));
+    owners.dedup_by(|a, b| a.kind == b.kind && a.name == b.name);
 }
 
 fn resource_usage(owners: &[ResourceOwner]) -> ResourceUsage {
@@ -1025,9 +1043,10 @@ fn format_resource_owners(owners: &[ResourceOwner], usage: ResourceUsage) -> Vec
     owners
         .iter()
         .map(|owner| {
-            let (label, color) = match owner.flavor {
-                config::Flavor::Task => (format!("task: {}", owner.name), "black"),
-                config::Flavor::Bridge => (format!("bridge: {}", owner.name), DIM_GRAY),
+            let (label, color) = match owner.kind {
+                ResourceOwnerKind::Task => (format!("task: {}", owner.name), "black"),
+                ResourceOwnerKind::Bridge => (format!("bridge: {}", owner.name), DIM_GRAY),
+                ResourceOwnerKind::System => (format!("system: {}", owner.name), "black"),
             };
             CellLine::code(label, color, false, PORT_VALUE_FONT_SIZE)
         })
@@ -2314,7 +2333,14 @@ struct ResourceTable {
 #[derive(Clone)]
 struct ResourceOwner {
     name: String,
-    flavor: config::Flavor,
+    kind: ResourceOwnerKind,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum ResourceOwnerKind {
+    Task,
+    Bridge,
+    System,
 }
 
 #[derive(Clone, Copy)]
@@ -2471,6 +2497,20 @@ struct TableCell {
 
 impl TableCell {
     fn new(lines: Vec<CellLine>) -> Self {
+        // SVG text collapses newlines. Store each visual line separately so
+        // measurement and rendering agree for wrapped labels.
+        let lines = lines
+            .into_iter()
+            .flat_map(|line| {
+                line.text
+                    .split('\n')
+                    .map(|text| CellLine {
+                        text: text.to_string(),
+                        ..line.clone()
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
         Self {
             lines,
             port: None,
@@ -4707,6 +4747,92 @@ mod tests {
         for slot in LINUX_RESOURCE_SLOT_NAMES {
             assert!(linux_slots.contains(slot), "missing slot {slot}");
         }
+    }
+
+    #[test]
+    fn wrapped_provider_labels_render_as_separate_lines() {
+        let bundle = config::ResourceBundleConfig {
+            id: "network".to_string(),
+            provider: "cu29_logstream_udp::CuUdpLogStreamResources".to_string(),
+            config: None,
+            missions: None,
+        };
+        let table = build_resource_table(&bundle, &[], None);
+        let TableNode::Array(rows) = &table else {
+            panic!("expected table rows");
+        };
+        let TableNode::Cell(header) = &rows[0] else {
+            panic!("expected header cell");
+        };
+        assert_eq!(header.lines.len(), 3);
+        assert_eq!(header.lines[1].text, "cu29_logstream_udp::");
+        assert_eq!(header.lines[2].text, "CuUdpLogStreamResources");
+        assert!(header.lines.iter().all(|line| !line.text.contains('\n')));
+        assert_eq!(
+            cell_text_height(header),
+            (FONT_SIZE + 2 * TYPE_FONT_SIZE) as f64 + 2.0 * CELL_LINE_SPACING
+        );
+
+        let size = record_size(&table, Orientation::TopToBottom);
+        let mut svg = SvgWriter::new();
+        draw_resource_table(
+            &mut svg,
+            &ResourceTable { table, size },
+            Point::new(0.0, 0.0),
+        );
+        let rendered = svg.finalize();
+        assert!(rendered.contains("cu29_logstream_udp::\n</text>"));
+        assert!(rendered.contains("CuUdpLogStreamResources\n</text>"));
+    }
+
+    #[test]
+    fn logstream_resources_have_system_owners_without_task_bindings() {
+        let config = read_configuration(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../examples/cu_logstream_demo/copperconfig.ron"
+        ))
+        .expect("demo config should load");
+        let catalog = collect_resource_catalog(&config).expect("catalog should build");
+        assert!(catalog["network"].contains("tx"));
+
+        let sections = build_sections(&config, None).expect("sections should build");
+        for section in &sections {
+            let owners = collect_resource_owners(&config, section.graph).expect("owners");
+            let tx_owners = &owners["network"]["tx"];
+            assert_eq!(tx_owners.len(), 1);
+            assert!(matches!(tx_owners[0].kind, ResourceOwnerKind::System));
+            assert!(matches!(
+                resource_usage(tx_owners),
+                ResourceUsage::Exclusive
+            ));
+        }
+
+        let svg = String::from_utf8(render_config_svg(&config, None, None).expect("render"))
+            .expect("UTF-8 SVG");
+        assert!(svg.contains("network.tx"));
+        assert!(svg.contains("system: logstream (ground)"));
+        assert!(!svg.contains("unused"));
+    }
+
+    #[test]
+    fn resource_owners_preserve_mission_scoping() {
+        let config = read_configuration(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/render_resource_tables.ron"
+        ))
+        .expect("resource config should load");
+        let alpha =
+            String::from_utf8(render_config_svg(&config, Some("Alpha"), None).expect("render"))
+                .expect("UTF-8 SVG");
+        let beta =
+            String::from_utf8(render_config_svg(&config, Some("Beta"), None).expect("render"))
+                .expect("UTF-8 SVG");
+        assert!(alpha.contains("task: control"));
+        assert!(!beta.contains("task: control"));
+        assert!(!alpha.contains("Bundle: radio"));
+        assert!(beta.contains("bridge: telemetry"));
+        assert!(alpha.contains("unused"));
+        assert!(beta.contains("unused"));
     }
 
     #[test]
