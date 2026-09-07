@@ -73,8 +73,10 @@ come exclusively from reconstructed Copper task outputs.
 The screen follows `cu_tuimon` with numbered tabs and command badges. **1** selects
 Live, **2** selects Health, and **Tab** cycles between them. In Health, **hjkl**
 or the arrow keys scroll the details, including the archive path and recovery counters.
-Received values are green, reconstructed values cyan, warnings amber, and failures
-red, on an explicit dark background independent of the terminal palette.
+A warm graphite background and ivory text anchor the palette: received values use
+muted sage, reconstructed values and trails use copper, warnings use amber, and
+failures use soft red. Tabs and command badges share the same warm neutral colors,
+independent of the terminal palette.
 **Space** pauses consumption; wait a second and resume to see missed samples
 while the archive count keeps advancing. **q**, Escape, or Ctrl-C closes the
 receiver and finalizes its archive. The sender is a separate process. After the
