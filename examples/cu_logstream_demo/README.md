@@ -67,7 +67,8 @@ The Ratatui screen shows received shoulder/elbow angle traces on the left and a
 Braille-canvas robot arm on the right. Two rotating links draw a four-lobed loop
 every 12 seconds. The fingertip trail fades over one loop and clears on missing
 frames or a new session; the display never invents positions across a gap.
-The caption is the demo: **Only joint angles transmitted.** The arm positions
+The arm panel is labeled **Kinematics → output pose**, with the caption
+**Task re-executed on ground · pose not transmitted**. The arm positions
 come exclusively from reconstructed Copper task outputs.
 The screen follows `cu_tuimon` with numbered tabs and command badges. **1** selects
 Live, **2** selects Health, and **Tab** cycles between them. In Health, **hjkl**

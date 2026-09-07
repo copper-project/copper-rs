@@ -409,8 +409,8 @@ impl View {
     }
 
     fn draw_arm(&self, frame: &mut ratatui::Frame<'_>, area: Rect, color: Color, tip: &str) {
-        let block = panel("Robot arm · reconstructed locally", color)
-            .title_bottom(format!("Tip: {tip} · meters"));
+        let block =
+            panel("Kinematics → output pose", color).title_bottom(format!("Tip: {tip} · meters"));
         let inner = block.inner(area);
         // Terminal cells are approximately twice as tall as they are wide.
         let aspect = f64::from(inner.width.max(1)) / (2.0 * f64::from(inner.height.max(1)));
@@ -461,7 +461,10 @@ impl View {
                     ctx.print(
                         -x + 0.1,
                         y - 0.2,
-                        Span::styled("Only joint angles transmitted", Style::default().fg(CYAN)),
+                        Span::styled(
+                            "Task re-executed on ground · pose not transmitted",
+                            Style::default().fg(CYAN),
+                        ),
                     );
                     if tip == "—" {
                         ctx.print(
@@ -778,7 +781,7 @@ mod tests {
         let right: String = (7..21)
             .flat_map(|y| (40..100).map(move |x| buffer[(x, y)].symbol()))
             .collect();
-        assert!(right.contains("Robot arm · reconstructed locally"));
+        assert!(right.contains("Kinematics → output pose"));
         assert!(right.contains("Tip: (+1.00, +0.65)"));
         let left: String = (7..21)
             .flat_map(|y| (0..40).map(move |x| buffer[(x, y)].symbol()))
@@ -790,7 +793,7 @@ mod tests {
                 .chars()
                 .any(|c| ('\u{2801}'..='\u{28ff}').contains(&c))
         );
-        assert!(right.contains("Only joint angles transmitted"));
+        assert!(right.contains("Task re-executed on ground · pose not transmitted"));
     }
 
     #[test]
