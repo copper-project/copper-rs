@@ -1,6 +1,5 @@
 use cu29_logstream::{
-    ApplicationOutputSchema, ApplicationSchema, LogStreamPlan, SESSION_MANIFEST_VERSION,
-    SessionManifest, StreamIdentity,
+    ApplicationOutputSchema, ApplicationSchema, LogStreamPlan, SessionManifest, StreamIdentity,
 };
 use cu29_runtime::config::{
     LogStreamContinuousFecConfig, LogStreamDestinationConfig, LogStreamFecConfig,
@@ -51,7 +50,7 @@ fn schema() -> ApplicationSchema {
 }
 
 #[test]
-fn config_resolves_to_sender_config_and_versioned_manifest() {
+fn config_resolves_to_sender_config_and_manifest() {
     let plan = LogStreamPlan::resolve(&destination()).unwrap();
     assert_eq!(plan.symbol_size, 1128);
     assert_eq!(plan.continuous.repair_density, 15);
@@ -64,8 +63,10 @@ fn config_resolves_to_sender_config_and_versioned_manifest() {
     sender.validate().unwrap();
 
     let manifest = SessionManifest::decode_record(&sender.recovery.manifest_record).unwrap();
-    assert_eq!(manifest.version, SESSION_MANIFEST_VERSION);
-    assert_eq!(manifest.version, 1, "the unreleased protocol remains v1");
+    let payload = bincode::encode_to_vec(&manifest, bincode::config::standard()).unwrap();
+    let expected =
+        bincode::encode_to_vec((&identity, &plan, schema()), bincode::config::standard()).unwrap();
+    assert_eq!(payload, expected, "manifest has no version prefix");
     assert_eq!(manifest.identity, identity);
     assert_eq!(manifest.plan, plan);
     assert_eq!(manifest.application_schema, schema());
@@ -76,11 +77,27 @@ fn config_resolves_to_sender_config_and_versioned_manifest() {
 
 #[test]
 fn generated_capacity_and_memory_budget_are_enforced() {
-    let mut too_large = destination();
-    too_large.link.mtu_bytes = 1201;
-    assert!(LogStreamPlan::resolve(&too_large).is_err());
+    let mut larger_mtu = destination();
+    larger_mtu.link.mtu_bytes = 1201;
+    // An MTU is an upper bound; retain preallocated symbol storage on larger links.
+    assert_eq!(
+        LogStreamPlan::resolve(&larger_mtu).unwrap().symbol_size,
+        1128
+    );
 
     let mut too_small = destination();
     too_small.link.memory_budget_kib = 64;
     assert!(LogStreamPlan::resolve(&too_small).is_err());
+}
+
+#[test]
+fn symbol_size_respects_mtu_without_growing_preallocated_storage() {
+    let mut config = destination();
+    config.link.mtu_bytes = 1190;
+    let mut plan = LogStreamPlan::resolve(&config).unwrap();
+    assert_eq!(plan.symbol_size, 1124);
+    plan.symbol_size += 1;
+    assert!(plan.validate().is_err());
+    config.link.mtu_bytes = cu29_logstream::PACKET_HEADER_LEN as u16;
+    assert!(LogStreamPlan::resolve(&config).is_err());
 }

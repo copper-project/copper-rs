@@ -1,11 +1,13 @@
+//! Packed transport framing. No version or schema is sent in packet headers;
+//! sender and receiver must be built for the matching application.
+
 use crate::{Error, RecordKind, Result};
 use alloc::vec::Vec;
 use crc::{CRC_32_ISCSI, Crc};
 
 const PACKET_MAGIC: [u8; 4] = *b"CULS";
-pub const WIRE_VERSION: u8 = 1;
-pub const PACKET_HEADER_LEN: usize = 72;
-const CRC_OFFSET: usize = 68;
+pub const PACKET_HEADER_LEN: usize = 66;
+const CRC_OFFSET: usize = 62;
 const CRC32C: Crc<u32> = Crc::<u32>::new(&CRC_32_ISCSI);
 
 /// Independently scheduled transport lanes.
@@ -131,14 +133,7 @@ impl<'a> WirePacketRef<'a> {
         if bytes[..4] != PACKET_MAGIC {
             return Err(Error::InvalidMagic);
         }
-        let version = bytes[4];
-        if version != WIRE_VERSION {
-            return Err(Error::UnsupportedVersion(version));
-        }
-        if bytes[5] as usize != PACKET_HEADER_LEN {
-            return Err(Error::InvalidHeaderLength(bytes[5]));
-        }
-        let payload_len = u16::from_be_bytes(bytes[64..66].try_into().unwrap()) as usize;
+        let payload_len = u16::from_be_bytes(bytes[60..62].try_into().unwrap()) as usize;
         if bytes.len() != PACKET_HEADER_LEN + payload_len {
             return Err(Error::PayloadLengthMismatch);
         }
@@ -154,22 +149,22 @@ impl<'a> WirePacketRef<'a> {
         }
 
         let mut session_id = [0_u8; 16];
-        session_id.copy_from_slice(&bytes[12..28]);
+        session_id.copy_from_slice(&bytes[8..24]);
         let mut fec_metadata = [0_u8; 12];
-        fec_metadata.copy_from_slice(&bytes[48..60]);
+        fec_metadata.copy_from_slice(&bytes[44..56]);
 
         Ok(Self {
             header: WireHeader {
-                lane: Lane::try_from(bytes[6])?,
-                record_kind: RecordKind::try_from(bytes[7])?,
-                fec_scheme: FecScheme::try_from(bytes[8])?,
-                symbol_kind: FecSymbolKind::try_from(bytes[9])?,
+                lane: Lane::try_from(bytes[4])?,
+                record_kind: RecordKind::try_from(bytes[5])?,
+                fec_scheme: FecScheme::try_from(bytes[6])?,
+                symbol_kind: FecSymbolKind::try_from(bytes[7])?,
                 session_id,
-                sender_id: u32::from_be_bytes(bytes[28..32].try_into().unwrap()),
-                packet_sequence: u64::from_be_bytes(bytes[32..40].try_into().unwrap()),
-                object_id: u64::from_be_bytes(bytes[40..48].try_into().unwrap()),
+                sender_id: u32::from_be_bytes(bytes[24..28].try_into().unwrap()),
+                packet_sequence: u64::from_be_bytes(bytes[28..36].try_into().unwrap()),
+                object_id: u64::from_be_bytes(bytes[36..44].try_into().unwrap()),
                 fec_metadata,
-                fragment_count: u32::from_be_bytes(bytes[60..64].try_into().unwrap()),
+                fragment_count: u32::from_be_bytes(bytes[56..60].try_into().unwrap()),
             },
             payload: &bytes[PACKET_HEADER_LEN..],
         })
@@ -193,19 +188,17 @@ pub fn encode_packet_into(header: WireHeader, payload: &[u8], output: &mut [u8])
     let bytes = &mut output[..needed];
     bytes.fill(0);
     bytes[..4].copy_from_slice(&PACKET_MAGIC);
-    bytes[4] = WIRE_VERSION;
-    bytes[5] = PACKET_HEADER_LEN as u8;
-    bytes[6] = header.lane as u8;
-    bytes[7] = header.record_kind as u8;
-    bytes[8] = header.fec_scheme as u8;
-    bytes[9] = header.symbol_kind as u8;
-    bytes[12..28].copy_from_slice(&header.session_id);
-    bytes[28..32].copy_from_slice(&header.sender_id.to_be_bytes());
-    bytes[32..40].copy_from_slice(&header.packet_sequence.to_be_bytes());
-    bytes[40..48].copy_from_slice(&header.object_id.to_be_bytes());
-    bytes[48..60].copy_from_slice(&header.fec_metadata);
-    bytes[60..64].copy_from_slice(&header.fragment_count.to_be_bytes());
-    bytes[64..66].copy_from_slice(&payload_len.to_be_bytes());
+    bytes[4] = header.lane as u8;
+    bytes[5] = header.record_kind as u8;
+    bytes[6] = header.fec_scheme as u8;
+    bytes[7] = header.symbol_kind as u8;
+    bytes[8..24].copy_from_slice(&header.session_id);
+    bytes[24..28].copy_from_slice(&header.sender_id.to_be_bytes());
+    bytes[28..36].copy_from_slice(&header.packet_sequence.to_be_bytes());
+    bytes[36..44].copy_from_slice(&header.object_id.to_be_bytes());
+    bytes[44..56].copy_from_slice(&header.fec_metadata);
+    bytes[56..60].copy_from_slice(&header.fragment_count.to_be_bytes());
+    bytes[60..62].copy_from_slice(&payload_len.to_be_bytes());
     bytes[PACKET_HEADER_LEN..].copy_from_slice(payload);
     let checksum = CRC32C.checksum(bytes);
     bytes[CRC_OFFSET..PACKET_HEADER_LEN].copy_from_slice(&checksum.to_be_bytes());
@@ -238,10 +231,12 @@ mod tests {
     #[test]
     fn fixed_header_has_a_stable_golden_prefix() {
         let encoded = fixture().encode().unwrap();
-        assert_eq!(
-            &encoded[..12],
-            &[b'C', b'U', b'L', b'S', 1, 72, 2, 2, 2, 0, 0, 0]
-        );
+        assert_eq!(&encoded[..8], &[b'C', b'U', b'L', b'S', 2, 2, 2, 0]);
+        assert_eq!(encoded.len(), 66 + fixture().payload.len());
+        assert_eq!(&encoded[8..24], &[0x11; 16]);
+        assert_eq!(&encoded[24..28], &0x2233_4455_u32.to_be_bytes());
+        assert_eq!(&encoded[60..62], &12_u16.to_be_bytes());
+        assert_eq!(&encoded[66..], fixture().payload);
         assert_eq!(WirePacket::decode(&encoded).unwrap(), fixture());
     }
 

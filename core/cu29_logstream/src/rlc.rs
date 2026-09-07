@@ -11,8 +11,7 @@ use cu_fec::{
 };
 
 const FRAGMENT_MAGIC: [u8; 4] = *b"CUFR";
-const FRAGMENT_VERSION: u8 = 1;
-pub(crate) const FRAGMENT_HEADER_LEN: usize = 32;
+pub(crate) const FRAGMENT_HEADER_LEN: usize = 27;
 
 /// Identity shared by one sender's continuous stream.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode)]
@@ -1112,38 +1111,29 @@ fn encode_fragment_header(
     fragment_len: u16,
 ) {
     symbol[..4].copy_from_slice(&FRAGMENT_MAGIC);
-    symbol[4] = FRAGMENT_VERSION;
-    symbol[5] = kind as u8;
-    symbol[6..8].fill(0);
-    symbol[8..16].copy_from_slice(&object_id.to_be_bytes());
-    symbol[16..20].copy_from_slice(&record_len.to_be_bytes());
-    symbol[20..24].copy_from_slice(&fragment_index.to_be_bytes());
-    symbol[24..28].copy_from_slice(&fragment_count.to_be_bytes());
-    symbol[28..30].copy_from_slice(&fragment_len.to_be_bytes());
-    symbol[30..32].fill(0);
+    symbol[4] = kind as u8;
+    symbol[5..13].copy_from_slice(&object_id.to_be_bytes());
+    symbol[13..17].copy_from_slice(&record_len.to_be_bytes());
+    symbol[17..21].copy_from_slice(&fragment_index.to_be_bytes());
+    symbol[21..25].copy_from_slice(&fragment_count.to_be_bytes());
+    symbol[25..27].copy_from_slice(&fragment_len.to_be_bytes());
 }
 
 fn decode_fragment(symbol: &[u8], fragment_capacity: usize) -> Result<Fragment<'_>> {
     if symbol.len() < FRAGMENT_HEADER_LEN || symbol[..4] != FRAGMENT_MAGIC {
         return Err(Error::InvalidFragment("missing fragment header"));
     }
-    if symbol[4] != FRAGMENT_VERSION {
-        return Err(Error::UnsupportedVersion(symbol[4]));
-    }
-    if symbol[6..8].iter().any(|byte| *byte != 0) || symbol[30..32].iter().any(|byte| *byte != 0) {
-        return Err(Error::InvalidFragment("reserved bytes are nonzero"));
-    }
-    let kind = RecordKind::try_from(symbol[5])?;
+    let kind = RecordKind::try_from(symbol[4])?;
     if kind != RecordKind::CopperList {
         return Err(Error::InvalidFragment(
             "continuous lane requires CopperList records",
         ));
     }
-    let object_id = u64::from_be_bytes(symbol[8..16].try_into().unwrap());
-    let record_len = u32::from_be_bytes(symbol[16..20].try_into().unwrap()) as usize;
-    let fragment_index = u32::from_be_bytes(symbol[20..24].try_into().unwrap()) as usize;
-    let fragment_count = u32::from_be_bytes(symbol[24..28].try_into().unwrap()) as usize;
-    let fragment_len = u16::from_be_bytes(symbol[28..30].try_into().unwrap()) as usize;
+    let object_id = u64::from_be_bytes(symbol[5..13].try_into().unwrap());
+    let record_len = u32::from_be_bytes(symbol[13..17].try_into().unwrap()) as usize;
+    let fragment_index = u32::from_be_bytes(symbol[17..21].try_into().unwrap()) as usize;
+    let fragment_count = u32::from_be_bytes(symbol[21..25].try_into().unwrap()) as usize;
+    let fragment_len = u16::from_be_bytes(symbol[25..27].try_into().unwrap()) as usize;
     if record_len == 0 || fragment_count == 0 || fragment_index >= fragment_count {
         return Err(Error::InvalidFragment("invalid fragment geometry"));
     }
@@ -1189,6 +1179,13 @@ mod tests {
         let mut symbol = [0_u8; 64];
         encode_fragment_header(&mut symbol, RecordKind::CopperList, 42, 40, 1, 2, 8);
         symbol[FRAGMENT_HEADER_LEN..FRAGMENT_HEADER_LEN + 8].copy_from_slice(b"fragment");
+        assert_eq!(FRAGMENT_HEADER_LEN, 27);
+        assert_eq!(&symbol[..5], b"CUFR\x01");
+        assert_eq!(&symbol[5..13], &42_u64.to_be_bytes());
+        assert_eq!(&symbol[13..17], &40_u32.to_be_bytes());
+        assert_eq!(&symbol[17..21], &1_u32.to_be_bytes());
+        assert_eq!(&symbol[21..25], &2_u32.to_be_bytes());
+        assert_eq!(&symbol[25..27], &8_u16.to_be_bytes());
         let decoded = decode_fragment(&symbol, 32).unwrap();
         assert_eq!(decoded.object_id, 42);
         assert_eq!(decoded.fragment_index, 1);

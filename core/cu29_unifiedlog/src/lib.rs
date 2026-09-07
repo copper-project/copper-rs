@@ -43,8 +43,15 @@ pub const MAIN_MAGIC: [u8; 4] = [0xB4, 0xA5, 0x50, 0xFF]; // BRASS OFF
 /// ID to spot a section of Copper Log
 pub const SECTION_MAGIC: [u8; 2] = [0xFA, 0x57]; // FAST
 
-/// Version of the unified log file format.
-pub const UNIFIED_LOG_FORMAT_VERSION: u8 = 2;
+/// Version of the unified log **encapsulation only**: file headers, section
+/// headers, and the layout used to locate sections in a slab.
+///
+/// This is **never** a version of the encoded content inside sections. Changes
+/// to CopperLists, payload types, keyframes, or their serialization must not bump
+/// this value. Decode content with the logreader built for the exact application
+/// version that produced it; this header cannot establish content compatibility.
+/// The encapsulation remains version 1, unchanged since Copper's original format.
+pub const UNIFIED_LOG_FORMAT_VERSION: u8 = 1;
 
 pub const SECTION_HEADER_COMPACT_SIZE: u16 = 512; // Usual minimum size for a disk sector.
 
@@ -52,6 +59,9 @@ pub const SECTION_HEADER_COMPACT_SIZE: u16 = 512; // Usual minimum size for a di
 #[derive(Encode, Decode, Debug)]
 pub struct MainHeader {
     pub magic: [u8; 4], // Magic number to identify the file.
+    /// Encapsulation version only; see [`UNIFIED_LOG_FORMAT_VERSION`].
+    /// Never versions encoded section content or determines decoder compatibility.
+    /// Content requires the producing application's matching logreader.
     pub format_version: u8,
     pub first_section_offset: u16, // This is to align with a page at write time.
     pub page_size: u16,

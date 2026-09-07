@@ -12,9 +12,6 @@ pub enum Error {
     BufferTooSmall { needed: usize, available: usize },
     TruncatedPacket,
     InvalidMagic,
-    UnsupportedVersion(u8),
-    UnsupportedManifestVersion(u16),
-    InvalidHeaderLength(u8),
     UnknownLane(u8),
     UnknownRecordKind(u8),
     UnknownFecScheme(u8),
@@ -58,15 +55,6 @@ impl Display for Error {
             }
             Self::TruncatedPacket => formatter.write_str("truncated logstream packet"),
             Self::InvalidMagic => formatter.write_str("invalid logstream magic"),
-            Self::UnsupportedVersion(version) => {
-                write!(formatter, "unsupported logstream version {version}")
-            }
-            Self::UnsupportedManifestVersion(version) => {
-                write!(formatter, "unsupported session manifest version {version}")
-            }
-            Self::InvalidHeaderLength(length) => {
-                write!(formatter, "invalid logstream header length {length}")
-            }
             Self::UnknownLane(value) => write!(formatter, "unknown logstream lane {value}"),
             Self::UnknownRecordKind(value) => write!(formatter, "unknown record kind {value}"),
             Self::UnknownFecScheme(value) => write!(formatter, "unknown FEC scheme {value}"),

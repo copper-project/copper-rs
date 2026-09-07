@@ -56,7 +56,7 @@ pub use error::{Error, Result};
 pub use manifest::new_session_id;
 pub use manifest::{
     ApplicationOutputSchema, ApplicationSchema, LogStreamPlan, ResolvedContinuousFec,
-    ResolvedObjectFec, ResolvedRlcField, SESSION_MANIFEST_VERSION, SessionManifest,
+    ResolvedObjectFec, ResolvedRlcField, SessionManifest,
 };
 pub use object::{
     FiniteObjectDecoder, FiniteObjectEncoder, FiniteObjectLimits, FiniteObjectRecoveryStats,
@@ -87,6 +87,6 @@ pub use stream::{
     SeparateFeedback,
 };
 pub use wire::{
-    FecScheme, FecSymbolKind, Lane, PACKET_HEADER_LEN, WIRE_VERSION, WireHeader, WirePacket,
-    WirePacketRef, encode_packet_into,
+    FecScheme, FecSymbolKind, Lane, PACKET_HEADER_LEN, WireHeader, WirePacket, WirePacketRef,
+    encode_packet_into,
 };

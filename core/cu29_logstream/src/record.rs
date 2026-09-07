@@ -1,10 +1,12 @@
+//! Record encapsulation without content versions. Payloads require the producing
+//! application's matching decoder; this envelope does not select a content schema.
+
 use crate::{Error, Result};
 use alloc::vec::Vec;
 
 const RECORD_MAGIC: [u8; 4] = *b"CUSR";
-const RECORD_VERSION: u8 = 2;
-pub const RECORD_HEADER_LEN: usize = 56;
-const RECORD_DIGEST_OFFSET: usize = 24;
+pub const RECORD_HEADER_LEN: usize = 53;
+const RECORD_DIGEST_OFFSET: usize = 21;
 
 /// Semantic record families carried by the log stream.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -41,7 +43,7 @@ impl TryFrom<u8> for RecordKind {
 pub struct DecodedRecord<'a> {
     pub kind: RecordKind,
     pub object_id: u64,
-    /// Digest binding the record version, kind, identity, length, and payload.
+    /// Digest binding the record kind, identity, length, and payload.
     pub digest: [u8; 32],
     pub payload: &'a [u8],
 }
@@ -55,9 +57,7 @@ pub fn encode_record(kind: RecordKind, object_id: u64, payload: &[u8]) -> Result
         .ok_or(Error::InvalidConfig("record length overflow"))?;
     let mut record = Vec::with_capacity(capacity);
     record.extend_from_slice(&RECORD_MAGIC);
-    record.push(RECORD_VERSION);
     record.push(kind as u8);
-    record.extend_from_slice(&0_u16.to_be_bytes());
     record.extend_from_slice(&object_id.to_be_bytes());
     record.extend_from_slice(&payload_len.to_be_bytes());
     record.extend_from_slice(&[0_u8; 32]);
@@ -87,10 +87,9 @@ pub(crate) fn encode_record_header(
     let header = &mut header[..RECORD_HEADER_LEN];
     header.fill(0);
     header[..4].copy_from_slice(&RECORD_MAGIC);
-    header[4] = RECORD_VERSION;
-    header[5] = kind as u8;
-    header[8..16].copy_from_slice(&object_id.to_be_bytes());
-    header[16..24].copy_from_slice(&payload_len.to_be_bytes());
+    header[4] = kind as u8;
+    header[5..13].copy_from_slice(&object_id.to_be_bytes());
+    header[13..21].copy_from_slice(&payload_len.to_be_bytes());
     let digest = record_digest(kind, object_id, payload_len, payload);
     header[RECORD_DIGEST_OFFSET..RECORD_HEADER_LEN].copy_from_slice(digest.as_bytes());
     Ok(())
@@ -104,13 +103,9 @@ pub fn decode_record(record: &[u8]) -> Result<DecodedRecord<'_>> {
     if record[..4] != RECORD_MAGIC {
         return Err(Error::InvalidMagic);
     }
-    let version = record[4];
-    if version != RECORD_VERSION {
-        return Err(Error::UnsupportedVersion(version));
-    }
-    let kind = RecordKind::try_from(record[5])?;
-    let object_id = u64::from_be_bytes(record[8..16].try_into().unwrap());
-    let payload_len = u64::from_be_bytes(record[16..24].try_into().unwrap());
+    let kind = RecordKind::try_from(record[4])?;
+    let object_id = u64::from_be_bytes(record[5..13].try_into().unwrap());
+    let payload_len = u64::from_be_bytes(record[13..21].try_into().unwrap());
     let payload_len = usize::try_from(payload_len).map_err(|_| Error::RecordLengthMismatch)?;
     let expected_len = RECORD_HEADER_LEN
         .checked_add(payload_len)
@@ -138,7 +133,7 @@ fn record_digest(
     payload: &[u8],
 ) -> blake3::Hash {
     let mut hasher = blake3::Hasher::new();
-    hasher.update(&[RECORD_VERSION, kind as u8]);
+    hasher.update(&[kind as u8]);
     hasher.update(&object_id.to_be_bytes());
     hasher.update(&payload_len.to_be_bytes());
     hasher.update(payload);
@@ -150,14 +145,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn previous_record_version_is_rejected_before_payload_decode() {
-        let mut record = encode_record(RecordKind::CopperList, 42, &[42]).unwrap();
-        assert_eq!(record[4], 2);
-        record[4] = 1;
-        assert!(matches!(
-            decode_record(&record),
-            Err(Error::UnsupportedVersion(1))
-        ));
+    fn packed_record_header_contains_only_framing_fields() {
+        let record = encode_record(RecordKind::CopperList, 42, &[42]).unwrap();
+        assert_eq!(record.len(), 54);
+        assert_eq!(&record[..5], b"CUSR\x01");
+        assert_eq!(&record[5..13], &42_u64.to_be_bytes());
+        assert_eq!(&record[13..21], &1_u64.to_be_bytes());
+        assert_eq!(record[53], 42);
+        assert_eq!(decode_record(&record).unwrap().payload, &[42]);
+        let mut header = [0xaa; RECORD_HEADER_LEN];
+        encode_record_header(RecordKind::CopperList, 42, &[42], &mut header).unwrap();
+        assert_eq!(header, record[..RECORD_HEADER_LEN]);
     }
 
     #[test]
