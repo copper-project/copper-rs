@@ -35,6 +35,7 @@ resources: [
 `LinuxResources` exposes embedded-style fixed slots:
 
 - Serial: `serial0`, `serial1`, `serial2`, `serial3`, `serial4`, `serial5`
+- Optional RTS outputs: `serial0_rts` through `serial5_rts` (`serial-rts` feature)
 - I2C: `i2c0`, `i2c1`, `i2c2`
 - GPIO: `gpio0`, `gpio1`, `gpio2`, `gpio3`, `gpio4`, `gpio5`
 
@@ -62,6 +63,51 @@ Supported keys per serial slot `serialN`:
 - `serialN_parity` (`string`: `none`, `odd`, `even`; default `none`)
 - `serialN_stopbits` (`u8`: `1` or `2`; default `1`)
 - `serialN_timeout_ms` (`u64`, default `50`)
+
+Set `serialN_nonblocking: true` to export a `LinuxNonblockingSerialPort`
+implementing `cu_serial::SerialIo` on Unix. Its native descriptor uses
+`O_NONBLOCK`; each call makes one read/write attempt and returns the number of
+bytes transferred. Zero reports backpressure. Opening the device propagates
+startup errors. `serialN_nonblocking` defaults to `false`, which exports
+`LinuxSerialPort` with the configured timeout.
+
+### Serial RTS output
+
+Enable the `serial-rts` Cargo feature, then set `serialN_rts: true` in the bundle's
+RON config. On Unix this exports an owned `LinuxSerialRtsPin` in `serialN_rts`,
+alongside the `serialN` data resource. Both blocking and nonblocking serial slots
+support this option.
+
+```toml
+cu-linux-resources = { version = "1.2.0-dev", features = ["serial-rts"] }
+```
+
+```ron
+(id: "board", provider: "cu_linux_resources::LinuxResources", config: {
+    "serial0_dev": "/dev/ttyUSB0",
+    "serial0_baudrate": 9600,
+    "serial0_nonblocking": true,
+    "serial0_rts": true,
+}),
+```
+
+Bind a consumer's pin input to `board.serial0_rts`. `LinuxSerialRtsPin` implements
+`embedded_hal::digital::OutputPin` for active-low RTS# on USB-to-TTL adapters:
+`set_low()` asserts RTS, and `set_high()` deasserts it. The pin initializes high.
+Use an adapter with compatible logic levels and RTS# polarity for the connected
+device, and connect a common ground.
+
+RTS-enabled ports use manual flow control. The pin owns a duplicated descriptor
+and performs a modem-control ioctl for each output change; this operation may
+wait on the USB driver. The device remains open until both data and pin handles
+are dropped. OS/adapter behavior may briefly change RTS while opening or closing
+the port.
+
+RTS export requires a configured serial device, the `serial-rts` feature, Unix,
+and adapter support for modem control. Startup reports an error when a requested
+RTS output fails these requirements. Direct constructors
+`LinuxSerialPort::open_with_rts` and `LinuxNonblockingSerialPort::open_with_rts`
+return the same `(serial, pin)` pair.
 
 ### I2C
 

@@ -1,6 +1,8 @@
 [workspace]
 
 members = [
+  "components/libs/cu_serial",
+
   "core/cu29",
   "core/cu29_build",
   "core/cu29_base_derive",
@@ -221,6 +223,8 @@ repository = "https://github.com/copper-project/copper-rs"
 no_individual_tags = true
 
 [workspace.dependencies]
+cu-serial = { path = "components/libs/cu_serial", version = "1.2.0-dev", default-features = false }
+
 
 # Copper Core
 cu29 = { path = "core/cu29", version = "1.2.0-dev" } # default std

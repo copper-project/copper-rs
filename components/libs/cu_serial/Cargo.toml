@@ -1,0 +1,21 @@
+[package]
+name = "cu-serial"
+description = "Nonblocking byte I/O contract and embedded-io adapter for Copper"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[package.metadata.copper]
+kind = "lib"
+domains = ["communication/serial"]
+environments = ["host", "embedded"]
+
+[dependencies]
+embedded-io = { version = "0.7.1", default-features = false }
+
+[features]
+default = ["std"]
+std = ["embedded-io/std"]

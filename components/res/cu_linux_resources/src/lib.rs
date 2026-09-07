@@ -5,6 +5,11 @@ use embedded_io::{ErrorType as EmbeddedErrorType, Read as EmbeddedRead, Write as
 use serialport::{Parity as SerialParity, StopBits as SerialStopBits};
 use std::string::String;
 
+#[cfg(all(unix, feature = "serial-rts"))]
+mod serial_rts;
+#[cfg(all(unix, feature = "serial-rts"))]
+pub use serial_rts::{LinuxSerialRtsPin, SerialRtsError};
+
 pub const SERIAL0_DEV_KEY: &str = "serial0_dev";
 pub const SERIAL0_BAUDRATE_KEY: &str = "serial0_baudrate";
 pub const SERIAL0_PARITY_KEY: &str = "serial0_parity";
@@ -239,6 +244,13 @@ pub struct LinuxSerialPort {
 }
 
 impl LinuxSerialPort {
+    /// Open a UART and an independently owned, active-low RTS# output.
+    #[cfg(all(unix, feature = "serial-rts"))]
+    pub fn open_with_rts(config: &SerialSlotConfig) -> std::io::Result<(Self, LinuxSerialRtsPin)> {
+        let (port, rts) = serial_rts::open(config)?;
+        Ok((Self::new(Box::new(port)), rts))
+    }
+
     pub fn new(inner: Box<dyn serialport::SerialPort>) -> Self {
         Self {
             inner: Exclusive::new(inner),
@@ -302,6 +314,76 @@ impl EmbeddedWrite for LinuxSerialPort {
     }
 }
 
+/// Native nonblocking UART for resource stacks. Configure a serial slot with
+/// `serialN_nonblocking: true` to export this type.
+#[cfg(unix)]
+#[derive(Debug)]
+pub struct LinuxNonblockingSerialPort(std::fs::File);
+
+#[cfg(unix)]
+impl LinuxNonblockingSerialPort {
+    /// Open a nonblocking UART and an independently owned, active-low RTS# output.
+    #[cfg(feature = "serial-rts")]
+    pub fn open_with_rts(config: &SerialSlotConfig) -> std::io::Result<(Self, LinuxSerialRtsPin)> {
+        let (port, rts) = serial_rts::open(config)?;
+        Ok((Self::from_native(port)?, rts))
+    }
+
+    pub fn open_with_config(config: &SerialSlotConfig) -> std::io::Result<Self> {
+        let port = serialport::new(&config.dev, config.baudrate)
+            .parity(config.parity)
+            .stop_bits(config.stop_bits)
+            .open_native()?;
+        Self::from_native(port)
+    }
+
+    /// Take ownership of an already configured native UART.
+    pub fn from_native(port: serialport::TTYPort) -> std::io::Result<Self> {
+        use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd};
+        let fd = port.as_raw_fd();
+        // SAFETY: the live TTYPort owns fd; fcntl changes only its status flags.
+        let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+        if flags < 0 || unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        // SAFETY: ownership transfers once from TTYPort into File.
+        Ok(Self(unsafe {
+            std::fs::File::from_raw_fd(port.into_raw_fd())
+        }))
+    }
+
+    fn result(result: std::io::Result<usize>) -> std::io::Result<usize> {
+        match result {
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted
+                ) =>
+            {
+                Ok(0)
+            }
+            other => other,
+        }
+    }
+}
+#[cfg(unix)]
+impl embedded_io::ErrorType for LinuxNonblockingSerialPort {
+    type Error = std::io::Error;
+}
+#[cfg(unix)]
+impl cu_serial::SerialIo for LinuxNonblockingSerialPort {
+    fn try_read(&mut self, bytes: &mut [u8]) -> std::io::Result<usize> {
+        let result = std::io::Read::read(&mut self.0, bytes);
+        if !bytes.is_empty() && matches!(result, Ok(0)) {
+            return Err(std::io::Error::from(std::io::ErrorKind::UnexpectedEof));
+        }
+        Self::result(result)
+    }
+    fn try_write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        Self::result(std::io::Write::write(&mut self.0, bytes))
+    }
+}
+
 #[cfg(target_os = "linux")]
 pub type LinuxI2c = Exclusive<linux_embedded_hal::I2cdev>;
 #[cfg(target_os = "linux")]
@@ -327,7 +409,13 @@ bundle_resources!(
         Gpio2 = "gpio2",
         Gpio3 = "gpio3",
         Gpio4 = "gpio4",
-        Gpio5 = "gpio5"
+        Gpio5 = "gpio5",
+        Serial0Rts = "serial0_rts",
+        Serial1Rts = "serial1_rts",
+        Serial2Rts = "serial2_rts",
+        Serial3Rts = "serial3_rts",
+        Serial4Rts = "serial4_rts",
+        Serial5Rts = "serial5_rts"
 );
 
 const LINUX_RESOURCE_SLOT_NAMES: &[&str] = &[
@@ -346,10 +434,17 @@ const LINUX_RESOURCE_SLOT_NAMES: &[&str] = &[
     GPIO3_NAME,
     GPIO4_NAME,
     GPIO5_NAME,
+    "serial0_rts",
+    "serial1_rts",
+    "serial2_rts",
+    "serial3_rts",
+    "serial4_rts",
+    "serial5_rts",
 ];
 
 struct SerialSlot {
     id: LinuxResourcesId,
+    rts_id: LinuxResourcesId,
     dev_key: &'static str,
     baudrate_key: &'static str,
     parity_key: &'static str,
@@ -369,6 +464,7 @@ pub struct SerialSlotConfig {
 const SERIAL_SLOTS: &[SerialSlot] = &[
     SerialSlot {
         id: LinuxResourcesId::Serial0,
+        rts_id: LinuxResourcesId::Serial0Rts,
         dev_key: SERIAL0_DEV_KEY,
         baudrate_key: SERIAL0_BAUDRATE_KEY,
         parity_key: SERIAL0_PARITY_KEY,
@@ -377,6 +473,7 @@ const SERIAL_SLOTS: &[SerialSlot] = &[
     },
     SerialSlot {
         id: LinuxResourcesId::Serial1,
+        rts_id: LinuxResourcesId::Serial1Rts,
         dev_key: SERIAL1_DEV_KEY,
         baudrate_key: SERIAL1_BAUDRATE_KEY,
         parity_key: SERIAL1_PARITY_KEY,
@@ -385,6 +482,7 @@ const SERIAL_SLOTS: &[SerialSlot] = &[
     },
     SerialSlot {
         id: LinuxResourcesId::Serial2,
+        rts_id: LinuxResourcesId::Serial2Rts,
         dev_key: SERIAL2_DEV_KEY,
         baudrate_key: SERIAL2_BAUDRATE_KEY,
         parity_key: SERIAL2_PARITY_KEY,
@@ -393,6 +491,7 @@ const SERIAL_SLOTS: &[SerialSlot] = &[
     },
     SerialSlot {
         id: LinuxResourcesId::Serial3,
+        rts_id: LinuxResourcesId::Serial3Rts,
         dev_key: SERIAL3_DEV_KEY,
         baudrate_key: SERIAL3_BAUDRATE_KEY,
         parity_key: SERIAL3_PARITY_KEY,
@@ -401,6 +500,7 @@ const SERIAL_SLOTS: &[SerialSlot] = &[
     },
     SerialSlot {
         id: LinuxResourcesId::Serial4,
+        rts_id: LinuxResourcesId::Serial4Rts,
         dev_key: SERIAL4_DEV_KEY,
         baudrate_key: SERIAL4_BAUDRATE_KEY,
         parity_key: SERIAL4_PARITY_KEY,
@@ -409,6 +509,7 @@ const SERIAL_SLOTS: &[SerialSlot] = &[
     },
     SerialSlot {
         id: LinuxResourcesId::Serial5,
+        rts_id: LinuxResourcesId::Serial5Rts,
         dev_key: SERIAL5_DEV_KEY,
         baudrate_key: SERIAL5_BAUDRATE_KEY,
         parity_key: SERIAL5_PARITY_KEY,
@@ -563,9 +664,53 @@ impl ResourceBundle for LinuxResources {
         manager: &mut ResourceManager,
     ) -> CuResult<()> {
         for slot in SERIAL_SLOTS {
+            let rts = read_serial_rts_config(config, slot)?;
             let Some(serial_config) = read_serial_slot_config(config, slot)? else {
                 continue; // Skip slots without explicit config
             };
+            let nonblocking_key = format!("{}_nonblocking", slot_name(slot.id));
+            let nonblocking = config
+                .and_then(|cfg| cfg.get::<bool>(&nonblocking_key).transpose())
+                .transpose()?
+                .unwrap_or(false);
+            if rts {
+                #[cfg(all(unix, feature = "serial-rts"))]
+                {
+                    if nonblocking {
+                        let (serial, pin) = LinuxNonblockingSerialPort::open_with_rts(
+                            &serial_config,
+                        )
+                        .map_err(|err| CuError::new_with_cause("Open serial RTS resource", err))?;
+                        manager.add_owned(bundle.key(slot.id), serial)?;
+                        manager.add_owned(bundle.key(slot.rts_id), pin)?;
+                    } else {
+                        let (serial, pin) = LinuxSerialPort::open_with_rts(&serial_config)
+                            .map_err(|err| {
+                                CuError::new_with_cause("Open serial RTS resource", err)
+                            })?;
+                        manager.add_owned(bundle.key(slot.id), serial)?;
+                        manager.add_owned(bundle.key(slot.rts_id), pin)?;
+                    }
+                    continue;
+                }
+                #[cfg(not(all(unix, feature = "serial-rts")))]
+                return Err(CuError::from(
+                    "Serial RTS requires Unix and the cu-linux-resources/serial-rts feature",
+                ));
+            }
+            if nonblocking {
+                #[cfg(unix)]
+                {
+                    let serial = LinuxNonblockingSerialPort::open_with_config(&serial_config)
+                        .map_err(|err| {
+                            CuError::new_with_cause("Open nonblocking serial resource", err)
+                        })?;
+                    manager.add_owned(bundle.key(slot.id), serial)?;
+                    continue;
+                }
+                #[cfg(not(unix))]
+                return Err(CuError::from("Nonblocking serial resources require Unix"));
+            }
             match LinuxSerialPort::open_with_config(&serial_config) {
                 Ok(serial) => {
                     manager.add_owned(bundle.key(slot.id), serial)?;
@@ -827,6 +972,18 @@ fn parse_gpio_initial_level_value(raw: &str) -> CuResult<GpioInitialLevel> {
     }
 }
 
+fn read_serial_rts_config(config: Option<&ComponentConfig>, slot: &SerialSlot) -> CuResult<bool> {
+    let key = slot_name(slot.rts_id);
+    let enabled = config
+        .and_then(|cfg| cfg.get::<bool>(key).transpose())
+        .transpose()?
+        .unwrap_or(false);
+    if enabled && get_string(config, slot.dev_key)?.is_none() {
+        return Err(CuError::from(format!("{key} requires {}", slot.dev_key)));
+    }
+    Ok(enabled)
+}
+
 fn slot_name(id: LinuxResourcesId) -> &'static str {
     LINUX_RESOURCE_SLOT_NAMES[id as usize]
 }
@@ -872,6 +1029,49 @@ mod tests {
         for (idx, name) in declared.iter().enumerate() {
             assert_eq!(resource_index_by_name::<LinuxResources>(name), idx);
         }
+    }
+
+    fn rts_config(value: &str) -> ComponentConfig {
+        let ron = format!(
+            r#"(resources: [(id: "board", provider: "cu_linux_resources::LinuxResources",
+                config: {{ "serial0_rts": {value} }})], tasks: [], cnx: [])"#,
+        );
+        cu29::config::CuConfig::deserialize_ron(&ron)
+            .unwrap()
+            .resources
+            .remove(0)
+            .config
+            .unwrap()
+    }
+
+    #[test]
+    fn serial_rts_is_opt_in_and_requires_a_device() {
+        let slot = &SERIAL_SLOTS[0];
+        assert!(!read_serial_rts_config(None, slot).unwrap());
+        let mut config = rts_config("false");
+        assert!(!read_serial_rts_config(Some(&config), slot).unwrap());
+        config = rts_config("true");
+        assert!(read_serial_rts_config(Some(&config), slot).is_err());
+        config.set("serial0_dev", "/dev/ttyUSB0".to_string());
+        assert!(read_serial_rts_config(Some(&config), slot).unwrap());
+        assert!(!read_serial_rts_config(Some(&config), &SERIAL_SLOTS[1]).unwrap());
+        config.set("serial0_rts", "invalid".to_string());
+        assert!(read_serial_rts_config(Some(&config), slot).is_err());
+    }
+
+    #[cfg(not(feature = "serial-rts"))]
+    #[test]
+    fn serial_rts_request_without_feature_fails_before_opening_the_device() {
+        let mut config = rts_config("true");
+        config.set("serial0_dev", "/not/a/serial/device".to_string());
+        let mut manager = ResourceManager::new(&[LINUX_RESOURCE_SLOT_NAMES.len()]);
+        let error = LinuxResources::build(
+            cu29::resource::BundleContext::new(cu29::resource::BundleIndex::new(0), "board"),
+            Some(&config),
+            &mut manager,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("serial-rts feature"));
     }
 
     #[test]
@@ -1092,5 +1292,40 @@ mod tests {
 
         let inner = wrapped.into_inner();
         assert_eq!(&inner.tx[..inner.tx_len], &[9, 8]);
+    }
+}
+
+#[cfg(all(test, unix))]
+mod nonblocking_tests {
+    use super::*;
+    use cu_serial::SerialIo;
+    #[test]
+    fn native_uart_reports_backpressure_and_preserves_binary_bytes() {
+        let (a, b) = serialport::TTYPort::pair().unwrap();
+        let mut tx = LinuxNonblockingSerialPort::from_native(a).unwrap();
+        let mut rx = LinuxNonblockingSerialPort::from_native(b).unwrap();
+        let mut buf = [0; 16];
+        assert_eq!(rx.try_read(&mut buf).unwrap(), 0);
+        assert_eq!(tx.try_write(&[0, 0x7e, 0x7d, 255]).unwrap(), 4);
+        let mut received = 0;
+        for _ in 0..1000 {
+            received += rx.try_read(&mut buf[received..4]).unwrap();
+            if received == 4 {
+                break;
+            }
+            std::thread::yield_now();
+        }
+        assert_eq!(&buf[..received], &[0, 0x7e, 0x7d, 255]);
+        let data = [42; 65536];
+        let written = tx.try_write(&data).unwrap();
+        assert!(written > 0 && written < data.len());
+        let mut blocked = false;
+        for _ in 0..128 {
+            if tx.try_write(&data).unwrap() == 0 {
+                blocked = true;
+                break;
+            }
+        }
+        assert!(blocked);
     }
 }

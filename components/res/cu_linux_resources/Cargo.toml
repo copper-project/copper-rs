@@ -19,6 +19,8 @@ environments = ["host"]
 host_os = ["linux"]
 
 [dependencies]
+cu-serial = { workspace = true }
+libc = { workspace = true }
 cu29 = { path = "../../../core/cu29", version = "1.2.0-dev", default-features = false, features = [
   "std",
 ] }
@@ -34,6 +36,7 @@ rppal = { workspace = true, default-features = false, features = ["hal"] }
 
 [features]
 default = []
+serial-rts = []
 defmt = ["embedded-io/defmt", "embedded-hal/defmt-03", "cu29/defmt"]
 alloc = ["embedded-io/alloc"]
 
