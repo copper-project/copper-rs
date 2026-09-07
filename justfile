@@ -189,6 +189,18 @@ resource-stack-check:
 	cargo +stable test -p cu29-runtime --bin cu29-rendercfg
 	cargo +stable check -p cu29 --no-default-features --target thumbv7em-none-eabihf
 
+# Resource stacking, HC-12 startup, serial bridge/framing, and DAG ownership.
+hc12-check:
+	cargo +stable clippy -p cu-linux-resources --no-default-features --all-targets -- --deny warnings
+	cargo +stable test -p cu-linux-resources --no-default-features
+	cargo +stable clippy -p cu-hc12 -p cu-serial -p cu-serial-bridge -p cu29-logstream-serial -p cu-linux-resources --all-targets --features cu29/reflect -- --deny warnings
+	cargo +stable test -p cu-hc12 -p cu-serial -p cu-serial-bridge -p cu29-logstream-serial -p cu-linux-resources --features cu29/reflect
+	cargo +stable test -p cu29 --test resource_stack
+	cargo +stable test -p cu29-derive --lib resource
+	cargo +stable test -p cu29-runtime --bin cu29-rendercfg
+	cargo +stable test -p cu29-logstream --test pacing
+	cargo +stable check -p cu-hc12 -p cu-serial -p cu-serial-bridge -p cu29-logstream-serial --no-default-features
+
 # Sender budget/retention, generated integration, and one-way UDP recovery.
 logstream-pacing-check:
 	cargo +stable clippy -p cu29-logstream --all-targets -- --deny warnings
