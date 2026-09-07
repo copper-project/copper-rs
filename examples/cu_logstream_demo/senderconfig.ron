@@ -1,0 +1,4 @@
+(
+    includes: [(path: "copperconfig.ron")],
+    monitor: (type: "cu_consolemon::CuConsoleMon"),
+)

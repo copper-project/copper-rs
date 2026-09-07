@@ -13,6 +13,9 @@ build:
 build-tui:
     cargo +stable build -p cu-logstream-demo --features tui --bin cu-logstream-demo
 
+build-sender:
+    cargo +stable build -p cu-logstream-demo --features replay,sender-monitor --bins
+
 # Start this first, then `just sender` in another terminal. Space pauses only the view.
 dashboard listen="127.0.0.1:7447" log="logs/dashboard.copper": build-tui
     {{root}}/target/debug/cu-logstream-demo dashboard --listen {{listen}} --log-base {{log}}
@@ -23,8 +26,11 @@ run scenario="clean": build
 
 check: (run "all")
 
+check-sender: build-sender
+    python3 run.py all --binary {{root}}/target/debug/cu-logstream-demo
+
 # Start these in separate terminals. Existing output logs are replaced on each run.
-sender remote="127.0.0.1:7447" log="logs/sender.copper" iterations="6000": build
+sender remote="127.0.0.1:7447" log="logs/sender.copper" iterations="6000": build-sender
     {{root}}/target/debug/cu-logstream-demo sender --remote {{remote}} --log-base {{log}} --iterations {{iterations}}
 
 receiver listen="127.0.0.1:7447" log="logs/received.copper": build
@@ -48,5 +54,5 @@ dashboard-verify listen="127.0.0.1:7447" log="logs/dashboard-verify.copper":
     {{root}}/target/debug/cu-logstream-demo dashboard --listen {{listen}} --log-base {{log}}
 
 sender-verify remote="127.0.0.1:7447" log="logs/sender-verify.copper" iterations="6000":
-    cargo +stable build -p cu-logstream-demo --features tui,verify-reconstruction --bin cu-logstream-demo
+    cargo +stable build -p cu-logstream-demo --features tui,verify-reconstruction,sender-monitor --bin cu-logstream-demo
     {{root}}/target/debug/cu-logstream-demo sender --remote {{remote}} --log-base {{log}} --iterations {{iterations}}
