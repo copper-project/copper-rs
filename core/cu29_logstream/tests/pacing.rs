@@ -323,3 +323,48 @@ fn feedback_interval_changes_future_repairs_without_changing_the_budget() {
     assert!(total <= budget);
     assert!(core.set_repair_interval(0).is_err());
 }
+
+#[test]
+fn pending_transport_is_serviced_through_idle_and_shutdown() {
+    #[derive(Debug, Default)]
+    struct Partial {
+        remaining: usize,
+        completed: usize,
+    }
+    impl CuStreamTx for Partial {
+        fn try_send(&mut self, _: &[u8]) -> core::result::Result<(), CuStreamTxError> {
+            if self.remaining != 0 {
+                return Err(CuStreamTxError::WouldBlock);
+            }
+            self.remaining = 3;
+            Ok(())
+        }
+        fn poll_pending(&mut self) -> core::result::Result<bool, CuStreamTxError> {
+            if self.remaining > 0 {
+                self.remaining -= 1;
+                if self.remaining == 0 {
+                    self.completed += 1;
+                }
+            }
+            Ok(self.remaining != 0)
+        }
+    }
+    let mut sender = SenderCore::new(config(), CuTime::default(), 0).unwrap();
+    let mut tx = Partial::default();
+    sender.begin_shutdown();
+    let now = CuTime::default();
+    let next = sender.poll(now, &mut tx).unwrap().unwrap();
+    assert!(!sender.is_idle());
+    assert!(next <= now + CuDuration::from_millis(1));
+    for tick in 1..100 {
+        sender
+            .poll(now + CuDuration::from_millis(tick), &mut tx)
+            .unwrap();
+        if sender.is_idle() {
+            break;
+        }
+    }
+    assert!(sender.is_idle());
+    assert_eq!(tx.remaining, 0);
+    assert!(tx.completed > 0);
+}

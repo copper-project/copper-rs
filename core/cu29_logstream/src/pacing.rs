@@ -132,6 +132,7 @@ pub struct SenderCore {
     deficit: [usize; 2],
     lane: usize,
     stopping: bool,
+    transport_pending: bool,
     stats: SenderStats,
 }
 
@@ -284,6 +285,7 @@ impl SenderCore {
             deficit: [0; 2],
             lane: 0,
             stopping: false,
+            transport_pending: false,
             stats: SenderStats::default(),
         })
     }
@@ -477,12 +479,32 @@ impl SenderCore {
     }
 
     pub fn is_idle(&self) -> bool {
-        self.data.len == 0 && self.control_packet().is_none()
+        self.data.len == 0 && self.control_packet().is_none() && !self.transport_pending
     }
 
     /// Send a bounded amount of eligible work and return the next local deadline.
     /// Carrier WouldBlock consumes the attempt's budget and drops the packet.
     pub fn poll<T: CuStreamTx>(
+        &mut self,
+        now: CuTime,
+        transport: &mut T,
+    ) -> Result<Option<CuTime>> {
+        let next = self.poll_packets(now, transport)?;
+        self.transport_pending = transport.poll_pending().map_err(|error| match error {
+            CuStreamTxError::WouldBlock => {
+                Error::Transport("Transport poll must report pending instead of WouldBlock")
+            }
+            CuStreamTxError::Failed(message) => Error::Transport(message),
+        })?;
+        Ok(if self.transport_pending {
+            let retry = now + CuDuration::from_millis(1);
+            Some(next.map_or(retry, |deadline| deadline.min(retry)))
+        } else {
+            next
+        })
+    }
+
+    fn poll_packets<T: CuStreamTx>(
         &mut self,
         now: CuTime,
         transport: &mut T,
@@ -567,7 +589,7 @@ impl SenderCore {
             work += 1;
             self.promote_recovery();
         }
-        Ok(if !self.is_idle() {
+        Ok(if self.data.len != 0 || self.control_packet().is_some() {
             Some(now)
         } else if self.stopping {
             None

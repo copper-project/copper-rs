@@ -2,6 +2,7 @@
 
 members = [
   "components/libs/cu_serial",
+  "components/res/cu29_logstream_serial",
   "components/bridges/cu_serial_bridge",
 
   "core/cu29",
@@ -225,6 +226,7 @@ no_individual_tags = true
 
 [workspace.dependencies]
 cu-serial = { path = "components/libs/cu_serial", version = "1.2.0-dev", default-features = false }
+cu29-logstream-serial = { path = "components/res/cu29_logstream_serial", version = "1.2.0-dev", default-features = false }
 cu-serial-bridge = { path = "components/bridges/cu_serial_bridge", version = "1.2.0-dev", default-features = false }
 
 

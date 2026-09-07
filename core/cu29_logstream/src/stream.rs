@@ -26,10 +26,20 @@ pub enum CuStreamRxError {
 /// retrying, acknowledging, or accepting a partial packet. `Ok(())` means only
 /// that the resource accepted this packet once; it does not guarantee delivery.
 pub trait CuStreamTx: Debug + Send + Sync {
+    /// Advance an accepted packet with bounded, nonblocking work. Returns true
+    /// while bytes remain. Drivers must keep polling until it returns false.
+    /// The default implementation reports an idle transport.
+    fn poll_pending(&mut self) -> core::result::Result<bool, CuStreamTxError> {
+        Ok(false)
+    }
+
     fn try_send(&mut self, packet: &[u8]) -> core::result::Result<(), CuStreamTxError>;
 }
 
 impl<T: CuStreamTx + ?Sized> CuStreamTx for alloc::boxed::Box<T> {
+    fn poll_pending(&mut self) -> core::result::Result<bool, CuStreamTxError> {
+        (**self).poll_pending()
+    }
     #[inline]
     fn try_send(&mut self, packet: &[u8]) -> core::result::Result<(), CuStreamTxError> {
         (**self).try_send(packet)
@@ -88,6 +98,10 @@ impl<T> OneWay<T> {
     }
 }
 impl<T: CuStreamTx> CuStreamTx for OneWay<T> {
+    fn poll_pending(&mut self) -> core::result::Result<bool, CuStreamTxError> {
+        self.tx.poll_pending()
+    }
+
     fn try_send(&mut self, packet: &[u8]) -> core::result::Result<(), CuStreamTxError> {
         self.tx.try_send(packet)
     }
@@ -109,6 +123,10 @@ pub struct SeparateFeedback<T, R> {
     pub feedback_rx: R,
 }
 impl<T: CuStreamTx, R: CuFeedbackRx> CuStreamTx for SeparateFeedback<T, R> {
+    fn poll_pending(&mut self) -> core::result::Result<bool, CuStreamTxError> {
+        self.tx.poll_pending()
+    }
+
     fn try_send(&mut self, packet: &[u8]) -> core::result::Result<(), CuStreamTxError> {
         self.tx.try_send(packet)
     }
