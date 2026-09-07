@@ -341,6 +341,9 @@ pub cu29_runtime::config::IncludesConfig::when: core::option::Option<cu29_runtim
 pub struct cu29_runtime::config::InstanceConfigSetOperation
 pub cu29_runtime::config::InstanceConfigSetOperation::path: alloc::string::String
 pub cu29_runtime::config::InstanceConfigSetOperation::value: cu29_runtime::config::ComponentConfig
+pub struct cu29_runtime::config::LogStreamAdaptationConfig
+pub cu29_runtime::config::LogStreamAdaptationConfig::max_repair_every_source_symbols: u16
+pub cu29_runtime::config::LogStreamAdaptationConfig::min_repair_every_source_symbols: u16
 pub struct cu29_runtime::config::LogStreamContinuousFecConfig
 pub cu29_runtime::config::LogStreamContinuousFecConfig::field: cu29_runtime::config::LogStreamRlcField
 pub cu29_runtime::config::LogStreamContinuousFecConfig::repair_density: cu29_runtime::config::LogStreamRepairDensity
@@ -348,6 +351,7 @@ pub cu29_runtime::config::LogStreamContinuousFecConfig::repair_every_source_symb
 pub cu29_runtime::config::LogStreamContinuousFecConfig::window_symbols: u16
 pub struct cu29_runtime::config::LogStreamDestinationConfig
 pub cu29_runtime::config::LogStreamDestinationConfig::fec: cu29_runtime::config::LogStreamFecConfig
+pub cu29_runtime::config::LogStreamDestinationConfig::feedback: core::option::Option<cu29_runtime::config::LogStreamFeedbackConfig>
 pub cu29_runtime::config::LogStreamDestinationConfig::id: alloc::string::String
 pub cu29_runtime::config::LogStreamDestinationConfig::link: cu29_runtime::config::LogStreamLinkConfig
 pub cu29_runtime::config::LogStreamDestinationConfig::max_record_bytes: u64
@@ -356,6 +360,11 @@ pub cu29_runtime::config::LogStreamDestinationConfig::transport: cu29_runtime::c
 pub struct cu29_runtime::config::LogStreamFecConfig
 pub cu29_runtime::config::LogStreamFecConfig::continuous: cu29_runtime::config::LogStreamContinuousFecConfig
 pub cu29_runtime::config::LogStreamFecConfig::objects: cu29_runtime::config::LogStreamObjectFecConfig
+pub struct cu29_runtime::config::LogStreamFeedbackConfig
+pub cu29_runtime::config::LogStreamFeedbackConfig::adaptation: core::option::Option<cu29_runtime::config::LogStreamAdaptationConfig>
+pub cu29_runtime::config::LogStreamFeedbackConfig::report_interval_ms: u32
+pub cu29_runtime::config::LogStreamFeedbackConfig::timeout_ms: u32
+pub cu29_runtime::config::LogStreamFeedbackConfig::transport: cu29_runtime::config::LogStreamTransportConfig
 pub struct cu29_runtime::config::LogStreamLinkConfig
 pub cu29_runtime::config::LogStreamLinkConfig::bitrate_bps: u64
 pub cu29_runtime::config::LogStreamLinkConfig::burst_packets: u32

@@ -4626,11 +4626,20 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let expected_type = LitStr::new(&destination.transport.type_, Span::call_site());
                 let expected_resource =
                     LitStr::new(&destination.transport.resource, Span::call_site());
+                let expected_feedback = match &destination.feedback {
+                    Some(feedback) => {
+                        let ty = LitStr::new(&feedback.transport.type_, Span::call_site());
+                        let resource = LitStr::new(&feedback.transport.resource, Span::call_site());
+                        quote! { Some((#ty, #resource)) }
+                    }
+                    None => quote! { None },
+                };
                 quote! {
                     let destination = &configured_logstream_destinations[#index];
                     if destination.id != #expected_id
                         || destination.transport.type_ != #expected_type
                         || destination.transport.resource != #expected_resource
+                        || destination.feedback.as_ref().map(|f| (f.transport.type_.as_str(), f.transport.resource.as_str())) != #expected_feedback
                     {
                         return Err(CuError::from(format!(
                             "Configured log_streaming destination topology at index {} does not match the runtime compiled into this binary",
@@ -5628,13 +5637,36 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         });
         let configured_logstream_initializers = logstream_resource_specs.iter().map(|spec| {
             let index = syn::Index::from(spec.destination_index);
-            let bundle_index = spec.bundle_index;
-            let provider_path = &spec.provider_path;
-            let resource_name = LitStr::new(&spec.resource_name, Span::call_site());
-            let transport_type = &spec.transport_type;
+            let bundle_index = spec.stream.bundle_index;
+            let provider_path = &spec.stream.provider_path;
+            let resource_name = LitStr::new(&spec.stream.resource_name, Span::call_site());
+            let transport_type = &spec.stream.transport_type;
             let transport_ident = format_ident!("__cu_logstream_transport_{}", spec.destination_index);
             let continuous_ident = format_ident!("__cu_logstream_continuous_{}", spec.destination_index);
             let recovery_ident = format_ident!("__cu_logstream_recovery_{}", spec.destination_index);
+            let scheduled = if let Some(feedback) = &spec.feedback {
+                let bundle = feedback.bundle_index;
+                let provider = &feedback.provider_path;
+                let name = LitStr::new(&feedback.resource_name, Span::call_site());
+                let ty = &feedback.transport_type;
+                quote! {
+                    let feedback_rx: #ty = resources.take(
+                        cu29::resource::ResourceKey::<()>::new(cu29::resource::BundleIndex::new(#bundle),
+                            cu29::resource::resource_index_by_name::<#provider>(#name)).typed::<#ty>()
+                    )?.0;
+                    let (#continuous_ident, #recovery_ident, _) = ::cu29::logstream::scheduled_feedback_sinks::<#mission_mod::CuStampedDataSet, _>(
+                        ::cu29::logstream::SeparateFeedback { tx: #transport_ident, feedback_rx }, sender_config,
+                        if clock.is_mock() { RobotClock::new() } else { clock.clone() },
+                    )?;
+                }
+            } else {
+                quote! {
+                    let (#continuous_ident, #recovery_ident, _) = ::cu29::logstream::scheduled_sinks::<#mission_mod::CuStampedDataSet, _>(
+                        #transport_ident, sender_config,
+                        if clock.is_mock() { RobotClock::new() } else { clock.clone() },
+                    )?;
+                }
+            };
             quote! {
                 let destination = &config
                     .log_streaming
@@ -5661,11 +5693,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         .typed::<#transport_type>(),
                     )?
                     .0;
-                let (#continuous_ident, #recovery_ident, _) =
-                    ::cu29::logstream::scheduled_sinks::<#mission_mod::CuStampedDataSet, _>(
-                        #transport_ident, sender_config,
-                        if clock.is_mock() { RobotClock::new() } else { clock.clone() },
-                    )?;
+                #scheduled
                 let #continuous_ident = if logstream_schema.reconstruction.is_empty() {
                     #continuous_ident
                 } else {
@@ -9060,6 +9088,11 @@ struct BundleSpec {
 
 struct LogStreamResourceSpec {
     destination_index: usize,
+    stream: LogStreamEndpointSpec,
+    feedback: Option<LogStreamEndpointSpec>,
+}
+
+struct LogStreamEndpointSpec {
     bundle_index: usize,
     provider_path: syn::Path,
     resource_name: String,
@@ -9080,40 +9113,44 @@ fn build_logstream_resource_specs(
         .enumerate()
         .map(|(index, bundle)| (bundle.id.as_str(), (index, &bundle.provider_path)))
         .collect();
-
+    let endpoint = |destination_id: &str,
+                    transport: &cu29_runtime::config::LogStreamTransportConfig|
+     -> CuResult<LogStreamEndpointSpec> {
+        let (bundle_id, resource_name) = parse_resource_path(&transport.resource)?;
+        let (bundle_index, provider_path) = bundle_lookup.get(bundle_id.as_str()).ok_or_else(|| CuError::from(format!(
+            "Log-stream destination '{destination_id}' references resource bundle '{bundle_id}' which is not active in mission '{mission}'"
+        )))?;
+        if component_resources.iter().any(|resource| {
+            resource.bundle_index == *bundle_index && resource.resource_name == resource_name
+        }) {
+            return Err(CuError::from(format!(
+                "Log-stream destination '{destination_id}' and a task or bridge both require exclusive resource '{}'",
+                transport.resource
+            )));
+        }
+        let transport_type = parse_str::<Type>(&transport.type_).map_err(|error| CuError::from(format!(
+            "Log-stream destination '{destination_id}' transport type '{}' is not a valid Rust type: {error}", transport.type_
+        )))?;
+        Ok(LogStreamEndpointSpec {
+            bundle_index: *bundle_index,
+            provider_path: (*provider_path).clone(),
+            resource_name,
+            transport_type,
+        })
+    };
     streaming
         .destinations
         .iter()
         .enumerate()
         .map(|(destination_index, destination)| {
-            let (bundle_id, resource_name) =
-                parse_resource_path(&destination.transport.resource)?;
-            let (bundle_index, provider_path) = bundle_lookup.get(bundle_id.as_str()).ok_or_else(|| {
-                CuError::from(format!(
-                    "Log-stream destination '{}' references resource bundle '{}' which is not active in mission '{}'",
-                    destination.id, bundle_id, mission
-                ))
-            })?;
-            if component_resources.iter().any(|resource| {
-                resource.bundle_index == *bundle_index && resource.resource_name == resource_name
-            }) {
-                return Err(CuError::from(format!(
-                    "Log-stream destination '{}' and a task or bridge both require exclusive resource '{}'",
-                    destination.id, destination.transport.resource
-                )));
-            }
-            let transport_type = parse_str::<Type>(&destination.transport.type_).map_err(|error| {
-                CuError::from(format!(
-                    "Log-stream destination '{}' transport type '{}' is not a valid Rust type: {error}",
-                    destination.id, destination.transport.type_
-                ))
-            })?;
             Ok(LogStreamResourceSpec {
                 destination_index,
-                bundle_index: *bundle_index,
-                provider_path: (*provider_path).clone(),
-                resource_name,
-                transport_type,
+                stream: endpoint(&destination.id, &destination.transport)?,
+                feedback: destination
+                    .feedback
+                    .as_ref()
+                    .map(|f| endpoint(&destination.id, &f.transport))
+                    .transpose()?,
             })
         })
         .collect()

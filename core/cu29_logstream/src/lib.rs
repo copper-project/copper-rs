@@ -28,6 +28,7 @@ pub mod telemetry;
 pub mod capture;
 mod copper;
 mod error;
+pub mod feedback;
 mod manifest;
 mod object;
 mod pacing;
@@ -41,7 +42,10 @@ mod wire;
 #[cfg(feature = "std")]
 mod worker;
 #[cfg(feature = "std")]
-pub use worker::{ScheduledCopperListSink, ScheduledKeyFrameSink, SenderMonitor, scheduled_sinks};
+pub use worker::{
+    ScheduledCopperListSink, ScheduledKeyFrameSink, SenderMonitor, SenderSnapshot,
+    scheduled_feedback_sinks, scheduled_sinks,
+};
 
 /// Utilities for testing log streaming over unreliable datagram links.
 ///

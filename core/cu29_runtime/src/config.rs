@@ -1510,6 +1510,8 @@ pub struct LogStreamingConfig {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct LogStreamDestinationConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feedback: Option<LogStreamFeedbackConfig>,
     pub id: String,
     pub transport: LogStreamTransportConfig,
     pub link: LogStreamLinkConfig,
@@ -1517,6 +1519,25 @@ pub struct LogStreamDestinationConfig {
     /// Recovery interval in CopperLists; a nonzero multiple of logging.keyframe_interval.
     pub recovery_interval: u32,
     pub max_record_bytes: u64,
+}
+
+/// Explicit reverse resource and advisory feedback policy for one destination.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct LogStreamFeedbackConfig {
+    pub transport: LogStreamTransportConfig,
+    pub report_interval_ms: u32,
+    pub timeout_ms: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub adaptation: Option<LogStreamAdaptationConfig>,
+}
+
+/// Bounds on the number of future source symbols between continuous repairs.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct LogStreamAdaptationConfig {
+    pub min_repair_every_source_symbols: u16,
+    pub max_repair_every_source_symbols: u16,
 }
 
 /// Concrete Copper resource used as the destination's packet transmitter.
@@ -2373,6 +2394,52 @@ impl CuConfig {
                     "log_streaming resource '{}' is bound by more than one destination",
                     destination.transport.resource
                 )));
+            }
+            if let Some(feedback) = &destination.feedback {
+                let baseline = destination.fec.continuous.repair_every_source_symbols;
+                if feedback.report_interval_ms == 0
+                    || feedback.timeout_ms <= feedback.report_interval_ms
+                    || feedback.adaptation.is_some_and(|bounds| {
+                        bounds.min_repair_every_source_symbols == 0
+                            || bounds.min_repair_every_source_symbols > baseline
+                            || baseline > bounds.max_repair_every_source_symbols
+                    })
+                {
+                    return Err(CuError::from(
+                        "Invalid log_streaming feedback cadence or FEC bounds",
+                    ));
+                }
+                let resource = &feedback.transport.resource;
+                let valid_resource = resource.split_once('.').is_some_and(|(bundle, slot)| {
+                    !slot.is_empty()
+                        && !slot.contains('.')
+                        && self.resources.iter().any(|r| r.id == bundle)
+                });
+                if feedback.transport.type_.trim().is_empty() || !valid_resource {
+                    return Err(CuError::from("Invalid log_streaming feedback resource"));
+                }
+            }
+            // All logical receivers have one owner, including shared-carrier handles.
+            let resources = core::iter::once(&destination.transport.resource)
+                .chain(destination.feedback.iter().map(|f| &f.transport.resource));
+            for resource in resources {
+                let uses = streaming
+                    .destinations
+                    .iter()
+                    .map(|d| {
+                        usize::from(&d.transport.resource == resource)
+                            + usize::from(
+                                d.feedback
+                                    .as_ref()
+                                    .is_some_and(|f| &f.transport.resource == resource),
+                            )
+                    })
+                    .sum::<usize>();
+                if uses > 1 {
+                    return Err(CuError::from(format!(
+                        "Log-stream resource '{resource}' has multiple owners"
+                    )));
+                }
             }
             if destination.link.mtu_bytes <= 72 {
                 return Err(CuError::from(format!(
@@ -6506,6 +6573,37 @@ mod tests {
         let serialized = config.serialize_ron().unwrap();
         let reparsed = read_configuration_str(serialized, None).unwrap();
         assert_eq!(reparsed.log_streaming, config.log_streaming);
+
+        let feedback = r#"feedback: (
+            transport: (type: "app::FeedbackRx", resource: "telemetry_udp.rx"),
+            report_interval_ms: 500, timeout_ms: 2000,
+            adaptation: (min_repair_every_source_symbols: 1, max_repair_every_source_symbols: 16),
+        ), link:"#;
+        let adaptive = txt.replace("link:", feedback);
+        let parsed = read_configuration_str(adaptive.clone(), None).unwrap();
+        assert!(
+            parsed.log_streaming.as_ref().unwrap().destinations[0]
+                .feedback
+                .is_some()
+        );
+        let roundtrip = read_configuration_str(parsed.serialize_ron().unwrap(), None).unwrap();
+        assert_eq!(roundtrip.log_streaming, parsed.log_streaming);
+        for invalid in [
+            adaptive.replace("report_interval_ms: 500", "report_interval_ms: 0"),
+            adaptive.replace("timeout_ms: 2000", "timeout_ms: 500"),
+            adaptive.replace(
+                "min_repair_every_source_symbols: 1",
+                "min_repair_every_source_symbols: 5",
+            ),
+            adaptive.replace(
+                "max_repair_every_source_symbols: 16",
+                "max_repair_every_source_symbols: 3",
+            ),
+            adaptive.replace("telemetry_udp.rx", "telemetry_udp.tx"),
+            adaptive.replace("telemetry_udp.rx", "missing.rx"),
+        ] {
+            assert!(read_configuration_str(invalid, None).is_err());
+        }
     }
 
     #[test]

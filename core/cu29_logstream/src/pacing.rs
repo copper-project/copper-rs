@@ -136,6 +136,15 @@ pub struct SenderCore {
 }
 
 impl SenderCore {
+    /// Changes only future repair scheduling; retained packets and budgets are untouched.
+    pub fn set_repair_interval(&mut self, every: u16) -> Result<()> {
+        if every == 0 {
+            return Err(Error::InvalidConfig("repair interval must be nonzero"));
+        }
+        self.repairs.set_interval(usize::from(every));
+        Ok(())
+    }
+
     /// Validate all storage arithmetic before allocating. `reserved_bytes` covers
     /// the driver's owned-record pool, which shares the destination budget.
     pub fn new(config: LogStreamSenderConfig, now: CuTime, reserved_bytes: usize) -> Result<Self> {

@@ -435,6 +435,13 @@ pub(crate) struct RepairSchedule {
 }
 
 impl RepairSchedule {
+    pub(crate) fn set_interval(&mut self, every: usize) {
+        self.every = every;
+        self.source_symbols_since_repair = self
+            .source_symbols_since_repair
+            .min(every.saturating_sub(1));
+    }
+
     pub(crate) const fn new(every: usize, next_repair_key: u16, density: DensityThreshold) -> Self {
         Self {
             every,
@@ -471,6 +478,7 @@ pub struct ContinuousDecoder<
     observed_window_base: Option<EncodingSymbolId>,
     retention_floor: Option<EncodingSymbolId>,
     stats: ContinuousRecoveryStats,
+    source_observer: Option<crate::feedback::SourceObserver<MAX_WINDOW_SYMBOLS>>,
 }
 
 impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQUATIONS: usize>
@@ -504,7 +512,19 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
             observed_window_base: None,
             retention_floor: None,
             stats: ContinuousRecoveryStats::default(),
+            source_observer: None,
         })
+    }
+
+    /// Enable bounded finalized-loss accounting on the receiver worker.
+    pub fn enable_feedback(&mut self) {
+        self.source_observer.get_or_insert_with(Default::default);
+    }
+
+    pub fn source_outcomes(&self) -> crate::feedback::SourceOutcomes {
+        self.source_observer
+            .as_ref()
+            .map_or_else(Default::default, |observer| observer.outcomes())
     }
 
     pub const fn next_object_id(&self) -> u64 {
@@ -618,6 +638,14 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
         if !accepted {
             return Ok(());
         }
+        if let Some(observer) = &mut self.source_observer
+            && let Some((base, _)) = self.fec.window()
+        {
+            observer.advance(base.get());
+            for (esi, _) in self.fec.known_symbols() {
+                observer.observe(esi.get(), false);
+            }
+        }
         self.stats.valid_datagrams = self.stats.valid_datagrams.saturating_add(1);
         self.update_retention_floor();
         self.symbols_pending = true;
@@ -655,6 +683,12 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
             }
             Err(error) => return Err(error.into()),
         };
+        if let Some(observer) = &mut self.source_observer
+            && let Some((base, _)) = self.fec.window()
+        {
+            observer.advance(base.get());
+            observer.observe(id.esi().get(), true);
+        }
         if report.status() == SourceStatus::Duplicate {
             self.stats.duplicate_symbols = self.stats.duplicate_symbols.saturating_add(1);
             return Ok(false);

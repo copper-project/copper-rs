@@ -165,6 +165,8 @@ struct RoutedSession<const S: usize, const W: usize, const E: usize> {
     recovery_dirty: bool,
     last_recovery_point: Option<u64>,
     delivered_record: bool,
+    received_bytes: u64,
+    received_packets: u64,
     continuous: Option<ContinuousDecoder<S, W, E>>,
 }
 
@@ -191,6 +193,32 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
 
     pub const fn stats(&self) -> SessionRouterStats {
         self.stats
+    }
+
+    /// Receiver-worker snapshot. Malformed datagrams are router-wide because their identity cannot be trusted.
+    pub fn feedback_counters(
+        &self,
+        identity: StreamIdentity,
+    ) -> Option<crate::feedback::ReceiverReport> {
+        let session = self.sessions.iter().find(|s| s.identity == identity)?;
+        let decoder = session.continuous.as_ref()?;
+        let stats = decoder.stats();
+        let occupancy = decoder.occupancy();
+        Some(crate::feedback::ReceiverReport {
+            received_bytes: session.received_bytes,
+            received_packets: session.received_packets,
+            sources: decoder.source_outcomes(),
+            invalid_packets: self.stats.malformed_datagrams as u64
+                + stats.invalid_datagrams as u64
+                + stats.inconsistent_datagrams as u64,
+            duplicate_packets: stats.duplicate_symbols as u64,
+            expired_records: stats.records_expired as u64,
+            buffered_records: (occupancy.incomplete_records + occupancy.ready_records)
+                .min(u32::MAX as usize) as u32,
+            record_capacity: self.limits.max_buffered_records.min(u32::MAX as usize) as u32,
+            request_recovery: session.last_recovery_point.is_none(),
+            ..Default::default()
+        })
     }
 
     pub fn session_manifest(&self, identity: StreamIdentity) -> Option<&SessionManifest> {
@@ -278,6 +306,8 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
                     recovery_dirty: false,
                     last_recovery_point: None,
                     delivered_record: false,
+                    received_bytes: 0,
+                    received_packets: 0,
                     continuous: None,
                 });
                 self.stats.sessions_discovered += 1;
@@ -288,6 +318,8 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
                 return Ok(());
             }
         };
+        self.sessions[index].received_bytes += datagram.len() as u64;
+        self.sessions[index].received_packets += 1;
         if packet.header.fec_scheme == FecScheme::RaptorQ {
             self.sessions[index].finite.receive_packet(packet)?;
             if let Some(record) = self.sessions[index].finite.pop_record() {
@@ -588,7 +620,7 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
                 "session manifest exceeds receiver-local limits",
             ));
         }
-        ContinuousDecoder::new(
+        let mut decoder = ContinuousDecoder::new(
             manifest.identity,
             Lane::ReplayCritical,
             manifest.plan.rlc_config()?,
@@ -598,7 +630,11 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
                 manifest.plan.max_record_bytes as usize,
                 limits.max_buffered_records,
             ),
-        )
+        )?;
+        if manifest.plan.feedback.is_some() {
+            decoder.enable_feedback();
+        }
+        Ok(decoder)
     }
 
     fn push_event(&mut self, event: PendingEvent) -> Result<()> {

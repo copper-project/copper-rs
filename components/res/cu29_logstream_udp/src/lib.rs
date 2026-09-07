@@ -8,7 +8,9 @@ use cu29::bundle_resources;
 use cu29::config::ComponentConfig;
 use cu29::resource::{BundleContext, ResourceBundle, ResourceManager};
 use cu29::{CuError, CuResult};
-use cu29_logstream::{CuStreamRx, CuStreamRxError, CuStreamTx, CuStreamTxError};
+use cu29_logstream::{
+    CuFeedbackRx, CuFeedbackTx, CuStreamRx, CuStreamRxError, CuStreamTx, CuStreamTxError,
+};
 use socket2::{Domain, MaybeUninitSlice, Protocol, SockAddr, Socket, Type};
 use std::io;
 use std::mem::MaybeUninit;
@@ -317,3 +319,15 @@ impl ResourceBundle for CuUdpLogStreamResources {
 
 #[cfg(test)]
 mod tests;
+
+// Logical direction is enabled by explicit resource wiring, not by trait presence.
+impl CuFeedbackTx for CuUdpLogStreamTx {
+    fn try_send_feedback(&mut self, packet: &[u8]) -> Result<(), CuStreamTxError> {
+        self.try_send(packet)
+    }
+}
+impl CuFeedbackRx for CuUdpLogStreamRx {
+    fn try_recv_feedback(&mut self, packet: &mut [u8]) -> Result<Option<usize>, CuStreamRxError> {
+        self.try_recv(packet)
+    }
+}

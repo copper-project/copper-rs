@@ -17,6 +17,7 @@ use cu29_traits::TaskOutputSpec;
 /// Link and codec policy after RON validation and MTU resolution.
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
 pub struct LogStreamPlan {
+    pub feedback: Option<crate::feedback::FeedbackPolicy>,
     pub destination_id: String,
     pub mtu_bytes: u16,
     pub symbol_size: u16,
@@ -158,6 +159,10 @@ impl LogStreamPlan {
         };
         DensityThreshold::new(repair_density)?;
         let plan = Self {
+            feedback: config
+                .feedback
+                .as_ref()
+                .map(crate::feedback::FeedbackPolicy::from),
             destination_id: config.id.clone(),
             mtu_bytes: config.link.mtu_bytes,
             symbol_size,
@@ -184,6 +189,9 @@ impl LogStreamPlan {
 
     /// Validates a resolved plan, including plans decoded from an untrusted manifest.
     pub fn validate(&self) -> Result<()> {
+        if let Some(feedback) = self.feedback {
+            feedback.validate(self.continuous.repair_every_source_symbols)?;
+        }
         let packet_bytes = PACKET_HEADER_LEN
             .checked_add(usize::from(self.symbol_size))
             .ok_or(Error::InvalidConfig("resolved MTU overflow"))?;

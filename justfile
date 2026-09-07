@@ -190,6 +190,15 @@ logstream-pacing-check:
 	cargo +stable test -p cu29 --features logstream --test logstream_runtime
 	just logstream-demo-check
 
+# Advisory feedback, adaptive FEC, static return-channel wiring, and UDP regressions.
+logstream-feedback-check:
+	cargo +stable clippy -p cu29-logstream --all-targets -- --deny warnings
+	cargo +stable test -p cu29-logstream
+	cargo +stable check -p cu29-logstream --no-default-features
+	cargo +stable test -p cu29-runtime --lib config::tests
+	cargo +stable test -p cu29 --features logstream --test logstream_runtime
+	just logstream-udp-check
+
 # Runnable two-process UDP scenarios, archive comparison, and recorded replay.
 logstream-demo-check:
 	cargo +stable clippy -p cu-logstream-demo --all-targets --features replay -- --deny warnings

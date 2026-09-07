@@ -53,9 +53,8 @@ preserves the received payloads and timestamps.
 - Pacing uses `RobotClock` and requires no robot/receiver time synchronization.
   Generated real-link senders select a running clock when application time is
   mocked. Direct driver tests can supply a mock clock.
-- Feedback packet traits and static one-way/separate-endpoint adapters are
-  available. A duplex resource may implement stream TX and feedback RX on one
-  carrier. Feedback protocol, negotiation, and adaptation remain deferred.
+- Optional feedback reports receiver health and adjusts future continuous FEC within explicit bounds.
+  A duplex resource may share stream TX and feedback RX; one receive owner consumes each logical endpoint.
 
 Run `just logstream-receiver-check` from the repository root to test reception,
 archival, and replay continuity. See the Rust API docs for receiver limits and
@@ -124,7 +123,7 @@ and counted; the last complete bundle remains usable. Ordinary data expires afte
 useful after that deadline and is repeated until replaced or stopped.
 
 Pool exhaustion, packet-queue overflow, expiry, carrier backpressure, and shutdown
-shedding are counted. `SenderMonitor` exposes final counters and failure state;
+shedding are counted. `SenderMonitor::snapshot()` exposes live counters and feedback state at 10 Hz;
 the worker also writes its shutdown statistics and failures to Copper structured
 logging. Dropping both sinks stops repetition and drains only until the configured
 latency deadline. An independent running RobotClock bounds teardown of a frozen
@@ -242,3 +241,44 @@ command compares the result against the full onboard log.
 
 Run `just logstream-twin-check` for allocation/native-format checks, both verification
 modes, worker lifecycle, reader isolation, and the UDP loss/recovery/replay scenarios.
+
+## Optional receiver feedback
+
+Add this to a `log_streaming.destinations` entry; the referenced resource must implement `CuFeedbackRx`:
+
+```ron
+feedback: (
+    transport: (type: "cu29_logstream_udp::CuUdpLogStreamRx", resource: "network.rx"),
+    report_interval_ms: 500,
+    timeout_ms: 2000,
+    adaptation: (
+        min_repair_every_source_symbols: 1,
+        max_repair_every_source_symbols: 16,
+    ),
+),
+```
+
+On the receiver, explicitly supply the return transmitter with `Twin::twin(rx).with_feedback(tx)`.
+Configure its destination address in the resource, not from incoming traffic. Standalone receivers can
+use `FeedbackReporter` with `SessionRouter::feedback_counters`. Programmatic senders use
+`scheduled_feedback_sinks(SeparateFeedback { tx, feedback_rx }, config, clock)`.
+
+Omitting feedback preserves one-way operation. The unversioned manifest advertises optional feedback
+policy, destination identity, cadence, and bounds. Reports are also unversioned and require the matching
+application decoder. Reports are bounded
+CRC32C datagrams carrying cumulative counters, receiver identity/sequence, finalized source outcomes,
+receiver progress/pressure, and an optional request for the latest retained recovery bundle. No data ACKs.
+
+Omit `adaptation` for reports only. Otherwise the existing repair interval is the startup/fallback baseline
+and must lie between the explicit bounds. Lower intervals mean more repairs. Finalized loss is smoothed
+with weight 1/4 for the new sample; the target repair/source ratio covers estimated loss plus two percentage
+points. Unrecovered symbols halve the interval, bounded by the target and minimum. Three healthier reports
+allow one step toward less redundancy. Reports without finalized progress do not reduce protection.
+
+A receiver binds on its first valid report; another can bind after timeout. Invalid, duplicate, reordered,
+or excessive reports cannot refresh health. After timeout, state is stale and the interval moves one step
+per report period toward baseline. Bitrate, burst, latency, memory, FEC window/field/density, and object FEC
+stay fixed. Feedback failure never stops capture or autonomous recovery; snapshots retain failure state.
+
+Loss excludes the active coding window and unseen history/tails. Invalid packets do not prove corruption;
+CRC is not authentication. Reports and adaptation stay on stream workers. Run `just logstream-feedback-check`.

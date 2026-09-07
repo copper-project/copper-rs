@@ -1,6 +1,12 @@
 //! Host driver for the autonomous sender. Only semantic output workers call these sinks.
 
-use crate::{CuStreamTx, LogStreamSenderConfig, OneWay, SenderCore, SenderStats};
+use crate::feedback::{
+    FEEDBACK_BUFFER_BYTES, FeedbackController, FeedbackSnapshot, ReceiverReport, destination_key,
+};
+use crate::{
+    CuFeedbackRx, CuStreamRxError, CuStreamTx, LogStreamSenderConfig, OneWay, SenderCore,
+    SenderStats,
+};
 use cu29_clock::{CuDuration, CuTime, RobotClock};
 #[allow(unused_imports)]
 use cu29_log::{ANONYMOUS, CuLogEntry, CuLogLevel};
@@ -34,6 +40,18 @@ struct Record {
     queued_at: CuTime,
 }
 
+/// Live worker snapshot. Publication uses try_lock at 10 Hz, never on the RT path.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SenderSnapshot {
+    pub sampled_at: CuTime,
+    pub stats: SenderStats,
+    pub inbox_drops: u64,
+    pub stopped: bool,
+    pub failed: bool,
+    pub feedback_failed: bool,
+    pub feedback: Option<FeedbackSnapshot>,
+}
+
 /// Final counters remain readable after both output sinks have been dropped.
 #[derive(Clone, Debug)]
 pub struct SenderMonitor(Arc<Shared>);
@@ -44,9 +62,16 @@ struct Shared {
     failed: AtomicBool,
     inbox_drops: AtomicU64,
     final_stats: Mutex<Option<SenderStats>>,
+    snapshot: Mutex<SenderSnapshot>,
 }
 
 impl SenderMonitor {
+    pub fn snapshot(&self) -> SenderSnapshot {
+        let mut snapshot = *self.0.snapshot.lock().expect("sender snapshot poisoned");
+        snapshot.failed |= self.failed();
+        snapshot
+    }
+
     pub fn inbox_drops(&self) -> u64 {
         self.0.inbox_drops.load(Ordering::Relaxed)
     }
@@ -214,6 +239,73 @@ where
     P: CopperListTuple + Send + Sync,
     T: CuStreamTx + 'static,
 {
+    scheduled_worker(OneWay::new(transport), config, clock, false)
+}
+
+/// Explicitly enable the advisory receive direction; the manifest must advertise it.
+pub fn scheduled_feedback_sinks<P, T>(
+    transport: T,
+    config: LogStreamSenderConfig,
+    clock: RobotClock,
+) -> CuResult<(
+    ScheduledCopperListSink<P>,
+    ScheduledKeyFrameSink,
+    SenderMonitor,
+)>
+where
+    P: CopperListTuple + Send + Sync,
+    T: CuStreamTx + CuFeedbackRx + 'static,
+{
+    scheduled_worker(transport, config, clock, true)
+}
+
+fn scheduled_worker<P, T>(
+    transport: T,
+    config: LogStreamSenderConfig,
+    clock: RobotClock,
+    feedback_enabled: bool,
+) -> CuResult<(
+    ScheduledCopperListSink<P>,
+    ScheduledKeyFrameSink,
+    SenderMonitor,
+)>
+where
+    P: CopperListTuple + Send + Sync,
+    T: CuStreamTx + CuFeedbackRx + 'static,
+{
+    let manifest = crate::SessionManifest::decode_record(&config.recovery.manifest_record);
+    let policy = manifest
+        .as_ref()
+        .ok()
+        .and_then(|manifest| manifest.plan.feedback);
+    if policy.is_some() != feedback_enabled {
+        return Err(CuError::from(
+            "Feedback transport wiring must match manifest capability",
+        ));
+    }
+    if policy.is_some() {
+        let manifest = manifest.as_ref().expect("validated feedback manifest");
+        if manifest.identity != config.continuous.identity
+            || usize::from(manifest.plan.continuous.repair_every_source_symbols)
+                != config.continuous.repair_every_source_symbols
+        {
+            return Err(CuError::from(
+                "Feedback manifest identity and baseline must match the sender",
+            ));
+        }
+    }
+    let mut feedback = policy
+        .map(|policy| {
+            let manifest = manifest.as_ref().expect("validated feedback manifest");
+            FeedbackController::new(
+                policy,
+                config.continuous.identity,
+                destination_key(&manifest.plan.destination_id),
+                config.continuous.repair_every_source_symbols as u16,
+            )
+        })
+        .transpose()
+        .map_err(|error| CuError::from(error.to_string()))?;
     let cl_bytes = config.continuous.max_record_bytes;
     let kf_bytes = usize::try_from(config.recovery.finite.max_object_bytes)
         .map_err(|_| CuError::from("Keyframe limit exceeds usize"))?;
@@ -250,13 +342,21 @@ where
     let cl_clock = clock.clone();
     let kf_clock = clock.clone();
     let shared = Arc::new(Shared::default());
+    *shared.snapshot.lock().expect("new snapshot") = SenderSnapshot {
+        sampled_at: clock.now(),
+        feedback: feedback.as_ref().map(FeedbackController::snapshot),
+        ..Default::default()
+    };
     let status = shared.clone();
     let cl_recycled = cl_return.clone();
     let kf_recycled = kf_return.clone();
     let handle = std::thread::Builder::new()
         .name("cu-logstream".into())
         .spawn(move || {
-            let mut transport = OneWay::new(transport);
+            let mut transport = transport;
+            let mut feedback_packet = [0; FEEDBACK_BUFFER_BYTES];
+            let mut feedback_failed = false;
+            let mut next_snapshot = clock.now();
             let mut stop_at = None;
             // Teardown remains finite even for deliberately frozen scheduler test clocks.
             let result = (|| -> crate::Result<()> {
@@ -264,6 +364,22 @@ where
                     if status.stop.load(Ordering::Acquire) && stop_at.is_none() {
                         core.begin_shutdown();
                         stop_at = Some(shutdown_clock.now() + drain_time);
+                    }
+                    if let Some(controller) = &mut feedback {
+                        for _ in 0..8 {
+                            if feedback_failed { break; }
+                            match transport.try_recv_feedback(&mut feedback_packet) {
+                                Ok(Some(len)) => match feedback_packet.get(..len).and_then(|p| ReceiverReport::decode(p).ok()) {
+                                    Some(report) => { if controller.receive(report, clock.now()) { core.request_recovery(); } }
+                                    None => controller.invalid_report(),
+                                },
+                                Ok(None) => break,
+                                Err(CuStreamRxError::BufferTooSmall { .. }) => controller.invalid_report(),
+                                Err(CuStreamRxError::Failed(_)) => { feedback_failed = true; }
+                            }
+                        }
+                        controller.tick(clock.now());
+                        core.set_repair_interval(controller.snapshot().effective_repair_every_source_symbols)?;
                     }
                     let mut received = 0;
                     for _ in 0..CL_BUFFERS + KF_BUFFERS {
@@ -282,6 +398,16 @@ where
                         received += 1;
                     }
                     let next = core.poll(clock.now(), &mut transport)?;
+                    let now = clock.now();
+                    if now >= next_snapshot {
+                        if let Ok(mut snapshot) = status.snapshot.try_lock() {
+                            *snapshot = SenderSnapshot { sampled_at: now, stats: core.stats(),
+                                inbox_drops: status.inbox_drops.load(Ordering::Relaxed),
+                                feedback: feedback.as_ref().map(FeedbackController::snapshot), feedback_failed,
+                                ..Default::default() };
+                        }
+                        next_snapshot = now + CuDuration::from_millis(100);
+                    }
                     if stop_at.is_some_and(|deadline| shutdown_clock.now() >= deadline)
                         || (stop_at.is_some() && received == 0 && core.is_idle())
                     {
@@ -307,6 +433,11 @@ where
             core.discard_pending();
             let stats = core.stats();
             *status.final_stats.lock().expect("sender stats") = Some(stats);
+            *status.snapshot.lock().expect("sender snapshot") = SenderSnapshot {
+                sampled_at: clock.now(), stats, inbox_drops: status.inbox_drops.load(Ordering::Relaxed),
+                stopped: true, failed: result.is_err(), feedback_failed,
+                feedback: feedback.as_ref().map(FeedbackController::snapshot),
+            };
             cu29_log_derive::info!("Logstream sender stopped: sent={} bytes={} queue_drops={} expired={} transport_drops={} inbox_drops={} shutdown_drops={}",
                 stats.packets_sent, stats.bytes_sent, stats.queue_drops, stats.expired_packets, stats.transport_drops,
                 status.inbox_drops.load(Ordering::Relaxed), stats.shutdown_drops);
