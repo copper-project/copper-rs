@@ -482,6 +482,7 @@ pub cu29_runtime::config::ResourceBundleConfig::config: core::option::Option<cu2
 pub cu29_runtime::config::ResourceBundleConfig::id: alloc::string::String
 pub cu29_runtime::config::ResourceBundleConfig::missions: core::option::Option<alloc::vec::Vec<alloc::string::String>>
 pub cu29_runtime::config::ResourceBundleConfig::provider: alloc::string::String
+pub cu29_runtime::config::ResourceBundleConfig::resources: core::option::Option<hashbrown::map::HashMap<alloc::string::String, alloc::string::String>>
 pub struct cu29_runtime::config::RuntimeConfig
 pub cu29_runtime::config::RuntimeConfig::planner: core::option::Option<cu29_runtime::config::PlannerConfig>
 pub cu29_runtime::config::RuntimeConfig::rate_target_hz: core::option::Option<u64>
@@ -2238,8 +2239,10 @@ pub struct cu29_runtime::resource::BundleContext<B: cu29_runtime::resource::Reso
 impl<B: cu29_runtime::resource::ResourceBundleDecl> cu29_runtime::resource::BundleContext<B>
 pub const fn cu29_runtime::resource::BundleContext<B>::bundle_id(&self) -> &'static str
 pub const fn cu29_runtime::resource::BundleContext<B>::bundle_index(&self) -> cu29_runtime::resource::BundleIndex
+pub fn cu29_runtime::resource::BundleContext<B>::inputs<'r, R: cu29_runtime::resource::ResourceBindings<'r>>(&self, manager: &'r mut cu29_runtime::resource::ResourceManager) -> cu29_traits::CuResult<R> where B: cu29_runtime::resource::ResourceBundle
 pub fn cu29_runtime::resource::BundleContext<B>::key<T>(&self, id: <B as cu29_runtime::resource::ResourceBundleDecl>::Id) -> cu29_runtime::resource::ResourceKey<T>
 pub const fn cu29_runtime::resource::BundleContext<B>::new(bundle_index: cu29_runtime::resource::BundleIndex, bundle_id: &'static str) -> Self
+pub const fn cu29_runtime::resource::BundleContext<B>::with_input_keys(self, keys: &'static [cu29_runtime::resource::ResourceKey]) -> Self
 pub struct cu29_runtime::resource::BundleIndex(_)
 impl cu29_runtime::resource::BundleIndex
 pub const fn cu29_runtime::resource::BundleIndex::index(self) -> usize
@@ -2271,11 +2274,16 @@ pub trait cu29_runtime::resource::NamedResourceBundleDecl: cu29_runtime::resourc
 pub const cu29_runtime::resource::NamedResourceBundleDecl::NAMES: &'static [&'static str]
 pub trait cu29_runtime::resource::ResourceBindings<'r>: core::marker::Sized
 pub type cu29_runtime::resource::ResourceBindings::Binding: core::marker::Copy + core::cmp::Eq + 'static
+pub const cu29_runtime::resource::ResourceBindings::NAMES: &'static [&'static str]
 pub fn cu29_runtime::resource::ResourceBindings::from_bindings(manager: &'r mut cu29_runtime::resource::ResourceManager, mapping: core::option::Option<&cu29_runtime::resource::ResourceBindingMap<Self::Binding>>) -> cu29_traits::CuResult<Self>
+pub fn cu29_runtime::resource::ResourceBindings::from_keys(_manager: &'r mut cu29_runtime::resource::ResourceManager, _keys: &[cu29_runtime::resource::ResourceKey]) -> cu29_traits::CuResult<Self>
 impl<'r> cu29_runtime::resource::ResourceBindings<'r> for ()
 pub type ()::Binding = ()
+pub const ()::NAMES: &'static [&'static str]
 pub fn ()::from_bindings(_manager: &'r mut cu29_runtime::resource::ResourceManager, _mapping: core::option::Option<&cu29_runtime::resource::ResourceBindingMap<Self::Binding>>) -> cu29_traits::CuResult<Self>
+pub fn ()::from_keys(_manager: &'r mut cu29_runtime::resource::ResourceManager, keys: &[cu29_runtime::resource::ResourceKey]) -> cu29_traits::CuResult<Self>
 pub trait cu29_runtime::resource::ResourceBundle: cu29_runtime::resource::ResourceBundleDecl + core::marker::Sized
+pub const cu29_runtime::resource::ResourceBundle::INPUT_NAMES: &'static [&'static str]
 pub fn cu29_runtime::resource::ResourceBundle::build(bundle: cu29_runtime::resource::BundleContext<Self>, config: core::option::Option<&cu29_runtime::config::ComponentConfig>, manager: &mut cu29_runtime::resource::ResourceManager) -> cu29_traits::CuResult<()>
 pub trait cu29_runtime::resource::ResourceBundleDecl
 pub type cu29_runtime::resource::ResourceBundleDecl::Id: cu29_runtime::resource::ResourceId
