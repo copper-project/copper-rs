@@ -1,4 +1,5 @@
 //! Optional advisory feedback. All accounting and adaptation run on stream workers.
+//! Sender and receiver must be built with matching feedback layouts.
 
 use crate::{Error, Result, StreamIdentity};
 use bincode::{Decode, Encode};
