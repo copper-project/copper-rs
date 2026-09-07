@@ -159,10 +159,10 @@
 <a href=#159 id=159 data-nosnippet>159</a>                                        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
 <a href=#160 id=160 data-nosnippet>160</a>                                    }
 <a href=#161 id=161 data-nosnippet>161</a>                                    <span class="kw">if let </span>SessionEvent::Manifest(manifest) = <span class="kw-2">&amp;</span>event {
-<a href=#162 id=162 data-nosnippet>162</a>                                        status.identity = <span class="prelude-val">Some</span>(manifest.identity);
+<a href=#162 id=162 data-nosnippet>162</a>                                        status.identity = <span class="prelude-val">Some</span>(manifest.manifest().identity);
 <a href=#163 id=163 data-nosnippet>163</a>                                        archive = <span class="prelude-val">Some</span>(CaptureArchive::&lt;A::DataSet&gt;::new(
 <a href=#164 id=164 data-nosnippet>164</a>                                            <span class="kw-2">&amp;</span>path,
-<a href=#165 id=165 data-nosnippet>165</a>                                            manifest.clone(),
+<a href=#165 id=165 data-nosnippet>165</a>                                            manifest,
 <a href=#166 id=166 data-nosnippet>166</a>                                            SLAB_BYTES,
 <a href=#167 id=167 data-nosnippet>167</a>                                            SECTION_BYTES,
 <a href=#168 id=168 data-nosnippet>168</a>                                        )<span class="question-mark">?</span>);

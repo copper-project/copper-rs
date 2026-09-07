@@ -315,13 +315,13 @@
 <a href=#315 id=315 data-nosnippet>315</a>    /// Archival must succeed first; replay never retries or delays that writer.
 <a href=#316 id=316 data-nosnippet>316</a>    </span><span class="kw">pub fn </span>accept(
 <a href=#317 id=317 data-nosnippet>317</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#318 id=318 data-nosnippet>318</a>        event: <span class="kw-2">&amp;</span><span class="kw">crate</span>::SessionEvent,
+<a href=#318 id=318 data-nosnippet>318</a>        event: <span class="kw-2">&amp;</span><span class="kw">crate</span>::SessionEventRef&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#319 id=319 data-nosnippet>319</a>        capture: <span class="prelude-ty">Option</span>&lt;CapturedList&lt;P&gt;&gt;,
 <a href=#320 id=320 data-nosnippet>320</a>    ) -&gt; <span class="kw">crate</span>::Result&lt;()&gt; {
 <a href=#321 id=321 data-nosnippet>321</a>        <span class="kw">match </span>event {
 <a href=#322 id=322 data-nosnippet>322</a>            <span class="kw">crate</span>::SessionEvent::Manifest(<span class="kw">_</span>) | <span class="kw">crate</span>::SessionEvent::Gap { .. } =&gt; <span class="self">self</span>.recover(),
 <a href=#323 id=323 data-nosnippet>323</a>            <span class="kw">crate</span>::SessionEvent::VerifiedRecoveryPoint { keyframe, .. } =&gt; {
-<a href=#324 id=324 data-nosnippet>324</a>                <span class="self">self</span>.recovery_point(<span class="kw">crate</span>::decode_keyframe(keyframe.decoded()<span class="question-mark">?</span>.payload)<span class="question-mark">?</span>)
+<a href=#324 id=324 data-nosnippet>324</a>                <span class="self">self</span>.recovery_point(<span class="kw">crate</span>::decode_keyframe(keyframe.decoded().payload)<span class="question-mark">?</span>)
 <a href=#325 id=325 data-nosnippet>325</a>            }
 <a href=#326 id=326 data-nosnippet>326</a>            <span class="kw">crate</span>::SessionEvent::ContinuousRecord { identity, .. } =&gt; {
 <a href=#327 id=327 data-nosnippet>327</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(capture) = capture {
