@@ -553,3 +553,10 @@ logstream-twin-check:
     cargo +stable test -p cu-logstream-demo --features demo --test twin
     just logstream-receiver-check
     just --justfile examples/cu_logstream_demo/justfile check
+
+# Sender monitor, status metadata, and streamed reconstruction interoperability.
+logstream-sender-check:
+    cargo +stable test -p cu-tuimon --no-default-features
+    cargo +stable clippy -p cu-logstream-demo --all-targets --features replay,tui,verify-reconstruction,sender-monitor -- --deny warnings
+    cargo +stable test -p cu-logstream-demo --features demo,tui,verify-reconstruction,sender-monitor
+    just --justfile examples/cu_logstream_demo/justfile check-sender

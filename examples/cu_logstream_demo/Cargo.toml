@@ -15,6 +15,7 @@ verify-reconstruction = ["demo", "cu29/logstream-verify"]
 demo = ["cu29/logstream", "cu29/reflect", "dep:cu-transform"]
 replay = ["demo", "cu29/remote-debug"]
 tui = ["demo", "dep:ratatui"]
+sender-monitor = ["demo", "dep:cu-consolemon"]
 
 [[bin]]
 name = "cu-logstream-demo"
@@ -34,6 +35,7 @@ required-features = ["replay"]
 [dependencies]
 cu29 = { workspace = true }
 cu-transform = { path = "../../components/libs/cu_transform", optional = true }
+cu-consolemon = { path = "../../components/monitors/cu_consolemon", default-features = false, optional = true }
 cu29-logstream = { workspace = true, features = ["std"] }
 cu29-logstream-udp = { workspace = true }
 cu29-export = { workspace = true }

@@ -74,6 +74,14 @@ come exclusively from reconstructed Copper task outputs.
 The screen follows `cu_tuimon` with numbered tabs and command badges. **1** selects
 Live, **2** selects Health, and **Tab** cycles between them. In Health, **hjkl**
 or the arrow keys scroll the details, including the archive path and recovery counters.
+`just sender` opens Copper's native task monitor (DAG, latency, bandwidth,
+and memory tabs). Encoder status shows `S:DDD.dd E:DDD.dd` in degrees;
+kinematics reports `pose ready (local)`. Use the numbered tabs and `q` to quit.
+Status metadata crosses the link, so it deliberately excludes pose coordinates.
+The `sender-monitor` feature and `senderconfig.ron` enable this monitor only for
+the sender; the ground twin uses the original graph without a monitor.
+Automated scenarios remain headless.
+
 The dashboard uses the official [Catppuccin Mocha palette](https://github.com/catppuccin/palette):
 green for received values and healthy status, mauve for reconstructed pose data,
 blue for headings and transport metrics, neutral text for explanations, yellow for

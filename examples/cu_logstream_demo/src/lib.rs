@@ -6,7 +6,14 @@ pub mod telemetry;
 
 use cu29::prelude::*;
 
-#[copper_runtime(config = "copperconfig.ron")]
+#[cfg_attr(
+    feature = "sender-monitor",
+    copper_runtime(config = "senderconfig.ron")
+)]
+#[cfg_attr(
+    not(feature = "sender-monitor"),
+    copper_runtime(config = "copperconfig.ron")
+)]
 struct Demo {}
 
 pub mod twin {
@@ -41,7 +48,7 @@ pub fn run_sender(
     iterations: u64,
     idle_ms: u64,
 ) -> CuResult<()> {
-    let mut config = CuConfig::deserialize_ron(include_str!("../copperconfig.ron"))?;
+    let mut config = CuConfig::deserialize_ron(&Demo::original_config())?;
     config.resources[0]
         .config
         .as_mut()

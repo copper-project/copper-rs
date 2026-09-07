@@ -447,3 +447,25 @@ fn twin_owns_shutdown_and_reports_transport_failure() {
             .contains("test transport failed")
     );
 }
+
+#[cfg(feature = "sender-monitor")]
+#[test]
+fn sender_status_is_allocation_free_and_keeps_pose_local() {
+    use cu_logstream_demo::tasks::{ArmPose, Encoders, JointAngles, Kinematics};
+    use cu29::prelude::*;
+
+    let (ctx, _clock) = CuContext::new_mock_clock();
+    let mut encoders = Encoders::default();
+    let mut kinematics = Kinematics;
+    let mut angles = CuMsg::<JointAngles>::default();
+    let mut pose = CuMsg::<ArmPose>::default();
+    ALLOCATIONS.with(|count| count.set(Some(0)));
+    for _ in 0..1200 {
+        encoders.process(&ctx, &mut angles).unwrap();
+        kinematics.process(&ctx, &angles, &mut pose).unwrap();
+    }
+    let allocations = ALLOCATIONS.with(|count| count.replace(None).unwrap());
+    assert_eq!(allocations, 0, "task status allocated on the task path");
+    assert_eq!(angles.metadata.status_txt.0.as_str(), "S:359.70 E:001.20");
+    assert_eq!(pose.metadata.status_txt.0.as_str(), "pose ready (local)");
+}

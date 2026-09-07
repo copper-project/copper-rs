@@ -226,6 +226,27 @@ impl MonitorModel {
             self.upsert_pool_stat(id.to_string(), space_left, total_size, buffer_size);
         }
     }
+
+    pub fn process_copperlist(&self, copperlist_id: u64, view: CopperListView<'_>) {
+        self.inner.component_stats.lock().unwrap().update(view);
+        self.update_copperlist_rate(copperlist_id);
+
+        let mut component_statuses = self.inner.component_statuses.lock().unwrap();
+        for entry in view.entries() {
+            let component_index = entry.component_id.index();
+            assert!(
+                component_index < component_statuses.len(),
+                "cu_tuimon: mapped component index {} out of component_statuses bounds {}",
+                component_index,
+                component_statuses.len()
+            );
+            let CuCompactString(status_txt) = &entry.msg.status_txt;
+            component_statuses[component_index].status_txt = status_txt.clone();
+        }
+        drop(component_statuses);
+
+        self.refresh_pool_stats_from_runtime();
+    }
 }
 
 #[cfg(feature = "log_pane")]
@@ -254,27 +275,6 @@ impl MonitorModel {
 
     pub fn log_line_count(&self) -> usize {
         self.inner.log_lines.lock().unwrap().len()
-    }
-
-    pub fn process_copperlist(&self, copperlist_id: u64, view: CopperListView<'_>) {
-        self.inner.component_stats.lock().unwrap().update(view);
-        self.update_copperlist_rate(copperlist_id);
-
-        let mut component_statuses = self.inner.component_statuses.lock().unwrap();
-        for entry in view.entries() {
-            let component_index = entry.component_id.index();
-            assert!(
-                component_index < component_statuses.len(),
-                "cu_tuimon: mapped component index {} out of component_statuses bounds {}",
-                component_index,
-                component_statuses.len()
-            );
-            let CuCompactString(status_txt) = &entry.msg.status_txt;
-            component_statuses[component_index].status_txt = status_txt.clone();
-        }
-        drop(component_statuses);
-
-        self.refresh_pool_stats_from_runtime();
     }
 }
 

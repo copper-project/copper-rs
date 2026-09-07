@@ -63,7 +63,16 @@ impl CuSrcTask for Encoders {
         Ok(Self::default())
     }
     fn process(&mut self, ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
-        output.set_payload(JointAngles::at_tick(self.tick));
+        let angles = JointAngles::at_tick(self.tick);
+        output.set_payload(angles);
+        #[cfg(feature = "sender-monitor")]
+        output.metadata.set_status(format_args!(
+            "S:{:03}.{:02} E:{:03}.{:02}",
+            angles.shoulder / 100,
+            angles.shoulder % 100,
+            angles.elbow / 100,
+            angles.elbow % 100,
+        ));
         output.tov = Tov::Time(ctx.now());
         self.tick = self.tick.wrapping_add(1);
         Ok(())
@@ -154,6 +163,10 @@ impl CuTask for Kinematics {
             .payload()
             .ok_or_else(|| CuError::from("Encoders produced no angles"))?;
         output.set_payload(forward_kinematics(angles)?);
+        // Status metadata is captured even when the pose payload is omitted.
+        // Keep coordinates out of it so reconstruction remains meaningful.
+        #[cfg(feature = "sender-monitor")]
+        output.metadata.set_status("pose ready (local)");
         output.tov = input.tov;
         Ok(())
     }
