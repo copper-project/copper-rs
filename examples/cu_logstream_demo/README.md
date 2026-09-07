@@ -74,8 +74,10 @@ The screen follows `cu_tuimon` with numbered tabs and command badges. **1** sele
 Live, **2** selects Health, and **Tab** cycles between them. In Health, **hjkl**
 or the arrow keys scroll the details, including the archive path and recovery counters.
 The dashboard uses the official [Catppuccin Mocha palette](https://github.com/catppuccin/palette):
-green for received values, mauve for reconstruction, yellow for warnings, and red
-for failures. Text, tabs, and trails use Mocha's named colors; the main background
+green for received values and healthy status, mauve for reconstructed pose data,
+blue for headings and transport metrics, neutral text for explanations, yellow for
+warnings, and red for failures. Packet and frame ages get a red background as soon
+as the displayed age reaches 0.1 seconds; fresh data clears the highlight. Text, tabs, and trails use Mocha's named colors; the main background
 preserves the terminal's default black or transparency.
 Teal, sky, and sapphire accents are omitted.
 **Space** pauses consumption; wait a second and resume to see missed samples

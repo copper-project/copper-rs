@@ -34,6 +34,9 @@ const BG: Color = Color::Reset; // Preserve the terminal's black/transparent bac
 const FG: Color = Color::Rgb(205, 214, 244); // Text
 const MUTED: Color = Color::Rgb(147, 153, 178); // Overlay 2
 const GREEN: Color = Color::Rgb(166, 227, 161);
+const BLUE: Color = Color::Rgb(137, 180, 250);
+const SUBTEXT: Color = Color::Rgb(186, 194, 222); // Subtext 1
+const ALERT_TEXT: Color = Color::Rgb(17, 17, 27); // Crust
 const MAUVE: Color = Color::Rgb(203, 166, 247);
 const YELLOW: Color = Color::Rgb(249, 226, 175);
 const RED: Color = Color::Rgb(243, 139, 168);
@@ -153,6 +156,14 @@ impl View {
             ReconstructionState::Verified => ("Verified (developer checks)", GREEN),
             ReconstructionState::Diverged => ("DIVERGED", RED),
         };
+        let reconstruction_color = if matches!(
+            status.twin.state,
+            ReconstructionState::Reconstructed | ReconstructionState::Verified
+        ) {
+            GREEN
+        } else {
+            twin_color
+        };
         let tip = if matches!(
             status.twin.state,
             ReconstructionState::Reconstructed | ReconstructionState::Verified
@@ -172,7 +183,7 @@ impl View {
         } else {
             "LIVE VIEW"
         };
-        let view_color = if self.paused { YELLOW } else { MAUVE };
+        let view_color = if self.paused { YELLOW } else { GREEN };
         let [header, body, footer] = Layout::vertical([
             Constraint::Length(1),
             Constraint::Min(0),
@@ -237,12 +248,12 @@ impl View {
                         Span::raw("  |  "),
                         value(view_state, view_color),
                     ]),
-                    Line::from(value(reconstruction, twin_color)),
+                    Line::from(value(reconstruction, reconstruction_color)),
                 ]),
                 state,
             );
             let lines = self.health_lines(status, overwritten, path);
-            let block = panel("Stream health · recording continues while paused", MAUVE);
+            let block = panel("Stream health · recording continues while paused", BLUE);
             let inner = block.inner(details);
             self.health_scroll.0 = self
                 .health_scroll
@@ -283,11 +294,11 @@ impl View {
                     Line::from(
                         [
                             metric("Tip", tip, MAUVE),
-                            vec![Span::styled("(local)", Style::default().fg(MAUVE))],
+                            vec![Span::styled("(local)", Style::default().fg(SUBTEXT))],
                         ]
                         .concat(),
                     ),
-                    Line::from(value("Payload NOT transmitted", MAUVE)),
+                    Line::from(value("Payload NOT transmitted", SUBTEXT)),
                     Line::from(
                         [
                             metric("Archived", status.archived, GREEN),
@@ -295,7 +306,7 @@ impl View {
                         ]
                         .concat(),
                     ),
-                    Line::from(value(reconstruction, twin_color)),
+                    Line::from(value(reconstruction, reconstruction_color)),
                 ]),
                 body,
             );
@@ -323,21 +334,21 @@ impl View {
                     .concat(),
                 ),
                 Line::from(vec![
-                    value(reconstruction, twin_color),
+                    value(reconstruction, reconstruction_color),
                     Span::styled(
                         " · pose payload not transmitted",
-                        Style::default().fg(MAUVE),
+                        Style::default().fg(SUBTEXT),
                     ),
                 ]),
                 Line::from(
                     [
                         metric("Displayed CL", number(self.displayed), FG),
-                        metric("Frame age", age(self.frame_age), FG),
+                        age_metric("Frame age", self.frame_age.map(|at| at.elapsed())),
                     ]
                     .concat(),
                 ),
             ])
-            .block(panel("Captured inputs + Copper twin output", MAUVE)),
+            .block(panel("Captured inputs + Copper twin output", BLUE)),
             values,
         );
         let [encoder_charts, arm] =
@@ -399,7 +410,7 @@ impl View {
                 Line::from(
                     [
                         metric("UI missed", self.missed, warning(self.missed > 0)),
-                        metric("Last packet", age(status.last_packet), FG),
+                        age_metric("Last packet", status.last_packet.map(|at| at.elapsed())),
                         vec![Span::styled(
                             "2: stream details",
                             Style::default().fg(YELLOW),
@@ -468,7 +479,7 @@ impl View {
                         y - 0.2,
                         Span::styled(
                             "Task re-executed on ground · pose not transmitted",
-                            Style::default().fg(MAUVE),
+                            Style::default().fg(SUBTEXT),
                         ),
                     );
                     if tip == "—" {
@@ -485,14 +496,17 @@ impl View {
 
     fn health_lines(&self, status: Status, overwritten: u64, path: &str) -> Vec<Line<'static>> {
         vec![
-            Line::from(metric("Packets", status.packets, MAUVE)),
-            Line::from(metric("Last packet", age(status.last_packet), FG)),
+            Line::from(metric("Packets", status.packets, BLUE)),
+            Line::from(age_metric(
+                "Last packet",
+                status.last_packet.map(|at| at.elapsed()),
+            )),
             Line::from(metric("Archived", status.archived, GREEN)),
             Line::from(metric("Latest CL", number(status.latest), GREEN)),
             Line::from(metric(
                 "Verified recovery point",
                 number(status.recovery_point),
-                MAUVE,
+                BLUE,
             )),
             Line::from(metric("Source gaps", status.gaps, warning(status.gaps > 0))),
             Line::from(metric(
@@ -587,11 +601,29 @@ fn position(value: Option<[f64; 2]>) -> String {
 fn number(value: Option<u64>) -> String {
     value.map_or_else(|| "—".into(), |v| v.to_string())
 }
-fn age(value: Option<Instant>) -> String {
-    value.map_or_else(
+/// Highlight as soon as the displayed age advances beyond 0.0s.
+fn age_metric(label: &str, age: Option<Duration>) -> Vec<Span<'static>> {
+    let tenths = age.map(|age| age.as_millis() / 100);
+    let stale = tenths.is_some_and(|age| age > 0);
+    let text = tenths.map_or_else(
         || "—".into(),
-        |v| format!("{:.1}s", v.elapsed().as_secs_f32()),
-    )
+        |age| format!("{}.{:01}s", age / 10, age % 10),
+    );
+    let label_style = if stale {
+        Style::default().fg(ALERT_TEXT).bg(RED)
+    } else {
+        Style::default().fg(FG)
+    };
+    let value_style = if stale {
+        label_style
+    } else {
+        Style::default().fg(if age.is_some() { BLUE } else { MUTED })
+    };
+    vec![
+        Span::styled(format!("{label}: "), label_style),
+        Span::styled(text, value_style.add_modifier(Modifier::BOLD)),
+        Span::raw("   "),
+    ]
 }
 
 pub fn run(options: ReceiverOptions) -> Result<()> {
@@ -654,6 +686,29 @@ pub fn run(options: ReceiverOptions) -> Result<()> {
 mod tests {
     use super::*;
     use ratatui::{Terminal, backend::TestBackend};
+
+    #[test]
+    fn ages_highlight_at_first_visible_increase_and_clear_on_fresh_data() {
+        for label in ["Last packet", "Frame age"] {
+            for (age, expected, highlighted) in [
+                (None, "—", false),
+                (Some(Duration::ZERO), "0.0s", false),
+                (Some(Duration::from_millis(99)), "0.0s", false),
+                (Some(Duration::from_millis(100)), "0.1s", true),
+                (Some(Duration::from_millis(1234)), "1.2s", true),
+                (Some(Duration::from_millis(5)), "0.0s", false),
+            ] {
+                let spans = age_metric(label, age);
+                assert_eq!(spans[1].content, expected);
+                for span in &spans[..2] {
+                    assert_eq!(span.style.bg, highlighted.then_some(RED));
+                    if highlighted {
+                        assert_eq!(span.style.fg, Some(ALERT_TEXT));
+                    }
+                }
+            }
+        }
+    }
 
     #[test]
     fn trail_uses_received_poses_and_breaks_at_gaps_and_new_sessions() {
