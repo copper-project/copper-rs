@@ -133,7 +133,12 @@ fn udp_feedback_worker_adapts_and_survives_a_lost_return_channel() -> CuResult<(
         RobotClock::new(),
     )?;
     let mut packet = [0; FEEDBACK_BUFFER_BYTES];
-    for sequence in 1..=10 {
+    // Reports and monitor snapshots are asynchronous. Keep reporting until the
+    // worker publishes adaptation instead of assuming a fixed sleep is enough.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut sequence = 0;
+    while Instant::now() < deadline {
+        sequence += 1;
         let report = ReceiverReport {
             session_id: identity.session_id,
             sender_id: identity.sender_id,
@@ -156,6 +161,11 @@ fn udp_feedback_worker_adapts_and_survives_a_lost_return_channel() -> CuResult<(
         let len = report.encode_into(&mut packet).unwrap();
         ground_tx.try_send_feedback(&packet[..len]).unwrap();
         std::thread::sleep(Duration::from_millis(60));
+        if monitor.snapshot().feedback.is_some_and(|feedback| {
+            feedback.accepted_reports >= 7 && feedback.effective_repair_every_source_symbols > 4
+        }) {
+            break;
+        }
     }
     let snapshot = monitor.snapshot();
     let feedback = snapshot.feedback.unwrap();
@@ -166,8 +176,19 @@ fn udp_feedback_worker_adapts_and_survives_a_lost_return_channel() -> CuResult<(
     );
     let sent = snapshot.stats.packets_sent;
     drop(ground_tx);
-    std::thread::sleep(Duration::from_millis(600));
-    let snapshot = monitor.snapshot();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let snapshot = loop {
+        let snapshot = monitor.snapshot();
+        if snapshot.feedback.is_some_and(|feedback| {
+            feedback.state == FeedbackState::Stale
+                && feedback.effective_repair_every_source_symbols == 4
+        }) && snapshot.stats.packets_sent > sent
+            || Instant::now() >= deadline
+        {
+            break snapshot;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    };
     assert_eq!(snapshot.feedback.unwrap().state, FeedbackState::Stale);
     assert_eq!(
         snapshot
