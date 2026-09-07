@@ -53,16 +53,12 @@
     ),
     tasks: [
         (
-            id: "counter",
-            type: "cu_logstream_demo::tasks::Counter",
+            id: "encoders",
+            type: "cu_logstream_demo::tasks::Encoders",
         ),
         (
-            id: "sum",
-            type: "cu_logstream_demo::tasks::Accumulator",
-        ),
-        (
-            id: "derived",
-            type: "cu_logstream_demo::tasks::Derived",
+            id: "kinematics",
+            type: "cu_logstream_demo::tasks::Kinematics",
             streaming: (
                 replay: reconstruct,
                 replay_abi: 1,
@@ -71,19 +67,14 @@
     ],
     cnx: [
         (
-            src: "counter",
-            dst: "sum",
-            msg: "cu_logstream_demo::tasks::Sample",
+            src: "encoders",
+            dst: "kinematics",
+            msg: "cu_logstream_demo::tasks::JointAngles",
         ),
         (
-            src: "sum",
-            dst: "derived",
-            msg: "cu_logstream_demo::tasks::Sample",
-        ),
-        (
-            src: "derived",
+            src: "kinematics",
             dst: "__nc__",
-            msg: "cu_logstream_demo::tasks::Sample",
+            msg: "cu_logstream_demo::tasks::ArmPose",
         ),
     ],
 )

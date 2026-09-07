@@ -55,7 +55,7 @@ fn capture(list: &List) -> CapturedList<DataSet> {
         captured
             .copperlist
             .msgs
-            .get_derived_output()
+            .get_kinematics_output()
             .payload()
             .is_none()
     );
@@ -259,19 +259,55 @@ fn recovery_discards_captures_waiting_for_an_old_recovery_point() {
 
 mod stateful {
     use cu29::prelude::*;
+    pub mod tasks {
+        include!("support/counter_tasks.rs");
+    }
     #[copper_runtime(config = "tests/stateful.ron", sim_mode = true)]
     struct Replay {}
     pub type Twin = default::Replay;
     pub type DataSet = default::CuStampedDataSet;
+    mod onboard {
+        use cu29::prelude::*;
+        #[copper_runtime(config = "tests/stateful.ron")]
+        struct Onboard {}
+        pub type App = default::Onboard;
+    }
+    pub fn fixture() -> (Vec<CopperList<DataSet>>, Vec<cu29::curuntime::KeyFrame>) {
+        let logs = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("logs");
+        std::fs::create_dir_all(&logs).unwrap();
+        let dir = tempfile::tempdir_in(logs).unwrap();
+        let path = dir.path().join("stateful.copper");
+        let (clock, mock) = RobotClock::mock();
+        let app = onboard::App::builder()
+            .with_clock(clock)
+            .with_log_path(&path, Some(cu_logstream_demo::SLAB_BYTES))
+            .unwrap()
+            .build()
+            .unwrap();
+        let mut running = app.start().unwrap();
+        for id in 0..34 {
+            mock.set_value((id + 1) * cu_logstream_demo::TICK_NS);
+            running.run_one_iteration().unwrap();
+            // Match run_sender's cadence so the async logger can recycle its slots.
+            std::thread::sleep(std::time::Duration::from_nanos(cu_logstream_demo::TICK_NS));
+        }
+        drop(running.stop().unwrap());
+        let lists = cu29_export::copperlists_reader::<DataSet>(UnifiedLoggerIOReader::new(
+            UnifiedLoggerRead::new(&path).unwrap(),
+            UnifiedLogType::CopperList,
+        ))
+        .collect();
+        (lists, cu_logstream_demo::read_keyframes(&path).unwrap())
+    }
 }
 
 #[test]
 fn stateful_reconstruction_restores_keyframes_and_feeds_downstream_tasks() {
     let _serial = SERIAL.lock().unwrap();
-    let (lists, keyframes) = fixture();
+    let (lists, keyframes) = stateful::fixture();
     let mut twin = LiveTwin::<stateful::Twin>::new().unwrap();
-    // The same onboard graph, but both the stateful sum and its downstream
-    // modulo task are omitted from the stream in this reconstruction contract.
+    // Keep the stateful counter/sum/modulo regression as a separate test graph.
+    // Both sum and its downstream modulo output are omitted from the stream.
     for expected in lists[..4].iter().chain(&lists[16..]) {
         let full =
             cu29::bincode::encode_to_vec(expected, cu29::bincode::config::standard()).unwrap();
@@ -313,6 +349,18 @@ fn stateful_reconstruction_restores_keyframes_and_feeds_downstream_tasks() {
 }
 
 #[test]
+fn arm_kinematics_does_not_allocate() {
+    use cu_logstream_demo::tasks::{JointAngles, forward_kinematics};
+    let _serial = SERIAL.lock().unwrap();
+    ALLOCATIONS.with(|count| count.set(Some(0)));
+    for tick in 0..1200 {
+        std::hint::black_box(forward_kinematics(JointAngles::at_tick(tick)).unwrap());
+    }
+    let allocations = ALLOCATIONS.with(|count| count.replace(None).unwrap());
+    assert_eq!(allocations, 0, "kinematics allocated on the task path");
+}
+
+#[test]
 fn capture_encoding_is_native_and_does_not_allocate() {
     use cu29_logstream::capture::CaptureView;
     let _serial = SERIAL.lock().unwrap();
@@ -333,7 +381,7 @@ fn capture_encoding_is_native_and_does_not_allocate() {
     .unwrap();
     assert_eq!(native, expected);
     let decoded = cu29_logstream::decode_copperlist::<DataSet>(native).unwrap();
-    assert!(decoded.msgs.get_derived_output().payload().is_none());
+    assert!(decoded.msgs.get_kinematics_output().payload().is_none());
     if cfg!(feature = "verify-reconstruction") {
         assert_eq!(record.payload.len(), native.len() + 32);
     } else {

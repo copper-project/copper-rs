@@ -8,11 +8,11 @@
     tasks: [
         (
             id: "counter",
-            type: "cu_logstream_demo::tasks::Counter",
+            type: "crate::stateful::tasks::Counter",
         ),
         (
             id: "sum",
-            type: "cu_logstream_demo::tasks::Accumulator",
+            type: "crate::stateful::tasks::Accumulator",
             streaming: (
                 replay: reconstruct,
                 replay_abi: 1,
@@ -20,7 +20,7 @@
         ),
         (
             id: "derived",
-            type: "cu_logstream_demo::tasks::Derived",
+            type: "crate::stateful::tasks::Derived",
             streaming: (
                 replay: reconstruct,
                 replay_abi: 1,
@@ -31,17 +31,17 @@
         (
             src: "counter",
             dst: "sum",
-            msg: "cu_logstream_demo::tasks::Sample",
+            msg: "crate::stateful::tasks::Sample",
         ),
         (
             src: "sum",
             dst: "derived",
-            msg: "cu_logstream_demo::tasks::Sample",
+            msg: "crate::stateful::tasks::Sample",
         ),
         (
             src: "derived",
             dst: "__nc__",
-            msg: "cu_logstream_demo::tasks::Sample",
+            msg: "crate::stateful::tasks::Sample",
         ),
     ],
 )

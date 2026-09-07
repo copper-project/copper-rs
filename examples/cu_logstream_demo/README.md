@@ -1,8 +1,9 @@
 # UDP log streaming demo
 
 Run a deterministic Copper graph in one process and collect its native execution
-log in another over localhost UDP. The graph is `counter → sum → derived`. Counter and sum are transmitted; derived
-is reconstructed live from the same Copper task implementation.
+log in another over localhost UDP. The graph is `encoders → kinematics`. Only shoulder and elbow encoder angles
+are transmitted; elbow and fingertip positions are reconstructed live by the same
+Copper task that runs on the robot.
 
 Each `log_streaming.destinations` entry sets `recovery_interval` directly alongside
 `transport`, `link`, `fec`, and `max_record_bytes`. The interval counts CopperLists
@@ -14,6 +15,7 @@ disables task reconstruction.
 From this directory:
 
 ```sh
+just dag
 just
 just run loss
 just run outage
@@ -62,14 +64,23 @@ just dashboard
 just sender
 ```
 
-The Ratatui screen shows counter/sum values, a received counter chart on the left,
-and a live `sum % 256` chart on the right with its local reconstruction status.
-The modulo chart uses reconstructed task outputs and a fixed 0–255 scale.
+The Ratatui screen shows received shoulder/elbow angle traces on the left and a
+Braille-canvas robot arm on the right. Two rotating links draw a four-lobed loop
+every 12 seconds. The fingertip trail fades over one loop and clears on missing
+frames or a new session; the display never invents positions across a gap.
+The arm panel is labeled **Kinematics → output pose**, with the caption
+**Task re-executed on ground · pose not transmitted**. The arm positions
+come exclusively from reconstructed Copper task outputs.
 The screen follows `cu_tuimon` with numbered tabs and command badges. **1** selects
 Live, **2** selects Health, and **Tab** cycles between them. In Health, **hjkl**
 or the arrow keys scroll the details, including the archive path and recovery counters.
-Received values are green, reconstructed values cyan, warnings amber, and failures
-red, on an explicit dark background independent of the terminal palette.
+The dashboard uses the official [Catppuccin Mocha palette](https://github.com/catppuccin/palette):
+green for received values and healthy status, mauve for reconstructed pose data,
+blue for headings and transport metrics, neutral text for explanations, yellow for
+warnings, and red for failures. Packet and frame ages get a red background as soon
+as the displayed age reaches 0.1 seconds; fresh data clears the highlight. Text, tabs, and trails use Mocha's named colors; the main background
+preserves the terminal's default black or transparency.
+Teal, sky, and sapphire accents are omitted.
 **Space** pauses consumption; wait a second and resume to see missed samples
 while the archive count keeps advancing. **q**, Escape, or Ctrl-C closes the
 receiver and finalizes its archive. The sender is a separate process. After the
@@ -82,7 +93,7 @@ with a 50 ms keyboard/age timer; no UI callback runs on the receiving thread.
 On overrun it resumes at the oldest retained frame with an exact local missed
 count. Source gaps and reader misses are distinct. Status stays available while
 the UI is paused. The UI owns its bounded chart history and uses generated
-`get_counter_output()` / `get_sum_output()` accessors.
+`get_encoders_output()` / `get_kinematics_output()` accessors.
 
 This step displays captured outputs; it does **not** yet execute a live
 Copper runtime on the ground to deterministically reconstruct omitted outputs
@@ -126,7 +137,7 @@ just resim-debug logs/replay.copper logs/debug-replay.copper
 
 The replay binary uses Copper's standard `--log-base`, `--replay-log-base`, and
 `--debug-base` contract. Remote debug creates separate replay outputs per session.
-Offline replay injects captured outputs and reconstructs the omitted derived output.
+Offline replay injects captured outputs and reconstructs the omitted arm pose.
 The verification tool compares full reconstructed outputs and sender metadata against
 the onboard log.
 Offline replay drains pending output before each iteration and aligns generated
@@ -163,16 +174,34 @@ permit a shared bidirectional carrier or separate explicitly configured endpoint
 
 ## Live Copper twin
 
-The demo graph is `counter -> sum -> derived`. The ordinary `Derived` Copper task
-computes `sum % 256` on the robot and in generated ground-side replay. Its payload
-is never transmitted, including repeated recovery point boundaries and FEC repairs. The
-robot's onboard log contains the full output for comparison. Ratatui explicitly
-labels the derived value **reconstructed locally; payload not transmitted**.
+The demo graph is `encoders -> kinematics`. The `Encoders` source simulates two
+integer encoder readings in hundredths of a degree. Shoulder turns at 30 degrees
+per second and elbow turns four times as fast in the opposite direction, relative
+to the upper arm. `Kinematics` uses `cu_transform::TypedTransform3D` to compose:
+
+`Base -> Shoulder -> Elbow -> Forearm -> Tip`
+
+The one-meter upper arm and 0.65-meter forearm are constant, unit-typed transforms;
+received angles supply the joint rotations. The same task computes elbow and tip
+positions on the robot and in generated ground-side replay. Its pose payload is
+never transmitted, including recovery points and FEC repairs. The robot's onboard
+log contains the full output for byte-for-byte comparison.
+
+The reconstruction ABI uses bounded integer inputs and the transform library's
+scalar `f64` const-capable constructors and composition, avoiding platform libm
+trigonometry and SIMD matrix multiplication. Tests check known arm configurations,
+runtime-versus-const bit equality, allocation-free kinematics, and exact replay
+including sender metadata. This checkout validates the native host; it does not
+claim a tested architecture matrix. Changes to that arithmetic require reviewing
+the task's cross-platform determinism contract and replay ABI.
+
+The original stateful counter/sum/modulo graph remains a test-only replay fixture.
+Existing counter-demo archives have a different schema; use newly recorded arm logs.
 
 Declare the static contract in the same RON used by the robot and ground build:
 
 ```ron
-(id: "derived", type: "tasks::Derived",
+(id: "kinematics", type: "tasks::Kinematics",
  streaming: (replay: reconstruct, replay_abi: 1)),
 ```
 

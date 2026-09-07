@@ -196,8 +196,8 @@ pub fn run(options: &ReceiverOptions) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cu_logstream_demo::run_sender;
     use cu_logstream_demo::telemetry::RecordingState;
-    use cu_logstream_demo::{ITERATIONS, run_sender};
 
     #[test]
     fn native_archive_is_identical_with_fast_stalled_or_disconnected_reader() {
@@ -235,8 +235,11 @@ mod tests {
                         while let Some(update) = reader.try_read() {
                             let list = &update.frame.copperlist;
                             assert_eq!(
-                                list.msgs.get_derived_output().payload().unwrap().0,
-                                list.msgs.get_sum_output().payload().unwrap().0 % ITERATIONS
+                                *list.msgs.get_kinematics_output().payload().unwrap(),
+                                cu_logstream_demo::tasks::forward_kinematics(
+                                    *list.msgs.get_encoders_output().payload().unwrap()
+                                )
+                                .unwrap()
                             );
                         }
                         std::thread::sleep(Duration::from_millis(1));

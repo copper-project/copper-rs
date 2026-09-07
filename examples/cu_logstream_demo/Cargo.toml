@@ -12,7 +12,7 @@ publish = false
 default = []
 verify-reconstruction = ["demo", "cu29/logstream-verify"]
 # Keep async runtime features out of ordinary workspace builds.
-demo = ["cu29/logstream", "cu29/reflect"]
+demo = ["cu29/logstream", "cu29/reflect", "dep:cu-transform"]
 replay = ["demo", "cu29/remote-debug"]
 tui = ["demo", "dep:ratatui"]
 
@@ -33,6 +33,7 @@ required-features = ["replay"]
 
 [dependencies]
 cu29 = { workspace = true }
+cu-transform = { path = "../../components/libs/cu_transform", optional = true }
 cu29-logstream = { workspace = true, features = ["std"] }
 cu29-logstream-udp = { workspace = true }
 cu29-export = { workspace = true }
