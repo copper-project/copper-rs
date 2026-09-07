@@ -18,7 +18,7 @@ use layout::std_shapes::shapes::{Arrow, Element, LineEndKind, RecordDef, ShapeKi
 use layout::topo::layout::VisualGraph;
 use serde::Deserialize;
 use std::cmp::Ordering;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -768,6 +768,11 @@ fn collect_resource_catalog(
     }
 
     for bundle in &config.resources {
+        for path in bundle.resources.iter().flat_map(|inputs| inputs.values()) {
+            collect_path(path)?;
+        }
+    }
+    for bundle in &config.resources {
         let Some(resource_names) = provider_resource_slots(bundle.provider.as_str()) else {
             continue;
         };
@@ -785,8 +790,42 @@ fn build_resource_tables(
     section: &SectionRef<'_>,
     resource_catalog: &HashMap<String, BTreeSet<String>>,
 ) -> CuResult<Vec<ResourceTable>> {
-    let owners_by_bundle = collect_resource_owners(config, section.graph)?;
+    let mut owners_by_bundle = collect_resource_owners(config, section.graph)?;
     let mission_id = section.mission_id.as_deref();
+    for bundle in &config.resources {
+        if !bundle_applies(&bundle.missions, mission_id) {
+            continue;
+        }
+        for (binding, path) in bundle.resources.iter().flat_map(|inputs| inputs.iter()) {
+            let (source, slot) = parse_resource_path(path)?;
+            let source_bundle = config
+                .resources
+                .iter()
+                .find(|candidate| candidate.id == source)
+                .ok_or_else(|| {
+                    CuError::from(format!("Resource dependency '{path}' has no provider"))
+                })?;
+            if !bundle_applies(&source_bundle.missions, mission_id) {
+                return Err(CuError::from(format!(
+                    "Resource dependency '{path}' is inactive in this mission"
+                )));
+            }
+            owners_by_bundle
+                .entry(source)
+                .or_default()
+                .entry(slot)
+                .or_default()
+                .push(ResourceOwner {
+                    name: format!("{} ({binding})", bundle.id),
+                    kind: ResourceOwnerKind::Bundle,
+                });
+        }
+    }
+    for slots in owners_by_bundle.values_mut() {
+        for owners in slots.values_mut() {
+            dedup_owners(owners);
+        }
+    }
     let mut tables = Vec::new();
 
     for bundle in &config.resources {
@@ -799,7 +838,26 @@ fn build_resource_tables(
             .unwrap_or_default();
         let table = build_resource_table(bundle, &resources, owners_by_bundle.get(&bundle.id));
         let size = record_size(&table, Orientation::TopToBottom);
-        tables.push(ResourceTable { table, size });
+        let mut dependencies: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        for (binding, path) in bundle.resources.iter().flat_map(|map| map.iter()) {
+            dependencies
+                .entry(parse_resource_path(path)?.0)
+                .or_default()
+                .push(format!("{path} → {}.{binding}", bundle.id));
+        }
+        let inputs = dependencies
+            .into_iter()
+            .map(|(source, mut labels)| {
+                labels.sort();
+                (source, labels.join("\n"))
+            })
+            .collect();
+        tables.push(ResourceTable {
+            table,
+            size,
+            bundle_id: Some(bundle.id.clone()),
+            inputs,
+        });
     }
 
     Ok(tables)
@@ -955,7 +1013,12 @@ fn build_perf_table(perf: &PerfStats) -> ResourceTable {
 
     let table = TableNode::Array(rows);
     let size = record_size(&table, Orientation::TopToBottom);
-    ResourceTable { table, size }
+    ResourceTable {
+        table,
+        size,
+        bundle_id: None,
+        inputs: Vec::new(),
+    }
 }
 
 fn collect_resource_owners(
@@ -1047,6 +1110,7 @@ fn format_resource_owners(owners: &[ResourceOwner], usage: ResourceUsage) -> Vec
                 ResourceOwnerKind::Task => (format!("task: {}", owner.name), "black"),
                 ResourceOwnerKind::Bridge => (format!("bridge: {}", owner.name), DIM_GRAY),
                 ResourceOwnerKind::System => (format!("system: {}", owner.name), "black"),
+                ResourceOwnerKind::Bundle => (format!("resource: {}", owner.name), "black"),
             };
             CellLine::code(label, color, false, PORT_VALUE_FONT_SIZE)
         })
@@ -1572,7 +1636,13 @@ fn render_sections_to_svg(
             let content_left = expanded_bounds.0.x;
             let content_bottom = expanded_bounds.1.y;
             let mut max_table_width: f64 = 0.0;
-            let mut cursor_table_y = content_bottom + RESOURCE_TABLE_MARGIN;
+            // Leave room for labels below task-loop edges before placing tables.
+            let label_clearance = if section.edges.iter().any(|edge| !edge.label.is_empty()) {
+                EDGE_LABEL_OFFSET + DETOUR_LABEL_CLEARANCE + EDGE_FONT_SIZE as f64
+            } else {
+                0.0
+            };
+            let mut cursor_table_y = content_bottom + RESOURCE_TABLE_MARGIN + label_clearance;
             for table in section
                 .perf_table
                 .iter()
@@ -1585,7 +1655,20 @@ fn render_sections_to_svg(
             }
             let tables_bottom = cursor_table_y - RESOURCE_TABLE_GAP;
             expanded_bounds.1.y = expanded_bounds.1.y.max(tables_bottom);
-            expanded_bounds.1.x = expanded_bounds.1.x.max(content_left + max_table_width);
+            let dependencies: usize = section
+                .resource_tables
+                .iter()
+                .map(|table| table.inputs.len())
+                .sum();
+            let lanes_width = if dependencies == 0 {
+                0.0
+            } else {
+                32.0 + dependencies as f64 * 18.0
+            };
+            expanded_bounds.1.x = expanded_bounds
+                .1
+                .x
+                .max(content_left + max_table_width + lanes_width);
         }
 
         let section_min = Point::new(
@@ -1809,6 +1892,7 @@ fn render_sections_to_svg(
             draw_node_table(&mut svg, node, element, content_offset);
         }
 
+        draw_resource_dependencies(&mut svg, &info_table_positions, content_offset);
         for (top_left, table) in &info_table_positions {
             draw_resource_table(&mut svg, table, top_left.add(content_offset));
         }
@@ -1870,6 +1954,78 @@ fn draw_node_table(svg: &mut SvgWriter, node: &NodeRender, element: &Element, of
             0.0,
         );
     }
+}
+
+/// Provider-to-consumer arrows run outside the resource tables, never through rows.
+fn draw_resource_dependencies(
+    svg: &mut SvgWriter,
+    tables: &[(Point, &ResourceTable)],
+    offset: Point,
+) {
+    let right = tables
+        .iter()
+        .map(|(pos, table)| pos.x + table.size.x)
+        .fold(0.0, f64::max)
+        + offset.x;
+    let mut lane = 0;
+    for (target_pos, target) in tables {
+        for (source_id, tooltip) in &target.inputs {
+            let Some((source_pos, source)) = tables
+                .iter()
+                .find(|(_, table)| table.bundle_id.as_ref() == Some(source_id))
+            else {
+                continue;
+            };
+            let start = source_pos
+                .add(offset)
+                .add(Point::new(source.size.x, resource_header_midpoint(source)));
+            let end = target_pos
+                .add(offset)
+                .add(Point::new(target.size.x, resource_header_midpoint(target)));
+            let x = right + 24.0 + lane as f64 * 18.0;
+            lane += 1;
+            let a = Point::new(x, start.y);
+            let b = Point::new(x, end.y);
+            let segments = [
+                BezierSegment {
+                    start,
+                    c1: start,
+                    c2: a,
+                    end: a,
+                },
+                BezierSegment {
+                    start: a,
+                    c1: a,
+                    c2: b,
+                    end: b,
+                },
+                BezierSegment {
+                    start: b,
+                    c1: b,
+                    c2: end,
+                    end,
+                },
+            ];
+            let mut arrow = SvgPath::new()
+                .set("d", build_path_data(&segments))
+                .set("stroke", INTERCONNECT_EDGE_COLOR)
+                .set("stroke-width", 1)
+                .set("fill", "none")
+                .set("stroke-dasharray", "5,5")
+                .set("marker-end", "url(#endarrow)");
+            arrow.append(Title::new(tooltip));
+            svg.content.append(arrow);
+        }
+    }
+}
+
+fn resource_header_midpoint(table: &ResourceTable) -> f64 {
+    if let TableNode::Array(rows) = &table.table
+        && let Some(header) = rows.first()
+    {
+        return record_size(header, Orientation::TopToBottom).y / 2.0;
+    }
+    table.size.y / 2.0
 }
 
 fn draw_resource_table(svg: &mut SvgWriter, table: &ResourceTable, top_left: Point) {
@@ -2326,6 +2482,8 @@ impl LegendItem {
 }
 
 struct ResourceTable {
+    bundle_id: Option<String>,
+    inputs: Vec<(String, String)>,
     table: TableNode,
     size: Point,
 }
@@ -2341,6 +2499,7 @@ enum ResourceOwnerKind {
     Task,
     Bridge,
     System,
+    Bundle,
 }
 
 #[derive(Clone, Copy)]
@@ -4729,6 +4888,7 @@ mod tests {
             logging: None,
             runtime: None,
             resources: vec![config::ResourceBundleConfig {
+                resources: None,
                 id: "linux".to_string(),
                 provider: "cu_linux_resources::LinuxResources".to_string(),
                 config: None,
@@ -4752,6 +4912,7 @@ mod tests {
     #[test]
     fn wrapped_provider_labels_render_as_separate_lines() {
         let bundle = config::ResourceBundleConfig {
+            resources: None,
             id: "network".to_string(),
             provider: "cu29_logstream_udp::CuUdpLogStreamResources".to_string(),
             config: None,
@@ -4777,7 +4938,12 @@ mod tests {
         let mut svg = SvgWriter::new();
         draw_resource_table(
             &mut svg,
-            &ResourceTable { table, size },
+            &ResourceTable {
+                table,
+                size,
+                bundle_id: None,
+                inputs: Vec::new(),
+            },
             Point::new(0.0, 0.0),
         );
         let rendered = svg.finalize();
@@ -4954,5 +5120,34 @@ mod tests {
         assert!(svg.contains("Subsystem: simple"));
         assert!(svg.contains("mission_task"));
         assert!(svg.contains("simple_task"));
+    }
+    #[test]
+    fn stacked_resources_show_consumers_and_directed_dependencies() {
+        let config = config::CuConfig::deserialize_ron(r#"(
+            resources: [
+                (id: "board", provider: "Board"),
+                (id: "radio", provider: "Radio", resources: {"serial": "board.uart", "set": "board.gpio"}),
+                (id: "stream", provider: "Stream", resources: {"serial": "radio.serial"}),
+            ],
+            tasks: [(id: "source", type: "Source", resources: {"input": "stream.rx"})],
+            cnx: [(src: "source", dst: "__nc__", msg: "u32")],
+        )"#).unwrap();
+        let svg = String::from_utf8(render_config_svg(&config, None, None).unwrap()).unwrap();
+        assert!(svg.contains("resource: radio (serial)"));
+        assert!(svg.contains("resource: stream (serial)"));
+        assert!(svg.contains("board.uart → radio.serial"));
+        assert!(svg.contains("radio.serial → stream.serial"));
+        assert!(svg.contains("marker-end=\"url(#endarrow)\""));
+        assert!(svg.contains("task: source"));
+    }
+    #[test]
+    fn logstream_destination_is_a_resource_consumer() {
+        let config = config::CuConfig::deserialize_ron(include_str!(
+            "../../cu29/tests/logstream_configured_runtime.ron"
+        ))
+        .unwrap();
+        let svg = String::from_utf8(render_config_svg(&config, None, None).unwrap()).unwrap();
+        assert!(svg.contains("network.tx"));
+        assert!(svg.contains("system: logstream (ground)"));
     }
 }

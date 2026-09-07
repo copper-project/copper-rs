@@ -15,6 +15,10 @@
         (
             id: "radio",
             provider: "demo::RadioBundle",
+            resources: {
+                "serial": "board.uart1",
+                "set": "board.gpio1",
+            },
             missions: ["Beta"],
         ),
         (
