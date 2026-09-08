@@ -22,9 +22,10 @@ compact_str = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 cu-sensor-payloads = { workspace = true }
-# `default-features = false` keeps glam optional for ROS users: the `Transform3D` accessors this
-# crate uses are backend-independent, so the glam and fallback storage paths behave identically.
-cu-spatial-payloads = { path = "../cu_spatial_payloads", version = "1.2.0-dev", default-features = false }
+cu-spatial-payloads = { path = "../cu_spatial_payloads", version = "1.2.0-dev" }
+# The geometry itself: quaternion extraction from a rotation matrix and the inverse. Same version
+# cu_spatial_payloads uses, and its default `glam` feature is left on so both sides agree.
+glam = { version = "0.33" }
 cu29 = { workspace = true }
 
 [features]

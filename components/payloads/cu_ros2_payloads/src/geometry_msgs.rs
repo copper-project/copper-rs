@@ -209,13 +209,42 @@ use cu_spatial_payloads::{Point3d, Point3f, Transform3D};
 use cu29::units::si::f32::Length as Length32;
 use cu29::units::si::f64::Length as Length64;
 use cu29::units::si::length::meter;
+use glam::{DAffine3, DMat3, DQuat, DVec3};
 
-/// How far a rotation block may stray from orthonormality before it is rejected.
+/// How far a rotation may stray from orthonormality before it is rejected.
 ///
 /// A rotation composed repeatedly drifts, so the check cannot demand exactness; these are set
 /// well above the accumulated error of a long chain and well below any real scale factor.
 const RIGID_TOLERANCE_F64: f64 = 1e-9;
 const RIGID_TOLERANCE_F32: f64 = 1e-5;
+
+/// Read a `Transform3D`'s rotation block as a glam matrix.
+///
+/// `Transform3D::rotation` returns rows (`r[row][column]`) and glam is column-major, so this is
+/// where the two conventions meet. Everything downstream is glam's.
+fn rotation_matrix<T>(rotation: [[T; 3]; 3]) -> DMat3
+where
+    f64: From<T>,
+    T: Copy,
+{
+    DMat3::from_cols(
+        DVec3::new(
+            f64::from(rotation[0][0]),
+            f64::from(rotation[1][0]),
+            f64::from(rotation[2][0]),
+        ),
+        DVec3::new(
+            f64::from(rotation[0][1]),
+            f64::from(rotation[1][1]),
+            f64::from(rotation[2][1]),
+        ),
+        DVec3::new(
+            f64::from(rotation[0][2]),
+            f64::from(rotation[1][2]),
+            f64::from(rotation[2][2]),
+        ),
+    )
+}
 
 /// Reject a rotation block that is not a pure rotation.
 ///
@@ -224,28 +253,26 @@ const RIGID_TOLERANCE_F32: f64 = 1e-5;
 /// reflection, none of which survive the conversion. Dropping them silently would publish a
 /// transform that looks plausible and places everything downstream wrongly, so this is an error
 /// rather than a best-effort projection onto the nearest rotation.
-fn ensure_rigid(rotation: [[f64; 3]; 3], tolerance: f64) -> Result<(), String> {
+///
+/// The check is explicit rather than delegated to `DAffine3::to_scale_rotation_translation`,
+/// which assumes its input is scale-times-rotation and so cannot report shear.
+fn ensure_rigid(rotation: DMat3, tolerance: f64) -> Result<(), String> {
     // R^T R == I says the columns are orthonormal: no scale on any axis and no shear between them.
-    for i in 0..3 {
-        for j in i..3 {
-            let dot: f64 = (0..3).map(|k| rotation[k][i] * rotation[k][j]).sum();
-            let expected = if i == j { 1.0 } else { 0.0 };
-            let deviation = (dot - expected).abs();
-            if deviation > tolerance {
-                return Err(format!(
-                    "Transform3D is not rigid: R^T R deviates from the identity at ({i},{j}) by \
-                     {deviation:.3e} (tolerance {tolerance:.1e}). geometry_msgs/Transform carries \
-                     a unit quaternion and cannot represent scale or shear."
-                ));
-            }
-        }
+    let residual = rotation.transpose() * rotation - DMat3::IDENTITY;
+    let deviation = residual
+        .to_cols_array()
+        .iter()
+        .fold(0.0f64, |worst, value| worst.max(value.abs()));
+    if deviation > tolerance {
+        return Err(format!(
+            "Transform3D is not rigid: R^T R deviates from the identity by {deviation:.3e} \
+             (tolerance {tolerance:.1e}). geometry_msgs/Transform carries a unit quaternion and \
+             cannot represent scale or shear."
+        ));
     }
 
     // An orthonormal matrix with determinant -1 is a reflection, which is also not a rotation.
-    let determinant = rotation[0][0]
-        * (rotation[1][1] * rotation[2][2] - rotation[1][2] * rotation[2][1])
-        - rotation[0][1] * (rotation[1][0] * rotation[2][2] - rotation[1][2] * rotation[2][0])
-        + rotation[0][2] * (rotation[1][0] * rotation[2][1] - rotation[1][1] * rotation[2][0]);
+    let determinant = rotation.determinant();
     if (determinant - 1.0).abs() > tolerance {
         return Err(format!(
             "Transform3D is not a rotation: determinant is {determinant:.6}, not 1. A determinant \
@@ -256,90 +283,45 @@ fn ensure_rigid(rotation: [[f64; 3]; 3], tolerance: f64) -> Result<(), String> {
     Ok(())
 }
 
-/// Shepperd's method: pick the branch whose divisor is largest so the square root never
-/// approaches zero, which is where the naive trace-only formula loses all its precision.
-fn quaternion_from_rotation(r: [[f64; 3]; 3]) -> Quaternion {
-    let trace = r[0][0] + r[1][1] + r[2][2];
-    if trace > 0.0 {
-        let s = (trace + 1.0).sqrt() * 2.0;
-        Quaternion {
-            x: (r[2][1] - r[1][2]) / s,
-            y: (r[0][2] - r[2][0]) / s,
-            z: (r[1][0] - r[0][1]) / s,
-            w: 0.25 * s,
-        }
-    } else if r[0][0] > r[1][1] && r[0][0] > r[2][2] {
-        let s = (1.0 + r[0][0] - r[1][1] - r[2][2]).sqrt() * 2.0;
-        Quaternion {
-            x: 0.25 * s,
-            y: (r[0][1] + r[1][0]) / s,
-            z: (r[0][2] + r[2][0]) / s,
-            w: (r[2][1] - r[1][2]) / s,
-        }
-    } else if r[1][1] > r[2][2] {
-        let s = (1.0 + r[1][1] - r[0][0] - r[2][2]).sqrt() * 2.0;
-        Quaternion {
-            x: (r[0][1] + r[1][0]) / s,
-            y: 0.25 * s,
-            z: (r[1][2] + r[2][1]) / s,
-            w: (r[0][2] - r[2][0]) / s,
-        }
-    } else {
-        let s = (1.0 + r[2][2] - r[0][0] - r[1][1]).sqrt() * 2.0;
-        Quaternion {
-            x: (r[0][2] + r[2][0]) / s,
-            y: (r[1][2] + r[2][1]) / s,
-            z: 0.25 * s,
-            w: (r[1][0] - r[0][1]) / s,
-        }
-    }
-}
-
-/// The inverse of [`quaternion_from_rotation`], for a quaternion already checked to be a unit.
-fn rotation_from_quaternion(q: &Quaternion) -> [[f64; 3]; 3] {
-    let (x, y, z, w) = (q.x, q.y, q.z, q.w);
-    [
-        [
-            1.0 - 2.0 * (y * y + z * z),
-            2.0 * (x * y - z * w),
-            2.0 * (x * z + y * w),
-        ],
-        [
-            2.0 * (x * y + z * w),
-            1.0 - 2.0 * (x * x + z * z),
-            2.0 * (y * z - x * w),
-        ],
-        [
-            2.0 * (x * z - y * w),
-            2.0 * (y * z + x * w),
-            1.0 - 2.0 * (x * x + y * y),
-        ],
-    ]
-}
-
 /// A quaternion off the unit sphere is not a rotation, and normalizing one silently would hide a
-/// sender's bug, so an out-of-tolerance norm is rejected.
-fn ensure_unit_quaternion(q: &Quaternion) -> Result<(), String> {
-    let norm_squared = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
-    if (norm_squared - 1.0).abs() > 1e-6 {
+/// sender's bug, so an out-of-tolerance norm is rejected. The tolerance is glam's own.
+fn unit_quaternion(quaternion: &Quaternion) -> Result<DQuat, String> {
+    let value = DQuat::from_xyzw(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
+    if !value.is_normalized() {
         return Err(format!(
             "geometry_msgs/Quaternion is not a unit quaternion: norm is {:.6}, not 1",
-            norm_squared.sqrt()
+            value.length()
         ));
     }
-    Ok(())
+    Ok(value)
 }
 
-/// Build the 4x4 the `Transform3D` constructor expects: `mat[row][column]`, translation in the
-/// last column, bottom row `[0, 0, 0, 1]`.
-fn homogeneous(rotation: [[f64; 3]; 3], translation: [f64; 3]) -> [[f64; 4]; 4] {
-    let mut mat = [[0.0f64; 4]; 4];
-    for row in 0..3 {
-        mat[row][..3].copy_from_slice(&rotation[row]);
-        mat[row][3] = translation[row];
-    }
-    mat[3][3] = 1.0;
-    mat
+/// The 4x4 the `Transform3D` constructor expects: `mat[row][column]`, translation in the last
+/// column, bottom row `[0, 0, 0, 1]`. glam stores columns, so this transposes the rotation back.
+fn homogeneous(affine: DAffine3) -> [[f64; 4]; 4] {
+    let rotation = affine.matrix3;
+    let translation = affine.translation;
+    [
+        [
+            rotation.x_axis.x,
+            rotation.y_axis.x,
+            rotation.z_axis.x,
+            translation.x,
+        ],
+        [
+            rotation.x_axis.y,
+            rotation.y_axis.y,
+            rotation.z_axis.y,
+            translation.y,
+        ],
+        [
+            rotation.x_axis.z,
+            rotation.y_axis.z,
+            rotation.z_axis.z,
+            translation.z,
+        ],
+        [0.0, 0.0, 0.0, 1.0],
+    ]
 }
 
 /// `f64 -> f32` silently saturates to infinity, so a coordinate that does not fit is an error
@@ -443,15 +425,14 @@ impl RosMsgAdapter<'static> for Point3f {
 }
 
 /// `Transform3D` is a full 4x4 affine, so both ROS targets need the same rigidity guarantee and
-/// the same quaternion extraction. Only the scalar precision differs.
+/// the same quaternion extraction. Only the scalar precision differs, and the geometry itself is
+/// glam's in both cases.
 macro_rules! impl_transform3d_conversions {
     ($scalar:ty, $tolerance:expr, $narrow:path) => {
         impl From<&Transform3D<$scalar>> for Transform {
             fn from(transform: &Transform3D<$scalar>) -> Self {
                 let translation = transform.translation();
-                let rotation = transform.rotation();
-                let rotation: [[f64; 3]; 3] =
-                    core::array::from_fn(|i| core::array::from_fn(|j| f64::from(rotation[i][j])));
+                let rotation = DQuat::from_mat3(&rotation_matrix(transform.rotation()));
 
                 Self {
                     translation: Vector3 {
@@ -459,7 +440,12 @@ macro_rules! impl_transform3d_conversions {
                         y: f64::from(translation[1].get::<meter>()),
                         z: f64::from(translation[2].get::<meter>()),
                     },
-                    rotation: quaternion_from_rotation(rotation),
+                    rotation: Quaternion {
+                        x: rotation.x,
+                        y: rotation.y,
+                        z: rotation.z,
+                        w: rotation.w,
+                    },
                 }
             }
         }
@@ -469,30 +455,23 @@ macro_rules! impl_transform3d_conversions {
             type Error = String;
 
             fn try_from(transform: Transform) -> Result<Self, Self::Error> {
-                ensure_unit_quaternion(&transform.rotation)?;
-                let translation = [
-                    $narrow(
+                let rotation = unit_quaternion(&transform.rotation)?;
+                let translation = DVec3::new(
+                    f64::from($narrow(
                         transform.translation.x,
                         "geometry_msgs/Transform.translation.x",
-                    )?,
-                    $narrow(
+                    )?),
+                    f64::from($narrow(
                         transform.translation.y,
                         "geometry_msgs/Transform.translation.y",
-                    )?,
-                    $narrow(
+                    )?),
+                    f64::from($narrow(
                         transform.translation.z,
                         "geometry_msgs/Transform.translation.z",
-                    )?,
-                ];
-                let mat = homogeneous(
-                    rotation_from_quaternion(&transform.rotation),
-                    [
-                        f64::from(translation[0]),
-                        f64::from(translation[1]),
-                        f64::from(translation[2]),
-                    ],
+                    )?),
                 );
 
+                let mat = homogeneous(DAffine3::from_rotation_translation(rotation, translation));
                 Ok(Self::from_matrix(core::array::from_fn(|i| {
                     core::array::from_fn(|j| mat[i][j] as $scalar)
                 })))
@@ -508,11 +487,7 @@ macro_rules! impl_transform3d_conversions {
             /// or a reflection fails loudly here instead of publishing a quaternion that silently
             /// discarded it.
             fn validate_ros_message(&self) -> Result<(), String> {
-                let rotation = self.rotation();
-                ensure_rigid(
-                    core::array::from_fn(|i| core::array::from_fn(|j| f64::from(rotation[i][j]))),
-                    $tolerance,
-                )
+                ensure_rigid(rotation_matrix(self.rotation()), $tolerance)
             }
 
             fn namespace() -> &'static str {
