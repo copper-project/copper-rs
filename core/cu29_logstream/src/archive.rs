@@ -82,7 +82,7 @@ impl<P: CopperListTuple> NativeArchive<P> {
         decode: ArchiveDecoder<P>,
     ) -> Result<Self> {
         let manifest = received.manifest();
-        manifest.plan.validate()?;
+        manifest.requirements.validate()?;
         if manifest.application_schema != expected_schema {
             return Err(Error::InvalidConfig(
                 "archive requires the matching application schema",

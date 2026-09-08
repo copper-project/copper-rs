@@ -125,8 +125,7 @@ fn configured_runtime_bootstraps_over_udp_in_actual_arrival_order() -> CuResult<
         match event {
             SessionEvent::Manifest(manifest) => {
                 assert_eq!(manifest.manifest().identity.sender_id, 41);
-                assert_eq!(manifest.manifest().plan.destination_id, "ground");
-                assert_eq!(manifest.manifest().plan.symbol_size, 1128);
+                assert_eq!(manifest.manifest().requirements.symbol_size, 1128);
                 assert_eq!(manifest.manifest().application_schema, expected_schema);
                 assert_eq!(manifest.manifest().application_schema.outputs.len(), 1);
                 assert_eq!(
