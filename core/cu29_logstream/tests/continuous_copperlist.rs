@@ -106,13 +106,14 @@ fn partial_copperlist(id: u64) -> CopperList<PartialDataSet> {
 }
 
 #[test]
-fn compact_fragment_fits_and_recovers_a_record_previously_needing_two_symbols() {
+fn compact_record_fits_and_recovers_a_payload_previously_needing_two_symbols() {
     let identity = StreamIdentity {
         session_id: *b"test-session-001",
         sender_id: 7,
     };
-    // A 140-byte record needed two 160-byte symbols with the former 27-byte header.
-    let record = encode_record(RecordKind::CopperList, 42, &[0xa5; 87]).unwrap();
+    // This payload needed two 160-byte symbols with the former 53-byte record
+    // header. It now fills one symbol including the 20-byte fragment header.
+    let record = encode_record(RecordKind::CopperList, 42, &[0xa5; 95]).unwrap();
     assert_eq!(record.len(), 140);
     for field in [Field::Gf2, Field::Gf256] {
         let config = RlcConfig::new(SYMBOL_SIZE, WINDOW_SYMBOLS, field).unwrap();
