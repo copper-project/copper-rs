@@ -1278,7 +1278,12 @@ mod tests {
                 assert_eq!(bottom[start], '╰');
                 assert_eq!(bottom[start + panel_width - 1], '╯');
             }
-            let headers: Vec<_> = lines[1].match_indices("Value").map(|(i, _)| i).collect();
+            let header: Vec<_> = lines[1].chars().collect();
+            let headers: Vec<_> = header
+                .windows(5)
+                .enumerate()
+                .filter_map(|(i, cells)| (cells == ['V', 'a', 'l', 'u', 'e']).then_some(i))
+                .collect();
             assert_eq!(headers.len(), 3);
             assert_eq!(headers[1] - headers[0], panel_width);
             assert_eq!(headers[2] - headers[1], panel_width);
