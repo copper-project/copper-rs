@@ -190,6 +190,13 @@ Implications:
 - macOS regressions still matter because they are exercised in CI.
 - Do not assume feature parity or deep support on Windows.
 
+## Documentation Scope
+
+- Describe what a component does and how to use it. Never describe what is absent or list unrelated features it does not implement.
+- Keep generic component documentation generic. Put device-specific configuration, lifecycle details, and wiring in that device's component documentation or integration example.
+- Explain behavior, requirements, and errors directly, in terms that help the reader use the documented component. Avoid contrasts with unrelated components and implementation history.
+- Apply these rules to READMEs, rustdoc, code comments, and PR descriptions.
+
 ## Practical Development Notes
 
 - Do not paper over issues just to make something work.

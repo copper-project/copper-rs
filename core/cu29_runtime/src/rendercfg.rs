@@ -166,9 +166,28 @@ const RESOURCE_LEGEND_ITEMS: [(&str, &str); 3] = [
     ("Shared", RESOURCE_SHARED_BG),
     ("Unused", RESOURCE_UNUSED_BG),
 ];
-const LINUX_RESOURCE_SLOT_NAMES: [&str; 15] = [
-    "serial0", "serial1", "serial2", "serial3", "serial4", "serial5", "i2c0", "i2c1", "i2c2",
-    "gpio0", "gpio1", "gpio2", "gpio3", "gpio4", "gpio5",
+const LINUX_RESOURCE_SLOT_NAMES: [&str; 21] = [
+    "serial0",
+    "serial1",
+    "serial2",
+    "serial3",
+    "serial4",
+    "serial5",
+    "i2c0",
+    "i2c1",
+    "i2c2",
+    "gpio0",
+    "gpio1",
+    "gpio2",
+    "gpio3",
+    "gpio4",
+    "gpio5",
+    "serial0_rts",
+    "serial1_rts",
+    "serial2_rts",
+    "serial3_rts",
+    "serial4_rts",
+    "serial5_rts",
 ];
 
 #[derive(Parser)]
