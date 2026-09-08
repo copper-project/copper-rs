@@ -16,7 +16,6 @@ pub enum Error {
     UnknownRecordKind(u8),
     UnknownFecScheme(u8),
     UnknownSymbolKind(u8),
-    PayloadLengthMismatch,
     CrcMismatch,
     InvalidFecMetadata(&'static str),
     InvalidFragment(&'static str),
@@ -59,7 +58,6 @@ impl Display for Error {
             Self::UnknownRecordKind(value) => write!(formatter, "unknown record kind {value}"),
             Self::UnknownFecScheme(value) => write!(formatter, "unknown FEC scheme {value}"),
             Self::UnknownSymbolKind(value) => write!(formatter, "unknown FEC symbol kind {value}"),
-            Self::PayloadLengthMismatch => formatter.write_str("packet payload length mismatch"),
             Self::CrcMismatch => formatter.write_str("packet CRC32C mismatch"),
             Self::InvalidFecMetadata(message) => {
                 write!(formatter, "invalid FEC metadata: {message}")
