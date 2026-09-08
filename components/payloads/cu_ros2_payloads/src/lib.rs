@@ -1,4 +1,7 @@
 pub mod builtin;
+mod fixed_array;
+pub mod geometry_msgs;
+pub mod nav_msgs;
 pub mod sensor_msgs;
 pub mod std_msgs;
 
@@ -14,6 +17,28 @@ use std::convert::From;
 #[macro_export]
 macro_rules! ros_type_name {
     ($t:ty) => {{ std::any::type_name::<$t>().rsplit("::").next().unwrap() }};
+}
+
+/// A ROS 2 message type, identified the way rmw needs it on the wire.
+///
+/// The three constants are exactly what a bridge puts in an rmw_zenoh key expression
+/// (`{domain}/{topic}/{namespace}::msg::dds_::{TYPE_NAME}_/{TYPE_HASH}`), so implementing this
+/// keeps the identity next to the struct instead of copied into every adapter that publishes it.
+///
+/// [`TYPE_HASH`](RosMessage::TYPE_HASH) is the RIHS01 hash of the **Jazzy** IDL. Humble predates
+/// type hashes entirely; the blanket [`RosBridgeAdapter`] impl already substitutes
+/// `"TypeHashNotSupported"` under the `humble` feature, so this constant needs no distro `cfg`.
+///
+/// Only messages with a hash verified against a ROS 2 Jazzy install implement this. Sub-messages
+/// that are never published on their own (`Point`, `Pose`, `Transform`, `RegionOfInterest`, ...)
+/// deliberately do not, rather than carry a guessed literal.
+pub trait RosMessage {
+    /// The ROS namespace, such as `"geometry_msgs"`.
+    const NAMESPACE: &'static str;
+    /// The message name, such as `"TransformStamped"`.
+    const TYPE_NAME: &'static str;
+    /// The RIHS01 type hash of the Jazzy IDL.
+    const TYPE_HASH: &'static str;
 }
 
 /// ROS adaptation trait to convert payload data to ROS compatible message.
@@ -107,5 +132,59 @@ where
 
     fn from_ros_message(msg: Self::RosMessage) -> Result<Self, String> {
         T::try_from(msg).map_err(|e| e.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RosMessage;
+
+    /// Every [`RosMessage::TYPE_HASH`] must be a well-formed RIHS01 literal, and no two types may
+    /// share one. A wrong or duplicated hash is invisible at runtime: it goes into the rmw_zenoh
+    /// key expression, so the subscriber simply never matches and neither side reports an error.
+    #[test]
+    fn type_hashes_are_well_formed_and_distinct() {
+        fn entry<T: RosMessage>() -> (&'static str, &'static str, &'static str) {
+            (T::NAMESPACE, T::TYPE_NAME, T::TYPE_HASH)
+        }
+
+        let entries = [
+            entry::<crate::geometry_msgs::PoseStamped>(),
+            entry::<crate::geometry_msgs::TransformStamped>(),
+            entry::<crate::geometry_msgs::Twist>(),
+            entry::<crate::nav_msgs::Odometry>(),
+            entry::<crate::nav_msgs::Path>(),
+            entry::<crate::sensor_msgs::CameraInfo>(),
+            entry::<crate::sensor_msgs::CompressedImage>(),
+            entry::<crate::sensor_msgs::Image>(),
+            entry::<crate::sensor_msgs::Imu>(),
+            entry::<crate::sensor_msgs::MagneticField>(),
+            entry::<crate::sensor_msgs::PointCloud2>(),
+            entry::<crate::sensor_msgs::PointField>(),
+        ];
+
+        for (namespace, type_name, hash) in entries {
+            assert!(!namespace.is_empty(), "{type_name} has no namespace");
+            let digest = hash
+                .strip_prefix("RIHS01_")
+                .unwrap_or_else(|| panic!("{namespace}/{type_name} hash lacks the RIHS01 prefix"));
+            assert_eq!(
+                digest.len(),
+                64,
+                "{namespace}/{type_name} hash is not a SHA-256 digest"
+            );
+            assert!(
+                digest
+                    .chars()
+                    .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()),
+                "{namespace}/{type_name} hash is not lowercase hex"
+            );
+        }
+
+        let mut hashes: Vec<&str> = entries.iter().map(|(_, _, hash)| *hash).collect();
+        hashes.sort_unstable();
+        let count = hashes.len();
+        hashes.dedup();
+        assert_eq!(count, hashes.len(), "two message types share a type hash");
     }
 }
