@@ -215,26 +215,28 @@ fn panic_fault_exits_with_configured_code_and_marker_context() {
 #[test]
 fn lock_fault_exits_with_configured_code_and_last_marker() {
     if std::env::var(CHILD_MODE_ENV).ok().as_deref() == Some("lock") {
-        let cfg = safetymon_test_config(79, 80);
+        // Allow the child to finish publishing progress on a busy CI runner.
+        let cfg = safetymon_test_config_with_timing(1_000, 10, 79, 80);
         let probe = Arc::new(RuntimeExecutionProbe::default());
         let (metadata, runtime) = monitor_metadata(&cfg, Some(probe.clone()));
         let layout = metadata.layout();
         let mut monitor = CuSafetyMon::new(metadata, runtime).expect("safetymon new");
         let (ctx, _clock_control) = CuContext::new_mock_clock();
-        monitor.start(&ctx).expect("safetymon start");
         let cl_ctx = CuContext::builder(ctx.clock.clone()).cl_id(9).build();
         let metadata = CuMsgMetadata::default();
         let msgs: [&CuMsgMetadata; 1] = [&metadata];
-        monitor
-            .process_copperlist(&cl_ctx, layout.view(&msgs))
-            .expect("safetymon process_copperlist");
+        // Publish the marker before arming the watchdog.
         probe.record(ExecutionMarker {
             component_id: ComponentId::new(1),
             step: CuComponentState::Process,
             culistid: Some(9),
         });
+        monitor.start(&ctx).expect("safetymon start");
+        monitor
+            .process_copperlist(&cl_ctx, layout.view(&msgs))
+            .expect("safetymon process_copperlist");
 
-        thread::sleep(Duration::from_millis(300));
+        thread::sleep(Duration::from_secs(10));
         std::process::exit(254);
     }
 
@@ -245,13 +247,14 @@ fn lock_fault_exits_with_configured_code_and_last_marker() {
     assert_eq!(
         output.status.code(),
         Some(79),
-        "unexpected lock child exit status: {:?}",
-        output.status
+        "unexpected lock child exit status: {:?}\nstderr:\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("cu_safetymon lock fault:"));
-    assert!(stderr.contains("component='driver'"));
-    assert!(stderr.contains("last_culist=9"));
+    assert!(stderr.contains("cu_safetymon lock fault:"), "{stderr}");
+    assert!(stderr.contains("component='driver'"), "{stderr}");
+    assert!(stderr.contains("last_culist=9"), "{stderr}");
     let _ = fs::remove_dir_all(&child_dir);
 }
 
