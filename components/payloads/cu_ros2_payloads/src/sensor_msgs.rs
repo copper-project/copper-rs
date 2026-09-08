@@ -193,6 +193,119 @@ impl RosMessage for MagneticField {
         "RIHS01_e80f32f56a20486c9923008fc1a1db07bbb273cbbf6a5b3bfa00835ee00e4dff";
 }
 
+// sensor_msgs/JointState
+//
+// The arrays are parallel to `name` and each one may be empty, which the message defines as "not
+// reported" rather than "zero": a robot that publishes positions but measures no effort sends an
+// empty `effort`, not a run of zeros. Anything else must have the same length as `name`, since
+// that is the only thing associating a value with a joint.
+//
+// `effort` is newtons or newton-metres. A servo that reports a unitless load or PWM duty has not
+// measured effort, and putting that number here is indistinguishable downstream from a real
+// torque measurement.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+pub struct JointState {
+    pub header: Header,
+    pub name: Vec<CompactString>,
+    pub position: Vec<f64>,
+    pub velocity: Vec<f64>,
+    pub effort: Vec<f64>,
+}
+
+impl RosMessage for JointState {
+    const NAMESPACE: &'static str = "sensor_msgs";
+    const TYPE_NAME: &'static str = "JointState";
+    const TYPE_HASH: &'static str =
+        "RIHS01_a13ee3a330e346c9d87b5aa18d24e11690752bd33a0350f11c5882bc9179260e";
+}
+
+// sensor_msgs/BatteryState
+//
+// Every field after `voltage` documents NaN as its "unmeasured" value, so a driver that reads
+// only a bus voltage fills the rest with NaN. Zero is a measurement — "flat battery", "0 degrees
+// C", "0% charge" — and no consumer can tell an invented zero from a real one. For the same
+// reason this derives no `Default`: a zeroed BatteryState is a lie in seven fields at once, and
+// the three `power_supply_*` enums have an explicit `_UNKNOWN = 0` precisely so that unknown is
+// stated rather than defaulted into.
+//
+// The wire layout is worth stating because it is easy to "tidy" wrongly: the three enums are
+// bytes and `present` is one byte (CDR has no packed bools), so the four of them occupy four
+// consecutive bytes between `percentage` and `cell_voltage`. Reordering any two same-width
+// fields here still round-trips through this struct, still passes the type hash, and decodes
+// into the wrong field on every ROS consumer.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct BatteryState {
+    pub header: Header,
+    /// Volts.
+    pub voltage: f32,
+    /// Degrees Celsius; NaN if unmeasured.
+    pub temperature: f32,
+    /// Amperes, negative when discharging; NaN if unmeasured.
+    pub current: f32,
+    /// Current charge in Ah; NaN if unmeasured.
+    pub charge: f32,
+    /// Last full capacity in Ah; NaN if unmeasured.
+    pub capacity: f32,
+    /// Design capacity in Ah; NaN if unmeasured.
+    pub design_capacity: f32,
+    /// Charge fraction on a 0 to 1 range; NaN if unmeasured.
+    pub percentage: f32,
+    /// One of the `POWER_SUPPLY_STATUS_*` constants.
+    pub power_supply_status: u8,
+    /// One of the `POWER_SUPPLY_HEALTH_*` constants.
+    pub power_supply_health: u8,
+    /// One of the `POWER_SUPPLY_TECHNOLOGY_*` constants.
+    pub power_supply_technology: u8,
+    /// True if the battery is present.
+    pub present: bool,
+    /// Per-cell voltages; NaN per cell if the count is known but the voltages are not.
+    pub cell_voltage: Vec<f32>,
+    /// Per-cell temperatures, same convention as `cell_voltage`.
+    pub cell_temperature: Vec<f32>,
+    /// Where the battery is inserted (slot number or plug).
+    pub location: CompactString,
+    pub serial_number: CompactString,
+}
+
+/// The enumerations `sensor_msgs/BatteryState` defines for its three `u8` fields.
+///
+/// They are part of the message definition, not a convenience: the fields are bare `u8`s, so
+/// without them every publisher writes a magic number and every consumer compares against one.
+impl BatteryState {
+    pub const POWER_SUPPLY_STATUS_UNKNOWN: u8 = 0;
+    pub const POWER_SUPPLY_STATUS_CHARGING: u8 = 1;
+    pub const POWER_SUPPLY_STATUS_DISCHARGING: u8 = 2;
+    pub const POWER_SUPPLY_STATUS_NOT_CHARGING: u8 = 3;
+    pub const POWER_SUPPLY_STATUS_FULL: u8 = 4;
+
+    pub const POWER_SUPPLY_HEALTH_UNKNOWN: u8 = 0;
+    pub const POWER_SUPPLY_HEALTH_GOOD: u8 = 1;
+    pub const POWER_SUPPLY_HEALTH_OVERHEAT: u8 = 2;
+    pub const POWER_SUPPLY_HEALTH_DEAD: u8 = 3;
+    pub const POWER_SUPPLY_HEALTH_OVERVOLTAGE: u8 = 4;
+    pub const POWER_SUPPLY_HEALTH_UNSPEC_FAILURE: u8 = 5;
+    pub const POWER_SUPPLY_HEALTH_COLD: u8 = 6;
+    pub const POWER_SUPPLY_HEALTH_WATCHDOG_TIMER_EXPIRE: u8 = 7;
+    pub const POWER_SUPPLY_HEALTH_SAFETY_TIMER_EXPIRE: u8 = 8;
+
+    pub const POWER_SUPPLY_TECHNOLOGY_UNKNOWN: u8 = 0;
+    pub const POWER_SUPPLY_TECHNOLOGY_NIMH: u8 = 1;
+    pub const POWER_SUPPLY_TECHNOLOGY_LION: u8 = 2;
+    pub const POWER_SUPPLY_TECHNOLOGY_LIPO: u8 = 3;
+    pub const POWER_SUPPLY_TECHNOLOGY_LIFE: u8 = 4;
+    pub const POWER_SUPPLY_TECHNOLOGY_NICD: u8 = 5;
+    pub const POWER_SUPPLY_TECHNOLOGY_LIMN: u8 = 6;
+    pub const POWER_SUPPLY_TECHNOLOGY_TERNARY: u8 = 7;
+    pub const POWER_SUPPLY_TECHNOLOGY_VRLA: u8 = 8;
+}
+
+impl RosMessage for BatteryState {
+    const NAMESPACE: &'static str = "sensor_msgs";
+    const TYPE_NAME: &'static str = "BatteryState";
+    const TYPE_HASH: &'static str =
+        "RIHS01_4bee5dfce981c98faa6828b868307a0a73f992ed0789f374ee96c8f840e69741";
+}
+
 impl<const N: usize> RosMsgAdapter<'static> for PointCloudSoa<N> {
     type Output = PointCloud2;
 
@@ -1085,5 +1198,118 @@ mod message_tests {
                 .expect("cdr encode succeeds");
         // 4-byte encapsulation header then twelve bare f64 — no uint32 count.
         assert_eq!(bytes.len(), 4 + 12 * 8);
+    }
+
+    #[test]
+    fn joint_state_roundtrips_with_an_empty_optional_array() {
+        // A robot that measures position and velocity but no torque leaves `effort` empty; the
+        // message defines that as "not reported", and the parallel arrays are still associated
+        // with `name` by index.
+        let value = JointState {
+            header: Header {
+                stamp: crate::builtin::Time {
+                    sec: 1_700_000_000,
+                    nanosec: 500_000_000,
+                },
+                frame_id: "base_link".into(),
+            },
+            name: vec!["left_wheel".into(), "right_wheel".into()],
+            position: vec![0.25, -0.5],
+            velocity: vec![1.0, -1.0],
+            effort: Vec::new(),
+        };
+
+        let bytes =
+            cdr::serialize::<_, _, cdr::CdrLe>(&value, cdr::Infinite).expect("cdr encode succeeds");
+        let decoded: JointState = cdr::deserialize(bytes.as_slice()).expect("cdr decode succeeds");
+        assert_eq!(decoded, value);
+        assert_eq!(decoded.name.len(), 2);
+        // An empty sequence still writes its uint32 length. Dropping it would shift every field
+        // after it, and there are none here only because `effort` is last.
+        assert_eq!(bytes[bytes.len() - 4..], 0u32.to_le_bytes());
+    }
+
+    #[test]
+    fn battery_state_roundtrips_and_preserves_unmeasured_nan() {
+        // Compared field by field rather than with `assert_eq!` on the struct: the honest value
+        // of an unmeasured field is NaN, and NaN != NaN.
+        let value = BatteryState {
+            header: Header {
+                stamp: crate::builtin::Time { sec: 7, nanosec: 8 },
+                frame_id: "battery".into(),
+            },
+            voltage: 12.1,
+            temperature: f32::NAN,
+            current: f32::NAN,
+            charge: f32::NAN,
+            capacity: f32::NAN,
+            design_capacity: f32::NAN,
+            percentage: f32::NAN,
+            power_supply_status: BatteryState::POWER_SUPPLY_STATUS_DISCHARGING,
+            power_supply_health: BatteryState::POWER_SUPPLY_HEALTH_UNKNOWN,
+            power_supply_technology: BatteryState::POWER_SUPPLY_TECHNOLOGY_LIPO,
+            present: true,
+            cell_voltage: vec![4.05, 4.1, 3.95],
+            cell_temperature: Vec::new(),
+            location: "slot0".into(),
+            serial_number: "".into(),
+        };
+
+        let bytes =
+            cdr::serialize::<_, _, cdr::CdrLe>(&value, cdr::Infinite).expect("cdr encode succeeds");
+        let decoded: BatteryState =
+            cdr::deserialize(bytes.as_slice()).expect("cdr decode succeeds");
+
+        assert_eq!(decoded.header, value.header);
+        assert_eq!(decoded.voltage, 12.1);
+        assert!(decoded.temperature.is_nan(), "NaN must survive the wire");
+        assert!(decoded.percentage.is_nan());
+        assert_eq!(decoded.power_supply_status, 2);
+        assert_eq!(decoded.power_supply_technology, 3);
+        assert!(decoded.present);
+        assert_eq!(decoded.cell_voltage, vec![4.05, 4.1, 3.95]);
+        assert!(decoded.cell_temperature.is_empty());
+        assert_eq!(decoded.location, "slot0");
+        assert_eq!(decoded.serial_number, "");
+    }
+
+    #[test]
+    fn battery_state_writes_the_enums_and_present_as_four_bytes() {
+        // A round trip through the same struct cannot detect a field order that disagrees with
+        // the .msg: swapping `charge` and `capacity`, or `present` and `power_supply_status`, is
+        // still symmetric here, still the same length, still the same type hash — and decodes
+        // into the wrong field on every ROS consumer. So the bytes are checked directly.
+        let value = BatteryState {
+            header: Header::default(),
+            voltage: 1.0,
+            temperature: 2.0,
+            current: 3.0,
+            charge: 4.0,
+            capacity: 5.0,
+            design_capacity: 6.0,
+            percentage: 7.0,
+            power_supply_status: BatteryState::POWER_SUPPLY_STATUS_FULL,
+            power_supply_health: BatteryState::POWER_SUPPLY_HEALTH_GOOD,
+            power_supply_technology: BatteryState::POWER_SUPPLY_TECHNOLOGY_LION,
+            present: true,
+            cell_voltage: Vec::new(),
+            cell_temperature: Vec::new(),
+            location: "".into(),
+            serial_number: "".into(),
+        };
+
+        let bytes =
+            cdr::serialize::<_, _, cdr::CdrLe>(&value, cdr::Infinite).expect("cdr encode succeeds");
+        // 4 encapsulation + 8 stamp + 4 length + 1 for the empty frame_id "\0" = 17, padded to
+        // 20 for the first f32.
+        let floats = 20;
+        let mut expected = Vec::new();
+        for value in [1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0] {
+            expected.extend_from_slice(&value.to_le_bytes());
+        }
+        // status, health, technology, present: four bytes, no padding and no widening. CDR has
+        // no packed bool, so `present` is a whole byte of its own.
+        expected.extend_from_slice(&[4, 1, 2, 1]);
+        assert_eq!(&bytes[floats..floats + 32], &expected[..]);
     }
 }
