@@ -227,7 +227,6 @@ fn sender_config(identity: StreamIdentity) -> CuResult<LogStreamSenderConfig> {
         .map_err(|error| CuError::from(error.to_string()))?;
     let continuous = ContinuousSenderConfig {
         identity,
-        first_packet_sequence: 0,
         lane: Lane::ReplayCritical,
         fec,
         max_record_bytes: RECORD_BYTES,
@@ -249,7 +248,6 @@ fn sender_config(identity: StreamIdentity) -> CuResult<LogStreamSenderConfig> {
         recovery: RecoverySenderConfig {
             finite: FiniteObjectSenderConfig {
                 identity,
-                first_packet_sequence: 0,
                 lane: Lane::LargeObject,
                 symbol_size: SYMBOL_SIZE as u16,
                 max_object_bytes: 64 * 1024,

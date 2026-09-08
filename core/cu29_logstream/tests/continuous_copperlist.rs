@@ -104,7 +104,6 @@ fn partial_copperlists_survive_a_deterministically_simulated_bad_link() {
     let fec_config = RlcConfig::new(SYMBOL_SIZE, WINDOW_SYMBOLS, Field::Gf256).unwrap();
     let mut encoder = ContinuousEncoder::<MAX_SYMBOL_SIZE, WINDOW_SYMBOLS>::new(
         identity,
-        u64::MAX - 5,
         Lane::ReplayCritical,
         fec_config,
         4_096,
@@ -207,7 +206,6 @@ fn missing_unrepaired_fragments_do_not_claim_semantic_recovery() {
     let fec_config = RlcConfig::new(SYMBOL_SIZE, WINDOW_SYMBOLS, Field::Gf256).unwrap();
     let mut encoder = ContinuousEncoder::<MAX_SYMBOL_SIZE, WINDOW_SYMBOLS>::new(
         identity,
-        0,
         Lane::ReplayCritical,
         fec_config,
         4_096,
@@ -293,7 +291,6 @@ fn receiver_reports_an_incomplete_record_when_its_missing_fragment_expires() {
     let fec_config = RlcConfig::new(SYMBOL_SIZE, 16, Field::Gf256).unwrap();
     let mut encoder = ContinuousEncoder::<MAX_SYMBOL_SIZE, WINDOW_SYMBOLS>::new(
         identity,
-        0,
         Lane::ReplayCritical,
         fec_config,
         4_096,
@@ -367,7 +364,6 @@ fn sender_drops_transport_backpressure_without_blocking_the_output_worker() {
         BackpressureTx::default(),
         ContinuousSenderConfig {
             identity,
-            first_packet_sequence: 0,
             lane: Lane::ReplayCritical,
             fec,
             max_record_bytes: 4_096,
@@ -401,7 +397,6 @@ fn receiver_runs_past_many_windows_with_bounded_state_and_wrapping_sequences() {
     let fec_config = RlcConfig::new(SYMBOL_SIZE, WINDOW_SYMBOLS, Field::Gf256).unwrap();
     let mut encoder = ContinuousEncoder::<MAX_SYMBOL_SIZE, WINDOW_SYMBOLS>::new(
         identity,
-        u64::MAX - 32,
         Lane::ReplayCritical,
         fec_config,
         4_096,
@@ -458,7 +453,6 @@ fn receiver_coalesces_wholly_missing_records_after_the_rlc_window_expires() {
     let fec_config = RlcConfig::new(SYMBOL_SIZE, 16, Field::Gf256).unwrap();
     let mut encoder = ContinuousEncoder::<MAX_SYMBOL_SIZE, WINDOW_SYMBOLS>::new(
         identity,
-        0,
         Lane::ReplayCritical,
         fec_config,
         4_096,
@@ -533,7 +527,6 @@ fn consumer_failure_leaves_the_record_available_for_retry() {
     let fec_config = RlcConfig::new(SYMBOL_SIZE, WINDOW_SYMBOLS, Field::Gf256).unwrap();
     let mut encoder = ContinuousEncoder::<MAX_SYMBOL_SIZE, WINDOW_SYMBOLS>::new(
         identity,
-        0,
         Lane::ReplayCritical,
         fec_config,
         4_096,

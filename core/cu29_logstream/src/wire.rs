@@ -6,8 +6,8 @@ use alloc::vec::Vec;
 use crc::{CRC_32_ISCSI, Crc};
 
 const PACKET_MAGIC: [u8; 4] = *b"CULS";
-pub const PACKET_HEADER_LEN: usize = 66;
-const CRC_OFFSET: usize = 62;
+pub const PACKET_HEADER_LEN: usize = 58;
+const CRC_OFFSET: usize = 54;
 const CRC32C: Crc<u32> = Crc::<u32>::new(&CRC_32_ISCSI);
 
 /// Independently scheduled transport lanes.
@@ -85,7 +85,6 @@ pub struct WireHeader {
     pub symbol_kind: FecSymbolKind,
     pub session_id: [u8; 16],
     pub sender_id: u32,
-    pub packet_sequence: u64,
     pub object_id: u64,
     /// Scheme-specific fixed-width FEC metadata.
     pub fec_metadata: [u8; 12],
@@ -133,7 +132,7 @@ impl<'a> WirePacketRef<'a> {
         if bytes[..4] != PACKET_MAGIC {
             return Err(Error::InvalidMagic);
         }
-        let payload_len = u16::from_be_bytes(bytes[60..62].try_into().unwrap()) as usize;
+        let payload_len = u16::from_be_bytes(bytes[52..54].try_into().unwrap()) as usize;
         if bytes.len() != PACKET_HEADER_LEN + payload_len {
             return Err(Error::PayloadLengthMismatch);
         }
@@ -151,7 +150,7 @@ impl<'a> WirePacketRef<'a> {
         let mut session_id = [0_u8; 16];
         session_id.copy_from_slice(&bytes[8..24]);
         let mut fec_metadata = [0_u8; 12];
-        fec_metadata.copy_from_slice(&bytes[44..56]);
+        fec_metadata.copy_from_slice(&bytes[36..48]);
 
         Ok(Self {
             header: WireHeader {
@@ -161,10 +160,9 @@ impl<'a> WirePacketRef<'a> {
                 symbol_kind: FecSymbolKind::try_from(bytes[7])?,
                 session_id,
                 sender_id: u32::from_be_bytes(bytes[24..28].try_into().unwrap()),
-                packet_sequence: u64::from_be_bytes(bytes[28..36].try_into().unwrap()),
-                object_id: u64::from_be_bytes(bytes[36..44].try_into().unwrap()),
+                object_id: u64::from_be_bytes(bytes[28..36].try_into().unwrap()),
                 fec_metadata,
-                fragment_count: u32::from_be_bytes(bytes[56..60].try_into().unwrap()),
+                fragment_count: u32::from_be_bytes(bytes[48..52].try_into().unwrap()),
             },
             payload: &bytes[PACKET_HEADER_LEN..],
         })
@@ -194,11 +192,10 @@ pub fn encode_packet_into(header: WireHeader, payload: &[u8], output: &mut [u8])
     bytes[7] = header.symbol_kind as u8;
     bytes[8..24].copy_from_slice(&header.session_id);
     bytes[24..28].copy_from_slice(&header.sender_id.to_be_bytes());
-    bytes[28..36].copy_from_slice(&header.packet_sequence.to_be_bytes());
-    bytes[36..44].copy_from_slice(&header.object_id.to_be_bytes());
-    bytes[44..56].copy_from_slice(&header.fec_metadata);
-    bytes[56..60].copy_from_slice(&header.fragment_count.to_be_bytes());
-    bytes[60..62].copy_from_slice(&payload_len.to_be_bytes());
+    bytes[28..36].copy_from_slice(&header.object_id.to_be_bytes());
+    bytes[36..48].copy_from_slice(&header.fec_metadata);
+    bytes[48..52].copy_from_slice(&header.fragment_count.to_be_bytes());
+    bytes[52..54].copy_from_slice(&payload_len.to_be_bytes());
     bytes[PACKET_HEADER_LEN..].copy_from_slice(payload);
     let checksum = CRC32C.checksum(bytes);
     bytes[CRC_OFFSET..PACKET_HEADER_LEN].copy_from_slice(&checksum.to_be_bytes());
@@ -219,7 +216,6 @@ mod tests {
                 symbol_kind: FecSymbolKind::Source,
                 session_id: [0x11; 16],
                 sender_id: 0x2233_4455,
-                packet_sequence: 0x6677_8899_aabb_ccdd,
                 object_id: 0x0102_0304_0506_0708,
                 fec_metadata: [0, 0, 0, 0, 3, 0, 0, 8, 1, 0, 1, 1],
                 fragment_count: 1,
@@ -232,11 +228,12 @@ mod tests {
     fn fixed_header_has_a_stable_golden_prefix() {
         let encoded = fixture().encode().unwrap();
         assert_eq!(&encoded[..8], &[b'C', b'U', b'L', b'S', 2, 2, 2, 0]);
-        assert_eq!(encoded.len(), 66 + fixture().payload.len());
+        assert_eq!(encoded.len(), 58 + fixture().payload.len());
         assert_eq!(&encoded[8..24], &[0x11; 16]);
         assert_eq!(&encoded[24..28], &0x2233_4455_u32.to_be_bytes());
-        assert_eq!(&encoded[60..62], &12_u16.to_be_bytes());
-        assert_eq!(&encoded[66..], fixture().payload);
+        assert_eq!(&encoded[28..36], &0x0102_0304_0506_0708_u64.to_be_bytes());
+        assert_eq!(&encoded[52..54], &12_u16.to_be_bytes());
+        assert_eq!(&encoded[58..], fixture().payload);
         assert_eq!(WirePacket::decode(&encoded).unwrap(), fixture());
     }
 

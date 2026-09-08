@@ -200,15 +200,17 @@ length field. All multi-byte header fields use big endian encoding:
 
 | Layer | Header fields, in wire order | Bytes |
 | --- | --- | ---: |
-| Packet | magic (4), lane (1), record kind (1), FEC scheme (1), symbol kind (1), session ID (16), sender ID (4), packet sequence (8), object ID (8), FEC metadata (12), fragment count (4), payload length (2), CRC32C (4) | 66 |
+| Packet | magic (4), lane (1), record kind (1), FEC scheme (1), symbol kind (1), session ID (16), sender ID (4), object ID (8), FEC metadata (12), fragment count (4), payload length (2), CRC32C (4) | 58 |
 | Record | magic (4), kind (1), object ID (8), payload length (8), BLAKE3 digest (32) | 53 |
 | RLC fragment | magic (4), kind (1), object ID (8), record length (4), fragment index (4), fragment count (4), fragment length (2) | 27 |
 
-Compared with the prior headers, this saves 6 bytes per packet, 3 per record,
+Compared with the prior headers, this saves 14 bytes per packet, 3 per record,
 and 5 per RLC source fragment, plus one bincode byte per session manifest.
+Packet sequence counters are not transmitted; recovery and deduplication use
+FEC symbol identifiers and record identities.
 Fixed-size FEC symbols use the recovered space for fragment payload; this can
 reduce fragment counts rather than shortening each symbol. Existing symbol
-storage capacity is unchanged: a 1200-byte MTU now emits at most 1194-byte packets.
+storage capacity is unchanged: a 1200-byte MTU now emits at most 1186-byte packets.
 
 The native codec already carries original/captured presence. There is no proof envelope,
 per-list verification allocation, or new continuity record. The archive writes the

@@ -220,7 +220,6 @@ impl SenderCore {
             ))?;
         let continuous = Box::new(ContinuousEncoder::new(
             config.continuous.identity,
-            config.continuous.first_packet_sequence,
             config.continuous.lane,
             config.continuous.fec,
             config.continuous.max_record_bytes,
