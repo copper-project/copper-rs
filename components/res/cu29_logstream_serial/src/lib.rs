@@ -1,21 +1,24 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 //! Serial packet framing: 0x7e delimiters, 0x7d escaping (byte XOR 0x20).
-//! LogStream's existing packet CRC protects contents. RX resynchronizes at the
+//! A framing CRC32C protects the complete packet. RX resynchronizes at the
 //! next delimiter after corruption. TX owns exactly one pending encoded frame.
 //! Encoding runs in the LogStream sender worker, outside the runtime hot path.
 use core::{fmt, marker::PhantomData};
+use crc::{CRC_32_ISCSI, Crc};
 use cu_serial::SerialIo;
 use cu29::prelude::*;
 use cu29::resource::{
     BundleContext, NamedResourceBundleDecl, ResourceBindings, ResourceBundle, ResourceBundleDecl,
     ResourceManager,
 };
-use cu29_logstream::{CuStreamRx, CuStreamRxError, CuStreamTx, CuStreamTxError, WirePacketRef};
+use cu29_logstream::{CuStreamRx, CuStreamRxError, CuStreamTx, CuStreamTxError};
 
 pub const DEFAULT_FRAME_CAPACITY: usize = 514;
 const DELIMITER: u8 = 0x7e;
 const ESCAPE: u8 = 0x7d;
+const CHECKSUM_BYTES: usize = 4;
+const CRC32C: Crc<u32> = Crc::<u32>::new(&CRC_32_ISCSI);
 
 pub struct SerialLogStreamTx<S, const N: usize = DEFAULT_FRAME_CAPACITY> {
     serial: S,
@@ -33,7 +36,7 @@ impl<S, const N: usize> SerialLogStreamTx<S, N> {
         }
     }
     pub const fn max_packet_bytes() -> usize {
-        N.saturating_sub(2) / 2
+        (N.saturating_sub(2) / 2).saturating_sub(CHECKSUM_BYTES)
     }
 }
 impl<S, const N: usize> fmt::Debug for SerialLogStreamTx<S, N> {
@@ -56,7 +59,8 @@ impl<S: SerialIo + Send + Sync, const N: usize> CuStreamTx for SerialLogStreamTx
         self.sent = 0;
         self.len = 1;
         self.frame[0] = DELIMITER;
-        for &byte in packet {
+        let checksum = CRC32C.checksum(packet).to_be_bytes();
+        for &byte in packet.iter().chain(checksum.iter()) {
             if byte == DELIMITER || byte == ESCAPE {
                 self.frame[self.len] = ESCAPE;
                 self.len += 1;
@@ -141,11 +145,15 @@ impl<S: SerialIo + Send + Sync, const N: usize> CuStreamRx for SerialLogStreamRx
             if byte == DELIMITER {
                 let valid = self.active
                     && !self.escaped
-                    && self.len > 0
-                    && WirePacketRef::decode(&self.frame[..self.len]).is_ok();
+                    && self.len > CHECKSUM_BYTES
+                    && CRC32C
+                        .checksum(&self.frame[..self.len - CHECKSUM_BYTES])
+                        .to_be_bytes()
+                        == self.frame[self.len - CHECKSUM_BYTES..self.len];
                 self.active = true;
                 self.escaped = false;
                 if valid {
+                    self.len -= CHECKSUM_BYTES;
                     self.ready = true;
                     return self.deliver(out);
                 }
@@ -213,7 +221,7 @@ macro_rules! provider {
                 _: Option<&ComponentConfig>,
                 manager: &mut ResourceManager,
             ) -> CuResult<()> {
-                if N < 2 * (cu29_logstream::PACKET_HEADER_LEN + 1) + 2 {
+                if N < 2 * (cu29_logstream::PACKET_HEADER_LEN + 1 + CHECKSUM_BYTES) + 2 {
                     return Err(CuError::from(
                         "Serial frame capacity does not fit a LogStream packet",
                     ));
@@ -306,6 +314,85 @@ mod tests {
         while tx.poll_pending().unwrap() {}
         tx.serial.tx
     }
+    fn received(wire: Vec<u8>) -> Vec<Vec<u8>> {
+        let polls = wire.len() + 1;
+        let mut rx = SerialLogStreamRx::<_, 514>::new(Uart {
+            rx: wire.into(),
+            step: 1,
+            ..Uart::default()
+        });
+        let mut out = [0; 256];
+        let mut packets = Vec::new();
+        for _ in 0..polls {
+            if let Some(n) = rx.try_recv(&mut out).unwrap() {
+                packets.push(out[..n].to_vec());
+            }
+        }
+        packets
+    }
+
+    #[test]
+    fn framing_crc_is_independent_of_logstream_headers() {
+        let packet = b"123456789";
+        let wire = encoded(packet);
+        let mut expected = vec![DELIMITER];
+        expected.extend_from_slice(packet);
+        // Published CRC32C check value, serialized big endian.
+        expected.extend_from_slice(&[0xe3, 0x06, 0x92, 0x83, DELIMITER]);
+        assert_eq!(wire, expected);
+        assert_eq!(received(wire), vec![packet.to_vec()]);
+    }
+
+    #[test]
+    fn damaged_frames_are_dropped_before_delivery_and_resynchronize() {
+        // No inner LogStream CRC: only the adapter can detect this corruption.
+        let packet = [0, DELIMITER, ESCAPE, 255, 1, 2, 3];
+        let good = encoded(&packet);
+        for offset in 0..good.len() {
+            for bit in 0..8 {
+                let mut damaged = good.clone();
+                damaged[offset] ^= 1 << bit;
+                damaged.extend_from_slice(&good);
+                assert_eq!(received(damaged), vec![packet.to_vec()], "{offset}:{bit}");
+            }
+        }
+        for end in 0..good.len() - 1 {
+            let mut truncated = good[..end].to_vec();
+            truncated.extend_from_slice(&good);
+            assert_eq!(received(truncated), vec![packet.to_vec()], "{end}");
+        }
+    }
+
+    #[test]
+    fn checksum_bytes_are_escaped_and_capacity_includes_them() {
+        assert_eq!(SerialLogStreamTx::<Uart>::max_packet_bytes(), 252);
+        assert_eq!(SerialLogStreamTx::<Uart, 0>::max_packet_bytes(), 0);
+        assert_eq!(SerialLogStreamTx::<Uart, 9>::max_packet_bytes(), 0);
+        let mut checksum_escape_seen = false;
+        for byte in 0..=255 {
+            let packet = vec![byte; 252];
+            checksum_escape_seen |= CRC32C
+                .checksum(&packet)
+                .to_be_bytes()
+                .iter()
+                .any(|byte| *byte == DELIMITER || *byte == ESCAPE);
+            let wire = encoded(&packet);
+            assert!(wire.len() <= DEFAULT_FRAME_CAPACITY);
+            assert_eq!(received(wire), vec![packet]);
+        }
+        assert!(checksum_escape_seen);
+        let mut tx = SerialLogStreamTx::<_, 514>::new(Uart::default());
+        assert!(tx.try_send(&[0; 253]).is_err());
+        assert_eq!(tx.len, 0);
+        let mut tiny = SerialLogStreamTx::<_, 12>::new(Uart {
+            step: 12,
+            ..Uart::default()
+        });
+        tiny.try_send(&[DELIMITER]).unwrap();
+        assert!(!tiny.poll_pending().unwrap());
+        assert_eq!(received(tiny.serial.tx), vec![vec![DELIMITER]]);
+    }
+
     #[test]
     fn partial_writes_deliver_last_frame_without_another_send() {
         let packet = packet();

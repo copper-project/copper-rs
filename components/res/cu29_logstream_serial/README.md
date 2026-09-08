@@ -6,14 +6,15 @@
 `SerialLogStreamRxResources<S, N>` consumes a `serial` input and exports `rx`.
 Each provider owns its serial resource. Choose a direction for each carrier.
 
-The framing format is a `0x7e` delimiter, escaped LogStream packet bytes, then a
-`0x7e` delimiter. Bytes `0x7e` and `0x7d` are escaped as `0x7d` followed by the
-byte XOR `0x20`. CRC verification uses the LogStream packet CRC. Invalid,
+The framing format is a `0x7e` delimiter, escaped LogStream packet bytes followed by
+an escaped four-byte big endian CRC32C, then a `0x7e` delimiter. The checksum
+covers exactly the unescaped packet bytes. Bytes `0x7e` and `0x7d` are escaped as `0x7d` followed by the
+byte XOR `0x20`. The adapter verifies and removes its checksum before delivering a packet to FEC. Invalid,
 oversized, interrupted and CRC-invalid frames are discarded, and the next
 delimiter resynchronizes reception. Both serial peers must use this framing.
 
 `N` is the compile-time frame capacity (default 514), allowing packets up to
-`(N - 2) / 2` bytes (default 256) even when every byte requires escaping. TX retains
+`(N - 2) / 2 - 4` bytes (default 252) even when every byte requires escaping. TX retains
 one encoded frame. A busy transmitter returns `WouldBlock`; retry that packet
 after the current frame drains. `Ok(())` means one complete packet was accepted
 into the buffer. Encoding runs in the configured LogStream worker.
@@ -29,5 +30,5 @@ Feed successful packets into `SessionRouter`. LogStream's configured limits,
 recovery and FEC policies apply to these packets.
 
 Configure MTU within the adapter bound and pace below the serial link's usable
-throughput, accounting for escaping and serial start/stop bits. Use a burst of
+throughput, accounting for the framing checksum, escaping, and serial start/stop bits. Use a burst of
 one for slow links.
