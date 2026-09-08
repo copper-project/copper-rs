@@ -17,7 +17,7 @@ pub enum SourceGapReason {
 /// Gaps remain missing history even when a later keyframe permits state replay.
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
 pub enum StreamContinuityRecord<B = Vec<u8>> {
-    /// Canonical, versioned semantic manifest bytes bind identity, plan and schema.
+    /// Canonical semantic manifest bytes bind identity, receiver requirements and schema.
     Manifest { record: B },
     Gap {
         first_id: u64,

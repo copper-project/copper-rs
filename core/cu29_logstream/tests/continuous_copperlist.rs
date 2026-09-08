@@ -17,6 +17,16 @@ const SYMBOL_SIZE: usize = 160;
 const WINDOW_SYMBOLS: usize = 64;
 const MAX_EQUATIONS: usize = 32;
 
+// Loss selection reads identity from the FEC-protected source fragment.
+fn source_object_id(datagram: &[u8]) -> u64 {
+    let packet = cu29_logstream::WirePacketRef::decode(datagram).unwrap();
+    assert_eq!(
+        packet.header.symbol_kind,
+        cu29_logstream::FecSymbolKind::Source
+    );
+    u64::from_be_bytes(packet.payload[4..12].try_into().unwrap())
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ObservedEvent {
     Record(u64),
@@ -96,6 +106,66 @@ fn partial_copperlist(id: u64) -> CopperList<PartialDataSet> {
 }
 
 #[test]
+fn compact_record_fits_and_recovers_a_payload_previously_needing_two_symbols() {
+    let identity = StreamIdentity {
+        session_id: *b"test-session-001",
+        sender_id: 7,
+    };
+    // This payload needed two 160-byte symbols with the former 53-byte record
+    // header. It now fills one symbol including the 20-byte fragment header.
+    let record = encode_record(RecordKind::CopperList, 42, &[0xa5; 95]).unwrap();
+    assert_eq!(record.len(), 140);
+    for field in [Field::Gf2, Field::Gf256] {
+        let config = RlcConfig::new(SYMBOL_SIZE, WINDOW_SYMBOLS, field).unwrap();
+        let mut encoder = ContinuousEncoder::<MAX_SYMBOL_SIZE, WINDOW_SYMBOLS>::new(
+            identity,
+            Lane::ReplayCritical,
+            config,
+            4_096,
+            EncodingSymbolId::new(u32::MAX),
+        )
+        .unwrap();
+        let mut datagrams = Vec::new();
+        assert_eq!(encoder.push_record(&record, &mut datagrams).unwrap(), 1);
+        assert_eq!(datagrams.len(), 1);
+        let packet = cu29_logstream::WirePacketRef::decode(&datagrams[0]).unwrap();
+        assert_eq!(packet.payload.len(), SYMBOL_SIZE);
+        assert_eq!(packet.payload.len() + 36, datagrams[0].len());
+        assert_eq!(&packet.payload[20..], record.as_slice());
+        datagrams.clear(); // Lose the only source; recover entirely from its repair.
+        encoder
+            .push_repair(
+                RepairParameters::new(0, DensityThreshold::FULL),
+                &mut datagrams,
+            )
+            .unwrap();
+        let mut decoder = ContinuousDecoder::<MAX_SYMBOL_SIZE, WINDOW_SYMBOLS, MAX_EQUATIONS>::new(
+            identity,
+            Lane::ReplayCritical,
+            config,
+            MAX_EQUATIONS,
+            42,
+            ReceiverLimits::new(4_096, WINDOW_SYMBOLS),
+        )
+        .unwrap();
+        let mut recovered = Vec::new();
+        for datagram in &datagrams {
+            decoder
+                .receive_datagram(datagram, |event| {
+                    let ContinuousReceiveEvent::Record(record) = event else {
+                        panic!("unexpected gap");
+                    };
+                    recovered.push(record.bytes().to_vec());
+                    Ok::<(), core::convert::Infallible>(())
+                })
+                .unwrap();
+        }
+        assert_eq!(recovered, vec![record.clone()]);
+        assert_eq!(decoder.stats().source_symbols_recovered, 1);
+    }
+}
+
+#[test]
 fn partial_copperlists_survive_a_deterministically_simulated_bad_link() {
     let identity = StreamIdentity {
         session_id: *b"test-session-001",
@@ -104,7 +174,6 @@ fn partial_copperlists_survive_a_deterministically_simulated_bad_link() {
     let fec_config = RlcConfig::new(SYMBOL_SIZE, WINDOW_SYMBOLS, Field::Gf256).unwrap();
     let mut encoder = ContinuousEncoder::<MAX_SYMBOL_SIZE, WINDOW_SYMBOLS>::new(
         identity,
-        u64::MAX - 5,
         Lane::ReplayCritical,
         fec_config,
         4_096,
@@ -207,7 +276,6 @@ fn missing_unrepaired_fragments_do_not_claim_semantic_recovery() {
     let fec_config = RlcConfig::new(SYMBOL_SIZE, WINDOW_SYMBOLS, Field::Gf256).unwrap();
     let mut encoder = ContinuousEncoder::<MAX_SYMBOL_SIZE, WINDOW_SYMBOLS>::new(
         identity,
-        0,
         Lane::ReplayCritical,
         fec_config,
         4_096,
@@ -227,10 +295,7 @@ fn missing_unrepaired_fragments_do_not_claim_semantic_recovery() {
     let retained = datagrams
         .into_iter()
         .filter(|datagram| {
-            let object_id = cu29_logstream::WirePacket::decode(datagram)
-                .unwrap()
-                .header
-                .object_id;
+            let object_id = source_object_id(datagram);
             if omitted_objects.contains(&object_id) {
                 true
             } else {
@@ -293,7 +358,6 @@ fn receiver_reports_an_incomplete_record_when_its_missing_fragment_expires() {
     let fec_config = RlcConfig::new(SYMBOL_SIZE, 16, Field::Gf256).unwrap();
     let mut encoder = ContinuousEncoder::<MAX_SYMBOL_SIZE, WINDOW_SYMBOLS>::new(
         identity,
-        0,
         Lane::ReplayCritical,
         fec_config,
         4_096,
@@ -308,8 +372,7 @@ fn receiver_reports_an_incomplete_record_when_its_missing_fragment_expires() {
     }
     let mut omitted_fragment = false;
     datagrams.retain(|datagram| {
-        let packet = cu29_logstream::WirePacket::decode(datagram).unwrap();
-        if packet.header.object_id == 4 && !omitted_fragment {
+        if source_object_id(datagram) == 4 && !omitted_fragment {
             omitted_fragment = true;
             false
         } else {
@@ -367,7 +430,6 @@ fn sender_drops_transport_backpressure_without_blocking_the_output_worker() {
         BackpressureTx::default(),
         ContinuousSenderConfig {
             identity,
-            first_packet_sequence: 0,
             lane: Lane::ReplayCritical,
             fec,
             max_record_bytes: 4_096,
@@ -401,7 +463,6 @@ fn receiver_runs_past_many_windows_with_bounded_state_and_wrapping_sequences() {
     let fec_config = RlcConfig::new(SYMBOL_SIZE, WINDOW_SYMBOLS, Field::Gf256).unwrap();
     let mut encoder = ContinuousEncoder::<MAX_SYMBOL_SIZE, WINDOW_SYMBOLS>::new(
         identity,
-        u64::MAX - 32,
         Lane::ReplayCritical,
         fec_config,
         4_096,
@@ -458,7 +519,6 @@ fn receiver_coalesces_wholly_missing_records_after_the_rlc_window_expires() {
     let fec_config = RlcConfig::new(SYMBOL_SIZE, 16, Field::Gf256).unwrap();
     let mut encoder = ContinuousEncoder::<MAX_SYMBOL_SIZE, WINDOW_SYMBOLS>::new(
         identity,
-        0,
         Lane::ReplayCritical,
         fec_config,
         4_096,
@@ -472,10 +532,7 @@ fn receiver_coalesces_wholly_missing_records_after_the_rlc_window_expires() {
         encoder.push_record(&record, &mut datagrams).unwrap();
     }
     datagrams.retain(|datagram| {
-        let object_id = cu29_logstream::WirePacket::decode(datagram)
-            .unwrap()
-            .header
-            .object_id;
+        let object_id = source_object_id(datagram);
         !(4..=6).contains(&object_id)
     });
 
@@ -533,7 +590,6 @@ fn consumer_failure_leaves_the_record_available_for_retry() {
     let fec_config = RlcConfig::new(SYMBOL_SIZE, WINDOW_SYMBOLS, Field::Gf256).unwrap();
     let mut encoder = ContinuousEncoder::<MAX_SYMBOL_SIZE, WINDOW_SYMBOLS>::new(
         identity,
-        0,
         Lane::ReplayCritical,
         fec_config,
         4_096,

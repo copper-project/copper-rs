@@ -126,10 +126,11 @@ fn generated_runtime_streams_without_local_copperlist_logging() -> CuResult<()> 
     let impaired: Vec<_> = datagrams
         .iter()
         .filter(|datagram| {
-            let header = WirePacket::decode(datagram).unwrap().header;
-            !(header.record_kind == RecordKind::CopperList
-                && header.symbol_kind == FecSymbolKind::Source
-                && header.object_id == 1)
+            let packet = WirePacket::decode(datagram).unwrap();
+            // Object identity is carried inside the protected source fragment.
+            !(packet.header.record_kind == RecordKind::CopperList
+                && packet.header.symbol_kind == FecSymbolKind::Source
+                && u64::from_be_bytes(packet.payload[4..12].try_into().unwrap()) == 1)
         })
         .cloned()
         .collect();
@@ -227,7 +228,6 @@ fn sender_config(identity: StreamIdentity) -> CuResult<LogStreamSenderConfig> {
         .map_err(|error| CuError::from(error.to_string()))?;
     let continuous = ContinuousSenderConfig {
         identity,
-        first_packet_sequence: 0,
         lane: Lane::ReplayCritical,
         fec,
         max_record_bytes: RECORD_BYTES,
@@ -239,6 +239,7 @@ fn sender_config(identity: StreamIdentity) -> CuResult<LogStreamSenderConfig> {
     let manifest = encode_record(RecordKind::Manifest, 0, b"runtime-test-manifest")
         .map_err(|error| CuError::from(error.to_string()))?;
     Ok(LogStreamSenderConfig {
+        feedback: None,
         pacing: cu29::logstream::PacingConfig {
             bitrate_bps: 10_000_000,
             burst_packets: 8,
@@ -249,7 +250,6 @@ fn sender_config(identity: StreamIdentity) -> CuResult<LogStreamSenderConfig> {
         recovery: RecoverySenderConfig {
             finite: FiniteObjectSenderConfig {
                 identity,
-                first_packet_sequence: 0,
                 lane: Lane::LargeObject,
                 symbol_size: SYMBOL_SIZE as u16,
                 max_object_bytes: 64 * 1024,

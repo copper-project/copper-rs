@@ -102,8 +102,7 @@ fn configured_runtime_bootstraps_over_udp_in_actual_arrival_order() -> CuResult<
         match event {
             SessionEvent::Manifest(manifest) => {
                 assert_eq!(manifest.manifest().identity.sender_id, 41);
-                assert_eq!(manifest.manifest().plan.destination_id, "ground");
-                assert_eq!(manifest.manifest().plan.symbol_size, 1128);
+                assert_eq!(manifest.manifest().requirements.symbol_size, 1128);
                 assert_eq!(manifest.manifest().application_schema, expected_schema);
                 assert_eq!(manifest.manifest().application_schema.outputs.len(), 1);
                 assert_eq!(
@@ -161,12 +160,7 @@ fn configured_runtime_bootstraps_over_udp_in_actual_arrival_order() -> CuResult<
         let mut recovery_received = bootstrap.is_none();
         while !(source_received && recovery_received) && Instant::now() < deadline {
             if let Some(len) = rx.try_recv(&mut packet).unwrap() {
-                let header = cu29_logstream::WirePacket::decode(&packet[..len])
-                    .unwrap()
-                    .header;
-                source_received |= header.record_kind == RecordKind::CopperList
-                    && header.symbol_kind == cu29_logstream::FecSymbolKind::Source
-                    && header.object_id == id;
+                source_received |= source_copperlist_id(&packet[..len]) == Some(id);
                 traffic.push(packet[..len].to_vec());
                 router.receive_datagram(&packet[..len], &mut emit).unwrap();
                 // The impaired capture starts at this source packet; earlier
@@ -210,12 +204,7 @@ fn configured_runtime_bootstraps_over_udp_in_actual_arrival_order() -> CuResult<
     assert!(verified_recovery_point_seen);
     let source_ids: std::collections::BTreeSet<_> = traffic
         .iter()
-        .filter_map(|packet| {
-            let header = cu29_logstream::WirePacket::decode(packet).unwrap().header;
-            (header.record_kind == RecordKind::CopperList
-                && header.symbol_kind == cu29_logstream::FecSymbolKind::Source)
-                .then_some(header.object_id)
-        })
+        .filter_map(|packet| source_copperlist_id(packet))
         .collect();
     assert_eq!(
         source_ids,
@@ -255,10 +244,7 @@ fn configured_runtime_bootstraps_over_udp_in_actual_arrival_order() -> CuResult<
     let boundary = |id| {
         traffic
             .iter()
-            .position(|packet| {
-                let header = cu29_logstream::WirePacket::decode(packet).unwrap().header;
-                header.record_kind == RecordKind::CopperList && header.object_id == id
-            })
+            .position(|packet| source_copperlist_id(packet) == Some(id))
             .unwrap()
     };
     let late = boundary(64);
@@ -282,6 +268,15 @@ fn configured_runtime_bootstraps_over_udp_in_actual_arrival_order() -> CuResult<
         false,
     );
     Ok(())
+}
+
+// Read the identity from the protected RLC source fragment, including at capture
+// boundaries. Repair symbols cover a window and have no single object identity.
+fn source_copperlist_id(datagram: &[u8]) -> Option<u64> {
+    let packet = cu29_logstream::WirePacketRef::decode(datagram).unwrap();
+    (packet.header.record_kind == RecordKind::CopperList
+        && packet.header.symbol_kind == cu29_logstream::FecSymbolKind::Source)
+        .then(|| u64::from_be_bytes(packet.payload[4..12].try_into().unwrap()))
 }
 
 // Reuse actual UDP arrival order; only remove a prefix or one contiguous outage.

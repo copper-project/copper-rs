@@ -30,7 +30,7 @@ RON config. Bind a transport implementing `CuStreamTx`; the
 [`cu29-logstream-udp`](../../components/res/cu29_logstream_udp) resource supplies UDP
 sender and receiver endpoints.
 
-On the receiving side, `SessionRouter` discovers the sender's configuration from
+On the receiving side, `SessionRouter` discovers the decoder requirements from
 its manifest. Feed its events to `NativeArchive<P>`, where `P` is your application's
 generated dataset type. The archive checks that the sender's schema matches and
 preserves the received payloads and timestamps.
@@ -199,15 +199,63 @@ length field. All multi-byte header fields use big endian encoding:
 
 | Layer | Header fields, in wire order | Bytes |
 | --- | --- | ---: |
-| Packet | magic (4), lane (1), record kind (1), FEC scheme (1), symbol kind (1), session ID (16), sender ID (4), packet sequence (8), object ID (8), FEC metadata (12), fragment count (4), payload length (2), CRC32C (4) | 66 |
-| Record | magic (4), kind (1), object ID (8), payload length (8), BLAKE3 digest (32) | 53 |
-| RLC fragment | magic (4), kind (1), object ID (8), record length (4), fragment index (4), fragment count (4), fragment length (2) | 27 |
+| RLC source packet | magic (4), lane (1), record kind (1), FEC scheme (1), symbol kind (1), session ID (16), sender ID (4), source payload ID (4), CRC32C (4) | 36 |
+| RLC repair packet | magic (4), lane (1), record kind (1), FEC scheme (1), symbol kind (1), session ID (16), sender ID (4), repair payload ID (8), CRC32C (4) | 40 |
+| RaptorQ packet | magic (4), lane (1), record kind (1), FEC scheme (1), symbol kind (1), session ID (16), sender ID (4), object ID (8), compact OTI (11), payload ID (4), CRC32C (4) | 55 |
+| Record | magic (4), kind (1), object ID (8), BLAKE3 digest (32) | 45 |
+| RLC fragment | magic (4), object ID (8), record length (4), fragment index (4) | 20 |
 
-Compared with the prior headers, this saves 6 bytes per packet, 3 per record,
-and 5 per RLC source fragment, plus one bincode byte per session manifest.
-Fixed-size FEC symbols use the recovered space for fragment payload; this can
-reduce fragment counts rather than shortening each symbol. Existing symbol
-storage capacity is unchanged: a 1200-byte MTU now emits at most 1194-byte packets.
+Compared with the original headers, this saves 36 bytes per RLC source packet,
+32 per RLC repair packet, 17 per RaptorQ packet, 11 per record, and 12 per RLC
+source fragment, plus the manifest savings described below.
+Packet sequence counters are not transmitted; recovery and deduplication use
+FEC symbol identifiers and record identities. RLC packets omit the outer object ID
+and fragment count; protected source fragments carry record identity, record
+length, and fragment index. Receivers derive fragment count and payload length
+from that geometry and the configured symbol capacity. Fragment kind is implicitly
+CopperList; the reassembled record must still match that kind and identity and
+pass digest verification. Repairs span a window of fragments. Only the active
+RLC FEC ID bytes are transmitted.
+RaptorQ OTI omits the reserved zero byte at index 5 of the library's 12-byte
+representation. The wire carries transfer length (5), symbol size (2), source
+blocks (1), sub-blocks (2), and alignment (1). Decoding restores the zero byte
+before receiver geometry validation and RaptorQ decoding. Encoding rejects a
+nonzero reserved byte instead of silently discarding it.
+Record payload length is derived from the complete reassembled record extent,
+saving eight bytes per record. The BLAKE3 input remains kind, object ID, derived
+payload length as a big endian u64, and payload. Recovery-point references retain
+the same digests for the same semantic records. Truncated headers are rejected;
+truncated payloads and appended bytes fail digest verification. Receiver allocation
+bounds still apply to the complete framed record before assembly.
+Session manifests encode identity, `ReceiverRequirements`, and application schema
+using standard bincode encoding. Requirements carry only symbol size, RLC field,
+window symbols, maximum complete CopperList record bytes, and optional feedback
+requirements (report interval and destination key). Receivers validate
+this geometry and enforce their own symbol, window, record, and buffering limits
+before constructing a decoder. RaptorQ geometry comes from packet OTI and remains
+bounded by receiver-local finite-object limits.
+Destination ID, MTU, bitrate, sender memory budget, latency, burst allowance,
+repair cadence/density/count, recovery interval, and sender object bounds stay in
+`LogStreamPlan`; they are not repeated in manifests. For the `ground` test profile
+(1128-byte symbols, GF(256), window 64, 65536-byte records), requirements occupy
+11 bincode bytes instead of the 40-byte sender plan, saving 29 bytes per manifest
+in addition to the previously removed version byte. Savings vary with sender
+policy values and destination-name length. Schema strings and reconstruction ABI
+checks remain intact. The record digest still binds the exact manifest bytes;
+recovery points reference that digest. Sender-only policy changes with identical
+requirements, identity, and schema now produce identical manifest records.
+Savings inside record and fragment headers free symbol payload capacity and can
+reduce fragment counts. Packet-header savings directly shorten each datagram.
+Existing symbol storage capacity is unchanged: a 1200-byte MTU uses at most 1128-byte symbols,
+producing RLC source packets up to 1164 bytes, RLC repair packets up to 1168 bytes,
+and RaptorQ packets up to 1183 bytes. `PACKET_HEADER_LEN` is the maximum header
+length for buffer sizing; encoding returns the exact length for each packet.
+Shared symbol sizing still reserves room for the largest (RaptorQ) header.
+Packet payload length is derived from the complete packet extent supplied by
+`CuStreamRx`; serial/transparent-radio adapters must frame the byte stream into
+complete packets before decoding. The packet header carries no payload length.
+CRC32C remains on every packet until integrity checking moves to the transport
+adapters, including framing for serial and transparent radio.
 
 The native codec already carries original/captured presence. There is no proof envelope,
 per-list verification allocation, or new continuity record. The archive writes the
@@ -264,7 +312,8 @@ use `FeedbackReporter` with `SessionRouter::feedback_counters`. Programmatic sen
 `scheduled_feedback_sinks(SeparateFeedback { tx, feedback_rx }, config, clock)`.
 
 Omitting feedback preserves one-way operation. The unversioned manifest advertises optional feedback
-policy, destination identity, cadence, and bounds. Reports are also unversioned and require the matching
+capability, destination key, and report cadence. Timeout and adaptation bounds remain in the local
+sender configuration. Reports are also unversioned and require the matching
 application decoder. Reports are bounded
 CRC32C datagrams carrying cumulative counters, receiver identity/sequence, finalized source outcomes,
 receiver progress/pressure, and an optional request for the latest retained recovery bundle. No data ACKs.

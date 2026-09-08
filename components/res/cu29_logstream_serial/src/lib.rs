@@ -292,7 +292,6 @@ mod tests {
                 symbol_kind: FecSymbolKind::Source,
                 session_id: [0; 16],
                 sender_id: 1,
-                packet_sequence: 1,
                 object_id: 2,
                 fec_metadata: [0; 12],
                 fragment_count: 1,
