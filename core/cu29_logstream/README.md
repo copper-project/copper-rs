@@ -30,7 +30,7 @@ RON config. Bind a transport implementing `CuStreamTx`; the
 [`cu29-logstream-udp`](../../components/res/cu29_logstream_udp) resource supplies UDP
 sender and receiver endpoints.
 
-On the receiving side, `SessionRouter` discovers the sender's configuration from
+On the receiving side, `SessionRouter` discovers the decoder requirements from
 its manifest. Feed its events to `NativeArchive<P>`, where `P` is your application's
 generated dataset type. The archive checks that the sender's schema matches and
 preserves the received payloads and timestamps.
@@ -208,7 +208,7 @@ length field. All multi-byte header fields use big endian encoding:
 
 Compared with the original headers, this saves 36 bytes per RLC source packet,
 32 per RLC repair packet, 17 per RaptorQ packet, 11 per record, and 12 per RLC
-source fragment, plus one bincode byte per session manifest.
+source fragment, plus the manifest savings described below.
 Packet sequence counters are not transmitted; recovery and deduplication use
 FEC symbol identifiers and record identities. RLC packets omit the outer object ID
 and fragment count; protected source fragments carry record identity, record
@@ -228,6 +228,22 @@ payload length as a big endian u64, and payload. Recovery-point references retai
 the same digests for the same semantic records. Truncated headers are rejected;
 truncated payloads and appended bytes fail digest verification. Receiver allocation
 bounds still apply to the complete framed record before assembly.
+Session manifests encode identity, `ReceiverRequirements`, and application schema
+using standard bincode encoding. Requirements carry only symbol size, RLC field,
+window symbols, and maximum complete CopperList record bytes. Receivers validate
+this geometry and enforce their own symbol, window, record, and buffering limits
+before constructing a decoder. RaptorQ geometry comes from packet OTI and remains
+bounded by receiver-local finite-object limits.
+Destination ID, MTU, bitrate, sender memory budget, latency, burst allowance,
+repair cadence/density/count, recovery interval, and sender object bounds stay in
+`LogStreamPlan`; they are not repeated in manifests. For the `ground` test profile
+(1128-byte symbols, GF(256), window 64, 65536-byte records), requirements occupy
+10 bincode bytes instead of the 39-byte sender plan, saving 29 bytes per manifest
+in addition to the previously removed version byte. Savings vary with sender
+policy values and destination-name length. Schema strings and reconstruction ABI
+checks remain intact. The record digest still binds the exact manifest bytes;
+recovery points reference that digest. Sender-only policy changes with identical
+requirements, identity, and schema now produce identical manifest records.
 Savings inside record and fragment headers free symbol payload capacity and can
 reduce fragment counts. Packet-header savings directly shorten each datagram.
 Existing symbol storage capacity is unchanged: a 1200-byte MTU uses at most 1128-byte symbols,

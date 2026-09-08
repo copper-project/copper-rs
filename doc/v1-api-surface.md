@@ -96,6 +96,7 @@ This file defines the Copper V1 public contract. Anything not listed as stable i
 
 ## Experimental
 
+- LogStream session manifests and `ReceiverRequirements` decoder geometry/bounds.
 - `remote-debug` feature and `cu29::remote_debug`.
 - `parallel-rt` feature and parallel executor APIs.
 - `async-cl-io` feature and async CopperList I/O internals.
