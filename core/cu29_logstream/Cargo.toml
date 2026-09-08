@@ -58,6 +58,7 @@ std = [
   "cu29-unifiedlog/std",
   "blake3/std",
   "cu29-runtime/std",
+  "cu29-runtime/logstream-monitoring",
   "cu29-clock/std",
   "cu29-traits/std",
   "raptorq/std",

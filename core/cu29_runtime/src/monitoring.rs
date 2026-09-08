@@ -1,6 +1,14 @@
 //! Some basic internal monitoring tooling Copper uses to monitor itself and the components it runs.
 //!
 
+#[cfg(feature = "std")]
+mod logstream;
+#[cfg(feature = "std")]
+pub use logstream::{
+    LogStreamFeedbackState, LogStreamFeedbackStats, LogStreamMonitor, LogStreamStats,
+    LogStreamStatsSource,
+};
+
 use crate::config::CuConfig;
 use crate::config::{
     BridgeChannelConfigRepresentation, BridgeConfig, ComponentConfig, CuGraph, Flavor, NodeId,
@@ -730,13 +738,40 @@ impl CuMonitoringMetadata {
 #[derive(Debug, Clone, Default)]
 pub struct CuMonitoringRuntime {
     execution_probe: MonitorExecutionProbe,
+    #[cfg(feature = "logstream-monitoring")]
+    log_streams: Option<Arc<[LogStreamMonitor]>>,
 }
 
 impl CuMonitoringRuntime {
     #[cfg(feature = "std")]
     pub fn new(execution_probe: MonitorExecutionProbe) -> Self {
         ensure_runtime_panic_hook_installed();
-        Self { execution_probe }
+        Self {
+            execution_probe,
+            #[cfg(feature = "logstream-monitoring")]
+            log_streams: None,
+        }
+    }
+
+    /// Statically bound stream workers; absent when the application has no streams.
+    #[cfg(feature = "std")]
+    pub fn log_streams(&self) -> Option<Arc<[LogStreamMonitor]>> {
+        #[cfg(feature = "logstream-monitoring")]
+        {
+            self.log_streams.clone()
+        }
+        #[cfg(not(feature = "logstream-monitoring"))]
+        {
+            None
+        }
+    }
+
+    #[cfg(feature = "logstream-monitoring")]
+    pub fn with_log_streams(mut self, streams: Arc<[LogStreamMonitor]>) -> Self {
+        if !streams.is_empty() {
+            self.log_streams = Some(streams);
+        }
+        self
     }
 
     #[cfg(not(feature = "std"))]

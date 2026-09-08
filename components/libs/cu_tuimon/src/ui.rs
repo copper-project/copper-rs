@@ -166,6 +166,8 @@ pub struct MonitorUi {
     help_hitboxes: Vec<HelpHitbox>,
     nodes_scrollable_widget_state: NodesScrollableWidgetState,
     latency_scroll_state: ScrollViewState,
+    bandwidth_scroll_state: ScrollViewState,
+    stream_rates: Vec<crate::stream_panel::StreamRates>,
 
     #[cfg(feature = "sysinfo_pane")]
     system_info: SystemInfo,
@@ -179,6 +181,12 @@ impl MonitorUi {
         let runtime_node_col_width = Self::compute_runtime_node_col_width(model.components());
         let nodes_scrollable_widget_state = NodesScrollableWidgetState::new(model.clone());
 
+        let stream_rates = model.streams.as_ref().map_or_else(Vec::new, |streams| {
+            streams
+                .iter()
+                .map(|_| crate::stream_panel::StreamRates::default())
+                .collect()
+        });
         Self {
             model,
             runtime_node_col_width,
@@ -188,6 +196,8 @@ impl MonitorUi {
             help_hitboxes: Vec::new(),
             nodes_scrollable_widget_state,
             latency_scroll_state: ScrollViewState::default(),
+            bandwidth_scroll_state: ScrollViewState::default(),
+            stream_rates,
 
             #[cfg(feature = "sysinfo_pane")]
             system_info: default_system_info(),
@@ -261,6 +271,17 @@ impl MonitorUi {
 
     pub fn scroll(&mut self, direction: ScrollDirection, steps: usize) {
         match (self.active_screen, direction) {
+            (MonitorScreen::CopperList, direction) => {
+                for _ in 0..steps {
+                    match direction {
+                        ScrollDirection::Up => self.bandwidth_scroll_state.scroll_up(),
+                        ScrollDirection::Down => self.bandwidth_scroll_state.scroll_down(),
+                        ScrollDirection::Left => self.bandwidth_scroll_state.scroll_left(),
+                        ScrollDirection::Right => self.bandwidth_scroll_state.scroll_right(),
+                    }
+                }
+            }
+
             (MonitorScreen::Dag, ScrollDirection::Down) => {
                 self.nodes_scrollable_widget_state
                     .nodes_scrollable_state
@@ -682,7 +703,7 @@ impl MonitorUi {
         f.render_widget(table, area);
     }
 
-    fn draw_copperlist_stats(&self, f: &mut Frame, area: Rect) {
+    fn draw_copperlist_stats(&mut self, f: &mut Frame, area: Rect) {
         let stats = self.model.inner.copperlist_stats.lock().unwrap();
         let size_display = format_bytes_or(stats.size_bytes as u64, "unknown");
         let raw_total = stats.raw_culist_bytes.max(stats.size_bytes as u64);
@@ -785,13 +806,71 @@ impl MonitorUi {
                     .title(" Disk / Encoding "),
             );
 
-        let layout = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Length(42), Constraint::Length(42)].as_ref())
-            .split(area);
-
-        f.render_widget(mem_table, layout[0]);
-        f.render_widget(disk_table, layout[1]);
+        drop(stats);
+        let mut telemetry = Vec::new();
+        if let Some(streams) = &self.model.streams {
+            for (monitor, rates) in streams.iter().zip(&mut self.stream_rates) {
+                let snapshot = monitor.snapshot();
+                rates.update(snapshot);
+                telemetry.push((
+                    format!(" Telemetry / TX: {} ", monitor.destination),
+                    crate::stream_panel::rows(monitor, snapshot, rates),
+                ));
+            }
+        }
+        if telemetry.is_empty() {
+            telemetry.push((
+                " Telemetry / TX ".to_string(),
+                vec![row("Status", "Not configured".to_string())],
+            ));
+        }
+        let telemetry_height = telemetry
+            .iter()
+            .map(|(_, rows)| rows.len() + 4)
+            .sum::<usize>();
+        let content_size = Size::new(
+            area.width.max(126),
+            area.height
+                .max(telemetry_height.min(u16::MAX as usize) as u16),
+        );
+        let offset = self.bandwidth_scroll_state.offset();
+        self.bandwidth_scroll_state.set_offset(Position::new(
+            offset.x.min(content_size.width.saturating_sub(area.width)),
+            offset
+                .y
+                .min(content_size.height.saturating_sub(area.height)),
+        ));
+        let mut scroll = ScrollView::new(content_size);
+        scroll.render_widget(
+            Block::default().style(Style::default().bg(palette::BACKGROUND)),
+            Rect::new(0, 0, content_size.width, content_size.height),
+        );
+        scroll.render_widget(mem_table, Rect::new(0, 0, 42, content_size.height));
+        scroll.render_widget(disk_table, Rect::new(42, 0, 42, content_size.height));
+        let mut y = 0;
+        for (title, rows) in telemetry {
+            let height =
+                (rows.len() + 4).min(usize::from(content_size.height.saturating_sub(y))) as u16;
+            let table = Table::new(rows, [Constraint::Length(23), Constraint::Min(13)])
+                .header(
+                    Row::new(["Metric", "Value"])
+                        .style(
+                            Style::default()
+                                .fg(palette::YELLOW)
+                                .add_modifier(Modifier::BOLD),
+                        )
+                        .bottom_margin(1),
+                )
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Rounded)
+                        .title(title),
+                );
+            scroll.render_widget(table, Rect::new(84, y, content_size.width - 84, height));
+            y = y.saturating_add(height);
+        }
+        scroll.render(area, f.buffer_mut(), &mut self.bandwidth_scroll_state);
     }
 
     fn draw_nodes(&mut self, f: &mut Frame, area: Rect) {
@@ -1142,6 +1221,127 @@ mod tests {
     };
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
+
+    #[derive(Debug)]
+    struct StreamFixture(cu29::monitoring::LogStreamStats);
+    impl cu29::monitoring::LogStreamStatsSource for StreamFixture {
+        fn snapshot(&self) -> cu29::monitoring::LogStreamStats {
+            self.0
+        }
+    }
+
+    fn stream_ui(stats: cu29::monitoring::LogStreamStats) -> MonitorUi {
+        use cu29::monitoring::LogStreamMonitor;
+        let mut model = test_monitor_model();
+        model.streams = Some(std::sync::Arc::from(vec![LogStreamMonitor::new(
+            "ground",
+            1_000_000,
+            4,
+            StreamFixture(stats),
+        )]));
+        let mut ui = MonitorUi::new(model, MonitorUiOptions::default());
+        ui.set_active_screen(MonitorScreen::CopperList);
+        ui
+    }
+
+    fn stream_text(ui: &mut MonitorUi, width: u16, height: u16) -> String {
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        terminal.draw(|f| ui.draw_content(f, f.area())).unwrap();
+        terminal
+            .backend()
+            .buffer()
+            .content
+            .chunks(usize::from(width))
+            .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn bandwidth_shows_one_way_stats_and_hides_receiver_fields() {
+        let mut ui = stream_ui(cu29::monitoring::LogStreamStats {
+            packets_sent: 12345,
+            queue_drops: 7,
+            ..Default::default()
+        });
+        let text = stream_text(&mut ui, 132, 40);
+        assert!(text.contains("Telemetry / TX: ground"));
+        assert!(text.contains("One-way"));
+        assert!(text.contains("12345"));
+        assert!(text.contains("Queue drops"));
+        assert!(!text.contains("RX BW"));
+    }
+
+    #[test]
+    fn bandwidth_distinguishes_waiting_active_stale_and_failed_feedback() {
+        use cu29::monitoring::{LogStreamFeedbackState, LogStreamFeedbackStats, LogStreamStats};
+        for (state, label, failed) in [
+            (LogStreamFeedbackState::Waiting, "Waiting", false),
+            (LogStreamFeedbackState::Active, "Active", false),
+            (LogStreamFeedbackState::Stale, "Stale", false),
+            (LogStreamFeedbackState::Active, "Failed", true),
+        ] {
+            let mut ui = stream_ui(LogStreamStats {
+                feedback: Some(LogStreamFeedbackStats {
+                    state,
+                    failed,
+                    reports: 4,
+                    finalized_symbols: 100,
+                    rates_available: true,
+                    source_metrics_available: true,
+                    loss_basis_points: 1250,
+                    latest_copperlist: Some(987654321),
+                    effective_repair_every_source_symbols: 2,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            });
+            let text = stream_text(&mut ui, 132, 45);
+            assert!(text.contains("Two-way"));
+            assert!(text.contains(label));
+            assert!(text.contains("RX BW"));
+            assert!(text.contains("FEC effective interval"));
+            assert_eq!(
+                text.contains("987654321"),
+                state == LogStreamFeedbackState::Active && !failed
+            );
+            assert_eq!(
+                text.contains("12.50%"),
+                state == LogStreamFeedbackState::Active && !failed
+            );
+        }
+    }
+
+    #[test]
+    fn bandwidth_scrolls_to_multiple_destinations_on_narrow_terminals() {
+        use cu29::monitoring::{LogStreamMonitor, LogStreamStats};
+        let mut model = test_monitor_model();
+        model.streams = Some(std::sync::Arc::from(vec![
+            LogStreamMonitor::new(
+                "first",
+                1_000_000,
+                4,
+                StreamFixture(LogStreamStats::default()),
+            ),
+            LogStreamMonitor::new(
+                "second",
+                1_000_000,
+                4,
+                StreamFixture(LogStreamStats::default()),
+            ),
+        ]));
+        let mut ui = MonitorUi::new(model, MonitorUiOptions::default());
+        ui.set_active_screen(MonitorScreen::CopperList);
+        ui.scroll(ScrollDirection::Right, 84);
+        ui.scroll(ScrollDirection::Down, 20);
+        let text = stream_text(&mut ui, 42, 12);
+        assert!(text.contains("Telemetry / TX: second"), "{text}");
+        // Tiny terminal sizes and resizing clamp rather than overflow.
+        stream_text(&mut ui, 1, 1);
+        ui.scroll(ScrollDirection::Left, 200);
+        ui.scroll(ScrollDirection::Up, 200);
+        assert!(stream_text(&mut ui, 132, 48).contains("Telemetry / TX: first"));
+    }
 
     #[test]
     fn normalize_text_colors_replaces_reset_fg_and_bg() {
@@ -1624,7 +1824,7 @@ fn spans_from_runs(line: &StyledLine) -> Vec<Span<'static>> {
     spans
 }
 
-fn format_bytes(bytes: f64) -> String {
+pub(crate) fn format_bytes(bytes: f64) -> String {
     const UNITS: [&str; 4] = ["B", "KiB", "MiB", "GiB"];
     let mut value = bytes;
     let mut unit_idx = 0;

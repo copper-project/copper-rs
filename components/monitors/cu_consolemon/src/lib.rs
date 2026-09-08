@@ -222,7 +222,7 @@ impl UI {
 impl CuMonitor for CuConsoleMon {
     fn new(metadata: CuMonitoringMetadata, runtime: CuMonitoringRuntime) -> CuResult<Self> {
         Ok(Self {
-            model: MonitorModel::from_metadata(&metadata),
+            model: MonitorModel::from_metadata(&metadata).with_runtime(&runtime),
             ui_handle: None,
             quitting: Arc::new(AtomicBool::new(false)),
             monitor_runtime: runtime,

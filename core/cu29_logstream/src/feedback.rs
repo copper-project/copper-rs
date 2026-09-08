@@ -239,6 +239,8 @@ pub struct FeedbackSnapshot {
     pub report: Option<ReceiverReport>,
     pub effective_repair_every_source_symbols: u16,
     pub baseline_repair_every_source_symbols: u16,
+    pub receiver_rates_available: bool,
+    pub source_metrics_available: bool,
     pub receiver_bytes_per_second: u64,
     pub receiver_packets_per_second: u64,
     pub source_loss_basis_points: u16,
@@ -341,12 +343,14 @@ impl FeedbackController {
         // First report establishes a measurement baseline, including after receiver restart.
         if let Some(previous) = previous.filter(|_| same_peer) {
             let micros = report.elapsed_us - previous.elapsed_us;
+            self.snapshot.receiver_rates_available = true;
             self.snapshot.receiver_bytes_per_second =
                 rate(report.received_bytes - previous.received_bytes, micros);
             self.snapshot.receiver_packets_per_second =
                 rate(report.received_packets - previous.received_packets, micros);
             let n = report.sources.finalized - previous.sources.finalized;
             if n > 0 {
+                self.snapshot.source_metrics_available = true;
                 let lost = n.saturating_sub(report.sources.received - previous.sources.received);
                 let recovered = report.sources.recovered - previous.sources.recovered;
                 let loss = ((u128::from(lost) * 10_000) / u128::from(n)) as u64;
@@ -361,6 +365,8 @@ impl FeedbackController {
         } else {
             self.healthy = 0;
             self.smoothed_loss = None;
+            self.snapshot.receiver_rates_available = false;
+            self.snapshot.source_metrics_available = false;
             self.snapshot.receiver_bytes_per_second = 0;
             self.snapshot.receiver_packets_per_second = 0;
             self.snapshot.source_loss_basis_points = 0;
