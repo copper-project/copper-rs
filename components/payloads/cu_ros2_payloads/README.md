@@ -33,7 +33,7 @@ disables ROS type hashes.
 
 To add a new payload, we pregenerated all the RIHS01 in the [RIHS payloads](all_rihs.md) file from Jazzy.
 
-Added the script [extract_rihs01.sh](extract_rihs01.sh) to extract the RIHS01 from Jazzy.
+Run `just ros-rihs01-hashes` (see [Justfile command](#justfile-command) below) to extract the RIHS01 from Jazzy.
 As an alternation you can do:
 
 ```bash
