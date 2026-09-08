@@ -1,0 +1,54 @@
+(
+    runtime: (rate_target_hz: 100),
+    logging: (
+        slab_size_mib: 1,
+        section_size_mib: 1,
+    ),
+    resources: [
+        (
+            id: "board",
+            provider: "cu_linux_resources::LinuxResources",
+            config: {
+                "serial0_dev": "/dev/ttyACM0",
+                "serial0_baudrate": 9600,
+                "serial0_nonblocking": true,
+                "serial0_rts": true,
+            },
+        ),
+        (
+            id: "timing",
+            provider: "cu_hc12::host::DelayResources",
+        ),
+        (
+            id: "radio",
+            provider: "RadioResources",
+            resources: {
+                "serial": "board.serial0",
+                "set": "board.serial0_rts",
+                "delay": "timing.delay",
+            },
+            config: {"channel": 21},
+        ),
+    ],
+    bridges: [
+        (
+            id: "bytes",
+            type: "RadioBridge",
+            resources: {
+                "serial": "radio.serial",
+            },
+            channels: [
+                Rx(id: "bytes_rx"),
+                Tx(id: "bytes_tx"),
+            ],
+        ),
+    ],
+    tasks: [],
+    cnx: [
+        (
+            src: "bytes/bytes_rx",
+            dst: "bytes/bytes_tx",
+            msg: "cu_serial_bridge::ByteChunk",
+        ),
+    ],
+)

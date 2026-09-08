@@ -1,0 +1,41 @@
+[package]
+name = "cu-hc12"
+description = "HC-12 transparent radio resource for Copper"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[package.metadata.copper]
+kind = "resource"
+domains = ["communication/serial"]
+environments = ["host", "embedded"]
+
+[dependencies]
+embedded-io = { version = "0.7.1", default-features = false }
+cu29 = { path = "../../../core/cu29", version = "1.2.0-dev", default-features = false }
+cu-serial = { workspace = true }
+embedded-hal = { version = "1.0", default-features = false }
+
+[features]
+default = ["std"]
+std = ["cu29/std", "cu-serial/std"]
+
+[build-dependencies]
+cu29-build = { workspace = true }
+
+[dev-dependencies]
+cu-linux-resources = { workspace = true, features = ["serial-rts"] }
+cu-serial-bridge = { workspace = true }
+bincode = { workspace = true }
+serde = { workspace = true }
+
+[[example]]
+name = "echo"
+required-features = ["std"]
+
+[[example]]
+name = "pair"
+required-features = ["std"]

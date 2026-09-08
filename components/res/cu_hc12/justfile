@@ -1,0 +1,15 @@
+# Run software checks.
+default:
+    just --justfile ../../../justfile hc12-check
+
+# Echo on one HC-12 (edit examples/echo.ron to match wiring first).
+echo:
+    cargo run -p cu-hc12 --example echo
+
+# Test two radios over the air using the baud/channel from examples/echo.ron.
+pair first="/dev/ttyACM0" second="/dev/ttyACM1":
+    cargo run -p cu-hc12 --example pair -- "{{first}}" "{{second}}"
+
+# Render resource ownership and dependencies.
+dag:
+    cargo run -p cu29-runtime --bin cu29-rendercfg -- examples/echo.ron
