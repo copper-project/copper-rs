@@ -198,275 +198,276 @@
 <a href=#198 id=198 data-nosnippet>198</a>        <span class="self">self</span>.objects.len().saturating_add(<span class="self">self</span>.ready.len())
 <a href=#199 id=199 data-nosnippet>199</a>    }
 <a href=#200 id=200 data-nosnippet>200</a>
-<a href=#201 id=201 data-nosnippet>201</a>    <span class="doccomment">/// Accepts one datagram and emits a digest-verified record when its object completes.
-<a href=#202 id=202 data-nosnippet>202</a>    </span><span class="kw">pub fn </span>receive_datagram&lt;E&gt;(
-<a href=#203 id=203 data-nosnippet>203</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#204 id=204 data-nosnippet>204</a>        datagram: <span class="kw-2">&amp;</span>[u8],
-<a href=#205 id=205 data-nosnippet>205</a>        <span class="kw-2">mut </span>emit: <span class="kw">impl </span>FnMut(<span class="kw-2">&amp;</span>RecoveredRecord) -&gt; core::result::Result&lt;(), E&gt;,
-<a href=#206 id=206 data-nosnippet>206</a>    ) -&gt; core::result::Result&lt;(), ReceiveError&lt;E&gt;&gt; {
-<a href=#207 id=207 data-nosnippet>207</a>        <span class="self">self</span>.drain_records(<span class="kw-2">&amp;mut </span>emit)<span class="question-mark">?</span>;
-<a href=#208 id=208 data-nosnippet>208</a>        <span class="kw">let </span>packet = <span class="kw">match </span>WirePacketRef::decode(datagram) {
-<a href=#209 id=209 data-nosnippet>209</a>            <span class="prelude-val">Ok</span>(packet) =&gt; packet,
-<a href=#210 id=210 data-nosnippet>210</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {
-<a href=#211 id=211 data-nosnippet>211</a>                <span class="self">self</span>.stats.datagrams_seen = <span class="self">self</span>.stats.datagrams_seen.saturating_add(<span class="number">1</span>);
-<a href=#212 id=212 data-nosnippet>212</a>                <span class="self">self</span>.stats.invalid_datagrams = <span class="self">self</span>.stats.invalid_datagrams.saturating_add(<span class="number">1</span>);
-<a href=#213 id=213 data-nosnippet>213</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#214 id=214 data-nosnippet>214</a>            }
-<a href=#215 id=215 data-nosnippet>215</a>        };
-<a href=#216 id=216 data-nosnippet>216</a>        <span class="self">self</span>.receive_packet(packet)<span class="question-mark">?</span>;
-<a href=#217 id=217 data-nosnippet>217</a>        <span class="self">self</span>.drain_records(<span class="kw-2">&amp;mut </span>emit)
-<a href=#218 id=218 data-nosnippet>218</a>    }
-<a href=#219 id=219 data-nosnippet>219</a>
-<a href=#220 id=220 data-nosnippet>220</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>receive_packet(<span class="kw-2">&amp;mut </span><span class="self">self</span>, packet: WirePacketRef&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#221 id=221 data-nosnippet>221</a>        <span class="self">self</span>.stats.datagrams_seen = <span class="self">self</span>.stats.datagrams_seen.saturating_add(<span class="number">1</span>);
-<a href=#222 id=222 data-nosnippet>222</a>        <span class="kw">if </span>packet.header.session_id != <span class="self">self</span>.identity.session_id
-<a href=#223 id=223 data-nosnippet>223</a>            || packet.header.sender_id != <span class="self">self</span>.identity.sender_id
-<a href=#224 id=224 data-nosnippet>224</a>            || packet.header.lane != <span class="self">self</span>.lane
-<a href=#225 id=225 data-nosnippet>225</a>            || packet.header.fec_scheme != FecScheme::RaptorQ
-<a href=#226 id=226 data-nosnippet>226</a>            || packet.header.record_kind == RecordKind::CopperList
-<a href=#227 id=227 data-nosnippet>227</a>        {
-<a href=#228 id=228 data-nosnippet>228</a>            <span class="self">self</span>.stats.inconsistent_datagrams = <span class="self">self</span>.stats.inconsistent_datagrams.saturating_add(<span class="number">1</span>);
-<a href=#229 id=229 data-nosnippet>229</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#230 id=230 data-nosnippet>230</a>        }
-<a href=#231 id=231 data-nosnippet>231</a>
-<a href=#232 id=232 data-nosnippet>232</a>        <span class="kw">let </span>oti = <span class="kw">match </span>validate_oti(packet.header.fec_metadata, <span class="self">self</span>.limits) {
-<a href=#233 id=233 data-nosnippet>233</a>            <span class="prelude-val">Ok</span>(oti) =&gt; oti,
-<a href=#234 id=234 data-nosnippet>234</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {
-<a href=#235 id=235 data-nosnippet>235</a>                <span class="self">self</span>.stats.invalid_datagrams = <span class="self">self</span>.stats.invalid_datagrams.saturating_add(<span class="number">1</span>);
-<a href=#236 id=236 data-nosnippet>236</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#237 id=237 data-nosnippet>237</a>            }
-<a href=#238 id=238 data-nosnippet>238</a>        };
-<a href=#239 id=239 data-nosnippet>239</a>        <span class="kw">if </span>packet.payload.len() != oti.symbol_size() <span class="kw">as </span>usize {
-<a href=#240 id=240 data-nosnippet>240</a>            <span class="self">self</span>.stats.invalid_datagrams = <span class="self">self</span>.stats.invalid_datagrams.saturating_add(<span class="number">1</span>);
-<a href=#241 id=241 data-nosnippet>241</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#242 id=242 data-nosnippet>242</a>        }
-<a href=#243 id=243 data-nosnippet>243</a>
-<a href=#244 id=244 data-nosnippet>244</a>        <span class="kw">let </span>payload_id = PayloadId::deserialize(<span class="kw-2">&amp;</span>packet.header.fragment_count.to_be_bytes());
-<a href=#245 id=245 data-nosnippet>245</a>        <span class="kw">if </span>payload_id.source_block_number() &gt;= oti.source_blocks() {
-<a href=#246 id=246 data-nosnippet>246</a>            <span class="self">self</span>.stats.invalid_datagrams = <span class="self">self</span>.stats.invalid_datagrams.saturating_add(<span class="number">1</span>);
-<a href=#247 id=247 data-nosnippet>247</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#248 id=248 data-nosnippet>248</a>        }
-<a href=#249 id=249 data-nosnippet>249</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(object) = <span class="self">self</span>.ready.iter().find(|object| {
-<a href=#250 id=250 data-nosnippet>250</a>            object.kind == packet.header.record_kind &amp;&amp; object.object_id == packet.header.object_id
-<a href=#251 id=251 data-nosnippet>251</a>        }) {
-<a href=#252 id=252 data-nosnippet>252</a>            <span class="kw">if </span>object.oti != oti {
-<a href=#253 id=253 data-nosnippet>253</a>                <span class="self">self</span>.stats.inconsistent_datagrams =
-<a href=#254 id=254 data-nosnippet>254</a>                    <span class="self">self</span>.stats.inconsistent_datagrams.saturating_add(<span class="number">1</span>);
-<a href=#255 id=255 data-nosnippet>255</a>            } <span class="kw">else </span>{
-<a href=#256 id=256 data-nosnippet>256</a>                <span class="self">self</span>.stats.duplicate_symbols = <span class="self">self</span>.stats.duplicate_symbols.saturating_add(<span class="number">1</span>);
-<a href=#257 id=257 data-nosnippet>257</a>            }
-<a href=#258 id=258 data-nosnippet>258</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#259 id=259 data-nosnippet>259</a>        }
-<a href=#260 id=260 data-nosnippet>260</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(object) = <span class="self">self</span>.completed.iter().find(|object| {
-<a href=#261 id=261 data-nosnippet>261</a>            object.kind == packet.header.record_kind &amp;&amp; object.object_id == packet.header.object_id
-<a href=#262 id=262 data-nosnippet>262</a>        }) {
-<a href=#263 id=263 data-nosnippet>263</a>            <span class="kw">if </span>object.oti != oti {
-<a href=#264 id=264 data-nosnippet>264</a>                <span class="self">self</span>.stats.inconsistent_datagrams =
-<a href=#265 id=265 data-nosnippet>265</a>                    <span class="self">self</span>.stats.inconsistent_datagrams.saturating_add(<span class="number">1</span>);
-<a href=#266 id=266 data-nosnippet>266</a>            } <span class="kw">else </span>{
-<a href=#267 id=267 data-nosnippet>267</a>                <span class="self">self</span>.stats.duplicate_symbols = <span class="self">self</span>.stats.duplicate_symbols.saturating_add(<span class="number">1</span>);
-<a href=#268 id=268 data-nosnippet>268</a>            }
-<a href=#269 id=269 data-nosnippet>269</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#270 id=270 data-nosnippet>270</a>        }
-<a href=#271 id=271 data-nosnippet>271</a>        <span class="kw">let </span>object_index = <span class="kw">match </span><span class="self">self</span>.objects.iter().position(|object| {
-<a href=#272 id=272 data-nosnippet>272</a>            object.kind == packet.header.record_kind &amp;&amp; object.object_id == packet.header.object_id
-<a href=#273 id=273 data-nosnippet>273</a>        }) {
-<a href=#274 id=274 data-nosnippet>274</a>            <span class="prelude-val">Some</span>(index) =&gt; {
-<a href=#275 id=275 data-nosnippet>275</a>                <span class="kw">let </span>object = <span class="kw-2">&amp;</span><span class="self">self</span>.objects[index];
-<a href=#276 id=276 data-nosnippet>276</a>                <span class="kw">if </span>object.oti != oti {
-<a href=#277 id=277 data-nosnippet>277</a>                    <span class="self">self</span>.stats.inconsistent_datagrams =
-<a href=#278 id=278 data-nosnippet>278</a>                        <span class="self">self</span>.stats.inconsistent_datagrams.saturating_add(<span class="number">1</span>);
-<a href=#279 id=279 data-nosnippet>279</a>                    <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#280 id=280 data-nosnippet>280</a>                }
-<a href=#281 id=281 data-nosnippet>281</a>                index
-<a href=#282 id=282 data-nosnippet>282</a>            }
-<a href=#283 id=283 data-nosnippet>283</a>            <span class="prelude-val">None </span>=&gt; {
-<a href=#284 id=284 data-nosnippet>284</a>                <span class="kw">let </span>actual = <span class="self">self
-<a href=#285 id=285 data-nosnippet>285</a>                    </span>.objects
-<a href=#286 id=286 data-nosnippet>286</a>                    .len()
-<a href=#287 id=287 data-nosnippet>287</a>                    .saturating_add(<span class="self">self</span>.ready.len())
-<a href=#288 id=288 data-nosnippet>288</a>                    .saturating_add(<span class="number">1</span>);
-<a href=#289 id=289 data-nosnippet>289</a>                <span class="kw">if </span>actual &gt; <span class="self">self</span>.limits.max_concurrent_objects {
-<a href=#290 id=290 data-nosnippet>290</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(Error::TooManyRecords {
-<a href=#291 id=291 data-nosnippet>291</a>                        actual,
-<a href=#292 id=292 data-nosnippet>292</a>                        maximum: <span class="self">self</span>.limits.max_concurrent_objects,
-<a href=#293 id=293 data-nosnippet>293</a>                    });
-<a href=#294 id=294 data-nosnippet>294</a>                }
-<a href=#295 id=295 data-nosnippet>295</a>                <span class="self">self</span>.objects.push(ObjectDecoder {
-<a href=#296 id=296 data-nosnippet>296</a>                    kind: packet.header.record_kind,
-<a href=#297 id=297 data-nosnippet>297</a>                    object_id: packet.header.object_id,
-<a href=#298 id=298 data-nosnippet>298</a>                    oti,
-<a href=#299 id=299 data-nosnippet>299</a>                    decoder: Decoder::new(oti),
-<a href=#300 id=300 data-nosnippet>300</a>                });
-<a href=#301 id=301 data-nosnippet>301</a>                <span class="self">self</span>.stats.peak_concurrent_objects =
-<a href=#302 id=302 data-nosnippet>302</a>                    <span class="self">self</span>.stats.peak_concurrent_objects.max(<span class="self">self</span>.objects.len());
-<a href=#303 id=303 data-nosnippet>303</a>                <span class="self">self</span>.objects.len() - <span class="number">1
-<a href=#304 id=304 data-nosnippet>304</a>            </span>}
-<a href=#305 id=305 data-nosnippet>305</a>        };
-<a href=#306 id=306 data-nosnippet>306</a>
-<a href=#307 id=307 data-nosnippet>307</a>        <span class="kw">match </span>packet.header.symbol_kind {
-<a href=#308 id=308 data-nosnippet>308</a>            FecSymbolKind::Source =&gt; {
-<a href=#309 id=309 data-nosnippet>309</a>                <span class="self">self</span>.stats.source_symbols_received =
-<a href=#310 id=310 data-nosnippet>310</a>                    <span class="self">self</span>.stats.source_symbols_received.saturating_add(<span class="number">1</span>);
-<a href=#311 id=311 data-nosnippet>311</a>            }
-<a href=#312 id=312 data-nosnippet>312</a>            FecSymbolKind::Repair =&gt; {
-<a href=#313 id=313 data-nosnippet>313</a>                <span class="self">self</span>.stats.repair_symbols_received =
-<a href=#314 id=314 data-nosnippet>314</a>                    <span class="self">self</span>.stats.repair_symbols_received.saturating_add(<span class="number">1</span>);
-<a href=#315 id=315 data-nosnippet>315</a>            }
-<a href=#316 id=316 data-nosnippet>316</a>        }
-<a href=#317 id=317 data-nosnippet>317</a>        <span class="self">self</span>.stats.valid_datagrams = <span class="self">self</span>.stats.valid_datagrams.saturating_add(<span class="number">1</span>);
-<a href=#318 id=318 data-nosnippet>318</a>        <span class="kw">let </span>completed = <span class="self">self</span>.objects[object_index]
-<a href=#319 id=319 data-nosnippet>319</a>            .decoder
-<a href=#320 id=320 data-nosnippet>320</a>            .decode(EncodingPacket::new(payload_id, packet.payload.to_vec()));
-<a href=#321 id=321 data-nosnippet>321</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(bytes) = completed <span class="kw">else </span>{
-<a href=#322 id=322 data-nosnippet>322</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#323 id=323 data-nosnippet>323</a>        };
-<a href=#324 id=324 data-nosnippet>324</a>
-<a href=#325 id=325 data-nosnippet>325</a>        <span class="kw">let </span>object = <span class="self">self</span>.objects.swap_remove(object_index);
-<a href=#326 id=326 data-nosnippet>326</a>        <span class="kw">let </span>record = RecoveredRecord::from_bytes(bytes)<span class="question-mark">?</span>;
-<a href=#327 id=327 data-nosnippet>327</a>        <span class="kw">let </span>decoded = record.decoded();
-<a href=#328 id=328 data-nosnippet>328</a>        <span class="kw">if </span>decoded.kind != object.kind || decoded.object_id != object.object_id {
-<a href=#329 id=329 data-nosnippet>329</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(Error::InconsistentObject);
-<a href=#330 id=330 data-nosnippet>330</a>        }
-<a href=#331 id=331 data-nosnippet>331</a>        <span class="self">self</span>.ready.push(ReadyObject {
-<a href=#332 id=332 data-nosnippet>332</a>            kind: object.kind,
-<a href=#333 id=333 data-nosnippet>333</a>            object_id: object.object_id,
-<a href=#334 id=334 data-nosnippet>334</a>            oti: object.oti,
-<a href=#335 id=335 data-nosnippet>335</a>            record,
-<a href=#336 id=336 data-nosnippet>336</a>        });
-<a href=#337 id=337 data-nosnippet>337</a>        <span class="self">self</span>.stats.objects_recovered = <span class="self">self</span>.stats.objects_recovered.saturating_add(<span class="number">1</span>);
-<a href=#338 id=338 data-nosnippet>338</a>        <span class="prelude-val">Ok</span>(())
-<a href=#339 id=339 data-nosnippet>339</a>    }
-<a href=#340 id=340 data-nosnippet>340</a>
-<a href=#341 id=341 data-nosnippet>341</a>    <span class="doccomment">/// Retries delivery of records retained after a consumer failure.
-<a href=#342 id=342 data-nosnippet>342</a>    </span><span class="kw">pub fn </span>drain_records&lt;E&gt;(
-<a href=#343 id=343 data-nosnippet>343</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#344 id=344 data-nosnippet>344</a>        <span class="kw-2">mut </span>emit: <span class="kw">impl </span>FnMut(<span class="kw-2">&amp;</span>RecoveredRecord) -&gt; core::result::Result&lt;(), E&gt;,
-<a href=#345 id=345 data-nosnippet>345</a>    ) -&gt; core::result::Result&lt;(), ReceiveError&lt;E&gt;&gt; {
-<a href=#346 id=346 data-nosnippet>346</a>        <span class="kw">while let </span><span class="prelude-val">Some</span>(ready) = <span class="self">self</span>.ready.first() {
-<a href=#347 id=347 data-nosnippet>347</a>            emit(<span class="kw-2">&amp;</span>ready.record).map_err(ReceiveError::Consumer)<span class="question-mark">?</span>;
-<a href=#348 id=348 data-nosnippet>348</a>            <span class="self">self</span>.pop_record();
-<a href=#349 id=349 data-nosnippet>349</a>        }
-<a href=#350 id=350 data-nosnippet>350</a>        <span class="prelude-val">Ok</span>(())
-<a href=#351 id=351 data-nosnippet>351</a>    }
-<a href=#352 id=352 data-nosnippet>352</a>
-<a href=#353 id=353 data-nosnippet>353</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>pop_record(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;RecoveredRecord&gt; {
-<a href=#354 id=354 data-nosnippet>354</a>        <span class="kw">if </span><span class="self">self</span>.ready.is_empty() {
-<a href=#355 id=355 data-nosnippet>355</a>            <span class="kw">return </span><span class="prelude-val">None</span>;
-<a href=#356 id=356 data-nosnippet>356</a>        }
-<a href=#357 id=357 data-nosnippet>357</a>        <span class="kw">let </span>delivered = <span class="self">self</span>.ready.remove(<span class="number">0</span>);
-<a href=#358 id=358 data-nosnippet>358</a>        <span class="kw">if </span><span class="self">self</span>.completed.len() == <span class="self">self</span>.limits.max_concurrent_objects {
-<a href=#359 id=359 data-nosnippet>359</a>            <span class="self">self</span>.completed.remove(<span class="number">0</span>);
-<a href=#360 id=360 data-nosnippet>360</a>        }
-<a href=#361 id=361 data-nosnippet>361</a>        <span class="self">self</span>.completed.push(CompletedObject {
-<a href=#362 id=362 data-nosnippet>362</a>            kind: delivered.kind,
-<a href=#363 id=363 data-nosnippet>363</a>            object_id: delivered.object_id,
-<a href=#364 id=364 data-nosnippet>364</a>            oti: delivered.oti,
-<a href=#365 id=365 data-nosnippet>365</a>        });
-<a href=#366 id=366 data-nosnippet>366</a>        <span class="prelude-val">Some</span>(delivered.record)
-<a href=#367 id=367 data-nosnippet>367</a>    }
-<a href=#368 id=368 data-nosnippet>368</a>}
-<a href=#369 id=369 data-nosnippet>369</a>
-<a href=#370 id=370 data-nosnippet>370</a><span class="kw">struct </span>ObjectDecoder {
-<a href=#371 id=371 data-nosnippet>371</a>    kind: RecordKind,
-<a href=#372 id=372 data-nosnippet>372</a>    object_id: u64,
-<a href=#373 id=373 data-nosnippet>373</a>    oti: ObjectTransmissionInformation,
-<a href=#374 id=374 data-nosnippet>374</a>    decoder: Decoder,
-<a href=#375 id=375 data-nosnippet>375</a>}
-<a href=#376 id=376 data-nosnippet>376</a>
-<a href=#377 id=377 data-nosnippet>377</a><span class="kw">struct </span>ReadyObject {
-<a href=#378 id=378 data-nosnippet>378</a>    kind: RecordKind,
-<a href=#379 id=379 data-nosnippet>379</a>    object_id: u64,
-<a href=#380 id=380 data-nosnippet>380</a>    oti: ObjectTransmissionInformation,
-<a href=#381 id=381 data-nosnippet>381</a>    record: RecoveredRecord,
-<a href=#382 id=382 data-nosnippet>382</a>}
-<a href=#383 id=383 data-nosnippet>383</a>
-<a href=#384 id=384 data-nosnippet>384</a><span class="kw">struct </span>CompletedObject {
-<a href=#385 id=385 data-nosnippet>385</a>    kind: RecordKind,
-<a href=#386 id=386 data-nosnippet>386</a>    object_id: u64,
-<a href=#387 id=387 data-nosnippet>387</a>    oti: ObjectTransmissionInformation,
-<a href=#388 id=388 data-nosnippet>388</a>}
-<a href=#389 id=389 data-nosnippet>389</a>
-<a href=#390 id=390 data-nosnippet>390</a><span class="kw">fn </span>validate_sender_config(config: FiniteObjectSenderConfig) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#391 id=391 data-nosnippet>391</a>    <span class="kw">if </span>config.symbol_size == <span class="number">0 </span>{
-<a href=#392 id=392 data-nosnippet>392</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Error::InvalidConfig(<span class="string">"RaptorQ symbol size must be nonzero"</span>));
-<a href=#393 id=393 data-nosnippet>393</a>    }
-<a href=#394 id=394 data-nosnippet>394</a>    <span class="kw">if </span>config.max_object_bytes == <span class="number">0 </span>|| config.max_object_bytes &gt; RFC6330_MAX_TRANSFER_LENGTH {
-<a href=#395 id=395 data-nosnippet>395</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Error::InvalidConfig(<span class="string">"invalid RaptorQ maximum object size"</span>));
-<a href=#396 id=396 data-nosnippet>396</a>    }
-<a href=#397 id=397 data-nosnippet>397</a>    <span class="prelude-val">Ok</span>(())
-<a href=#398 id=398 data-nosnippet>398</a>}
-<a href=#399 id=399 data-nosnippet>399</a>
-<a href=#400 id=400 data-nosnippet>400</a><span class="kw">fn </span>validate_limits(limits: FiniteObjectLimits) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#401 id=401 data-nosnippet>401</a>    <span class="kw">if </span>limits.max_object_bytes == <span class="number">0 </span>|| limits.max_object_bytes &gt; RFC6330_MAX_TRANSFER_LENGTH {
-<a href=#402 id=402 data-nosnippet>402</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Error::InvalidConfig(<span class="string">"invalid RaptorQ maximum object size"</span>));
-<a href=#403 id=403 data-nosnippet>403</a>    }
-<a href=#404 id=404 data-nosnippet>404</a>    <span class="kw">if </span>limits.max_symbol_size == <span class="number">0 </span>{
-<a href=#405 id=405 data-nosnippet>405</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Error::InvalidConfig(
-<a href=#406 id=406 data-nosnippet>406</a>            <span class="string">"RaptorQ maximum symbol size must be nonzero"</span>,
-<a href=#407 id=407 data-nosnippet>407</a>        ));
-<a href=#408 id=408 data-nosnippet>408</a>    }
-<a href=#409 id=409 data-nosnippet>409</a>    <span class="kw">if </span>limits.max_concurrent_objects == <span class="number">0 </span>{
-<a href=#410 id=410 data-nosnippet>410</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Error::InvalidConfig(
-<a href=#411 id=411 data-nosnippet>411</a>            <span class="string">"finite-object receiver capacity must be nonzero"</span>,
-<a href=#412 id=412 data-nosnippet>412</a>        ));
-<a href=#413 id=413 data-nosnippet>413</a>    }
-<a href=#414 id=414 data-nosnippet>414</a>    <span class="prelude-val">Ok</span>(())
-<a href=#415 id=415 data-nosnippet>415</a>}
-<a href=#416 id=416 data-nosnippet>416</a>
-<a href=#417 id=417 data-nosnippet>417</a><span class="kw">fn </span>validate_oti(
-<a href=#418 id=418 data-nosnippet>418</a>    encoded: [u8; <span class="number">12</span>],
-<a href=#419 id=419 data-nosnippet>419</a>    limits: FiniteObjectLimits,
-<a href=#420 id=420 data-nosnippet>420</a>) -&gt; <span class="prelude-ty">Result</span>&lt;ObjectTransmissionInformation&gt; {
-<a href=#421 id=421 data-nosnippet>421</a>    <span class="kw">if </span>encoded[<span class="number">5</span>] != <span class="number">0 </span>{
-<a href=#422 id=422 data-nosnippet>422</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Error::InvalidFecMetadata(
-<a href=#423 id=423 data-nosnippet>423</a>            <span class="string">"RaptorQ OTI reserved byte is nonzero"</span>,
-<a href=#424 id=424 data-nosnippet>424</a>        ));
-<a href=#425 id=425 data-nosnippet>425</a>    }
-<a href=#426 id=426 data-nosnippet>426</a>    <span class="kw">let </span>oti = ObjectTransmissionInformation::deserialize(<span class="kw-2">&amp;</span>encoded);
-<a href=#427 id=427 data-nosnippet>427</a>    <span class="kw">let </span>transfer_length = oti.transfer_length();
-<a href=#428 id=428 data-nosnippet>428</a>    <span class="kw">let </span>symbol_size = oti.symbol_size();
-<a href=#429 id=429 data-nosnippet>429</a>    <span class="kw">let </span>source_blocks = oti.source_blocks();
-<a href=#430 id=430 data-nosnippet>430</a>    <span class="kw">let </span>sub_blocks = oti.sub_blocks();
-<a href=#431 id=431 data-nosnippet>431</a>    <span class="kw">let </span>alignment = oti.symbol_alignment();
-<a href=#432 id=432 data-nosnippet>432</a>    <span class="kw">if </span>transfer_length == <span class="number">0 </span>|| transfer_length &gt; limits.max_object_bytes {
-<a href=#433 id=433 data-nosnippet>433</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Error::ObjectTooLarge {
-<a href=#434 id=434 data-nosnippet>434</a>            actual: transfer_length,
-<a href=#435 id=435 data-nosnippet>435</a>            maximum: limits.max_object_bytes,
-<a href=#436 id=436 data-nosnippet>436</a>        });
-<a href=#437 id=437 data-nosnippet>437</a>    }
-<a href=#438 id=438 data-nosnippet>438</a>    <span class="kw">if </span>symbol_size == <span class="number">0 </span>|| symbol_size &gt; limits.max_symbol_size {
-<a href=#439 id=439 data-nosnippet>439</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Error::InvalidFecMetadata(
-<a href=#440 id=440 data-nosnippet>440</a>            <span class="string">"RaptorQ symbol size exceeds receiver limit"</span>,
-<a href=#441 id=441 data-nosnippet>441</a>        ));
-<a href=#442 id=442 data-nosnippet>442</a>    }
-<a href=#443 id=443 data-nosnippet>443</a>    <span class="kw">if </span>source_blocks == <span class="number">0 </span>|| sub_blocks == <span class="number">0 </span>|| alignment == <span class="number">0 </span>{
-<a href=#444 id=444 data-nosnippet>444</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Error::InvalidFecMetadata(
-<a href=#445 id=445 data-nosnippet>445</a>            <span class="string">"RaptorQ OTI contains a zero parameter"</span>,
-<a href=#446 id=446 data-nosnippet>446</a>        ));
-<a href=#447 id=447 data-nosnippet>447</a>    }
-<a href=#448 id=448 data-nosnippet>448</a>    <span class="kw">if </span>!symbol_size.is_multiple_of(alignment <span class="kw">as </span>u16) {
-<a href=#449 id=449 data-nosnippet>449</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Error::InvalidFecMetadata(
-<a href=#450 id=450 data-nosnippet>450</a>            <span class="string">"RaptorQ symbol alignment is invalid"</span>,
-<a href=#451 id=451 data-nosnippet>451</a>        ));
-<a href=#452 id=452 data-nosnippet>452</a>    }
-<a href=#453 id=453 data-nosnippet>453</a>    <span class="kw">let </span>total_source_symbols = transfer_length.div_ceil(symbol_size <span class="kw">as </span>u64);
-<a href=#454 id=454 data-nosnippet>454</a>    <span class="kw">if </span>source_blocks <span class="kw">as </span>u64 &gt; total_source_symbols {
-<a href=#455 id=455 data-nosnippet>455</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Error::InvalidFecMetadata(
-<a href=#456 id=456 data-nosnippet>456</a>            <span class="string">"RaptorQ has more source blocks than source symbols"</span>,
-<a href=#457 id=457 data-nosnippet>457</a>        ));
-<a href=#458 id=458 data-nosnippet>458</a>    }
-<a href=#459 id=459 data-nosnippet>459</a>    <span class="kw">if </span>sub_blocks <span class="kw">as </span>u32 &gt; u32::from(symbol_size / alignment <span class="kw">as </span>u16) {
-<a href=#460 id=460 data-nosnippet>460</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Error::InvalidFecMetadata(
-<a href=#461 id=461 data-nosnippet>461</a>            <span class="string">"RaptorQ sub-block count exceeds symbol geometry"</span>,
-<a href=#462 id=462 data-nosnippet>462</a>        ));
-<a href=#463 id=463 data-nosnippet>463</a>    }
-<a href=#464 id=464 data-nosnippet>464</a>    <span class="kw">let </span>largest_block = total_source_symbols.div_ceil(source_blocks <span class="kw">as </span>u64);
-<a href=#465 id=465 data-nosnippet>465</a>    <span class="kw">if </span>largest_block &gt; RFC6330_MAX_SOURCE_SYMBOLS_PER_BLOCK {
-<a href=#466 id=466 data-nosnippet>466</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Error::InvalidFecMetadata(
-<a href=#467 id=467 data-nosnippet>467</a>            <span class="string">"RaptorQ source block is too large"</span>,
-<a href=#468 id=468 data-nosnippet>468</a>        ));
-<a href=#469 id=469 data-nosnippet>469</a>    }
-<a href=#470 id=470 data-nosnippet>470</a>    <span class="prelude-val">Ok</span>(oti)
-<a href=#471 id=471 data-nosnippet>471</a>}
+<a href=#201 id=201 data-nosnippet>201</a>    <span class="doccomment">/// Accepts one carrier-verified datagram and emits a digest-verified record
+<a href=#202 id=202 data-nosnippet>202</a>    /// when its object completes. Callers must uphold [`crate::CuStreamRx`] integrity.
+<a href=#203 id=203 data-nosnippet>203</a>    </span><span class="kw">pub fn </span>receive_datagram&lt;E&gt;(
+<a href=#204 id=204 data-nosnippet>204</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#205 id=205 data-nosnippet>205</a>        datagram: <span class="kw-2">&amp;</span>[u8],
+<a href=#206 id=206 data-nosnippet>206</a>        <span class="kw-2">mut </span>emit: <span class="kw">impl </span>FnMut(<span class="kw-2">&amp;</span>RecoveredRecord) -&gt; core::result::Result&lt;(), E&gt;,
+<a href=#207 id=207 data-nosnippet>207</a>    ) -&gt; core::result::Result&lt;(), ReceiveError&lt;E&gt;&gt; {
+<a href=#208 id=208 data-nosnippet>208</a>        <span class="self">self</span>.drain_records(<span class="kw-2">&amp;mut </span>emit)<span class="question-mark">?</span>;
+<a href=#209 id=209 data-nosnippet>209</a>        <span class="kw">let </span>packet = <span class="kw">match </span>WirePacketRef::decode(datagram) {
+<a href=#210 id=210 data-nosnippet>210</a>            <span class="prelude-val">Ok</span>(packet) =&gt; packet,
+<a href=#211 id=211 data-nosnippet>211</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {
+<a href=#212 id=212 data-nosnippet>212</a>                <span class="self">self</span>.stats.datagrams_seen = <span class="self">self</span>.stats.datagrams_seen.saturating_add(<span class="number">1</span>);
+<a href=#213 id=213 data-nosnippet>213</a>                <span class="self">self</span>.stats.invalid_datagrams = <span class="self">self</span>.stats.invalid_datagrams.saturating_add(<span class="number">1</span>);
+<a href=#214 id=214 data-nosnippet>214</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#215 id=215 data-nosnippet>215</a>            }
+<a href=#216 id=216 data-nosnippet>216</a>        };
+<a href=#217 id=217 data-nosnippet>217</a>        <span class="self">self</span>.receive_packet(packet)<span class="question-mark">?</span>;
+<a href=#218 id=218 data-nosnippet>218</a>        <span class="self">self</span>.drain_records(<span class="kw-2">&amp;mut </span>emit)
+<a href=#219 id=219 data-nosnippet>219</a>    }
+<a href=#220 id=220 data-nosnippet>220</a>
+<a href=#221 id=221 data-nosnippet>221</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>receive_packet(<span class="kw-2">&amp;mut </span><span class="self">self</span>, packet: WirePacketRef&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#222 id=222 data-nosnippet>222</a>        <span class="self">self</span>.stats.datagrams_seen = <span class="self">self</span>.stats.datagrams_seen.saturating_add(<span class="number">1</span>);
+<a href=#223 id=223 data-nosnippet>223</a>        <span class="kw">if </span>packet.header.session_id != <span class="self">self</span>.identity.session_id
+<a href=#224 id=224 data-nosnippet>224</a>            || packet.header.sender_id != <span class="self">self</span>.identity.sender_id
+<a href=#225 id=225 data-nosnippet>225</a>            || packet.header.lane != <span class="self">self</span>.lane
+<a href=#226 id=226 data-nosnippet>226</a>            || packet.header.fec_scheme != FecScheme::RaptorQ
+<a href=#227 id=227 data-nosnippet>227</a>            || packet.header.record_kind == RecordKind::CopperList
+<a href=#228 id=228 data-nosnippet>228</a>        {
+<a href=#229 id=229 data-nosnippet>229</a>            <span class="self">self</span>.stats.inconsistent_datagrams = <span class="self">self</span>.stats.inconsistent_datagrams.saturating_add(<span class="number">1</span>);
+<a href=#230 id=230 data-nosnippet>230</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#231 id=231 data-nosnippet>231</a>        }
+<a href=#232 id=232 data-nosnippet>232</a>
+<a href=#233 id=233 data-nosnippet>233</a>        <span class="kw">let </span>oti = <span class="kw">match </span>validate_oti(packet.header.fec_metadata, <span class="self">self</span>.limits) {
+<a href=#234 id=234 data-nosnippet>234</a>            <span class="prelude-val">Ok</span>(oti) =&gt; oti,
+<a href=#235 id=235 data-nosnippet>235</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {
+<a href=#236 id=236 data-nosnippet>236</a>                <span class="self">self</span>.stats.invalid_datagrams = <span class="self">self</span>.stats.invalid_datagrams.saturating_add(<span class="number">1</span>);
+<a href=#237 id=237 data-nosnippet>237</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#238 id=238 data-nosnippet>238</a>            }
+<a href=#239 id=239 data-nosnippet>239</a>        };
+<a href=#240 id=240 data-nosnippet>240</a>        <span class="kw">if </span>packet.payload.len() != oti.symbol_size() <span class="kw">as </span>usize {
+<a href=#241 id=241 data-nosnippet>241</a>            <span class="self">self</span>.stats.invalid_datagrams = <span class="self">self</span>.stats.invalid_datagrams.saturating_add(<span class="number">1</span>);
+<a href=#242 id=242 data-nosnippet>242</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#243 id=243 data-nosnippet>243</a>        }
+<a href=#244 id=244 data-nosnippet>244</a>
+<a href=#245 id=245 data-nosnippet>245</a>        <span class="kw">let </span>payload_id = PayloadId::deserialize(<span class="kw-2">&amp;</span>packet.header.fragment_count.to_be_bytes());
+<a href=#246 id=246 data-nosnippet>246</a>        <span class="kw">if </span>payload_id.source_block_number() &gt;= oti.source_blocks() {
+<a href=#247 id=247 data-nosnippet>247</a>            <span class="self">self</span>.stats.invalid_datagrams = <span class="self">self</span>.stats.invalid_datagrams.saturating_add(<span class="number">1</span>);
+<a href=#248 id=248 data-nosnippet>248</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#249 id=249 data-nosnippet>249</a>        }
+<a href=#250 id=250 data-nosnippet>250</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(object) = <span class="self">self</span>.ready.iter().find(|object| {
+<a href=#251 id=251 data-nosnippet>251</a>            object.kind == packet.header.record_kind &amp;&amp; object.object_id == packet.header.object_id
+<a href=#252 id=252 data-nosnippet>252</a>        }) {
+<a href=#253 id=253 data-nosnippet>253</a>            <span class="kw">if </span>object.oti != oti {
+<a href=#254 id=254 data-nosnippet>254</a>                <span class="self">self</span>.stats.inconsistent_datagrams =
+<a href=#255 id=255 data-nosnippet>255</a>                    <span class="self">self</span>.stats.inconsistent_datagrams.saturating_add(<span class="number">1</span>);
+<a href=#256 id=256 data-nosnippet>256</a>            } <span class="kw">else </span>{
+<a href=#257 id=257 data-nosnippet>257</a>                <span class="self">self</span>.stats.duplicate_symbols = <span class="self">self</span>.stats.duplicate_symbols.saturating_add(<span class="number">1</span>);
+<a href=#258 id=258 data-nosnippet>258</a>            }
+<a href=#259 id=259 data-nosnippet>259</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#260 id=260 data-nosnippet>260</a>        }
+<a href=#261 id=261 data-nosnippet>261</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(object) = <span class="self">self</span>.completed.iter().find(|object| {
+<a href=#262 id=262 data-nosnippet>262</a>            object.kind == packet.header.record_kind &amp;&amp; object.object_id == packet.header.object_id
+<a href=#263 id=263 data-nosnippet>263</a>        }) {
+<a href=#264 id=264 data-nosnippet>264</a>            <span class="kw">if </span>object.oti != oti {
+<a href=#265 id=265 data-nosnippet>265</a>                <span class="self">self</span>.stats.inconsistent_datagrams =
+<a href=#266 id=266 data-nosnippet>266</a>                    <span class="self">self</span>.stats.inconsistent_datagrams.saturating_add(<span class="number">1</span>);
+<a href=#267 id=267 data-nosnippet>267</a>            } <span class="kw">else </span>{
+<a href=#268 id=268 data-nosnippet>268</a>                <span class="self">self</span>.stats.duplicate_symbols = <span class="self">self</span>.stats.duplicate_symbols.saturating_add(<span class="number">1</span>);
+<a href=#269 id=269 data-nosnippet>269</a>            }
+<a href=#270 id=270 data-nosnippet>270</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#271 id=271 data-nosnippet>271</a>        }
+<a href=#272 id=272 data-nosnippet>272</a>        <span class="kw">let </span>object_index = <span class="kw">match </span><span class="self">self</span>.objects.iter().position(|object| {
+<a href=#273 id=273 data-nosnippet>273</a>            object.kind == packet.header.record_kind &amp;&amp; object.object_id == packet.header.object_id
+<a href=#274 id=274 data-nosnippet>274</a>        }) {
+<a href=#275 id=275 data-nosnippet>275</a>            <span class="prelude-val">Some</span>(index) =&gt; {
+<a href=#276 id=276 data-nosnippet>276</a>                <span class="kw">let </span>object = <span class="kw-2">&amp;</span><span class="self">self</span>.objects[index];
+<a href=#277 id=277 data-nosnippet>277</a>                <span class="kw">if </span>object.oti != oti {
+<a href=#278 id=278 data-nosnippet>278</a>                    <span class="self">self</span>.stats.inconsistent_datagrams =
+<a href=#279 id=279 data-nosnippet>279</a>                        <span class="self">self</span>.stats.inconsistent_datagrams.saturating_add(<span class="number">1</span>);
+<a href=#280 id=280 data-nosnippet>280</a>                    <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#281 id=281 data-nosnippet>281</a>                }
+<a href=#282 id=282 data-nosnippet>282</a>                index
+<a href=#283 id=283 data-nosnippet>283</a>            }
+<a href=#284 id=284 data-nosnippet>284</a>            <span class="prelude-val">None </span>=&gt; {
+<a href=#285 id=285 data-nosnippet>285</a>                <span class="kw">let </span>actual = <span class="self">self
+<a href=#286 id=286 data-nosnippet>286</a>                    </span>.objects
+<a href=#287 id=287 data-nosnippet>287</a>                    .len()
+<a href=#288 id=288 data-nosnippet>288</a>                    .saturating_add(<span class="self">self</span>.ready.len())
+<a href=#289 id=289 data-nosnippet>289</a>                    .saturating_add(<span class="number">1</span>);
+<a href=#290 id=290 data-nosnippet>290</a>                <span class="kw">if </span>actual &gt; <span class="self">self</span>.limits.max_concurrent_objects {
+<a href=#291 id=291 data-nosnippet>291</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(Error::TooManyRecords {
+<a href=#292 id=292 data-nosnippet>292</a>                        actual,
+<a href=#293 id=293 data-nosnippet>293</a>                        maximum: <span class="self">self</span>.limits.max_concurrent_objects,
+<a href=#294 id=294 data-nosnippet>294</a>                    });
+<a href=#295 id=295 data-nosnippet>295</a>                }
+<a href=#296 id=296 data-nosnippet>296</a>                <span class="self">self</span>.objects.push(ObjectDecoder {
+<a href=#297 id=297 data-nosnippet>297</a>                    kind: packet.header.record_kind,
+<a href=#298 id=298 data-nosnippet>298</a>                    object_id: packet.header.object_id,
+<a href=#299 id=299 data-nosnippet>299</a>                    oti,
+<a href=#300 id=300 data-nosnippet>300</a>                    decoder: Decoder::new(oti),
+<a href=#301 id=301 data-nosnippet>301</a>                });
+<a href=#302 id=302 data-nosnippet>302</a>                <span class="self">self</span>.stats.peak_concurrent_objects =
+<a href=#303 id=303 data-nosnippet>303</a>                    <span class="self">self</span>.stats.peak_concurrent_objects.max(<span class="self">self</span>.objects.len());
+<a href=#304 id=304 data-nosnippet>304</a>                <span class="self">self</span>.objects.len() - <span class="number">1
+<a href=#305 id=305 data-nosnippet>305</a>            </span>}
+<a href=#306 id=306 data-nosnippet>306</a>        };
+<a href=#307 id=307 data-nosnippet>307</a>
+<a href=#308 id=308 data-nosnippet>308</a>        <span class="kw">match </span>packet.header.symbol_kind {
+<a href=#309 id=309 data-nosnippet>309</a>            FecSymbolKind::Source =&gt; {
+<a href=#310 id=310 data-nosnippet>310</a>                <span class="self">self</span>.stats.source_symbols_received =
+<a href=#311 id=311 data-nosnippet>311</a>                    <span class="self">self</span>.stats.source_symbols_received.saturating_add(<span class="number">1</span>);
+<a href=#312 id=312 data-nosnippet>312</a>            }
+<a href=#313 id=313 data-nosnippet>313</a>            FecSymbolKind::Repair =&gt; {
+<a href=#314 id=314 data-nosnippet>314</a>                <span class="self">self</span>.stats.repair_symbols_received =
+<a href=#315 id=315 data-nosnippet>315</a>                    <span class="self">self</span>.stats.repair_symbols_received.saturating_add(<span class="number">1</span>);
+<a href=#316 id=316 data-nosnippet>316</a>            }
+<a href=#317 id=317 data-nosnippet>317</a>        }
+<a href=#318 id=318 data-nosnippet>318</a>        <span class="self">self</span>.stats.valid_datagrams = <span class="self">self</span>.stats.valid_datagrams.saturating_add(<span class="number">1</span>);
+<a href=#319 id=319 data-nosnippet>319</a>        <span class="kw">let </span>completed = <span class="self">self</span>.objects[object_index]
+<a href=#320 id=320 data-nosnippet>320</a>            .decoder
+<a href=#321 id=321 data-nosnippet>321</a>            .decode(EncodingPacket::new(payload_id, packet.payload.to_vec()));
+<a href=#322 id=322 data-nosnippet>322</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(bytes) = completed <span class="kw">else </span>{
+<a href=#323 id=323 data-nosnippet>323</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#324 id=324 data-nosnippet>324</a>        };
+<a href=#325 id=325 data-nosnippet>325</a>
+<a href=#326 id=326 data-nosnippet>326</a>        <span class="kw">let </span>object = <span class="self">self</span>.objects.swap_remove(object_index);
+<a href=#327 id=327 data-nosnippet>327</a>        <span class="kw">let </span>record = RecoveredRecord::from_bytes(bytes)<span class="question-mark">?</span>;
+<a href=#328 id=328 data-nosnippet>328</a>        <span class="kw">let </span>decoded = record.decoded();
+<a href=#329 id=329 data-nosnippet>329</a>        <span class="kw">if </span>decoded.kind != object.kind || decoded.object_id != object.object_id {
+<a href=#330 id=330 data-nosnippet>330</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(Error::InconsistentObject);
+<a href=#331 id=331 data-nosnippet>331</a>        }
+<a href=#332 id=332 data-nosnippet>332</a>        <span class="self">self</span>.ready.push(ReadyObject {
+<a href=#333 id=333 data-nosnippet>333</a>            kind: object.kind,
+<a href=#334 id=334 data-nosnippet>334</a>            object_id: object.object_id,
+<a href=#335 id=335 data-nosnippet>335</a>            oti: object.oti,
+<a href=#336 id=336 data-nosnippet>336</a>            record,
+<a href=#337 id=337 data-nosnippet>337</a>        });
+<a href=#338 id=338 data-nosnippet>338</a>        <span class="self">self</span>.stats.objects_recovered = <span class="self">self</span>.stats.objects_recovered.saturating_add(<span class="number">1</span>);
+<a href=#339 id=339 data-nosnippet>339</a>        <span class="prelude-val">Ok</span>(())
+<a href=#340 id=340 data-nosnippet>340</a>    }
+<a href=#341 id=341 data-nosnippet>341</a>
+<a href=#342 id=342 data-nosnippet>342</a>    <span class="doccomment">/// Retries delivery of records retained after a consumer failure.
+<a href=#343 id=343 data-nosnippet>343</a>    </span><span class="kw">pub fn </span>drain_records&lt;E&gt;(
+<a href=#344 id=344 data-nosnippet>344</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#345 id=345 data-nosnippet>345</a>        <span class="kw-2">mut </span>emit: <span class="kw">impl </span>FnMut(<span class="kw-2">&amp;</span>RecoveredRecord) -&gt; core::result::Result&lt;(), E&gt;,
+<a href=#346 id=346 data-nosnippet>346</a>    ) -&gt; core::result::Result&lt;(), ReceiveError&lt;E&gt;&gt; {
+<a href=#347 id=347 data-nosnippet>347</a>        <span class="kw">while let </span><span class="prelude-val">Some</span>(ready) = <span class="self">self</span>.ready.first() {
+<a href=#348 id=348 data-nosnippet>348</a>            emit(<span class="kw-2">&amp;</span>ready.record).map_err(ReceiveError::Consumer)<span class="question-mark">?</span>;
+<a href=#349 id=349 data-nosnippet>349</a>            <span class="self">self</span>.pop_record();
+<a href=#350 id=350 data-nosnippet>350</a>        }
+<a href=#351 id=351 data-nosnippet>351</a>        <span class="prelude-val">Ok</span>(())
+<a href=#352 id=352 data-nosnippet>352</a>    }
+<a href=#353 id=353 data-nosnippet>353</a>
+<a href=#354 id=354 data-nosnippet>354</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>pop_record(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;RecoveredRecord&gt; {
+<a href=#355 id=355 data-nosnippet>355</a>        <span class="kw">if </span><span class="self">self</span>.ready.is_empty() {
+<a href=#356 id=356 data-nosnippet>356</a>            <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#357 id=357 data-nosnippet>357</a>        }
+<a href=#358 id=358 data-nosnippet>358</a>        <span class="kw">let </span>delivered = <span class="self">self</span>.ready.remove(<span class="number">0</span>);
+<a href=#359 id=359 data-nosnippet>359</a>        <span class="kw">if </span><span class="self">self</span>.completed.len() == <span class="self">self</span>.limits.max_concurrent_objects {
+<a href=#360 id=360 data-nosnippet>360</a>            <span class="self">self</span>.completed.remove(<span class="number">0</span>);
+<a href=#361 id=361 data-nosnippet>361</a>        }
+<a href=#362 id=362 data-nosnippet>362</a>        <span class="self">self</span>.completed.push(CompletedObject {
+<a href=#363 id=363 data-nosnippet>363</a>            kind: delivered.kind,
+<a href=#364 id=364 data-nosnippet>364</a>            object_id: delivered.object_id,
+<a href=#365 id=365 data-nosnippet>365</a>            oti: delivered.oti,
+<a href=#366 id=366 data-nosnippet>366</a>        });
+<a href=#367 id=367 data-nosnippet>367</a>        <span class="prelude-val">Some</span>(delivered.record)
+<a href=#368 id=368 data-nosnippet>368</a>    }
+<a href=#369 id=369 data-nosnippet>369</a>}
+<a href=#370 id=370 data-nosnippet>370</a>
+<a href=#371 id=371 data-nosnippet>371</a><span class="kw">struct </span>ObjectDecoder {
+<a href=#372 id=372 data-nosnippet>372</a>    kind: RecordKind,
+<a href=#373 id=373 data-nosnippet>373</a>    object_id: u64,
+<a href=#374 id=374 data-nosnippet>374</a>    oti: ObjectTransmissionInformation,
+<a href=#375 id=375 data-nosnippet>375</a>    decoder: Decoder,
+<a href=#376 id=376 data-nosnippet>376</a>}
+<a href=#377 id=377 data-nosnippet>377</a>
+<a href=#378 id=378 data-nosnippet>378</a><span class="kw">struct </span>ReadyObject {
+<a href=#379 id=379 data-nosnippet>379</a>    kind: RecordKind,
+<a href=#380 id=380 data-nosnippet>380</a>    object_id: u64,
+<a href=#381 id=381 data-nosnippet>381</a>    oti: ObjectTransmissionInformation,
+<a href=#382 id=382 data-nosnippet>382</a>    record: RecoveredRecord,
+<a href=#383 id=383 data-nosnippet>383</a>}
+<a href=#384 id=384 data-nosnippet>384</a>
+<a href=#385 id=385 data-nosnippet>385</a><span class="kw">struct </span>CompletedObject {
+<a href=#386 id=386 data-nosnippet>386</a>    kind: RecordKind,
+<a href=#387 id=387 data-nosnippet>387</a>    object_id: u64,
+<a href=#388 id=388 data-nosnippet>388</a>    oti: ObjectTransmissionInformation,
+<a href=#389 id=389 data-nosnippet>389</a>}
+<a href=#390 id=390 data-nosnippet>390</a>
+<a href=#391 id=391 data-nosnippet>391</a><span class="kw">fn </span>validate_sender_config(config: FiniteObjectSenderConfig) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#392 id=392 data-nosnippet>392</a>    <span class="kw">if </span>config.symbol_size == <span class="number">0 </span>{
+<a href=#393 id=393 data-nosnippet>393</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Error::InvalidConfig(<span class="string">"RaptorQ symbol size must be nonzero"</span>));
+<a href=#394 id=394 data-nosnippet>394</a>    }
+<a href=#395 id=395 data-nosnippet>395</a>    <span class="kw">if </span>config.max_object_bytes == <span class="number">0 </span>|| config.max_object_bytes &gt; RFC6330_MAX_TRANSFER_LENGTH {
+<a href=#396 id=396 data-nosnippet>396</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Error::InvalidConfig(<span class="string">"invalid RaptorQ maximum object size"</span>));
+<a href=#397 id=397 data-nosnippet>397</a>    }
+<a href=#398 id=398 data-nosnippet>398</a>    <span class="prelude-val">Ok</span>(())
+<a href=#399 id=399 data-nosnippet>399</a>}
+<a href=#400 id=400 data-nosnippet>400</a>
+<a href=#401 id=401 data-nosnippet>401</a><span class="kw">fn </span>validate_limits(limits: FiniteObjectLimits) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#402 id=402 data-nosnippet>402</a>    <span class="kw">if </span>limits.max_object_bytes == <span class="number">0 </span>|| limits.max_object_bytes &gt; RFC6330_MAX_TRANSFER_LENGTH {
+<a href=#403 id=403 data-nosnippet>403</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Error::InvalidConfig(<span class="string">"invalid RaptorQ maximum object size"</span>));
+<a href=#404 id=404 data-nosnippet>404</a>    }
+<a href=#405 id=405 data-nosnippet>405</a>    <span class="kw">if </span>limits.max_symbol_size == <span class="number">0 </span>{
+<a href=#406 id=406 data-nosnippet>406</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Error::InvalidConfig(
+<a href=#407 id=407 data-nosnippet>407</a>            <span class="string">"RaptorQ maximum symbol size must be nonzero"</span>,
+<a href=#408 id=408 data-nosnippet>408</a>        ));
+<a href=#409 id=409 data-nosnippet>409</a>    }
+<a href=#410 id=410 data-nosnippet>410</a>    <span class="kw">if </span>limits.max_concurrent_objects == <span class="number">0 </span>{
+<a href=#411 id=411 data-nosnippet>411</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Error::InvalidConfig(
+<a href=#412 id=412 data-nosnippet>412</a>            <span class="string">"finite-object receiver capacity must be nonzero"</span>,
+<a href=#413 id=413 data-nosnippet>413</a>        ));
+<a href=#414 id=414 data-nosnippet>414</a>    }
+<a href=#415 id=415 data-nosnippet>415</a>    <span class="prelude-val">Ok</span>(())
+<a href=#416 id=416 data-nosnippet>416</a>}
+<a href=#417 id=417 data-nosnippet>417</a>
+<a href=#418 id=418 data-nosnippet>418</a><span class="kw">fn </span>validate_oti(
+<a href=#419 id=419 data-nosnippet>419</a>    encoded: [u8; <span class="number">12</span>],
+<a href=#420 id=420 data-nosnippet>420</a>    limits: FiniteObjectLimits,
+<a href=#421 id=421 data-nosnippet>421</a>) -&gt; <span class="prelude-ty">Result</span>&lt;ObjectTransmissionInformation&gt; {
+<a href=#422 id=422 data-nosnippet>422</a>    <span class="kw">if </span>encoded[<span class="number">5</span>] != <span class="number">0 </span>{
+<a href=#423 id=423 data-nosnippet>423</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Error::InvalidFecMetadata(
+<a href=#424 id=424 data-nosnippet>424</a>            <span class="string">"RaptorQ OTI reserved byte is nonzero"</span>,
+<a href=#425 id=425 data-nosnippet>425</a>        ));
+<a href=#426 id=426 data-nosnippet>426</a>    }
+<a href=#427 id=427 data-nosnippet>427</a>    <span class="kw">let </span>oti = ObjectTransmissionInformation::deserialize(<span class="kw-2">&amp;</span>encoded);
+<a href=#428 id=428 data-nosnippet>428</a>    <span class="kw">let </span>transfer_length = oti.transfer_length();
+<a href=#429 id=429 data-nosnippet>429</a>    <span class="kw">let </span>symbol_size = oti.symbol_size();
+<a href=#430 id=430 data-nosnippet>430</a>    <span class="kw">let </span>source_blocks = oti.source_blocks();
+<a href=#431 id=431 data-nosnippet>431</a>    <span class="kw">let </span>sub_blocks = oti.sub_blocks();
+<a href=#432 id=432 data-nosnippet>432</a>    <span class="kw">let </span>alignment = oti.symbol_alignment();
+<a href=#433 id=433 data-nosnippet>433</a>    <span class="kw">if </span>transfer_length == <span class="number">0 </span>|| transfer_length &gt; limits.max_object_bytes {
+<a href=#434 id=434 data-nosnippet>434</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Error::ObjectTooLarge {
+<a href=#435 id=435 data-nosnippet>435</a>            actual: transfer_length,
+<a href=#436 id=436 data-nosnippet>436</a>            maximum: limits.max_object_bytes,
+<a href=#437 id=437 data-nosnippet>437</a>        });
+<a href=#438 id=438 data-nosnippet>438</a>    }
+<a href=#439 id=439 data-nosnippet>439</a>    <span class="kw">if </span>symbol_size == <span class="number">0 </span>|| symbol_size &gt; limits.max_symbol_size {
+<a href=#440 id=440 data-nosnippet>440</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Error::InvalidFecMetadata(
+<a href=#441 id=441 data-nosnippet>441</a>            <span class="string">"RaptorQ symbol size exceeds receiver limit"</span>,
+<a href=#442 id=442 data-nosnippet>442</a>        ));
+<a href=#443 id=443 data-nosnippet>443</a>    }
+<a href=#444 id=444 data-nosnippet>444</a>    <span class="kw">if </span>source_blocks == <span class="number">0 </span>|| sub_blocks == <span class="number">0 </span>|| alignment == <span class="number">0 </span>{
+<a href=#445 id=445 data-nosnippet>445</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Error::InvalidFecMetadata(
+<a href=#446 id=446 data-nosnippet>446</a>            <span class="string">"RaptorQ OTI contains a zero parameter"</span>,
+<a href=#447 id=447 data-nosnippet>447</a>        ));
+<a href=#448 id=448 data-nosnippet>448</a>    }
+<a href=#449 id=449 data-nosnippet>449</a>    <span class="kw">if </span>!symbol_size.is_multiple_of(alignment <span class="kw">as </span>u16) {
+<a href=#450 id=450 data-nosnippet>450</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Error::InvalidFecMetadata(
+<a href=#451 id=451 data-nosnippet>451</a>            <span class="string">"RaptorQ symbol alignment is invalid"</span>,
+<a href=#452 id=452 data-nosnippet>452</a>        ));
+<a href=#453 id=453 data-nosnippet>453</a>    }
+<a href=#454 id=454 data-nosnippet>454</a>    <span class="kw">let </span>total_source_symbols = transfer_length.div_ceil(symbol_size <span class="kw">as </span>u64);
+<a href=#455 id=455 data-nosnippet>455</a>    <span class="kw">if </span>source_blocks <span class="kw">as </span>u64 &gt; total_source_symbols {
+<a href=#456 id=456 data-nosnippet>456</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Error::InvalidFecMetadata(
+<a href=#457 id=457 data-nosnippet>457</a>            <span class="string">"RaptorQ has more source blocks than source symbols"</span>,
+<a href=#458 id=458 data-nosnippet>458</a>        ));
+<a href=#459 id=459 data-nosnippet>459</a>    }
+<a href=#460 id=460 data-nosnippet>460</a>    <span class="kw">if </span>sub_blocks <span class="kw">as </span>u32 &gt; u32::from(symbol_size / alignment <span class="kw">as </span>u16) {
+<a href=#461 id=461 data-nosnippet>461</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Error::InvalidFecMetadata(
+<a href=#462 id=462 data-nosnippet>462</a>            <span class="string">"RaptorQ sub-block count exceeds symbol geometry"</span>,
+<a href=#463 id=463 data-nosnippet>463</a>        ));
+<a href=#464 id=464 data-nosnippet>464</a>    }
+<a href=#465 id=465 data-nosnippet>465</a>    <span class="kw">let </span>largest_block = total_source_symbols.div_ceil(source_blocks <span class="kw">as </span>u64);
+<a href=#466 id=466 data-nosnippet>466</a>    <span class="kw">if </span>largest_block &gt; RFC6330_MAX_SOURCE_SYMBOLS_PER_BLOCK {
+<a href=#467 id=467 data-nosnippet>467</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Error::InvalidFecMetadata(
+<a href=#468 id=468 data-nosnippet>468</a>            <span class="string">"RaptorQ source block is too large"</span>,
+<a href=#469 id=469 data-nosnippet>469</a>        ));
+<a href=#470 id=470 data-nosnippet>470</a>    }
+<a href=#471 id=471 data-nosnippet>471</a>    <span class="prelude-val">Ok</span>(oti)
+<a href=#472 id=472 data-nosnippet>472</a>}
 </code></pre></div></section></main></body></html>
