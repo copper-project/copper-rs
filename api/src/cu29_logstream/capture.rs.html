@@ -110,7 +110,7 @@
 <a href=#110 id=110 data-nosnippet>110</a>    }
 <a href=#111 id=111 data-nosnippet>111</a>    <span class="kw">let </span>(header, payload) = output.split_at_mut(header_len);
 <a href=#112 id=112 data-nosnippet>112</a>    <span class="kw">let </span>len = bincode::encode_into_slice(
-<a href=#113 id=113 data-nosnippet>113</a>        (list.id, list.get_state(), CaptureView(<span class="kw-2">&amp;</span>list.msgs)),
+<a href=#113 id=113 data-nosnippet>113</a>        (list.id, CaptureView(<span class="kw-2">&amp;</span>list.msgs)),
 <a href=#114 id=114 data-nosnippet>114</a>        payload,
 <a href=#115 id=115 data-nosnippet>115</a>        bincode::config::standard(),
 <a href=#116 id=116 data-nosnippet>116</a>    )
