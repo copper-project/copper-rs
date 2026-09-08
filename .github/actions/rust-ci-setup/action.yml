@@ -56,7 +56,7 @@ runs:
         toolchain: ${{ inputs.toolchain }}
         components: rustc,cargo,rust-std,rustfmt,clippy
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.9
+      uses: mozilla-actions/sccache-action@v0.0.11
       with:
         version: "v0.16.0"
     - name: Compute cache save policy

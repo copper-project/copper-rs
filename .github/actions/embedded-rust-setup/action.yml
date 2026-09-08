@@ -35,7 +35,7 @@ runs:
         targets: aarch64-unknown-none,thumbv7em-none-eabihf,thumbv8m.main-none-eabihf,riscv32imac-unknown-none-elf
         components: rustc,cargo,rust-std,rustfmt,clippy
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.9
+      uses: mozilla-actions/sccache-action@v0.0.11
       with:
         version: "v0.16.0"
     - name: Compute cache save policy
