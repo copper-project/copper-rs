@@ -202,12 +202,12 @@ length field. All multi-byte header fields use big endian encoding:
 | --- | --- | ---: |
 | RLC source packet | magic (4), lane (1), record kind (1), FEC scheme (1), symbol kind (1), session ID (16), sender ID (4), source payload ID (4), CRC32C (4) | 36 |
 | RLC repair packet | magic (4), lane (1), record kind (1), FEC scheme (1), symbol kind (1), session ID (16), sender ID (4), repair payload ID (8), CRC32C (4) | 40 |
-| RaptorQ packet | magic (4), lane (1), record kind (1), FEC scheme (1), symbol kind (1), session ID (16), sender ID (4), object ID (8), OTI (12), payload ID (4), CRC32C (4) | 56 |
+| RaptorQ packet | magic (4), lane (1), record kind (1), FEC scheme (1), symbol kind (1), session ID (16), sender ID (4), object ID (8), compact OTI (11), payload ID (4), CRC32C (4) | 55 |
 | Record | magic (4), kind (1), object ID (8), BLAKE3 digest (32) | 45 |
 | RLC fragment | magic (4), object ID (8), record length (4), fragment index (4) | 20 |
 
 Compared with the original headers, this saves 36 bytes per RLC source packet,
-32 per RLC repair packet, 16 per RaptorQ packet, 11 per record, and 12 per RLC
+32 per RLC repair packet, 17 per RaptorQ packet, 11 per record, and 12 per RLC
 source fragment, plus one bincode byte per session manifest.
 Packet sequence counters are not transmitted; recovery and deduplication use
 FEC symbol identifiers and record identities. RLC packets omit the outer object ID
@@ -217,6 +217,11 @@ from that geometry and the configured symbol capacity. Fragment kind is implicit
 CopperList; the reassembled record must still match that kind and identity and
 pass digest verification. Repairs span a window of fragments. Only the active
 RLC FEC ID bytes are transmitted.
+RaptorQ OTI omits the reserved zero byte at index 5 of the library's 12-byte
+representation. The wire carries transfer length (5), symbol size (2), source
+blocks (1), sub-blocks (2), and alignment (1). Decoding restores the zero byte
+before receiver geometry validation and RaptorQ decoding. Encoding rejects a
+nonzero reserved byte instead of silently discarding it.
 Record payload length is derived from the complete reassembled record extent,
 saving eight bytes per record. The BLAKE3 input remains kind, object ID, derived
 payload length as a big endian u64, and payload. Recovery-point references retain
@@ -227,7 +232,7 @@ Savings inside record and fragment headers free symbol payload capacity and can
 reduce fragment counts. Packet-header savings directly shorten each datagram.
 Existing symbol storage capacity is unchanged: a 1200-byte MTU uses at most 1128-byte symbols,
 producing RLC source packets up to 1164 bytes, RLC repair packets up to 1168 bytes,
-and RaptorQ packets up to 1184 bytes. `PACKET_HEADER_LEN` is the maximum header
+and RaptorQ packets up to 1183 bytes. `PACKET_HEADER_LEN` is the maximum header
 length for buffer sizing; encoding returns the exact length for each packet.
 Shared symbol sizing still reserves room for the largest (RaptorQ) header.
 Packet payload length is derived from the complete packet extent supplied by

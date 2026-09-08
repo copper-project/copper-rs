@@ -7,8 +7,8 @@ use crc::{CRC_32_ISCSI, Crc};
 
 const PACKET_MAGIC: [u8; 4] = *b"CULS";
 /// Maximum packet header length, used to bound storage and the shared FEC symbol size.
-/// RaptorQ uses 56 bytes; RLC uses 36 for source packets and 40 for repair packets.
-pub const PACKET_HEADER_LEN: usize = 56;
+/// RaptorQ uses 55 bytes; RLC uses 36 for source packets and 40 for repair packets.
+pub const PACKET_HEADER_LEN: usize = 55;
 const COMMON_HEADER_LEN: usize = 28;
 const RLC_SOURCE_HEADER_LEN: usize = 36;
 const RLC_REPAIR_HEADER_LEN: usize = 40;
@@ -100,6 +100,8 @@ pub struct WireHeader {
     /// RaptorQ object identity. Not transmitted for RLC; decoded as zero.
     pub object_id: u64,
     /// RaptorQ OTI (12 bytes), RLC source ID (first 4), or RLC repair ID (first 8).
+    /// RaptorQ's reserved byte at index 5 must be zero; it is omitted on the wire
+    /// and restored locally when decoding.
     /// Unused RLC bytes are not transmitted and decode as zero.
     pub fec_metadata: [u8; 12],
     /// RaptorQ payload ID. Not transmitted for RLC; decoded as zero.
@@ -170,10 +172,11 @@ impl<'a> WirePacketRef<'a> {
         let mut fec_metadata = [0_u8; 12];
         let (object_id, fragment_count) = match fec_scheme {
             FecScheme::RaptorQ => {
-                fec_metadata.copy_from_slice(&bytes[36..48]);
+                fec_metadata[..5].copy_from_slice(&bytes[36..41]);
+                fec_metadata[6..].copy_from_slice(&bytes[41..47]);
                 (
                     u64::from_be_bytes(bytes[28..36].try_into().unwrap()),
-                    u32::from_be_bytes(bytes[48..52].try_into().unwrap()),
+                    u32::from_be_bytes(bytes[47..51].try_into().unwrap()),
                 )
             }
             FecScheme::RlcGf2 | FecScheme::RlcGf256 => {
@@ -202,6 +205,11 @@ impl<'a> WirePacketRef<'a> {
 
 /// Encodes one packet into caller-owned storage and returns its exact length.
 pub fn encode_packet_into(header: WireHeader, payload: &[u8], output: &mut [u8]) -> Result<usize> {
+    if header.fec_scheme == FecScheme::RaptorQ && header.fec_metadata[5] != 0 {
+        return Err(Error::InvalidFecMetadata(
+            "RaptorQ OTI reserved byte is nonzero",
+        ));
+    }
     let header_len = packet_header_len(header.fec_scheme, header.symbol_kind);
     let crc_offset = header_len - 4;
     let needed = header_len
@@ -226,8 +234,9 @@ pub fn encode_packet_into(header: WireHeader, payload: &[u8], output: &mut [u8])
     match header.fec_scheme {
         FecScheme::RaptorQ => {
             bytes[28..36].copy_from_slice(&header.object_id.to_be_bytes());
-            bytes[36..48].copy_from_slice(&header.fec_metadata);
-            bytes[48..52].copy_from_slice(&header.fragment_count.to_be_bytes());
+            bytes[36..41].copy_from_slice(&header.fec_metadata[..5]);
+            bytes[41..47].copy_from_slice(&header.fec_metadata[6..]);
+            bytes[47..51].copy_from_slice(&header.fragment_count.to_be_bytes());
         }
         FecScheme::RlcGf2 | FecScheme::RlcGf256 => {
             bytes[COMMON_HEADER_LEN..crc_offset]
@@ -266,14 +275,47 @@ mod tests {
     fn fixed_header_has_a_stable_golden_prefix() {
         let encoded = fixture().encode().unwrap();
         assert_eq!(&encoded[..8], &[b'C', b'U', b'L', b'S', 2, 2, 2, 0]);
-        assert_eq!(encoded.len(), 56 + fixture().payload.len());
+        assert_eq!(encoded.len(), 55 + fixture().payload.len());
         assert_eq!(&encoded[8..24], &[0x11; 16]);
         assert_eq!(&encoded[24..28], &0x2233_4455_u32.to_be_bytes());
         assert_eq!(&encoded[28..36], &0x0102_0304_0506_0708_u64.to_be_bytes());
-        assert_eq!(&encoded[36..48], &fixture().header.fec_metadata);
-        assert_eq!(&encoded[48..52], &1_u32.to_be_bytes());
-        assert_eq!(&encoded[56..], fixture().payload);
+        assert_eq!(&encoded[36..47], &[0, 0, 0, 0, 3, 0, 8, 1, 0, 1, 1]);
+        assert_eq!(&encoded[47..51], &1_u32.to_be_bytes());
+        assert_eq!(&encoded[55..], fixture().payload);
         assert_eq!(WirePacket::decode(&encoded).unwrap(), fixture());
+    }
+
+    #[test]
+    fn raptorq_oti_preserves_every_nonreserved_byte() {
+        for kind in [FecSymbolKind::Source, FecSymbolKind::Repair] {
+            let mut packet = fixture();
+            packet.header.symbol_kind = kind;
+            packet.header.fec_metadata = [1, 2, 3, 4, 5, 0, 6, 7, 8, 9, 10, 11];
+            packet.header.fragment_count = 0x1234_5678;
+            let encoded = packet.encode().unwrap();
+            assert_eq!(&encoded[36..47], &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+            assert_eq!(&encoded[47..51], &[0x12, 0x34, 0x56, 0x78]);
+            assert_eq!(WirePacket::decode(&encoded).unwrap(), packet);
+        }
+    }
+
+    #[test]
+    fn raptorq_oti_rejects_nonzero_reserved_byte_before_encoding() {
+        for kind in [FecSymbolKind::Source, FecSymbolKind::Repair] {
+            let mut packet = fixture();
+            packet.header.symbol_kind = kind;
+            for reserved in 1..=u8::MAX {
+                packet.header.fec_metadata[5] = reserved;
+                let expected = Error::InvalidFecMetadata("RaptorQ OTI reserved byte is nonzero");
+                let mut storage = [0xaa; 128];
+                assert_eq!(
+                    encode_packet_into(packet.header, &packet.payload, &mut storage),
+                    Err(expected.clone())
+                );
+                assert_eq!(storage, [0xaa; 128]);
+                assert_eq!(packet.encode(), Err(expected));
+            }
+        }
     }
 
     fn rlc_fixture(scheme: FecScheme, kind: FecSymbolKind) -> WirePacket {

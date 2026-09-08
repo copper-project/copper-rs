@@ -95,7 +95,7 @@ fn symbol_size_respects_mtu_without_growing_preallocated_storage() {
     let mut config = destination();
     config.link.mtu_bytes = 1100;
     let mut plan = LogStreamPlan::resolve(&config).unwrap();
-    assert_eq!(plan.symbol_size, 1044);
+    assert_eq!(plan.symbol_size, 1045);
     plan.symbol_size += 1;
     assert!(plan.validate().is_err());
     config.link.mtu_bytes = cu29_logstream::PACKET_HEADER_LEN as u16;
