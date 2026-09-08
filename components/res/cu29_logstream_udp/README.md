@@ -45,7 +45,7 @@ configuration, including the required link, FEC, content, and record bounds.
 MTU and stream policy belong there, not in the UDP resource. Generated senders
 schedule all lanes through one background worker enforcing the configured
 bitrate/burst budget and data expiry. Retained bootstrap data repeats without
-new captures. Optional feedback remains deferred; its logical receive interface
+new captures. Optional feedback uses an explicitly bound reverse endpoint; its logical receive interface
 may share this carrier and does not require a separate physical uplink.
 
 ## Receiver resource
@@ -128,3 +128,9 @@ For a runnable sender and receiver in separate processes, see the
 [UDP demo](../../../examples/cu_logstream_demo). Run `just logstream-demo-check`
 from the repository root to exercise clean reception, FEC recovery, outages,
 late start, receiver restart, and recorded replay.
+
+For a return channel, bind the sender destination's `feedback.transport` to the bundle's `rx` resource.
+`CuUdpLogStreamRx` implements `CuFeedbackRx`, and `CuUdpLogStreamTx` implements `CuFeedbackTx`.
+The ground receiver explicitly sets `remote_addr` to the sender's bound address and passes its TX
+endpoint to `CuTwinBuilder::with_feedback`. Sharing a socket does not enable feedback implicitly;
+never assign competing readers to the same socket. See the logstream README for FEC bounds and reports.

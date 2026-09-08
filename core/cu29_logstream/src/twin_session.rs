@@ -43,6 +43,9 @@ pub struct CuTwinStatus {
     pub last_packet: Option<Instant>,
     pub state: CuTwinRecordingState,
     pub twin: TwinStatus,
+    pub feedback_reports_sent: u64,
+    pub feedback_reports_dropped: u64,
+    pub feedback_failed: bool,
 }
 
 impl TwinReceiverStatus for CuTwinStatus {
@@ -58,6 +61,7 @@ impl TwinReceiverStatus for CuTwinStatus {
 /// One handle accepts one sender session, with a fresh archive path.
 pub struct CuTwinBuilder<A, R> {
     rx: R,
+    feedback_tx: Option<Box<dyn crate::CuFeedbackTx>>,
     log_base: Option<PathBuf>,
     frame_capacity: NonZeroUsize,
     reconstruct: bool,
@@ -65,6 +69,12 @@ pub struct CuTwinBuilder<A, R> {
 }
 
 impl<A: LiveReplay, R: CuStreamRx + 'static> CuTwinBuilder<A, R> {
+    /// Enable feedback only when the sender advertises support. The caller owns endpoint selection.
+    pub fn with_feedback<T: crate::CuFeedbackTx + 'static>(mut self, tx: T) -> Self {
+        self.feedback_tx = Some(Box::new(tx));
+        self
+    }
+
     pub fn with_log_path(mut self, path: impl AsRef<Path>) -> Self {
         self.log_base = Some(path.as_ref().to_path_buf());
         self
@@ -140,6 +150,11 @@ impl<A: LiveReplay, R: CuStreamRx + 'static> CuTwinBuilder<A, R> {
                     .map_err(stream_error)?;
                     let _ = ready_tx.send(Ok(()));
                     let mut rx = self.rx;
+                    let mut feedback_tx = self.feedback_tx;
+                    let feedback_clock = cu29_clock::RobotClock::new();
+                    let receiver_id = crate::new_session_id();
+                    let mut reporter = None;
+                    let mut feedback_packet = [0; crate::feedback::FEEDBACK_BUFFER_BYTES];
                     let mut packet = [0; 1200];
                     while !stopping.load(Ordering::Acquire) {
                         if let Some(len) = rx
@@ -160,6 +175,13 @@ impl<A: LiveReplay, R: CuStreamRx + 'static> CuTwinBuilder<A, R> {
                                     }
                                     if let SessionEvent::Manifest(manifest) = &event {
                                         status.identity = Some(manifest.manifest().identity);
+                                        if feedback_tx.is_some() {
+                                            reporter = crate::feedback::FeedbackReporter::new(
+                                                manifest.manifest(),
+                                                receiver_id,
+                                                feedback_clock.now(),
+                                            );
+                                        }
                                         archive = Some(CaptureArchive::<A::DataSet>::new(
                                             &path,
                                             manifest,
@@ -198,6 +220,28 @@ impl<A: LiveReplay, R: CuStreamRx + 'static> CuTwinBuilder<A, R> {
                             publish_status(status);
                         } else {
                             thread::park_timeout(POLL_INTERVAL);
+                        }
+                        if let (Some(reporter), Some(tx), Some(identity)) =
+                            (&mut reporter, &mut feedback_tx, status.identity)
+                            && let Some(mut counters) = router.feedback_counters(identity)
+                        {
+                            counters.latest_copperlist = status.latest;
+                            if let Some(report) = reporter.report(feedback_clock.now(), counters) {
+                                let len = report
+                                    .encode_into(&mut feedback_packet)
+                                    .map_err(stream_error)?;
+                                match tx.try_send_feedback(&feedback_packet[..len]) {
+                                    Ok(()) => status.feedback_reports_sent += 1,
+                                    Err(crate::CuStreamTxError::WouldBlock) => {
+                                        status.feedback_reports_dropped += 1
+                                    }
+                                    Err(crate::CuStreamTxError::Failed(_)) => {
+                                        feedback_tx = None;
+                                        status.feedback_failed = true;
+                                    }
+                                }
+                                publish_status(status);
+                            }
                         }
                     }
                     if let Some(archive) = archive.take() {
@@ -260,6 +304,7 @@ impl<A: LiveReplay> CuTwin<A> {
     pub fn builder<R: CuStreamRx + 'static>(rx: R) -> CuTwinBuilder<A, R> {
         CuTwinBuilder {
             rx,
+            feedback_tx: None,
             log_base: None,
             frame_capacity: FRAME_CAPACITY,
             reconstruct: true,

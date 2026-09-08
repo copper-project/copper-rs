@@ -4,6 +4,7 @@ use cu29_runtime::curuntime::KeyFrame;
 
 fn config() -> LogStreamSenderConfig {
     let plan = LogStreamPlan {
+        feedback: None,
         destination_id: "ground".into(),
         mtu_bytes: 1200,
         symbol_size: 1128,
@@ -287,4 +288,38 @@ fn recovery_never_overtakes_older_queued_source_records() {
         }));
     }
     assert_eq!(core.stats().expired_packets, 0);
+}
+
+#[test]
+fn feedback_interval_changes_future_repairs_without_changing_the_budget() {
+    let config = config();
+    let (clock, mock) = RobotClock::mock();
+    let mut core = SenderCore::new(config.clone(), clock.now(), 0).unwrap();
+    let mut tx = Capture::default();
+    let mut id = 0;
+    let mut start_ms = 0;
+    for (interval, expected_repairs) in [(4, 4), (1, 16), (16, 1)] {
+        core.set_repair_interval(interval).unwrap();
+        let before = tx.packets.len();
+        for _ in 0..16 {
+            core.accept_record(&cl(id), clock.now()).unwrap();
+            advance(&mut core, &mut tx, &clock, &mock, start_ms, start_ms + 40);
+            start_ms += 41;
+            id += 1;
+        }
+        let repairs = tx.packets[before..]
+            .iter()
+            .filter(|(_, bytes)| {
+                let header = WirePacket::decode(bytes).unwrap().header;
+                header.record_kind == RecordKind::CopperList
+                    && header.symbol_kind == FecSymbolKind::Repair
+            })
+            .count();
+        assert_eq!(repairs, expected_repairs);
+    }
+    let total = core.stats().bytes_sent;
+    let budget = config.pacing.bitrate_bps * clock.now().as_nanos() / 8_000_000_000
+        + u64::from(config.pacing.burst_packets) * 1200;
+    assert!(total <= budget);
+    assert!(core.set_repair_interval(0).is_err());
 }

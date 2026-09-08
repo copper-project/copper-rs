@@ -1,4 +1,3 @@
-use bincode::{Decode, Encode};
 use cu29::prelude::*;
 use cu29::resource::{BundleContext, BundleIndex, ResourceBundle, ResourceManager};
 use cu29_logstream::{
@@ -6,33 +5,11 @@ use cu29_logstream::{
     decode_copperlist,
 };
 use cu29_logstream_udp::{CuUdpLogStreamResources, CuUdpLogStreamResourcesId, CuUdpLogStreamRx};
-use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Encode, Decode, Serialize, Deserialize, Reflect)]
-struct UdpMessage(u64);
-
-#[derive(Default, Reflect)]
-struct UdpSource {
-    next: u64,
-}
-
-impl Freezable for UdpSource {}
-
-impl CuSrcTask for UdpSource {
-    type Resources<'r> = ();
-    type Output<'m> = output_msg!(UdpMessage);
-
-    fn new(_config: Option<&ComponentConfig>, _resources: ()) -> CuResult<Self> {
-        Ok(Self::default())
-    }
-
-    fn process(&mut self, _ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
-        output.set_payload(UdpMessage(self.next));
-        self.next += 1;
-        Ok(())
-    }
-}
+#[path = "support/tasks.rs"]
+mod tasks;
+use tasks::{UdpMessage, UdpSource};
 
 #[copper_runtime(config = "tests/configured_sender.ron")]
 struct UdpApp {}

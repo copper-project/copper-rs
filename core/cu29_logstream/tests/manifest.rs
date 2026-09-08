@@ -9,6 +9,7 @@ use cu29_runtime::config::{
 
 fn destination() -> LogStreamDestinationConfig {
     LogStreamDestinationConfig {
+        feedback: None,
         id: "ground".into(),
         transport: LogStreamTransportConfig {
             type_: "test::Tx".into(),

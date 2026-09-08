@@ -27,6 +27,10 @@ runtime-integration = ["cu29/logstream", "cu29/reflect"]
 name = "configured_sender"
 required-features = ["runtime-integration"]
 
+[[test]]
+name = "configured_feedback"
+required-features = ["runtime-integration"]
+
 [dependencies]
 cu29 = { path = "../../../core/cu29", version = "1.2.0-dev", default-features = false, features = [
   "std",
