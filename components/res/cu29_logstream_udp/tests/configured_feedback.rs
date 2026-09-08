@@ -4,7 +4,7 @@ use tasks::{UdpMessage, UdpSource};
 
 use cu29::prelude::*;
 use cu29_logstream::{
-    CuStreamRx, FiniteObjectLimits, RecordKind, SessionEvent, SessionRouter, SessionRouterLimits,
+    CuStreamRx, FiniteObjectLimits, SessionEvent, SessionRouter, SessionRouterLimits,
 };
 use std::time::{Duration, Instant};
 thread_local! {
@@ -40,8 +40,8 @@ struct FeedbackApp {}
 
 #[test]
 fn configured_feedback_resource_is_owned_and_advertised() -> CuResult<()> {
+    use cu29_logstream::CuFeedbackTx;
     use cu29_logstream::feedback::{FEEDBACK_BUFFER_BYTES, FeedbackReporter};
-    use cu29_logstream::{CuFeedbackTx, FecSymbolKind, WirePacket};
     use cu29_logstream_udp::CuUdpLogStreamConfig;
     let sender_socket = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
     let sender_address = sender_socket.local_addr().unwrap();
@@ -88,19 +88,23 @@ fn configured_feedback_resource_is_owned_and_advertised() -> CuResult<()> {
             sent += 1;
         }
         if let Some(len) = rx.try_recv(&mut packet).unwrap() {
-            let header = WirePacket::decode(&packet[..len]).unwrap().header;
-            if header.record_kind == RecordKind::CopperList
-                && header.symbol_kind == FecSymbolKind::Source
-            {
-                received =
-                    Some(received.map_or(header.object_id, |id: u64| id.max(header.object_id)));
-            }
             router
                 .receive_datagram(&packet[..len], |event| {
-                    if let SessionEvent::Manifest(manifest) = event {
-                        identity = Some(manifest.manifest().identity);
-                        reporter = FeedbackReporter::new(manifest.manifest(), [9; 16], clock.now());
-                        assert!(reporter.is_some());
+                    match event {
+                        SessionEvent::Manifest(manifest) => {
+                            identity = Some(manifest.manifest().identity);
+                            reporter =
+                                FeedbackReporter::new(manifest.manifest(), [9; 16], clock.now());
+                            assert!(reporter.is_some());
+                        }
+                        SessionEvent::ContinuousRecord { record, .. } => {
+                            let record = record.decoded();
+                            received = Some(
+                                received
+                                    .map_or(record.object_id, |id: u64| id.max(record.object_id)),
+                            );
+                        }
+                        _ => {}
                     }
                     Ok::<_, ()>(())
                 })
