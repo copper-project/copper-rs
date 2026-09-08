@@ -788,23 +788,18 @@ impl MonitorUi {
             row("Total disk BW", disk_total_bw),
         ];
 
-        let mem_table = Table::new(mem_rows, &[Constraint::Length(24), Constraint::Length(12)])
-            .header(header.clone())
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_type(BorderType::Rounded)
-                    .title(" Memory BW "),
-            );
-
-        let disk_table = Table::new(disk_rows, &[Constraint::Length(24), Constraint::Length(12)])
-            .header(header)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_type(BorderType::Rounded)
-                    .title(" Disk / Encoding "),
-            );
+        let table = |rows, title: String| {
+            Table::new(rows, [Constraint::Length(24), Constraint::Min(12)])
+                .header(header.clone())
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Rounded)
+                        .title(title),
+                )
+        };
+        let mem_table = table(mem_rows, " Memory BW ".into());
+        let disk_table = table(disk_rows, " Disk / Encoding ".into());
 
         drop(stats);
         let mut telemetry = Vec::new();
@@ -845,29 +840,27 @@ impl MonitorUi {
             Block::default().style(Style::default().bg(palette::BACKGROUND)),
             Rect::new(0, 0, content_size.width, content_size.height),
         );
-        scroll.render_widget(mem_table, Rect::new(0, 0, 42, content_size.height));
-        scroll.render_widget(disk_table, Rect::new(42, 0, 42, content_size.height));
+        let panels = Layout::horizontal([Constraint::Fill(1); 3]).split(Rect::new(
+            0,
+            0,
+            content_size.width,
+            content_size.height,
+        ));
+        scroll.render_widget(mem_table, panels[0]);
+        scroll.render_widget(disk_table, panels[1]);
         let mut y = 0;
-        for (title, rows) in telemetry {
-            let height =
-                (rows.len() + 4).min(usize::from(content_size.height.saturating_sub(y))) as u16;
-            let table = Table::new(rows, [Constraint::Length(23), Constraint::Min(13)])
-                .header(
-                    Row::new(["Metric", "Value"])
-                        .style(
-                            Style::default()
-                                .fg(palette::YELLOW)
-                                .add_modifier(Modifier::BOLD),
-                        )
-                        .bottom_margin(1),
-                )
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .border_type(BorderType::Rounded)
-                        .title(title),
-                );
-            scroll.render_widget(table, Rect::new(84, y, content_size.width - 84, height));
+        let last = telemetry.len() - 1;
+        for (index, (title, rows)) in telemetry.into_iter().enumerate() {
+            let remaining = content_size.height.saturating_sub(y);
+            let height = if index == last {
+                remaining
+            } else {
+                (rows.len() + 4).min(usize::from(remaining)) as u16
+            };
+            scroll.render_widget(
+                table(rows, title),
+                Rect::new(panels[2].x, y, panels[2].width, height),
+            );
             y = y.saturating_add(height);
         }
         scroll.render(area, f.buffer_mut(), &mut self.bandwidth_scroll_state);
@@ -1270,6 +1263,26 @@ mod tests {
         assert!(text.contains("12345"));
         assert!(text.contains("Queue drops"));
         assert!(!text.contains("RX BW"));
+    }
+
+    #[test]
+    fn bandwidth_panels_share_width_columns_and_full_height() {
+        let mut ui = stream_ui(cu29::monitoring::LogStreamStats::default());
+        for width in [126, 180] {
+            let text = stream_text(&mut ui, width, 40);
+            let lines: Vec<_> = text.lines().collect();
+            let panel_width = usize::from(width / 3);
+            let bottom: Vec<_> = lines[39].chars().collect();
+            for panel in 0..3 {
+                let start = panel * panel_width;
+                assert_eq!(bottom[start], '╰');
+                assert_eq!(bottom[start + panel_width - 1], '╯');
+            }
+            let headers: Vec<_> = lines[1].match_indices("Value").map(|(i, _)| i).collect();
+            assert_eq!(headers.len(), 3);
+            assert_eq!(headers[1] - headers[0], panel_width);
+            assert_eq!(headers[2] - headers[1], panel_width);
+        }
     }
 
     #[test]
