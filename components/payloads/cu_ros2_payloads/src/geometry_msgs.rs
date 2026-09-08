@@ -7,7 +7,7 @@
 //! [`crate::sensor_msgs`] re-exports both so existing `sensor_msgs::Vector3` paths keep working.
 
 use crate::builtin::Header;
-use crate::{RosMessage, fixed_array};
+use crate::{RosMessage, RosMsgAdapter, fixed_array};
 use compact_str::CompactString;
 use serde::{Deserialize, Serialize};
 
@@ -58,6 +58,34 @@ pub struct Pose {
     pub orientation: Quaternion,
 }
 
+impl RosMessage for Vector3 {
+    const NAMESPACE: &'static str = "geometry_msgs";
+    const TYPE_NAME: &'static str = "Vector3";
+    const TYPE_HASH: &'static str =
+        "RIHS01_cc12fe83e4c02719f1ce8070bfd14aecd40f75a96696a67a2a1f37f7dbb0765d";
+}
+
+impl RosMessage for Quaternion {
+    const NAMESPACE: &'static str = "geometry_msgs";
+    const TYPE_NAME: &'static str = "Quaternion";
+    const TYPE_HASH: &'static str =
+        "RIHS01_8a765f66778c8ff7c8ab94afcc590a2ed5325a1d9a076ffff38fbce36f458684";
+}
+
+impl RosMessage for Point {
+    const NAMESPACE: &'static str = "geometry_msgs";
+    const TYPE_NAME: &'static str = "Point";
+    const TYPE_HASH: &'static str =
+        "RIHS01_6963084842a9b04494d6b2941d11444708d892da2f4b09843b9c43f42a7f6881";
+}
+
+impl RosMessage for Pose {
+    const NAMESPACE: &'static str = "geometry_msgs";
+    const TYPE_NAME: &'static str = "Pose";
+    const TYPE_HASH: &'static str =
+        "RIHS01_d501954e9476cea2996984e812054b68026ae0bfae789d9a10b23daf35cc90fa";
+}
+
 /// `geometry_msgs/PoseStamped`.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct PoseStamped {
@@ -97,6 +125,13 @@ impl RosMessage for TransformStamped {
         "RIHS01_0a241f87d04668d94099cbb5ba11691d5ad32c2f29682e4eb5653424bd275206";
 }
 
+impl RosMessage for Transform {
+    const NAMESPACE: &'static str = "geometry_msgs";
+    const TYPE_NAME: &'static str = "Transform";
+    const TYPE_HASH: &'static str =
+        "RIHS01_beb83fbe698636351461f6f35d1abb20010c43d55374d81bd041f1ba2581fddc";
+}
+
 /// `geometry_msgs/Twist`.
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct Twist {
@@ -131,6 +166,13 @@ impl Default for PoseWithCovariance {
     }
 }
 
+impl RosMessage for PoseWithCovariance {
+    const NAMESPACE: &'static str = "geometry_msgs";
+    const TYPE_NAME: &'static str = "PoseWithCovariance";
+    const TYPE_HASH: &'static str =
+        "RIHS01_9a7c0fd234b7f45c6098745ecccd773ca1085670e64107135397aee31c02e1bb";
+}
+
 /// `geometry_msgs/TwistWithCovariance`.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
 pub struct TwistWithCovariance {
@@ -147,6 +189,358 @@ impl Default for TwistWithCovariance {
         }
     }
 }
+
+// ── cu_spatial_payloads conversions ───────────────────────────────────────────────────────────
+//
+// The crate's established shape, per the module docs on `RosMsgAdapter`:
+//
+//   - `From<&CopperPayload> for RosType`   outbound
+//   - `TryFrom<RosType> for CopperPayload` inbound
+//   - `RosMsgAdapter` on the payload       identity
+//   - the blanket impl then supplies `RosBridgeAdapter` for the transport
+//
+// Stamped messages (`PoseStamped`, `TransformStamped`) are deliberately NOT bound here. None of
+// these payloads carries a capture time or a frame id, so an adapter could only invent both, and
+// a header invented at publish time is worse than no message: a zero stamp turns pipeline latency
+// into apparent jitter for every consumer, and an empty `frame_id` silently builds no tf tree.
+// Binding them needs a deliberate source for the two fields first.
+
+use cu_spatial_payloads::{Point3d, Point3f, Transform3D};
+use cu29::units::si::f32::Length as Length32;
+use cu29::units::si::f64::Length as Length64;
+use cu29::units::si::length::meter;
+use glam::{DAffine3, DMat3, DQuat, DVec3};
+
+/// How far a rotation may stray from orthonormality before it is rejected.
+///
+/// A rotation composed repeatedly drifts, so the check cannot demand exactness; these are set
+/// well above the accumulated error of a long chain and well below any real scale factor.
+const RIGID_TOLERANCE_F64: f64 = 1e-9;
+const RIGID_TOLERANCE_F32: f64 = 1e-5;
+
+/// Read a `Transform3D`'s rotation block as a glam matrix.
+///
+/// `Transform3D::rotation` returns rows (`r[row][column]`) and glam is column-major, so this is
+/// where the two conventions meet. Everything downstream is glam's.
+fn rotation_matrix<T>(rotation: [[T; 3]; 3]) -> DMat3
+where
+    f64: From<T>,
+    T: Copy,
+{
+    DMat3::from_cols(
+        DVec3::new(
+            f64::from(rotation[0][0]),
+            f64::from(rotation[1][0]),
+            f64::from(rotation[2][0]),
+        ),
+        DVec3::new(
+            f64::from(rotation[0][1]),
+            f64::from(rotation[1][1]),
+            f64::from(rotation[2][1]),
+        ),
+        DVec3::new(
+            f64::from(rotation[0][2]),
+            f64::from(rotation[1][2]),
+            f64::from(rotation[2][2]),
+        ),
+    )
+}
+
+/// Reject a rotation block that is not a pure rotation.
+///
+/// `geometry_msgs/Transform` is a translation plus a unit quaternion: it can represent a rigid
+/// motion and nothing else. A `Transform3D` is a full 4x4 affine and may carry scale, shear or a
+/// reflection, none of which survive the conversion. Dropping them silently would publish a
+/// transform that looks plausible and places everything downstream wrongly, so this is an error
+/// rather than a best-effort projection onto the nearest rotation.
+///
+/// The check is explicit rather than delegated to `DAffine3::to_scale_rotation_translation`,
+/// which assumes its input is scale-times-rotation and so cannot report shear.
+fn ensure_rigid(rotation: DMat3, tolerance: f64) -> Result<(), String> {
+    // R^T R == I says the columns are orthonormal: no scale on any axis and no shear between them.
+    let residual = rotation.transpose() * rotation - DMat3::IDENTITY;
+    let deviation = residual
+        .to_cols_array()
+        .iter()
+        .fold(0.0f64, |worst, value| worst.max(value.abs()));
+    if deviation > tolerance {
+        return Err(format!(
+            "Transform3D is not rigid: R^T R deviates from the identity by {deviation:.3e} \
+             (tolerance {tolerance:.1e}). geometry_msgs/Transform carries a unit quaternion and \
+             cannot represent scale or shear."
+        ));
+    }
+
+    // An orthonormal matrix with determinant -1 is a reflection, which is also not a rotation.
+    let determinant = rotation.determinant();
+    if (determinant - 1.0).abs() > tolerance {
+        return Err(format!(
+            "Transform3D is not a rotation: determinant is {determinant:.6}, not 1. A determinant \
+             of -1 is a reflection, which geometry_msgs/Transform cannot represent."
+        ));
+    }
+
+    Ok(())
+}
+
+/// A quaternion off the unit sphere is not a rotation, and normalizing one silently would hide a
+/// sender's bug, so an out-of-tolerance norm is rejected. The tolerance is glam's own.
+fn unit_quaternion(quaternion: &Quaternion) -> Result<DQuat, String> {
+    let value = DQuat::from_xyzw(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
+    if !value.is_normalized() {
+        return Err(format!(
+            "geometry_msgs/Quaternion is not a unit quaternion: norm is {:.6}, not 1",
+            value.length()
+        ));
+    }
+    Ok(value)
+}
+
+/// The 4x4 the `Transform3D` constructor expects: `mat[row][column]`, translation in the last
+/// column, bottom row `[0, 0, 0, 1]`. glam stores columns, so this transposes the rotation back.
+fn homogeneous(affine: DAffine3) -> [[f64; 4]; 4] {
+    let rotation = affine.matrix3;
+    let translation = affine.translation;
+    [
+        [
+            rotation.x_axis.x,
+            rotation.y_axis.x,
+            rotation.z_axis.x,
+            translation.x,
+        ],
+        [
+            rotation.x_axis.y,
+            rotation.y_axis.y,
+            rotation.z_axis.y,
+            translation.y,
+        ],
+        [
+            rotation.x_axis.z,
+            rotation.y_axis.z,
+            rotation.z_axis.z,
+            translation.z,
+        ],
+        [0.0, 0.0, 0.0, 1.0],
+    ]
+}
+
+/// `f64 -> f32` silently saturates to infinity, so a coordinate that does not fit is an error
+/// rather than a point placed at infinity.
+fn narrow_to_f32(value: f64, field: &str) -> Result<f32, String> {
+    if !value.is_finite() {
+        return Err(format!("{field} is not finite: {value}"));
+    }
+    let narrowed = value as f32;
+    if !narrowed.is_finite() {
+        return Err(format!("{field} = {value} overflows f32"));
+    }
+    Ok(narrowed)
+}
+
+/// The `f64` counterpart of [`narrow_to_f32`]: nothing to narrow, but a non-finite coordinate is
+/// still not a position.
+fn keep_f64(value: f64, field: &str) -> Result<f64, String> {
+    if value.is_finite() {
+        Ok(value)
+    } else {
+        Err(format!("{field} is not finite: {value}"))
+    }
+}
+
+impl From<&Point3d> for Point {
+    fn from(point: &Point3d) -> Self {
+        Self {
+            x: point.x.get::<meter>(),
+            y: point.y.get::<meter>(),
+            z: point.z.get::<meter>(),
+        }
+    }
+}
+
+impl TryFrom<Point> for Point3d {
+    type Error = String;
+
+    fn try_from(point: Point) -> Result<Self, Self::Error> {
+        Ok(Self {
+            x: Length64::new::<meter>(point.x),
+            y: Length64::new::<meter>(point.y),
+            z: Length64::new::<meter>(point.z),
+        })
+    }
+}
+
+impl RosMsgAdapter<'static> for Point3d {
+    type Output = Point;
+
+    fn namespace() -> &'static str {
+        Point::NAMESPACE
+    }
+
+    fn type_name() -> &'static str {
+        Point::TYPE_NAME
+    }
+
+    fn type_hash() -> &'static str {
+        Point::TYPE_HASH
+    }
+}
+
+impl From<&Point3f> for Point {
+    fn from(point: &Point3f) -> Self {
+        // Widening f32 to f64 is exact.
+        Self {
+            x: point.x.get::<meter>() as f64,
+            y: point.y.get::<meter>() as f64,
+            z: point.z.get::<meter>() as f64,
+        }
+    }
+}
+
+impl TryFrom<Point> for Point3f {
+    type Error = String;
+
+    fn try_from(point: Point) -> Result<Self, Self::Error> {
+        Ok(Self {
+            x: Length32::new::<meter>(narrow_to_f32(point.x, "geometry_msgs/Point.x")?),
+            y: Length32::new::<meter>(narrow_to_f32(point.y, "geometry_msgs/Point.y")?),
+            z: Length32::new::<meter>(narrow_to_f32(point.z, "geometry_msgs/Point.z")?),
+        })
+    }
+}
+
+impl RosMsgAdapter<'static> for Point3f {
+    type Output = Point;
+
+    fn namespace() -> &'static str {
+        Point::NAMESPACE
+    }
+
+    fn type_name() -> &'static str {
+        Point::TYPE_NAME
+    }
+
+    fn type_hash() -> &'static str {
+        Point::TYPE_HASH
+    }
+}
+
+/// `Transform3D` is a full 4x4 affine, so both ROS targets need the same rigidity guarantee and
+/// the same quaternion extraction. Only the scalar precision differs, and the geometry itself is
+/// glam's in both cases.
+macro_rules! impl_transform3d_conversions {
+    ($scalar:ty, $tolerance:expr, $narrow:path) => {
+        impl From<&Transform3D<$scalar>> for Transform {
+            fn from(transform: &Transform3D<$scalar>) -> Self {
+                let translation = transform.translation();
+                let rotation = DQuat::from_mat3(&rotation_matrix(transform.rotation()));
+
+                Self {
+                    translation: Vector3 {
+                        x: f64::from(translation[0].get::<meter>()),
+                        y: f64::from(translation[1].get::<meter>()),
+                        z: f64::from(translation[2].get::<meter>()),
+                    },
+                    rotation: Quaternion {
+                        x: rotation.x,
+                        y: rotation.y,
+                        z: rotation.z,
+                        w: rotation.w,
+                    },
+                }
+            }
+        }
+
+        #[allow(clippy::unnecessary_cast)]
+        impl TryFrom<Transform> for Transform3D<$scalar> {
+            type Error = String;
+
+            fn try_from(transform: Transform) -> Result<Self, Self::Error> {
+                let rotation = unit_quaternion(&transform.rotation)?;
+                let translation = DVec3::new(
+                    f64::from($narrow(
+                        transform.translation.x,
+                        "geometry_msgs/Transform.translation.x",
+                    )?),
+                    f64::from($narrow(
+                        transform.translation.y,
+                        "geometry_msgs/Transform.translation.y",
+                    )?),
+                    f64::from($narrow(
+                        transform.translation.z,
+                        "geometry_msgs/Transform.translation.z",
+                    )?),
+                );
+
+                let mat = homogeneous(DAffine3::from_rotation_translation(rotation, translation));
+                Ok(Self::from_matrix(core::array::from_fn(|i| {
+                    core::array::from_fn(|j| mat[i][j] as $scalar)
+                })))
+            }
+        }
+
+        impl RosMsgAdapter<'static> for Transform3D<$scalar> {
+            type Output = Transform;
+
+            /// Refuse a transform that is not rigid.
+            ///
+            /// The bridge calls this before conversion, so a `Transform3D` carrying scale, shear
+            /// or a reflection fails loudly here instead of publishing a quaternion that silently
+            /// discarded it.
+            fn validate_ros_message(&self) -> Result<(), String> {
+                ensure_rigid(rotation_matrix(self.rotation()), $tolerance)
+            }
+
+            fn namespace() -> &'static str {
+                Transform::NAMESPACE
+            }
+
+            fn type_name() -> &'static str {
+                Transform::TYPE_NAME
+            }
+
+            fn type_hash() -> &'static str {
+                Transform::TYPE_HASH
+            }
+        }
+
+        // `Pose` carries the same information under a different name, and `cu_spatial_payloads`
+        // itself aliases `Pose<T> = Transform3D<T>`. It cannot have its own `RosMsgAdapter`,
+        // because `Output` is an associated type and the adapter above already spends it on
+        // `Transform` — the type ROS names the same thing this payload does. These conversions
+        // stay available for a graph that wants the pose spelling.
+        impl From<&Transform3D<$scalar>> for Pose {
+            fn from(transform: &Transform3D<$scalar>) -> Self {
+                let transform: Transform = transform.into();
+                Self {
+                    position: Point {
+                        x: transform.translation.x,
+                        y: transform.translation.y,
+                        z: transform.translation.z,
+                    },
+                    orientation: transform.rotation,
+                }
+            }
+        }
+
+        impl TryFrom<Pose> for Transform3D<$scalar> {
+            type Error = String;
+
+            fn try_from(pose: Pose) -> Result<Self, Self::Error> {
+                Self::try_from(Transform {
+                    translation: Vector3 {
+                        x: pose.position.x,
+                        y: pose.position.y,
+                        z: pose.position.z,
+                    },
+                    rotation: pose.orientation,
+                })
+            }
+        }
+    };
+}
+
+impl_transform3d_conversions!(f64, RIGID_TOLERANCE_F64, keep_f64);
+impl_transform3d_conversions!(f32, RIGID_TOLERANCE_F32, narrow_to_f32);
 
 #[cfg(test)]
 mod tests {
@@ -275,6 +669,187 @@ mod tests {
                 z: 0.0,
                 w: 1.0
             }
+        );
+    }
+}
+
+impl RosMessage for TwistWithCovariance {
+    const NAMESPACE: &'static str = "geometry_msgs";
+    const TYPE_NAME: &'static str = "TwistWithCovariance";
+    const TYPE_HASH: &'static str =
+        "RIHS01_49f574f033f095d8b6cd1beaca5ca7925e296e84af1716d16c89d38b059c8c18";
+}
+
+#[cfg(test)]
+mod spatial_tests {
+    use super::*;
+
+    /// A quarter turn about z, translated by (1, 2, 3). `mat[row][column]`, translation in the
+    /// last column.
+    fn quarter_turn_about_z() -> [[f64; 4]; 4] {
+        [
+            [0.0, -1.0, 0.0, 1.0],
+            [1.0, 0.0, 0.0, 2.0],
+            [0.0, 0.0, 1.0, 3.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ]
+    }
+
+    fn assert_close(actual: f64, expected: f64, what: &str) {
+        assert!(
+            (actual - expected).abs() < 1e-9,
+            "{what}: expected {expected}, got {actual}"
+        );
+    }
+
+    #[test]
+    fn point3d_roundtrips_through_geometry_msgs_point() {
+        let original = Point3d {
+            x: Length64::new::<meter>(1.5),
+            y: Length64::new::<meter>(-2.25),
+            z: Length64::new::<meter>(0.0),
+        };
+
+        let ros: Point = (&original).into();
+        assert_close(ros.x, 1.5, "x");
+        assert_close(ros.y, -2.25, "y");
+
+        let recovered = Point3d::try_from(ros).expect("finite point converts back");
+        assert_close(recovered.x.get::<meter>(), 1.5, "recovered x");
+        assert_close(recovered.y.get::<meter>(), -2.25, "recovered y");
+    }
+
+    #[test]
+    fn point3f_rejects_a_coordinate_that_does_not_fit() {
+        // f64 -> f32 saturates to infinity rather than failing, which would put the point at
+        // infinity instead of reporting the problem.
+        let error = Point3f::try_from(Point {
+            x: 1e300,
+            y: 0.0,
+            z: 0.0,
+        })
+        .expect_err("1e300 does not fit in an f32");
+        assert!(error.contains("overflows f32"), "unexpected error: {error}");
+
+        let error = Point3f::try_from(Point {
+            x: f64::NAN,
+            y: 0.0,
+            z: 0.0,
+        })
+        .expect_err("NaN is not a position");
+        assert!(error.contains("not finite"), "unexpected error: {error}");
+    }
+
+    #[test]
+    fn rigid_transform_roundtrips_through_geometry_msgs_transform() {
+        let original = Transform3D::<f64>::from_matrix(quarter_turn_about_z());
+
+        original
+            .validate_ros_message()
+            .expect("a quarter turn is rigid");
+
+        let ros: Transform = (&original).into();
+        assert_close(ros.translation.x, 1.0, "translation x");
+        assert_close(ros.translation.y, 2.0, "translation y");
+        assert_close(ros.translation.z, 3.0, "translation z");
+        // A quarter turn about z is (0, 0, sin(45 deg), cos(45 deg)).
+        assert_close(ros.rotation.z, std::f64::consts::FRAC_1_SQRT_2, "quat z");
+        assert_close(ros.rotation.w, std::f64::consts::FRAC_1_SQRT_2, "quat w");
+
+        let recovered = Transform3D::<f64>::try_from(ros).expect("unit quaternion converts back");
+        let expected = quarter_turn_about_z();
+        let actual = recovered.to_matrix();
+        for row in 0..4 {
+            for column in 0..4 {
+                assert_close(
+                    actual[row][column],
+                    expected[row][column],
+                    &format!("mat[{row}][{column}]"),
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn scaled_transform_is_refused_rather_than_silently_flattened() {
+        // Doubling x is representable as a Transform3D and NOT as a geometry_msgs/Transform.
+        // Converting anyway would publish a plausible-looking rigid transform with the scale
+        // quietly dropped, which nothing downstream could detect.
+        let mut mat = quarter_turn_about_z();
+        mat[0][0] = 0.0;
+        mat[0][1] = -2.0;
+        mat[1][0] = 2.0;
+
+        let error = Transform3D::<f64>::from_matrix(mat)
+            .validate_ros_message()
+            .expect_err("a scaled transform is not rigid");
+        assert!(
+            error.contains("not rigid"),
+            "expected a rigidity error, got: {error}"
+        );
+    }
+
+    #[test]
+    fn reflection_is_refused() {
+        // Orthonormal, so R^T R == I passes, but the determinant is -1: a mirror, not a rotation.
+        let mut mat = [[0.0f64; 4]; 4];
+        mat[0][0] = -1.0;
+        mat[1][1] = 1.0;
+        mat[2][2] = 1.0;
+        mat[3][3] = 1.0;
+
+        let error = Transform3D::<f64>::from_matrix(mat)
+            .validate_ros_message()
+            .expect_err("a reflection is not a rotation");
+        assert!(
+            error.contains("determinant"),
+            "expected a determinant error, got: {error}"
+        );
+    }
+
+    #[test]
+    fn non_unit_quaternion_is_refused_on_the_way_in() {
+        let error = Transform3D::<f64>::try_from(Transform {
+            translation: Vector3::default(),
+            rotation: Quaternion {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 2.0,
+            },
+        })
+        .expect_err("a non-unit quaternion is not a rotation");
+        assert!(
+            error.contains("unit quaternion"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn pose_and_transform_spellings_agree() {
+        let value = Transform3D::<f32>::from_matrix(core::array::from_fn(|i| {
+            core::array::from_fn(|j| quarter_turn_about_z()[i][j] as f32)
+        }));
+
+        let as_transform: Transform = (&value).into();
+        let as_pose: Pose = (&value).into();
+
+        assert_close(as_pose.position.x, as_transform.translation.x, "position x");
+        assert_close(as_pose.position.y, as_transform.translation.y, "position y");
+        assert_close(as_pose.position.z, as_transform.translation.z, "position z");
+        assert_eq!(as_pose.orientation, as_transform.rotation);
+
+        let recovered = Transform3D::<f32>::try_from(as_pose).expect("pose converts back");
+        assert!((recovered.translation()[0].get::<meter>() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn adapters_publish_the_types_they_claim() {
+        assert_eq!(<Point3d as RosMsgAdapter>::type_name(), "Point");
+        assert_eq!(<Point3f as RosMsgAdapter>::namespace(), "geometry_msgs");
+        assert_eq!(
+            <Transform3D<f64> as RosMsgAdapter>::type_hash(),
+            Transform::TYPE_HASH
         );
     }
 }
