@@ -36,7 +36,8 @@ impl CuSrcTask for StreamSource {
         Ok(Self::default())
     }
 
-    fn process(&mut self, _ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
+    fn process(&mut self, ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
+        info!(ctx, "Logstream source iteration {}", self.next);
         output.set_payload(StreamMsg(self.next));
         self.next += 1;
         Ok(())
@@ -110,6 +111,31 @@ fn generated_runtime_streams_without_local_copperlist_logging() -> CuResult<()> 
         datagrams.len() > ITERATIONS,
         "expected source and repair datagrams, got {}",
         datagrams.len()
+    );
+    let mut log_decoder = FiniteObjectDecoder::new(
+        identity,
+        Lane::StructuredLog,
+        FiniteObjectLimits::new(4096, SYMBOL_SIZE as u16, 4),
+    )
+    .unwrap();
+    let mut logs = Vec::new();
+    for packet in &datagrams {
+        log_decoder
+            .receive_datagram(packet, |record| {
+                let (entry, used): (CuLogEntry, usize) = bincode::decode_from_slice(
+                    record.decoded().payload,
+                    bincode::config::standard(),
+                )
+                .unwrap();
+                assert_eq!(used, record.decoded().payload.len());
+                logs.push(entry);
+                Ok::<(), ()>(())
+            })
+            .unwrap();
+    }
+    assert!(
+        logs.iter()
+            .any(|entry| entry.level == CuLogLevel::Info && entry.origin.task_index == Some(0))
     );
     let source_symbols = datagrams
         .iter()

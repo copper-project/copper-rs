@@ -159,6 +159,8 @@ enum PendingEvent {
 struct RoutedSession<const S: usize, const W: usize, const E: usize> {
     identity: StreamIdentity,
     finite: FiniteObjectDecoder,
+    structured: FiniteObjectDecoder,
+    structured_seen: Option<(u64, u64)>,
     manifest: Option<ReceivedManifest>,
     startup: VecDeque<Vec<u8>>,
     recovery: Vec<RecoveryRecord>,
@@ -274,6 +276,15 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
                 return Ok(());
             }
         };
+        if (packet.header.lane == Lane::StructuredLog
+            || packet.header.record_kind == crate::RecordKind::StructuredLog)
+            && !(packet.header.lane == Lane::StructuredLog
+                && packet.header.record_kind == crate::RecordKind::StructuredLog
+                && packet.header.fec_scheme == FecScheme::RaptorQ)
+        {
+            self.stats.malformed_datagrams += 1;
+            return Ok(());
+        }
         let identity = StreamIdentity {
             session_id: packet.header.session_id,
             sender_id: packet.header.sender_id,
@@ -286,6 +297,9 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
             Some(i) => i,
             None if (packet.header.fec_scheme == FecScheme::RaptorQ
                 && packet.header.lane == Lane::Control)
+                || (packet.header.lane == Lane::StructuredLog
+                    && packet.header.record_kind == crate::RecordKind::StructuredLog
+                    && packet.header.fec_scheme == FecScheme::RaptorQ)
                 || (packet.header.lane == Lane::ReplayCritical
                     && packet.header.record_kind == crate::RecordKind::CopperList) =>
             {
@@ -302,6 +316,12 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
                         Lane::Control,
                         self.limits.finite_objects,
                     )?,
+                    structured: FiniteObjectDecoder::new(
+                        identity,
+                        Lane::StructuredLog,
+                        self.limits.finite_objects,
+                    )?,
+                    structured_seen: None,
                     manifest: None,
                     startup: VecDeque::with_capacity(self.limits.max_startup_packets),
                     recovery: Vec::with_capacity(self.limits.max_recovery_records),
@@ -322,7 +342,16 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
         };
         self.sessions[index].received_bytes += datagram.len() as u64;
         self.sessions[index].received_packets += 1;
-        if packet.header.fec_scheme == FecScheme::RaptorQ {
+        if packet.header.lane == Lane::StructuredLog {
+            if self.sessions[index].manifest.is_some() {
+                self.sessions[index].structured.receive_packet(packet)?;
+                if let Some(record) = self.sessions[index].structured.pop_record() {
+                    self.receive_object(index, record)?;
+                }
+            } else {
+                self.buffer_startup(index, datagram);
+            }
+        } else if packet.header.fec_scheme == FecScheme::RaptorQ {
             self.sessions[index].finite.receive_packet(packet)?;
             if let Some(record) = self.sessions[index].finite.pop_record() {
                 self.receive_object(index, record)?;
@@ -330,20 +359,24 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
         } else if self.sessions[index].continuous.is_some() {
             Self::receive_continuous(&mut self.sessions[index], packet, &mut emit)?;
         } else {
-            self.stats.datagrams_before_manifest += 1;
-            let startup = &mut self.sessions[index].startup;
-            if datagram.len() <= MAX_SYMBOL_SIZE + crate::PACKET_HEADER_LEN
-                && startup.len() < self.limits.max_startup_packets
-            {
-                startup.push_back(datagram.to_vec());
-            } else {
-                self.stats.startup_packets_dropped += 1;
-            }
+            self.buffer_startup(index, datagram);
         }
         self.drain_events(&mut emit)
     }
     /// Retries pending delivery without cloning encoded records. A consumer error
     /// retains the same bytes until a later call succeeds.
+    fn buffer_startup(&mut self, index: usize, datagram: &[u8]) {
+        self.stats.datagrams_before_manifest += 1;
+        let startup = &mut self.sessions[index].startup;
+        if datagram.len() <= MAX_SYMBOL_SIZE + crate::PACKET_HEADER_LEN
+            && startup.len() < self.limits.max_startup_packets
+        {
+            startup.push_back(datagram.to_vec());
+        } else {
+            self.stats.startup_packets_dropped += 1;
+        }
+    }
+
     pub fn drain_events<E>(
         &mut self,
         emit: &mut impl FnMut(SessionEventRef<'_>) -> core::result::Result<(), E>,
@@ -406,11 +439,15 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
                 .position(|session| session.continuous.is_some() && !session.startup.is_empty())
             {
                 let packet = self.sessions[index].startup.pop_front().unwrap();
-                Self::receive_continuous(
-                    &mut self.sessions[index],
-                    WirePacketRef::decode(&packet)?,
-                    emit,
-                )?;
+                let decoded = WirePacketRef::decode(&packet)?;
+                if decoded.header.lane == Lane::StructuredLog {
+                    self.sessions[index].structured.receive_packet(decoded)?;
+                    if let Some(record) = self.sessions[index].structured.pop_record() {
+                        self.receive_object(index, record)?;
+                    }
+                } else {
+                    Self::receive_continuous(&mut self.sessions[index], decoded, emit)?;
+                }
                 continue;
             }
             for index in 0..self.sessions.len() {
@@ -470,6 +507,32 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
     }
 
     fn receive_object(&mut self, index: usize, mut record: RecoveredRecord) -> Result<()> {
+        if record.decoded().kind == crate::RecordKind::StructuredLog {
+            // Accept reordered records inside a fixed 64-record window and suppress
+            // late duplicates even after the finite decoder evicts its object cache.
+            let id = record.decoded().object_id;
+            let seen = self.sessions[index].structured_seen;
+            let updated = match seen {
+                None => (id, 1),
+                Some((latest, bits)) if id > latest => (
+                    id,
+                    bits.checked_shl((id - latest).min(64) as u32).unwrap_or(0) | 1,
+                ),
+                Some((latest, bits)) => {
+                    let age = latest - id;
+                    if age >= 64 || bits & (1 << age) != 0 {
+                        return Ok(());
+                    }
+                    (latest, bits | (1 << age))
+                }
+            };
+            self.push_event(PendingEvent::Object {
+                identity: self.sessions[index].identity,
+                record,
+            })?;
+            self.sessions[index].structured_seen = Some(updated);
+            return Ok(());
+        }
         if record.decoded().kind == crate::RecordKind::Manifest {
             if let Some(existing) = &self.sessions[index].manifest {
                 if existing.record.decoded().digest != record.decoded().digest {

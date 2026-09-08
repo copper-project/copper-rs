@@ -39,6 +39,7 @@ pub struct CuTwinStatus {
     pub gaps: usize,
     pub packets: usize,
     pub archived: u64,
+    pub structured_logs: u64,
     pub identity: Option<StreamIdentity>,
     pub last_packet: Option<Instant>,
     pub state: CuTwinRecordingState,
@@ -109,6 +110,7 @@ impl<A: LiveReplay, R: CuStreamRx + 'static> CuTwinBuilder<A, R> {
                 .map_err(|e| CuError::new_with_cause("Create twin log directory", e))?;
         }
         let (publisher, reader) = telemetry_channel(self.frame_capacity, CuTwinStatus::default());
+        let (mut log_publisher, log_reader) = telemetry_channel(FRAME_CAPACITY, ());
         let stop = Arc::new(AtomicBool::new(false));
         let stopping = stop.clone();
         let (ready_tx, ready_rx) = std::sync::mpsc::sync_channel(1);
@@ -170,7 +172,7 @@ impl<A: LiveReplay, R: CuStreamRx + 'static> CuTwinBuilder<A, R> {
                                     // Recovery objects can arrive before the manifest.
                                     // The router retains them and emits VerifiedRecoveryPoint
                                     // once their manifest/keyframe references agree.
-                                    if matches!(event, SessionEvent::Object { .. }) {
+                                    if matches!(&event, SessionEvent::Object { record, .. } if record.decoded().kind != crate::RecordKind::StructuredLog) {
                                         return Ok(());
                                     }
                                     if let SessionEvent::Manifest(manifest) = &event {
@@ -194,6 +196,14 @@ impl<A: LiveReplay, R: CuStreamRx + 'static> CuTwinBuilder<A, R> {
                                             "capture arrived before its manifest",
                                         ))?;
                                     let capture = writer.accept(&event)?;
+                                    if let Some(entry) = writer.take_structured_log() {
+                                        status.structured_logs += 1;
+                                        if let SessionEvent::Object { identity, record } = &event {
+                                            log_publisher.publish(ReceivedStructuredLog {
+                                                identity: *identity, sequence: record.decoded().object_id, entry,
+                                            });
+                                        }
+                                    }
                                     if let Some(capture) = &capture {
                                         status.latest = Some(capture.copperlist.id);
                                         status.archived += 1;
@@ -276,6 +286,7 @@ impl<A: LiveReplay, R: CuStreamRx + 'static> CuTwinBuilder<A, R> {
                 stop,
                 worker: Some(worker),
                 final_status: None,
+                log_reader: Some(log_reader),
                 app: PhantomData,
             },
             reader,
@@ -290,6 +301,17 @@ fn stream_error(error: crate::Error) -> CuError {
 /// Reader for a generated graph's reconstructed frames and recording status.
 pub type CuTwinReader<A> = TelemetryReader<TwinFrame<<A as LiveReplay>::DataSet>, CuTwinStatus>;
 
+/// One original robot log entry, published only after native archival succeeds.
+#[derive(Debug)]
+pub struct ReceivedStructuredLog {
+    pub identity: StreamIdentity,
+    pub sequence: u64,
+    pub entry: cu29_log::CuLogEntry,
+}
+
+/// Independent bounded log reader; a stalled reader never delays native recording.
+pub type CuTwinLogReader = TelemetryReader<ReceivedStructuredLog, ()>;
+
 /// Running Copper twin. The separately owned reader can be paused or dropped
 /// without affecting recording. `stop()` closes the archive and drains admitted
 /// replay; dropping the handle also stops and joins Copper's workers.
@@ -297,6 +319,7 @@ pub struct CuTwin<A: LiveReplay> {
     stop: Arc<AtomicBool>,
     worker: Option<JoinHandle<CuResult<CuTwinStatus>>>,
     final_status: Option<CuTwinStatus>,
+    log_reader: Option<CuTwinLogReader>,
     app: PhantomData<fn() -> A>,
 }
 
@@ -310,6 +333,12 @@ impl<A: LiveReplay> CuTwin<A> {
             reconstruct: true,
             app: PhantomData,
         }
+    }
+
+    /// Take the independent 64-entry log view once. Entries retain sender string IDs;
+    /// use the producing application's string index to render text.
+    pub fn take_log_reader(&mut self) -> Option<CuTwinLogReader> {
+        self.log_reader.take()
     }
 
     pub fn stop(&mut self) -> CuResult<CuTwinStatus> {

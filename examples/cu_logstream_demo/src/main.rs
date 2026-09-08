@@ -1,6 +1,6 @@
-#[cfg(feature = "tui")]
-mod dashboard;
 mod receiver;
+#[cfg(feature = "tui")]
+mod telemetry_screen;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use cu_logstream_demo::{ITERATIONS, read_lists, tasks::JointAngles};
@@ -38,7 +38,7 @@ enum Command {
     Receiver(receiver::ReceiverOptions),
     /// Native telemetry screen; Space pauses only the reader, q closes recording.
     #[cfg(feature = "tui")]
-    Dashboard(receiver::ReceiverOptions),
+    Telemetry(receiver::ReceiverOptions),
     Verify {
         #[arg(long)]
         sender: PathBuf,
@@ -48,6 +48,9 @@ enum Command {
         expect: Expectation,
         #[arg(long, default_value_t = ITERATIONS)]
         iterations: u64,
+        /// Require every demonstrated robot log when the scenario preserves log packets.
+        #[arg(long)]
+        require_robot_logs: bool,
     },
 }
 
@@ -83,7 +86,13 @@ fn sender(remote: SocketAddr, path: &Path, iterations: u64, idle_ms: u64) -> Res
     Ok(())
 }
 
-fn verify(sender: &Path, received: &Path, expect: Expectation, iterations: u64) -> Result<()> {
+fn verify(
+    sender: &Path,
+    received: &Path,
+    expect: Expectation,
+    iterations: u64,
+    require_robot_logs: bool,
+) -> Result<()> {
     let onboard = read_lists(sender)?;
     let ground = read_lists(received)?;
     if onboard.len() as u64 != iterations || ground.is_empty() {
@@ -177,6 +186,26 @@ fn verify(sender: &Path, received: &Path, expect: Expectation, iterations: u64) 
             return Err(format!("Reconstructed output or sender metadata mismatch at {id}").into());
         }
     }
+    let onboard_logs = cu_logstream_demo::read_logs(sender)?;
+    let received_logs = cu_logstream_demo::read_logs(received)?;
+    for entry in &received_logs {
+        if !onboard_logs.contains(entry) {
+            return Err("Received structured log differs from the robot's original entry".into());
+        }
+    }
+    if require_robot_logs {
+        let robot_entries: Vec<_> = onboard_logs
+            .iter()
+            .filter(|entry| entry.origin.task_index == Some(0))
+            .collect();
+        if robot_entries.is_empty()
+            || robot_entries
+                .iter()
+                .any(|entry| !received_logs.contains(entry))
+        {
+            return Err("Missing streamed robot info! entries".into());
+        }
+    }
     let valid = match expect {
         Expectation::Complete => ground.len() == onboard.len() && gaps.is_empty(),
         Expectation::Outage => {
@@ -197,6 +226,10 @@ fn verify(sender: &Path, received: &Path, expect: Expectation, iterations: u64) 
         return Err(format!("Archive does not satisfy {expect:?}").into());
     }
     println!(
+        "Verified {} original robot structured logs.",
+        received_logs.len()
+    );
+    println!(
         "Verified {} received CopperLists against onboard payloads and timestamps; {} explicit gaps, {} verified recovery points ({expect:?}).",
         ground.len(),
         gaps.len(),
@@ -215,12 +248,13 @@ fn main() -> Result<()> {
         } => sender(remote, &log_base, iterations, idle_ms),
         Command::Receiver(options) => receiver::run(&options),
         #[cfg(feature = "tui")]
-        Command::Dashboard(options) => dashboard::run(options),
+        Command::Telemetry(options) => telemetry_screen::run(options),
         Command::Verify {
             sender,
             received,
             expect,
             iterations,
-        } => verify(&sender, &received, expect, iterations),
+            require_robot_logs,
+        } => verify(&sender, &received, expect, iterations, require_robot_logs),
     }
 }

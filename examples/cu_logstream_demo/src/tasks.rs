@@ -65,6 +65,15 @@ impl CuSrcTask for Encoders {
     fn process(&mut self, ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
         let angles = JointAngles::at_tick(self.tick);
         output.set_payload(angles);
+        if self.tick.is_multiple_of(100) {
+            let sample = self.tick / 100;
+            let temperature_c = 35 + sample % 5;
+            let supply_mv = 3300 - (sample % 7) * 5;
+            info!(
+                ctx,
+                "Simulated encoder health: temperature_c={} supply_mv={}", temperature_c, supply_mv
+            );
+        }
         #[cfg(feature = "sender-monitor")]
         output.metadata.set_status(format_args!(
             "S:{:03}.{:02} E:{:03}.{:02}",

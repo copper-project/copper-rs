@@ -15,6 +15,7 @@ pub const RECOVERY_REPEAT_INTERVAL: CuDuration = CuDuration(250_000_000);
 const MAX_SENDS_PER_POLL: usize = 64;
 const PENDING_BOUNDARIES: usize = 4;
 const PENDING_KEYFRAMES: usize = 2;
+pub(crate) const STRUCTURED_RECORD_BYTES: usize = 4096;
 
 /// Shared destination budget. Counts complete Copper packets, excluding carrier overhead.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -114,9 +115,11 @@ pub struct SenderCore {
     config: LogStreamSenderConfig,
     continuous: Box<ContinuousEncoder<1128, 64>>,
     finite: FiniteObjectEncoder,
+    structured_encoder: FiniteObjectEncoder,
     repairs: RepairSchedule,
     scratch: Vec<u8>,
     data: Packets,
+    structured: Packets,
     manifest: Packets,
     latest: RecoveryPackets,
     pending_cl: Vec<PendingPackets>,
@@ -128,8 +131,8 @@ pub struct SenderCore {
     last_now: CuTime,
     credit: u128,
     capacity: u128,
-    // Byte deficit fairness: three MTUs of replay for one MTU of recovery.
-    deficit: [usize; 2],
+    // Byte deficit fairness: replay, recovery, structured logs at 3:1:1.
+    deficit: [usize; 3],
     lane: usize,
     stopping: bool,
     transport_pending: bool,
@@ -228,6 +231,20 @@ impl SenderCore {
             .ok_or(Error::InvalidConfig(
                 "sender buffers exceed destination memory budget",
             ))?;
+        let structured_capacity = (queue_capacity / 8).max(
+            finite_capacity(object_bytes.min(STRUCTURED_RECORD_BYTES))
+                .ok_or(Error::InvalidConfig("structured packet bound overflow"))?,
+        );
+        let data_capacity = queue_capacity.saturating_sub(structured_capacity);
+        if data_capacity < boundary_capacity.max(1) {
+            return Err(Error::InvalidConfig(
+                "sender packet queues exceed memory budget",
+            ));
+        }
+        let structured_encoder = FiniteObjectEncoder::new(crate::FiniteObjectSenderConfig {
+            lane: crate::Lane::StructuredLog,
+            ..config.recovery.finite
+        })?;
         let continuous = Box::new(ContinuousEncoder::new(
             config.continuous.identity,
             config.continuous.lane,
@@ -258,8 +275,10 @@ impl SenderCore {
             config,
             continuous,
             finite,
+            structured_encoder,
             scratch: vec![0; mtu],
-            data: Packets::new(queue_capacity, mtu),
+            data: Packets::new(data_capacity, mtu),
+            structured: Packets::new(structured_capacity, mtu),
             manifest,
             latest: recovery(),
             pending_cl: (0..PENDING_BOUNDARIES)
@@ -281,7 +300,7 @@ impl SenderCore {
             last_now: now,
             credit: capacity,
             capacity,
-            deficit: [0; 2],
+            deficit: [0; 3],
             lane: 0,
             stopping: false,
             transport_pending: false,
@@ -333,6 +352,19 @@ impl SenderCore {
                     &mut self.repairs,
                 )?;
             }
+            RecordKind::StructuredLog => {
+                // This lane never advances CopperList continuity or recovery fences.
+                self.structured_encoder.push_record_with(record, |packet| {
+                    if !self.structured.push(packet, now, decoded.object_id) {
+                        self.stats.queue_drops = self.stats.queue_drops.saturating_add(1);
+                    }
+                    self.stats.queue_peak = self
+                        .stats
+                        .queue_peak
+                        .max(self.data.len + self.structured.len);
+                    Ok(())
+                })?;
+            }
             RecordKind::KeyFrame => {
                 if !decoded
                     .object_id
@@ -367,7 +399,7 @@ impl SenderCore {
             }
             _ => {
                 return Err(Error::InvalidConfig(
-                    "sender inbox accepts CLs and keyframes",
+                    "sender inbox accepts CLs, keyframes and structured logs",
                 ));
             }
         }
@@ -469,16 +501,21 @@ impl SenderCore {
     /// Account for work abandoned at the driver's finite shutdown deadline.
     pub fn discard_pending(&mut self) {
         self.stats.shutdown_drops += (self.data.len
+            + self.structured.len
             + self.manifest.len.saturating_sub(self.manifest_cursor)
             + self.recovery_len().saturating_sub(self.recovery_cursor))
             as u64;
         self.data.clear();
+        self.structured.clear();
         self.manifest_cursor = self.manifest.len;
         self.recovery_cursor = self.recovery_len();
     }
 
     pub fn is_idle(&self) -> bool {
-        self.data.len == 0 && self.control_packet().is_none() && !self.transport_pending
+        self.data.len == 0
+            && self.structured.len == 0
+            && self.control_packet().is_none()
+            && !self.transport_pending
     }
 
     /// Send a bounded amount of eligible work and return the next local deadline.
@@ -524,33 +561,39 @@ impl SenderCore {
             self.next_repeat = now + RECOVERY_REPEAT_INTERVAL;
         }
         let mut work = 0;
-        while self.data.len > 0
-            && now >= self.data.times[self.data.head] + self.config.pacing.max_latency
-            && work < MAX_SENDS_PER_POLL
-        {
-            self.data.pop();
-            self.stats.expired_packets += 1;
-            work += 1;
+        for queue in [&mut self.data, &mut self.structured] {
+            while queue.len > 0
+                && now >= queue.times[queue.head] + self.config.pacing.max_latency
+                && work < MAX_SENDS_PER_POLL
+            {
+                queue.pop();
+                self.stats.expired_packets += 1;
+                work += 1;
+            }
         }
         while work < MAX_SENDS_PER_POLL {
-            let has_data = self.data.len > 0;
-            let has_control = self.control_packet().is_some();
-            if !has_data && !has_control {
+            let available = [
+                self.data.len > 0,
+                self.control_packet().is_some(),
+                self.structured.len > 0,
+            ];
+            if !available.iter().any(|ready| *ready) {
                 break;
             }
-            if (self.lane == 0 && !has_data) || (self.lane == 1 && !has_control) {
+            if !available[self.lane] {
                 self.deficit[self.lane] = 0;
-                self.lane ^= 1;
+                self.lane = (self.lane + 1) % 3;
+                continue;
             }
-            let packet = if self.lane == 0 {
-                self.data.get(0)
-            } else {
-                self.control_packet().unwrap()
+            let packet = match self.lane {
+                0 => self.data.get(0),
+                1 => self.control_packet().unwrap(),
+                _ => self.structured.get(0),
             };
             let len = packet.len();
             if self.deficit[self.lane] < len {
                 self.deficit[self.lane] += self.scratch.len() * if self.lane == 0 { 3 } else { 1 };
-                self.lane ^= 1;
+                self.lane = (self.lane + 1) % 3;
                 continue;
             }
             let cost = len as u128 * 8 * 1_000_000_000;
@@ -558,9 +601,11 @@ impl SenderCore {
                 let wait =
                     (cost - self.credit).div_ceil(u128::from(self.config.pacing.bitrate_bps));
                 let mut deadline = now + CuDuration(wait.min(u128::from(u64::MAX)) as u64);
-                if self.data.len > 0 {
-                    deadline = deadline
-                        .min(self.data.times[self.data.head] + self.config.pacing.max_latency);
+                for queue in [&self.data, &self.structured] {
+                    if queue.len > 0 {
+                        deadline =
+                            deadline.min(queue.times[queue.head] + self.config.pacing.max_latency);
+                    }
                 }
                 return Ok(Some(if self.stopping {
                     deadline
@@ -580,6 +625,8 @@ impl SenderCore {
             self.deficit[self.lane] -= len;
             if self.lane == 0 {
                 self.data.pop();
+            } else if self.lane == 2 {
+                self.structured.pop();
             } else if self.manifest_cursor < self.manifest.len {
                 self.manifest_cursor += 1;
             } else {
@@ -588,12 +635,14 @@ impl SenderCore {
             work += 1;
             self.promote_recovery();
         }
-        Ok(if self.data.len != 0 || self.control_packet().is_some() {
-            Some(now)
-        } else if self.stopping {
-            None
-        } else {
-            Some(self.next_repeat)
-        })
+        Ok(
+            if self.data.len != 0 || self.structured.len != 0 || self.control_packet().is_some() {
+                Some(now)
+            } else if self.stopping {
+                None
+            } else {
+                Some(self.next_repeat)
+            },
+        )
     }
 }

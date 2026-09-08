@@ -43,7 +43,8 @@ def run(binary, scenario):
     def verify(name, expectation):
         wait(spawn("verify", "--sender", directory / "sender.copper", "--received",
                    directory / f"{name}.copper", "--expect", expectation,
-                   "--iterations", "1" if scenario == "idle" else "256"))
+                   "--iterations", "1" if scenario == "idle" else "256",
+                   *(["--require-robot-logs"] if scenario in ("clean", "loss") else [])))
 
     try:
         if scenario == "idle":

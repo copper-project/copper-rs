@@ -18,6 +18,9 @@ pub struct ReceiverOptions {
     pub listen: SocketAddr,
     #[arg(long)]
     pub log_base: PathBuf,
+    /// Producing application's string index for the telemetry log pane.
+    #[arg(long)]
+    pub log_index: Option<PathBuf>,
     /// Write the bound endpoint for the demo launcher.
     #[arg(long)]
     pub ready_file: Option<PathBuf>,
@@ -229,8 +232,11 @@ mod tests {
             };
             let (mut twin, reader) = builder.spawn().unwrap();
             let mut reader = Some(reader);
+            let mut log_reader = twin.take_log_reader();
+            assert!(twin.take_log_reader().is_none());
             if mode == "disconnected" {
                 drop(reader.take());
+                drop(log_reader.take());
             }
             std::thread::scope(|scope| {
                 let producer = scope.spawn(|| run_sender(address, &sender, COUNT, 0).unwrap());
@@ -257,6 +263,17 @@ mod tests {
             });
             let status = twin.stop().unwrap();
             assert_eq!(status.archived, COUNT);
+            assert!(status.structured_logs > 0);
+            let archived_logs = cu_logstream_demo::read_logs(&received).unwrap();
+            assert_eq!(archived_logs.len() as u64, status.structured_logs);
+            if let Some(reader) = &mut log_reader {
+                let mut received_entries = 0;
+                while let Some(update) = reader.try_read() {
+                    assert!(archived_logs.contains(&update.frame.entry));
+                    received_entries += 1;
+                }
+                assert!(received_entries > 0);
+            }
             assert_eq!(status.state, RecordingState::Closed);
             if mode == "stalled" {
                 let reader = reader.as_mut().unwrap();
@@ -264,7 +281,14 @@ mod tests {
                 assert_eq!(update.missed, COUNT - 4);
                 assert_eq!(update.frame.copperlist.id, COUNT - 4);
             }
-            crate::verify(&sender, &received, crate::Expectation::Complete, COUNT).unwrap();
+            crate::verify(
+                &sender,
+                &received,
+                crate::Expectation::Complete,
+                COUNT,
+                true,
+            )
+            .unwrap();
         }
     }
 }

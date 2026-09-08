@@ -454,7 +454,15 @@ fn sender_status_is_allocation_free_and_keeps_pose_local() {
     use cu_logstream_demo::tasks::{ArmPose, Encoders, JointAngles, Kinematics};
     use cu29::prelude::*;
 
+    let _serial = SERIAL.lock().unwrap();
     let (ctx, _clock) = CuContext::new_mock_clock();
+    let local = LogStream::new(
+        UnifiedLogType::StructuredLogLine,
+        std::sync::Arc::new(std::sync::Mutex::new(NoopLogger::new())),
+        4096,
+    )
+    .unwrap();
+    let _logger = LoggerRuntime::init(ctx.clock.clone(), local, None::<NullLog>);
     let mut encoders = Encoders::default();
     let mut kinematics = Kinematics;
     let mut angles = CuMsg::<JointAngles>::default();

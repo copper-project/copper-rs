@@ -369,3 +369,38 @@ fn pending_transport_is_serviced_through_idle_and_shutdown() {
     assert_eq!(tx.remaining, 0);
     assert!(tx.completed > 0);
 }
+
+#[test]
+fn structured_pressure_preserves_replay_recovery_and_shared_budget() {
+    let (clock, mock) = RobotClock::mock();
+    let config = config();
+    let bitrate = config.pacing.bitrate_bps;
+    let mut core = SenderCore::new(config, clock.now(), 0).unwrap();
+    for id in 0..100 {
+        core.accept_record(
+            &encode_record(RecordKind::StructuredLog, id, &[42; 100]).unwrap(),
+            clock.now(),
+        )
+        .unwrap();
+    }
+    core.accept_record(&cl(0), clock.now()).unwrap();
+    core.accept_record(&kf(0), clock.now()).unwrap();
+    let mut tx = Capture::default();
+    advance(&mut core, &mut tx, &clock, &mock, 0, 1000);
+    for kind in [
+        RecordKind::CopperList,
+        RecordKind::KeyFrame,
+        RecordKind::StructuredLog,
+    ] {
+        assert!(
+            tx.packets
+                .iter()
+                .any(|(_, p)| WirePacketRef::decode(p).unwrap().header.record_kind == kind)
+        );
+    }
+    assert!(core.stats().queue_drops > 0);
+    assert!(core.stats().bytes_sent <= bitrate / 8 + 4 * 1200);
+    core.begin_shutdown();
+    core.discard_pending();
+    assert!(core.is_idle());
+}

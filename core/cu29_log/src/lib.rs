@@ -139,15 +139,22 @@ impl<Context> Decode<Context> for CuLogEntry {
         let origin = CuLogOrigin::decode(decoder)?;
         let msg_index = u32::decode(decoder)?;
 
-        let paramname_len = u64::decode(decoder)? as usize;
+        let paramname_len = usize::try_from(u64::decode(decoder)?).map_err(|_| {
+            bincode::error::DecodeError::Other("log parameter name count exceeds usize")
+        })?;
+        decoder.claim_container_read::<u32>(paramname_len)?;
         let mut paramname_indexes = SmallVec::with_capacity(paramname_len);
         for _ in 0..paramname_len {
+            decoder.unclaim_bytes_read(core::mem::size_of::<u32>());
             paramname_indexes.push(u32::decode(decoder)?);
         }
 
-        let params_len = u64::decode(decoder)? as usize;
+        let params_len = usize::try_from(u64::decode(decoder)?)
+            .map_err(|_| bincode::error::DecodeError::Other("log parameter count exceeds usize"))?;
+        decoder.claim_container_read::<Value>(params_len)?;
         let mut params = SmallVec::with_capacity(params_len);
         for _ in 0..params_len {
+            decoder.unclaim_bytes_read(core::mem::size_of::<Value>());
             params.push(Value::decode(decoder)?);
         }
 
@@ -383,6 +390,25 @@ macro_rules! defmt_error {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn decode_budget_rejects_untrusted_parameter_counts() {
+        let config = bincode::config::standard().with_limit::<4096>();
+        let prefix = (CuTime::from(0), 0u8, CuLogOrigin::default(), 0u32);
+        for names in [true, false] {
+            let mut bytes = bincode::encode_to_vec(prefix, config).unwrap();
+            if !names {
+                bytes.extend(bincode::encode_to_vec(0u64, config).unwrap());
+            }
+            bytes.extend(bincode::encode_to_vec(u64::MAX, config).unwrap());
+            assert!(bincode::decode_from_slice::<CuLogEntry, _>(&bytes, config).is_err());
+        }
+        let entry = CuLogEntry::new(42, CuLogLevel::Warning);
+        let bytes = bincode::encode_to_vec(&entry, config).unwrap();
+        let (decoded, used) = bincode::decode_from_slice::<CuLogEntry, _>(&bytes, config).unwrap();
+        assert_eq!(decoded, entry);
+        assert_eq!(used, bytes.len());
+    }
 
     #[test]
     fn test_log_level_ordering() {

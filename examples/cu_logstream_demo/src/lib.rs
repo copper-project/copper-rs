@@ -90,3 +90,13 @@ pub fn read_keyframes(path: &std::path::Path) -> CuResult<Vec<cu29::curuntime::K
     ))
     .collect())
 }
+
+/// Read original robot entries from a local or received native archive.
+pub fn read_logs(path: &std::path::Path) -> CuResult<Vec<CuLogEntry>> {
+    cu29_export::structlog_reader(UnifiedLoggerIOReader::new(
+        UnifiedLoggerRead::new(path)
+            .map_err(|error| CuError::new_with_cause("Open structured log archive", error))?,
+        UnifiedLogType::StructuredLogLine,
+    ))
+    .collect()
+}

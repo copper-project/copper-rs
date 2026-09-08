@@ -36,29 +36,41 @@ just run idle        # Recover even after captures stop
 
 Each automated run creates a fresh directory under this example's `logs/` and
 prints its path. Python 3 coordinates the processes; Rust verifies the received
-payloads, reconstructed outputs, and metadata against the onboard log.
+payloads, reconstructed outputs, metadata, and original structured entries against the onboard log.
 
 ## Native telemetry screen
 
-Start `just dashboard`, then `just sender` in another terminal. The sender runs
+Start `just telemetry`, then `just sender` in another terminal. The sender runs
 for about a minute. The screen shows captured shoulder/elbow angle traces and a
 robot arm drawn from locally reconstructed kinematics outputs. Its fingertip trail
 clears across gaps. **1** selects Live, **2** selects Health, and **Tab** cycles
 between them; arrow keys or **hjkl** scroll Health details.
+
+The **Robot logs · received over UDP** pane displays an `info!(ctx, ...)` entry
+from the robot once per second: `Simulated encoder health: temperature_c=… supply_mv=…`.
+These simulated temperature and supply-voltage diagnostics are carried only by
+structured logs; the task message carries joint angles.
+Only interned IDs and numeric values cross the link for this statement. The
+telemetry process reconstructs text with `cu29_log_index` beside its executable;
+`--log-index <path>` selects the producing build's index when running elsewhere.
+The received archive retains the original binary entries and task origin.
+Log display has its own bounded ring and missed-entry counter; **Space** pauses
+both display readers while recording continues. On very small terminals, the
+compact view prioritizes robot and recording status.
 
 The sender opens Copper's native task monitor with DAG, latency, bandwidth, and
 memory tabs. Automated scenarios remain headless.
 
 **Space** pauses the view; resume after a second to see missed display samples
 while recording continues. Network gaps and display misses have separate counters.
-**q**, Escape, or Ctrl-C closes the dashboard and finalizes its archive; it stays
+**q**, Escape, or Ctrl-C closes the telemetry and finalizes its archive; it stays
 open after the sender finishes.
 
-Sender, receiver, and dashboard replace logs at the selected base on each run.
+Sender, receiver, and telemetry replace logs at the selected base on each run.
 Choose different paths to retain earlier runs:
 
 ```sh
-just dashboard 127.0.0.1:7447 logs/dashboard-2.copper
+just telemetry 127.0.0.1:7447 logs/telemetry-2.copper
 # In another terminal:
 just sender 127.0.0.1:7447 logs/sender-2.copper
 ```
@@ -102,7 +114,7 @@ failure modes; they are demo machinery.
    report errors. Use a fresh archive path per sender session.
 3. **Consume frames in your UI or analysis loop.** Use `frames.wait_timeout(...)`,
    `frames.try_read()`, and `frames.status()` as in
-   [src/dashboard.rs](src/dashboard.rs). Read typed outputs through generated
+   [src/telemetry.rs](src/telemetry.rs). Read typed outputs through generated
    accessors such as `get_encoders_output()` / `get_kinematics_output()`, and account for `update.missed`.
    The display retains 64 frames by default; `.with_frame_capacity(...)` changes
    that bound. For recording alone, use `.archive_only()` before `.spawn()`.
@@ -117,7 +129,7 @@ failure modes; they are demo machinery.
 
 Skip `ImpairedRx`, `ImpairmentStats`, readiness files, scenario stop conditions,
 [run.py](run.py), and the demo's `verify` command when integrating. Ratatui and
-[src/dashboard.rs](src/dashboard.rs) are optional presentation code. Retain
+[src/telemetry.rs](src/telemetry.rs) are optional presentation code. Retain
 Copper's FEC (forward error correction) and recovery configuration: those handle
 real packet loss.
 
@@ -144,7 +156,7 @@ frames and replay output, not in that archive. Replay needs the matching
 application schema and a matching keyframe to resume across a gap. Remote debug
 uses Copper's standard replay CLI and creates separate outputs per session.
 
-To check reconstruction against the sender live, run `just dashboard-verify`
+To check reconstruction against the sender live, run `just telemetry-verify`
 and `just sender-verify` in separate terminals. These enable
 `cu29/logstream-verify` on both ends: optional digest traffic and comparison work
 label matching frames **Verified**. Ordinary runs label them **Reconstructed**.
