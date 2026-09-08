@@ -9102,6 +9102,7 @@ fn build_bundle_list<'a>(config: &'a CuConfig, mission: &str) -> Vec<&'a Resourc
 }
 
 struct BundleSpec {
+    inputs: Vec<(String, String)>,
     id: String,
     provider_path: syn::Path,
 }
@@ -9148,6 +9149,17 @@ fn build_logstream_resource_specs(
                 transport.resource
             )));
         }
+        if bundle_specs.iter().any(|bundle| {
+            bundle
+                .inputs
+                .iter()
+                .any(|(_, path)| path == &transport.resource)
+        }) {
+            return Err(CuError::from(format!(
+                "Log-stream destination '{destination_id}' and a resource bundle both require exclusive resource '{}'",
+                transport.resource
+            )));
+        }
         let transport_type = parse_str::<Type>(&transport.type_).map_err(|error| CuError::from(format!(
             "Log-stream destination '{destination_id}' transport type '{}' is not a valid Rust type: {error}", transport.type_
         )))?;
@@ -9187,12 +9199,104 @@ fn build_bundle_specs(config: &CuConfig, mission: &str) -> CuResult<Vec<BundleSp
                         bundle.provider, bundle.id
                     ))
                 })?;
+            let mut inputs: Vec<_> = bundle
+                .resources
+                .iter()
+                .flat_map(|map| map.iter())
+                .map(|(name, path)| (name.clone(), path.clone()))
+                .collect();
+            inputs.sort();
             Ok(BundleSpec {
+                inputs,
                 id: bundle.id.clone(),
                 provider_path,
             })
         })
         .collect()
+}
+
+/// Compute construction order while preserving declaration-based resource keys.
+fn resource_bundle_build_order(bundles: &[BundleSpec]) -> CuResult<Vec<usize>> {
+    let mut lookup = HashMap::new();
+    for (index, bundle) in bundles.iter().enumerate() {
+        if lookup.insert(bundle.id.as_str(), index).is_some() {
+            return Err(CuError::from(format!(
+                "Duplicate resource bundle '{}'",
+                bundle.id
+            )));
+        }
+    }
+    let dependencies = bundles.iter().map(|bundle| {
+        bundle.inputs.iter().map(|(_, path)| {
+            let (source, _) = parse_resource_path(path)?;
+            lookup.get(source.as_str()).copied().ok_or_else(|| CuError::from(format!(
+                "Resource bundle '{}' depends on '{}' which is not active in this mission", bundle.id, source
+            )))
+        }).collect::<CuResult<Vec<_>>>()
+    }).collect::<CuResult<Vec<_>>>()?;
+    let mut built = vec![false; bundles.len()];
+    let mut order = Vec::with_capacity(bundles.len());
+    while order.len() < bundles.len() {
+        let Some(index) = (0..bundles.len()).find(|&index| {
+            !built[index]
+                && dependencies[index]
+                    .iter()
+                    .all(|&dependency| built[dependency])
+        }) else {
+            let cycle = bundles
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| !built[*index])
+                .map(|(_, bundle)| bundle.id.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(CuError::from(format!(
+                "Resource dependency cycle involving: {cycle}"
+            )));
+        };
+        built[index] = true;
+        order.push(index);
+    }
+    Ok(order)
+}
+
+#[cfg(test)]
+mod resource_stack_tests {
+    use super::*;
+    type InputSpecs<'a> = &'a [(&'a str, &'a str)];
+    fn specs(entries: &[(&str, InputSpecs<'_>)]) -> Vec<BundleSpec> {
+        entries
+            .iter()
+            .map(|(id, inputs)| BundleSpec {
+                id: (*id).into(),
+                provider_path: syn::parse_str("Provider").unwrap(),
+                inputs: inputs
+                    .iter()
+                    .map(|(name, path)| ((*name).into(), (*path).into()))
+                    .collect(),
+            })
+            .collect()
+    }
+    #[test]
+    fn resource_dependencies_validate_and_keep_indices() {
+        assert_eq!(
+            resource_bundle_build_order(&specs(&[
+                ("stream", &[("serial", "radio.serial")]),
+                ("board", &[]),
+                ("radio", &[("serial", "board.uart")]),
+            ]))
+            .unwrap(),
+            [1, 2, 0]
+        );
+        for invalid in [
+            specs(&[("a", &[("x", "a.x")])]),
+            specs(&[("a", &[("x", "b.x")]), ("b", &[("x", "a.x")])]),
+            specs(&[("a", &[("x", "inactive.x")])]),
+            specs(&[("a", &[]), ("a", &[])]),
+        ] {
+            assert!(resource_bundle_build_order(&invalid).is_err());
+        }
+    }
 }
 
 fn build_resources_module(
@@ -9223,33 +9327,66 @@ fn build_resources_module(
         quote! { <#provider_path as cu29::resource::ResourceBundleDecl>::Id::COUNT }
     });
 
-    let bundle_inits = bundle_specs
-        .iter()
-        .enumerate()
-        .map(|(index, bundle)| {
-            let bundle_id = LitStr::new(bundle.id.as_str(), Span::call_site());
-            let provider_path = &bundle.provider_path;
+    let order = resource_bundle_build_order(bundle_specs)?;
+    let mut validations = Vec::new();
+    let mut bundle_inits = Vec::new();
+    for index in order {
+        let bundle = &bundle_specs[index];
+        let bundle_id = LitStr::new(&bundle.id, Span::call_site());
+        let provider_path = &bundle.provider_path;
+        let input_count = bundle.inputs.len();
+        let checks = bundle.inputs.iter().map(|(name, path)| {
             quote! {
-                let bundle_cfg = config
-                    .resources
-                    .iter()
-                    .find(|b| b.id == #bundle_id)
-                    .unwrap_or_else(|| panic!("Resource bundle '{}' missing from configuration", #bundle_id));
+                bundle_cfg.resources.as_ref().and_then(|map| map.get(#name))
+                    .is_some_and(|value| value == #path)
+            }
+        });
+        validations.push(quote! {
+            let bundle_cfg = config.resources.iter().find(|b| b.id == #bundle_id)
+                .ok_or_else(|| cu29::CuError::from(concat!("Missing resource bundle: ", #bundle_id)))?;
+            if bundle_cfg.resources.as_ref().map_or(0, |map| map.len()) != #input_count
+                #(|| !(#checks))* {
+                return Err(cu29::CuError::from(concat!("Resource input topology differs from compiled configuration: ", #bundle_id)));
+            }
+        });
+        let mut entries = Vec::new();
+        for (name, path) in &bundle.inputs {
+            let (source_id, slot) = parse_resource_path(path)?;
+            let source_index = bundle_specs
+                .iter()
+                .position(|source| source.id == source_id)
+                .expect("validated resource dependency");
+            let source_provider = &bundle_specs[source_index].provider_path;
+            entries.push(quote! {
+                (#name, cu29::resource::ResourceKey::new(
+                    cu29::resource::BundleIndex::new(#source_index),
+                    cu29::resource::resource_index_by_name::<#source_provider>(#slot),
+                ))
+            });
+        }
+        bundle_inits.push(quote! {
+            {
+                const INPUT_KEYS: [cu29::resource::ResourceKey;
+                    <#provider_path as cu29::resource::ResourceBundle>::INPUT_NAMES.len()] =
+                    cu29::resource::resource_input_keys(
+                        <#provider_path as cu29::resource::ResourceBundle>::INPUT_NAMES,
+                        &[#(#entries),*],
+                    );
+                let bundle_cfg = config.resources.iter().find(|b| b.id == #bundle_id)
+                    .expect("validated resource bundle");
                 let bundle_ctx = cu29::resource::BundleContext::<#provider_path>::new(
-                    cu29::resource::BundleIndex::new(#index),
-                    #bundle_id,
-                );
+                    cu29::resource::BundleIndex::new(#index), #bundle_id,
+                ).with_input_keys(&INPUT_KEYS);
                 <#provider_path as cu29::resource::ResourceBundle>::build(
-                    bundle_ctx,
-                    bundle_cfg.config.as_ref(),
-                    &mut manager,
+                    bundle_ctx, bundle_cfg.config.as_ref(), &mut manager,
                 )?;
             }
-            })
-            .collect::<Vec<_>>();
+        });
+    }
 
     let resources_instanciator = quote! {
         pub fn resources_instanciator(config: &CuConfig) -> CuResult<cu29::resource::ResourceManager> {
+            #(#validations)*
             let bundle_counts: &[usize] = &[ #(#bundle_counts),* ];
             let mut manager = cu29::resource::ResourceManager::new(bundle_counts);
             #(#bundle_inits)*
@@ -11860,6 +11997,7 @@ mod tests {
 
         let mut config = cu29::config::CuConfig::default();
         config.resources.push(ResourceBundleConfig {
+            resources: None,
             id: "fc".to_string(),
             provider: "board::Bundle".to_string(),
             config: None,

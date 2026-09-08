@@ -181,6 +181,14 @@ logstream-receiver-check:
 	cargo +stable test -p cu29-runtime --test replay_primitives
 	just logstream-udp-check
 
+# Compile-time resource composition and DAG dependency rendering.
+resource-stack-check:
+	cargo +stable clippy -p cu29-runtime --bin cu29-rendercfg -p cu29-derive --lib -- --deny warnings
+	cargo +stable test -p cu29 --test resource_stack
+	cargo +stable test -p cu29-derive --lib resource
+	cargo +stable test -p cu29-runtime --bin cu29-rendercfg
+	cargo +stable check -p cu29 --no-default-features --target thumbv7em-none-eabihf
+
 # Sender budget/retention, generated integration, and one-way UDP recovery.
 logstream-pacing-check:
 	cargo +stable clippy -p cu29-logstream --all-targets -- --deny warnings

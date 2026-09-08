@@ -1490,6 +1490,9 @@ fn validate_bridge_channel(
 /// Declarative definition of a resource bundle.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ResourceBundleConfig {
+    /// Resource inputs consumed by this provider at startup.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resources: Option<HashMap<String, String>>,
     pub id: String,
     #[serde(rename = "provider")]
     pub provider: String,
@@ -6229,6 +6232,7 @@ mod tests {
         let mut bundle_cfg = ComponentConfig::default();
         bundle_cfg.set("path", "/dev/ttyACM0".to_string());
         config.resources.push(ResourceBundleConfig {
+            resources: None,
             id: "fc".to_string(),
             provider: "copper_board_px4::Px4Bundle".to_string(),
             config: Some(bundle_cfg),
@@ -6342,6 +6346,7 @@ mod tests {
     fn test_bridge_resources_preserved() {
         let mut config = CuConfig::default();
         config.resources.push(ResourceBundleConfig {
+            resources: None,
             id: "fc".to_string(),
             provider: "board::Bundle".to_string(),
             config: None,

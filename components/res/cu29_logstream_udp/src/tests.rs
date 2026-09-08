@@ -296,7 +296,28 @@ fn full_receive_queue_drops_packets_without_replay_or_partial_packets() {
     let mut last = None;
     let mut received = 0;
     let mut packet = [0; 1024];
-    while let Some(len) = rx.try_recv(&mut packet).unwrap() {
+    let mut marker_sent = false;
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        assert!(
+            Instant::now() < deadline,
+            "post-pressure UDP marker did not arrive"
+        );
+        let Some(len) = rx.try_recv(&mut packet).unwrap() else {
+            // An empty socket queue does not mean the kernel has delivered all
+            // in-flight loopback packets. Mark the end of the stream and keep
+            // validating pressure packets until that marker arrives.
+            if !marker_sent {
+                tx.try_send(b"after pressure").unwrap();
+                marker_sent = true;
+            }
+            std::thread::yield_now();
+            continue;
+        };
+        if &packet[..len] == b"after pressure" {
+            assert!(marker_sent);
+            break;
+        }
         assert_eq!(len, packet.len());
         assert!(packet[8..].iter().all(|&byte| byte == 0xa5));
         let id = u64::from_le_bytes(packet[..8].try_into().unwrap());
@@ -310,9 +331,6 @@ fn full_receive_queue_drops_packets_without_replay_or_partial_packets() {
         received < sent,
         "small unread receive queue should shed UDP traffic"
     );
-    tx.try_send(b"after pressure").unwrap();
-    let len = receive(&mut rx, &mut packet).unwrap();
-    assert_eq!(&packet[..len], b"after pressure");
     assert_eq!(rx.try_recv(&mut packet), Ok(None));
 }
 

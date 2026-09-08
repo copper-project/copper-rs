@@ -35,8 +35,10 @@ pub fn resources(input: TokenStream) -> TokenStream {
     let mut borrow_stmts = Vec::new();
 
     let mut binding_variants = Vec::new();
+    let mut names = Vec::new();
+    let mut key_stmts = [Vec::new(), Vec::new(), Vec::new()];
 
-    for entry in entries {
+    for (index, entry) in entries.into_iter().enumerate() {
         let name = entry.name;
         let binding = name.to_string();
         let binding_ident = Ident::new(&config_id_to_enum(&binding), name.span());
@@ -75,6 +77,15 @@ pub fn resources(input: TokenStream) -> TokenStream {
             ResourceAccessKind::Shared => shared_stmts.push(stmt),
             ResourceAccessKind::Borrowed => borrow_stmts.push(stmt),
         }
+        let bucket = match access_kind {
+            ResourceAccessKind::Owned => 0,
+            ResourceAccessKind::Shared => 1,
+            ResourceAccessKind::Borrowed => 2,
+        };
+        key_stmts[bucket].push(quote! {
+            let #name = manager.#access(keys[#index].typed())?;
+        });
+        names.push(binding);
         field_idents.push(name);
         binding_variants.push(binding_ident);
     }
@@ -101,6 +112,15 @@ pub fn resources(input: TokenStream) -> TokenStream {
         #(#owned_stmts)*
         #(#shared_stmts)*
         #(#borrow_stmts)*
+        Ok(Self { #(#field_idents,)* #marker_init })
+    };
+
+    let key_stmts = key_stmts.iter().flatten();
+    let from_keys_body = quote! {
+        if keys.len() != Self::NAMES.len() {
+            return Err(::cu29::CuError::from("Resource input count mismatch"));
+        }
+        #(#key_stmts)*
         Ok(Self { #(#field_idents,)* #marker_init })
     };
 
@@ -135,6 +155,11 @@ pub fn resources(input: TokenStream) -> TokenStream {
             #where_clause
             {
                 type Binding = Binding;
+                const NAMES: &'static [&'static str] = &[#(#names),*];
+
+                fn from_keys(manager: &'r mut ::cu29::resource::ResourceManager, keys: &[::cu29::resource::ResourceKey]) -> ::cu29::CuResult<Self> {
+                    #from_keys_body
+                }
 
                 fn from_bindings(
                     manager: &'r mut ::cu29::resource::ResourceManager,
@@ -159,6 +184,11 @@ pub fn resources(input: TokenStream) -> TokenStream {
             #where_clause
             {
                 type Binding = Binding;
+                const NAMES: &'static [&'static str] = &[#(#names),*];
+
+                fn from_keys(manager: &mut ::cu29::resource::ResourceManager, keys: &[::cu29::resource::ResourceKey]) -> ::cu29::CuResult<Self> {
+                    #from_keys_body
+                }
 
                 fn from_bindings(
                     manager: &mut ::cu29::resource::ResourceManager,

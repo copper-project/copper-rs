@@ -77,7 +77,9 @@ fn configured_feedback_resource_is_owned_and_advertised() -> CuResult<()> {
     let mut packet = [0; 1200];
     let mut feedback_packet = [0; FEEDBACK_BUFFER_BYTES];
     let mut reports_sent = 0;
-    let deadline = Instant::now() + Duration::from_secs(5);
+    // This checks generated resource wiring, not throughput. macOS timers and
+    // shared CI runners can take more than five seconds for 100 round trips.
+    let deadline = Instant::now() + Duration::from_secs(30);
     let mut sent = 0;
     let mut received = None;
     while Instant::now() < deadline && (sent < 100 || reports_sent < 4) {
