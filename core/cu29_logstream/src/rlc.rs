@@ -226,7 +226,6 @@ pub struct ContinuousEncoder<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMB
     identity: StreamIdentity,
     lane: Lane,
     max_record_bytes: usize,
-    packet_sequence: u64,
     fec: RlcEncoder<MAX_SYMBOL_SIZE, MAX_WINDOW_SYMBOLS>,
 }
 
@@ -235,7 +234,6 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize>
 {
     pub fn new(
         identity: StreamIdentity,
-        first_packet_sequence: u64,
         lane: Lane,
         config: RlcConfig,
         max_record_bytes: usize,
@@ -246,7 +244,6 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize>
             identity,
             lane,
             max_record_bytes,
-            packet_sequence: first_packet_sequence,
             fec: RlcEncoder::new(config, initial_esi)?,
         })
     }
@@ -406,7 +403,6 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize>
             symbol_kind,
             session_id: self.identity.session_id,
             sender_id: self.identity.sender_id,
-            packet_sequence: self.packet_sequence,
             object_id,
             fec_metadata,
             fragment_count,
@@ -422,7 +418,6 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize>
     ) -> Result<()> {
         let encoded = encode_packet_into(header, payload, datagram)?;
         emit(&datagram[..encoded])?;
-        self.packet_sequence = self.packet_sequence.wrapping_add(1);
         Ok(())
     }
 }

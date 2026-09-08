@@ -15,7 +15,6 @@ const RFC6330_MAX_SOURCE_SYMBOLS_PER_BLOCK: u64 = 56_403;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FiniteObjectSenderConfig {
     pub identity: StreamIdentity,
-    pub first_packet_sequence: u64,
     pub lane: Lane,
     /// RaptorQ symbol bytes, excluding the Copper wire header.
     pub symbol_size: u16,
@@ -66,16 +65,12 @@ pub struct FiniteObjectRecoveryStats {
 /// Construction and encoding allocate and must run on a non-real-time output worker.
 pub struct FiniteObjectEncoder {
     config: FiniteObjectSenderConfig,
-    packet_sequence: u64,
 }
 
 impl FiniteObjectEncoder {
     pub fn new(config: FiniteObjectSenderConfig) -> Result<Self> {
         validate_sender_config(config)?;
-        Ok(Self {
-            packet_sequence: config.first_packet_sequence,
-            config,
-        })
+        Ok(Self { config })
     }
 
     pub const fn config(&self) -> FiniteObjectSenderConfig {
@@ -160,14 +155,12 @@ impl FiniteObjectEncoder {
             symbol_kind,
             session_id: self.config.identity.session_id,
             sender_id: self.config.identity.sender_id,
-            packet_sequence: self.packet_sequence,
             object_id: record.object_id,
             fec_metadata: oti,
             fragment_count: u32::from_be_bytes(payload_id.serialize()),
         };
         let encoded = encode_packet_into(header, &payload, datagram)?;
         emit(&datagram[..encoded])?;
-        self.packet_sequence = self.packet_sequence.wrapping_add(1);
         Ok(())
     }
 }

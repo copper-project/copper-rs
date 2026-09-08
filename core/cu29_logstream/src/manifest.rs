@@ -273,7 +273,6 @@ impl LogStreamPlan {
             },
             continuous: ContinuousSenderConfig {
                 identity,
-                first_packet_sequence: 0,
                 lane: Lane::ReplayCritical,
                 fec: self.rlc_config()?,
                 max_record_bytes,
@@ -287,7 +286,6 @@ impl LogStreamPlan {
             recovery: RecoverySenderConfig {
                 finite: FiniteObjectSenderConfig {
                     identity,
-                    first_packet_sequence: 0,
                     lane: Lane::Control,
                     symbol_size: self.symbol_size,
                     max_object_bytes: self.objects.max_object_bytes,

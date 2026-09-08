@@ -66,7 +66,6 @@ fn manifest_bootstraps_continuous_decoder_without_out_of_band_fec_config() {
     let record = encode_record(RecordKind::CopperList, 0, b"semantic-copperlist").unwrap();
     let mut continuous = ContinuousEncoder::<1128, 64>::new(
         identity,
-        sender.continuous.first_packet_sequence,
         sender.continuous.lane,
         sender.continuous.fec,
         sender.continuous.max_record_bytes,
@@ -180,7 +179,6 @@ fn continuous(
 ) -> Vec<Vec<u8>> {
     let mut encoder = ContinuousEncoder::<1128, 64>::new(
         sender.continuous.identity,
-        0,
         sender.continuous.lane,
         sender.continuous.fec,
         sender.continuous.max_record_bytes,
@@ -443,7 +441,6 @@ fn warmed_router_reuses_record_buffers_with_reordering_and_consumer_retries() {
     receive(&mut router, &objects(&sender, 0)[0], &mut Vec::new());
     let mut encoder = ContinuousEncoder::<1128, 64>::new(
         sender.continuous.identity,
-        0,
         sender.continuous.lane,
         sender.continuous.fec,
         sender.continuous.max_record_bytes,

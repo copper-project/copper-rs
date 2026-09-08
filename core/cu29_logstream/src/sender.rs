@@ -23,7 +23,6 @@ pub type DefaultContinuousCopperListSink<P, T> =
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ContinuousSenderConfig {
     pub identity: StreamIdentity,
-    pub first_packet_sequence: u64,
     pub lane: Lane,
     pub fec: RlcConfig,
     pub max_record_bytes: usize,
@@ -275,7 +274,6 @@ where
             .ok_or(Error::InvalidConfig("datagram length overflow"))?;
         let encoder = ContinuousEncoder::new(
             config.identity,
-            config.first_packet_sequence,
             config.lane,
             config.fec,
             config.max_record_bytes,

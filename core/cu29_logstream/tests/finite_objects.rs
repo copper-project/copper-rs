@@ -23,7 +23,6 @@ fn identity() -> StreamIdentity {
 fn encoder() -> FiniteObjectEncoder {
     FiniteObjectEncoder::new(FiniteObjectSenderConfig {
         identity: identity(),
-        first_packet_sequence: 0,
         lane: Lane::LargeObject,
         symbol_size: SYMBOL_SIZE,
         max_object_bytes: MAX_OBJECT_BYTES,
@@ -129,11 +128,13 @@ fn keyframe_and_recovery_point_recover_independently_and_bind_by_digest() {
     encoder
         .push_record(&recovery_point_record, &mut datagrams)
         .unwrap();
-    datagrams.reverse();
-    datagrams.retain(|datagram| {
-        let packet = WirePacket::decode(datagram).unwrap();
-        !packet.header.packet_sequence.is_multiple_of(7)
+    let mut packet_index = 0usize;
+    datagrams.retain(|_| {
+        let keep = !packet_index.is_multiple_of(7);
+        packet_index += 1;
+        keep
     });
+    datagrams.reverse();
 
     let mut receiver = decoder();
     let mut recovered = Vec::new();
@@ -178,7 +179,6 @@ fn a_late_receiver_restarts_the_continuous_stream_at_the_recovery_point() {
     let rlc = RlcConfig::new(160, WINDOW_SYMBOLS, Field::Gf256).unwrap();
     let mut continuous = ContinuousEncoder::<MAX_RLC_SYMBOL_SIZE, WINDOW_SYMBOLS>::new(
         identity(),
-        0,
         Lane::ReplayCritical,
         rlc,
         1_024,
