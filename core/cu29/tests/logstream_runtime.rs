@@ -130,7 +130,7 @@ fn generated_runtime_streams_without_local_copperlist_logging() -> CuResult<()> 
             // Object identity is carried inside the protected source fragment.
             !(packet.header.record_kind == RecordKind::CopperList
                 && packet.header.symbol_kind == FecSymbolKind::Source
-                && u64::from_be_bytes(packet.payload[5..13].try_into().unwrap()) == 1)
+                && u64::from_be_bytes(packet.payload[4..12].try_into().unwrap()) == 1)
         })
         .cloned()
         .collect();

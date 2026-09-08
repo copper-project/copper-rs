@@ -204,15 +204,19 @@ length field. All multi-byte header fields use big endian encoding:
 | RLC repair packet | magic (4), lane (1), record kind (1), FEC scheme (1), symbol kind (1), session ID (16), sender ID (4), repair payload ID (8), payload length (2), CRC32C (4) | 42 |
 | RaptorQ packet | magic (4), lane (1), record kind (1), FEC scheme (1), symbol kind (1), session ID (16), sender ID (4), object ID (8), OTI (12), payload ID (4), payload length (2), CRC32C (4) | 58 |
 | Record | magic (4), kind (1), object ID (8), payload length (8), BLAKE3 digest (32) | 53 |
-| RLC fragment | magic (4), kind (1), object ID (8), record length (4), fragment index (4), fragment count (4), fragment length (2) | 27 |
+| RLC fragment | magic (4), object ID (8), record length (4), fragment index (4) | 20 |
 
 Compared with the original headers, this saves 34 bytes per RLC source packet,
-30 per RLC repair packet, 14 per RaptorQ packet, 3 per record, and 5 per RLC
+30 per RLC repair packet, 14 per RaptorQ packet, 3 per record, and 12 per RLC
 source fragment, plus one bincode byte per session manifest.
 Packet sequence counters are not transmitted; recovery and deduplication use
 FEC symbol identifiers and record identities. RLC packets omit the outer object ID
-and fragment count because the protected source fragment carries both; repairs
-span a window of fragments. Only the active RLC FEC ID bytes are transmitted.
+and fragment count; protected source fragments carry record identity, record
+length, and fragment index. Receivers derive fragment count and payload length
+from that geometry and the configured symbol capacity. Fragment kind is implicitly
+CopperList; the reassembled record must still match that kind and identity and
+pass digest verification. Repairs span a window of fragments. Only the active
+RLC FEC ID bytes are transmitted.
 Savings inside record and fragment headers free symbol payload capacity and can
 reduce fragment counts. Packet-header savings directly shorten each datagram.
 Existing symbol storage capacity is unchanged: a 1200-byte MTU uses at most 1128-byte symbols,

@@ -11,7 +11,7 @@ use cu_fec::{
 };
 
 const FRAGMENT_MAGIC: [u8; 4] = *b"CUFR";
-pub(crate) const FRAGMENT_HEADER_LEN: usize = 27;
+pub(crate) const FRAGMENT_HEADER_LEN: usize = 20;
 
 /// Identity shared by one sender's continuous stream.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode)]
@@ -314,12 +314,9 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize>
             active_symbol.fill(0);
             encode_fragment_header(
                 active_symbol,
-                decoded.kind,
                 decoded.object_id,
                 record_len,
                 fragment_index as u32,
-                fragment_count,
-                chunk.len() as u16,
             );
             active_symbol[FRAGMENT_HEADER_LEN..FRAGMENT_HEADER_LEN + chunk.len()]
                 .copy_from_slice(chunk);
@@ -1051,72 +1048,45 @@ fn fec_scheme(field: Field) -> FecScheme {
     }
 }
 
-fn encode_fragment_header(
-    symbol: &mut [u8],
-    kind: RecordKind,
-    object_id: u64,
-    record_len: u32,
-    fragment_index: u32,
-    fragment_count: u32,
-    fragment_len: u16,
-) {
+fn encode_fragment_header(symbol: &mut [u8], object_id: u64, record_len: u32, fragment_index: u32) {
     symbol[..4].copy_from_slice(&FRAGMENT_MAGIC);
-    symbol[4] = kind as u8;
-    symbol[5..13].copy_from_slice(&object_id.to_be_bytes());
-    symbol[13..17].copy_from_slice(&record_len.to_be_bytes());
-    symbol[17..21].copy_from_slice(&fragment_index.to_be_bytes());
-    symbol[21..25].copy_from_slice(&fragment_count.to_be_bytes());
-    symbol[25..27].copy_from_slice(&fragment_len.to_be_bytes());
+    symbol[4..12].copy_from_slice(&object_id.to_be_bytes());
+    symbol[12..16].copy_from_slice(&record_len.to_be_bytes());
+    symbol[16..20].copy_from_slice(&fragment_index.to_be_bytes());
 }
 
 fn decode_fragment(symbol: &[u8], fragment_capacity: usize) -> Result<Fragment<'_>> {
     if symbol.len() < FRAGMENT_HEADER_LEN || symbol[..4] != FRAGMENT_MAGIC {
         return Err(Error::InvalidFragment("missing fragment header"));
     }
-    let kind = RecordKind::try_from(symbol[4])?;
-    if kind != RecordKind::CopperList {
-        return Err(Error::InvalidFragment(
-            "continuous lane requires CopperList records",
-        ));
-    }
-    let object_id = u64::from_be_bytes(symbol[5..13].try_into().unwrap());
-    let record_len = u32::from_be_bytes(symbol[13..17].try_into().unwrap()) as usize;
-    let fragment_index = u32::from_be_bytes(symbol[17..21].try_into().unwrap()) as usize;
-    let fragment_count = u32::from_be_bytes(symbol[21..25].try_into().unwrap()) as usize;
-    let fragment_len = u16::from_be_bytes(symbol[25..27].try_into().unwrap()) as usize;
-    if record_len == 0 || fragment_count == 0 || fragment_index >= fragment_count {
+    let object_id = u64::from_be_bytes(symbol[4..12].try_into().unwrap());
+    let record_len = u32::from_be_bytes(symbol[12..16].try_into().unwrap()) as usize;
+    let fragment_index = u32::from_be_bytes(symbol[16..20].try_into().unwrap()) as usize;
+    if record_len == 0 || fragment_capacity == 0 {
         return Err(Error::InvalidFragment("invalid fragment geometry"));
     }
-    let expected_count = record_len.div_ceil(fragment_capacity);
-    if fragment_count != expected_count {
-        return Err(Error::InvalidFragment(
-            "fragment count does not match record length",
-        ));
+    let fragment_count = record_len.div_ceil(fragment_capacity);
+    if fragment_index >= fragment_count {
+        return Err(Error::InvalidFragment("invalid fragment geometry"));
     }
-    let expected_len = if fragment_index + 1 == fragment_count {
-        record_len - fragment_index * fragment_capacity
-    } else {
-        fragment_capacity
-    };
-    if fragment_len != expected_len || FRAGMENT_HEADER_LEN + fragment_len > symbol.len() {
-        return Err(Error::InvalidFragment(
-            "fragment length does not match geometry",
-        ));
-    }
-    if symbol[FRAGMENT_HEADER_LEN + fragment_len..]
-        .iter()
-        .any(|byte| *byte != 0)
-    {
+    // The index bound guarantees that the offset is smaller than record_len.
+    let offset = fragment_index * fragment_capacity;
+    let fragment_len = fragment_capacity.min(record_len - offset);
+    let body = &symbol[FRAGMENT_HEADER_LEN..];
+    let payload = body.get(..fragment_len).ok_or(Error::InvalidFragment(
+        "fragment length does not match geometry",
+    ))?;
+    if body[fragment_len..].iter().any(|byte| *byte != 0) {
         return Err(Error::InvalidFragment("fragment padding is nonzero"));
     }
     Ok(Fragment {
-        kind,
+        kind: RecordKind::CopperList,
         object_id,
         record_len,
         fragment_index,
         fragment_count,
         fragment_capacity,
-        payload: &symbol[FRAGMENT_HEADER_LEN..FRAGMENT_HEADER_LEN + fragment_len],
+        payload,
     })
 }
 
@@ -1126,25 +1096,83 @@ mod tests {
 
     #[test]
     fn fragment_header_round_trips_and_rejects_padding() {
-        let mut symbol = [0_u8; 64];
-        encode_fragment_header(&mut symbol, RecordKind::CopperList, 42, 40, 1, 2, 8);
+        let mut symbol = [0_u8; 52];
+        encode_fragment_header(&mut symbol, 42, 40, 1);
         symbol[FRAGMENT_HEADER_LEN..FRAGMENT_HEADER_LEN + 8].copy_from_slice(b"fragment");
-        assert_eq!(FRAGMENT_HEADER_LEN, 27);
-        assert_eq!(&symbol[..5], b"CUFR\x01");
-        assert_eq!(&symbol[5..13], &42_u64.to_be_bytes());
-        assert_eq!(&symbol[13..17], &40_u32.to_be_bytes());
-        assert_eq!(&symbol[17..21], &1_u32.to_be_bytes());
-        assert_eq!(&symbol[21..25], &2_u32.to_be_bytes());
-        assert_eq!(&symbol[25..27], &8_u16.to_be_bytes());
+        assert_eq!(FRAGMENT_HEADER_LEN, 20);
+        assert_eq!(&symbol[..4], b"CUFR");
+        assert_eq!(&symbol[4..12], &42_u64.to_be_bytes());
+        assert_eq!(&symbol[12..16], &40_u32.to_be_bytes());
+        assert_eq!(&symbol[16..20], &1_u32.to_be_bytes());
         let decoded = decode_fragment(&symbol, 32).unwrap();
+        assert_eq!(decoded.kind, RecordKind::CopperList);
         assert_eq!(decoded.object_id, 42);
+        assert_eq!(decoded.record_len, 40);
         assert_eq!(decoded.fragment_index, 1);
+        assert_eq!(decoded.fragment_count, 2);
         assert_eq!(decoded.payload, b"fragment");
 
-        symbol[63] = 1;
+        symbol[51] = 1;
         assert_eq!(
             decode_fragment(&symbol, 32).unwrap_err(),
             Error::InvalidFragment("fragment padding is nonzero")
+        );
+    }
+
+    #[test]
+    fn fragment_geometry_handles_record_boundaries() {
+        for (record_len, index, count, len) in [
+            (1, 0, 1, 1),
+            (31, 0, 1, 31),
+            (32, 0, 1, 32),
+            (33, 0, 2, 32),
+            (33, 1, 2, 1),
+            (64, 1, 2, 32),
+            (65, 2, 3, 1),
+            (u32::MAX, 134_217_727, 134_217_728, 31),
+        ] {
+            let mut symbol = [0_u8; 52];
+            encode_fragment_header(&mut symbol, u64::MAX, record_len, index);
+            symbol[FRAGMENT_HEADER_LEN..FRAGMENT_HEADER_LEN + len].fill(0xa5);
+            let fragment = decode_fragment(&symbol, 32).unwrap();
+            assert_eq!(fragment.fragment_count, count);
+            assert_eq!(fragment.payload, &vec![0xa5; len]);
+        }
+        // Exercise the largest index and count without allocating a large record.
+        let mut symbol = [0_u8; 21];
+        encode_fragment_header(&mut symbol, 42, u32::MAX, u32::MAX - 1);
+        let fragment = decode_fragment(&symbol, 1).unwrap();
+        assert_eq!(fragment.fragment_count, u32::MAX as usize);
+        assert_eq!(fragment.payload.len(), 1);
+    }
+
+    #[test]
+    fn fragment_rejects_invalid_geometry_and_truncation() {
+        let mut symbol = [0_u8; 52];
+        for (record_len, index, capacity) in [
+            (0, 0, 32),
+            (32, 0, 0),
+            (32, 1, 32),
+            (33, 2, 32),
+            (u32::MAX, u32::MAX, 1),
+        ] {
+            encode_fragment_header(&mut symbol, 42, record_len, index);
+            assert_eq!(
+                decode_fragment(&symbol, capacity).unwrap_err(),
+                Error::InvalidFragment("invalid fragment geometry")
+            );
+        }
+        for (record_len, index, len) in [(32, 0, 32), (40, 1, 8)] {
+            encode_fragment_header(&mut symbol, 42, record_len, index);
+            for end in 0..FRAGMENT_HEADER_LEN + len {
+                assert!(decode_fragment(&symbol[..end], 32).is_err());
+            }
+            assert!(decode_fragment(&symbol[..FRAGMENT_HEADER_LEN + len], 32).is_ok());
+        }
+        symbol[0] ^= 1;
+        assert_eq!(
+            decode_fragment(&symbol, 32).unwrap_err(),
+            Error::InvalidFragment("missing fragment header")
         );
     }
 }

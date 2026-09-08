@@ -300,7 +300,7 @@ fn source_copperlist_id(datagram: &[u8]) -> Option<u64> {
     let packet = cu29_logstream::WirePacketRef::decode(datagram).unwrap();
     (packet.header.record_kind == RecordKind::CopperList
         && packet.header.symbol_kind == cu29_logstream::FecSymbolKind::Source)
-        .then(|| u64::from_be_bytes(packet.payload[5..13].try_into().unwrap()))
+        .then(|| u64::from_be_bytes(packet.payload[4..12].try_into().unwrap()))
 }
 
 // Reuse actual UDP arrival order; only remove a prefix or one contiguous outage.

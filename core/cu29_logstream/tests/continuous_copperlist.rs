@@ -24,7 +24,7 @@ fn source_object_id(datagram: &[u8]) -> u64 {
         packet.header.symbol_kind,
         cu29_logstream::FecSymbolKind::Source
     );
-    u64::from_be_bytes(packet.payload[5..13].try_into().unwrap())
+    u64::from_be_bytes(packet.payload[4..12].try_into().unwrap())
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -103,6 +103,65 @@ fn partial_copperlist(id: u64) -> CopperList<PartialDataSet> {
             ],
         },
     )
+}
+
+#[test]
+fn compact_fragment_fits_and_recovers_a_record_previously_needing_two_symbols() {
+    let identity = StreamIdentity {
+        session_id: *b"test-session-001",
+        sender_id: 7,
+    };
+    // A 140-byte record needed two 160-byte symbols with the former 27-byte header.
+    let record = encode_record(RecordKind::CopperList, 42, &[0xa5; 87]).unwrap();
+    assert_eq!(record.len(), 140);
+    for field in [Field::Gf2, Field::Gf256] {
+        let config = RlcConfig::new(SYMBOL_SIZE, WINDOW_SYMBOLS, field).unwrap();
+        let mut encoder = ContinuousEncoder::<MAX_SYMBOL_SIZE, WINDOW_SYMBOLS>::new(
+            identity,
+            Lane::ReplayCritical,
+            config,
+            4_096,
+            EncodingSymbolId::new(u32::MAX),
+        )
+        .unwrap();
+        let mut datagrams = Vec::new();
+        assert_eq!(encoder.push_record(&record, &mut datagrams).unwrap(), 1);
+        assert_eq!(datagrams.len(), 1);
+        let packet = cu29_logstream::WirePacketRef::decode(&datagrams[0]).unwrap();
+        assert_eq!(packet.payload.len(), SYMBOL_SIZE);
+        assert_eq!(packet.payload.len() + 38, datagrams[0].len());
+        assert_eq!(&packet.payload[20..], record.as_slice());
+        datagrams.clear(); // Lose the only source; recover entirely from its repair.
+        encoder
+            .push_repair(
+                RepairParameters::new(0, DensityThreshold::FULL),
+                &mut datagrams,
+            )
+            .unwrap();
+        let mut decoder = ContinuousDecoder::<MAX_SYMBOL_SIZE, WINDOW_SYMBOLS, MAX_EQUATIONS>::new(
+            identity,
+            Lane::ReplayCritical,
+            config,
+            MAX_EQUATIONS,
+            42,
+            ReceiverLimits::new(4_096, WINDOW_SYMBOLS),
+        )
+        .unwrap();
+        let mut recovered = Vec::new();
+        for datagram in &datagrams {
+            decoder
+                .receive_datagram(datagram, |event| {
+                    let ContinuousReceiveEvent::Record(record) = event else {
+                        panic!("unexpected gap");
+                    };
+                    recovered.push(record.bytes().to_vec());
+                    Ok::<(), core::convert::Infallible>(())
+                })
+                .unwrap();
+        }
+        assert_eq!(recovered, vec![record.clone()]);
+        assert_eq!(decoder.stats().source_symbols_recovered, 1);
+    }
 }
 
 #[test]

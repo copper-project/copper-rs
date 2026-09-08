@@ -90,7 +90,7 @@ impl<R: CuStreamRx> CuStreamRx for ImpairedRx<R> {
         {
             let id = wire
                 .payload
-                .get(5..13)
+                .get(4..12)
                 .ok_or(CuStreamRxError::Failed("Truncated demo source fragment"))?;
             Some(u64::from_be_bytes(id.try_into().unwrap()))
         } else {
