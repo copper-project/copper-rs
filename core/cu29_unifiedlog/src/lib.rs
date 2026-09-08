@@ -44,7 +44,7 @@ pub const MAIN_MAGIC: [u8; 4] = [0xB4, 0xA5, 0x50, 0xFF]; // BRASS OFF
 pub const SECTION_MAGIC: [u8; 2] = [0xFA, 0x57]; // FAST
 
 /// Version of the unified log file format.
-pub const UNIFIED_LOG_FORMAT_VERSION: u8 = 1;
+pub const UNIFIED_LOG_FORMAT_VERSION: u8 = 2;
 
 pub const SECTION_HEADER_COMPACT_SIZE: u16 = 512; // Usual minimum size for a disk sector.
 

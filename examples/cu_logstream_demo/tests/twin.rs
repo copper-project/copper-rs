@@ -375,7 +375,7 @@ fn capture_encoding_is_native_and_does_not_allocate() {
     let record = cu29_logstream::decode_record(&bytes[..encoded.unwrap()]).unwrap();
     let (capture, native) = decode_capture::<DataSet>(record.payload).unwrap();
     let expected = cu29::bincode::encode_to_vec(
-        (list.id, list.get_state(), CaptureView(&list.msgs)),
+        (list.id, CaptureView(&list.msgs)),
         cu29::bincode::config::standard(),
     )
     .unwrap();

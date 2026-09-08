@@ -6,7 +6,7 @@ use bincode::de::read::Reader;
 use bincode::enc::Encoder;
 use bincode::enc::write::Writer;
 use bincode::error::{DecodeError, EncodeError};
-use bincode::{Decode, Encode};
+use bincode::{Decode, Encode, Uleb128};
 use core::array;
 use cu29_clock::{CuTime, CuTimeRange, PartialCuTimeRange, Tov};
 use cu29_traits::{CuCompactString, CuMsgOrigin};
@@ -80,67 +80,17 @@ fn read_u64_le<D: Decoder>(decoder: &mut D) -> Result<u64, DecodeError> {
     Ok(u64::from_le_bytes(bytes))
 }
 
-fn encode_uleb128<E: Encoder>(encoder: &mut E, mut value: u128) -> Result<(), EncodeError> {
-    loop {
-        let mut byte = (value & 0x7f) as u8;
-        value >>= 7;
-        if value != 0 {
-            byte |= 0x80;
-        }
-        write_byte(encoder, byte)?;
-        if value == 0 {
-            return Ok(());
-        }
-    }
-}
-
-fn decode_uleb128<D: Decoder>(decoder: &mut D) -> Result<u128, DecodeError> {
-    let mut value = 0u128;
-    for byte_index in 0..19 {
-        let shift = byte_index * 7;
-        let byte = read_byte(decoder)?;
-        let chunk = u128::from(byte & 0x7f);
-        if byte_index == 18 && chunk > 0x03 {
-            return Err(DecodeError::Other("CopperList ULEB128 overflow"));
-        }
-        value |= chunk << shift;
-        if byte & 0x80 == 0 {
-            return Ok(value);
-        }
-    }
-    Err(DecodeError::Other("CopperList ULEB128 is too long"))
-}
-
-fn zigzag(delta: i128) -> u128 {
-    if delta >= 0 {
-        (delta as u128) << 1
-    } else {
-        ((-delta) as u128) * 2 - 1
-    }
-}
-
-fn unzigzag(value: u128) -> Result<i128, DecodeError> {
-    let magnitude = value >> 1;
-    let magnitude = i128::try_from(magnitude)
-        .map_err(|_| DecodeError::Other("CopperList timestamp delta overflow"))?;
-    Ok(if value & 1 == 0 {
-        magnitude
-    } else {
-        -magnitude - 1
-    })
-}
-
 fn encode_timestamp<E: Encoder>(
     encoder: &mut E,
     value: CuTime,
     anchor: CuTime,
 ) -> Result<(), EncodeError> {
     let delta = i128::from(value.as_nanos()) - i128::from(anchor.as_nanos());
-    encode_uleb128(encoder, zigzag(delta))
+    Uleb128(delta).encode(encoder)
 }
 
 fn decode_timestamp<D: Decoder>(decoder: &mut D, anchor: CuTime) -> Result<CuTime, DecodeError> {
-    let delta = unzigzag(decode_uleb128(decoder)?)?;
+    let Uleb128(delta) = Uleb128::<i128>::decode(decoder)?;
     let nanos = i128::from(anchor.as_nanos())
         .checked_add(delta)
         .and_then(|value| u64::try_from(value).ok())
@@ -294,7 +244,7 @@ pub fn encode_common_metadata<const N: usize, E: Encoder>(
             .iter()
             .position(|previous| previous.metadata.status_txt == slot.metadata.status_txt)
             .map_or(0, |previous| previous + 1);
-        encode_uleb128(encoder, backref as u128)?;
+        Uleb128(backref as u128).encode(encoder)?;
         if backref == 0 {
             slot.metadata.status_txt.encode(encoder)?;
         }
@@ -308,7 +258,7 @@ pub fn encode_common_metadata<const N: usize, E: Encoder>(
             .iter()
             .position(|previous| previous.metadata.origin.as_ref() == Some(origin))
             .map_or(0, |previous| previous + 1);
-        encode_uleb128(encoder, backref as u128)?;
+        Uleb128(backref as u128).encode(encoder)?;
         if backref == 0 {
             origin.encode(encoder)?;
         }
@@ -411,7 +361,7 @@ pub fn decode_common_metadata<const N: usize, D: Decoder<Context = ()>>(
         if !status[index] {
             continue;
         }
-        let backref = usize::try_from(decode_uleb128(decoder)?)
+        let backref = usize::try_from(Uleb128::<u128>::decode(decoder)?.0)
             .map_err(|_| DecodeError::Other("CopperList status backreference overflow"))?;
         slots[index].metadata.status_txt = if backref == 0 {
             CuCompactString::decode(decoder)?
@@ -428,7 +378,7 @@ pub fn decode_common_metadata<const N: usize, D: Decoder<Context = ()>>(
         if !origin[index] {
             continue;
         }
-        let backref = usize::try_from(decode_uleb128(decoder)?)
+        let backref = usize::try_from(Uleb128::<u128>::decode(decoder)?.0)
             .map_err(|_| DecodeError::Other("CopperList origin backreference overflow"))?;
         slots[index].metadata.origin = if backref == 0 {
             Some(CuMsgOrigin::decode(decoder)?)

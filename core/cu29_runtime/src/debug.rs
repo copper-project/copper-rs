@@ -348,7 +348,6 @@ where
                     CuError::new_with_cause("Failed to decode runtime CopperList snapshot", e)
                 })?;
                 runtime_cl.id = recorded.id;
-                runtime_cl.change_state(recorded.get_state());
                 bincode::encode_to_vec(&runtime_cl, standard()).map_err(|e| {
                     CuError::new_with_cause("Failed to encode normalized CopperList snapshot", e)
                 })

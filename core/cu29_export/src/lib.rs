@@ -970,7 +970,6 @@ Call register_copperlist_python_type::<P>() from Rust before using this function
         let task_ids = P::get_all_task_ids();
         let root = PyDict::new(py);
         root.set_item("id", entry.id)?;
-        root.set_item("state", entry.get_state().to_string())?;
 
         let mut messages: Vec<Py<PyAny>> = Vec::new();
         for (idx, msg) in entry.cumsgs().into_iter().enumerate() {
@@ -1389,6 +1388,40 @@ Call register_copperlist_python_type::<P>() from Rust before using this function
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        #[derive(Debug, Default, bincode::Encode, bincode::Decode, serde::Serialize)]
+        struct EmptyMessages;
+
+        impl ErasedCuStampedDataSet for EmptyMessages {
+            fn cumsgs(&self) -> Vec<&dyn ErasedCuStampedData> {
+                Vec::new()
+            }
+        }
+
+        impl MatchingTasks for EmptyMessages {
+            fn get_all_task_ids() -> &'static [&'static str] {
+                &[]
+            }
+        }
+
+        #[test]
+        fn copperlist_python_export_omits_runtime_state() {
+            Python::initialize();
+            Python::attach(|py| {
+                let list = CopperList::new(7, EmptyMessages);
+                let value = copperlist_to_py(&list, py).unwrap();
+                assert!(!value.bind(py).hasattr("state").unwrap());
+                assert_eq!(
+                    value
+                        .bind(py)
+                        .getattr("id")
+                        .unwrap()
+                        .extract::<u64>()
+                        .unwrap(),
+                    7
+                );
+            });
+        }
 
         #[test]
         fn value_to_py_preserves_128_bit_integers() {

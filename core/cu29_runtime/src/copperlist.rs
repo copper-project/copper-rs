@@ -51,11 +51,20 @@ impl Display for CopperListState {
     }
 }
 
+/// A cycle's messages and identifier. Lifecycle state exists only in memory;
+/// every serialization contains `id` followed by `msgs`.
 #[derive(Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct CopperList<P: CopperListTuple> {
     pub id: u64,
+    // Runtime bookkeeping only; recorded lists reconstruct the serialization state.
+    #[bincode(skip, default = "deserialized_state")]
+    #[serde(skip, default = "deserialized_state")]
     state: CopperListState,
     pub msgs: P, // This is generated from the runtime.
+}
+
+fn deserialized_state() -> CopperListState {
+    CopperListState::BeingSerialized
 }
 
 impl<P: CopperListTuple> Default for CopperList<P> {
@@ -348,6 +357,50 @@ mod tests {
 
     impl CuListZeroedInit for CuStampedDataSet {
         fn init_zeroed(&mut self) {}
+    }
+
+    #[test]
+    fn serialization_omits_runtime_state() {
+        let expected =
+            bincode::encode_to_vec((42u64, CuStampedDataSet(123)), bincode::config::standard())
+                .unwrap();
+        for state in [
+            CopperListState::Free,
+            CopperListState::Initialized,
+            CopperListState::Processing,
+            CopperListState::DoneProcessing,
+            CopperListState::QueuedForSerialization,
+            CopperListState::BeingSerialized,
+        ] {
+            let mut list = CopperList::new(42, CuStampedDataSet(123));
+            list.change_state(state);
+            let bytes = bincode::encode_to_vec(&list, bincode::config::standard()).unwrap();
+            assert_eq!(bytes, expected);
+            let old_bytes =
+                bincode::encode_to_vec((list.id, state, &list.msgs), bincode::config::standard())
+                    .unwrap();
+            assert_eq!(old_bytes.len(), bytes.len() + 1);
+            let (decoded, used): (CopperList<CuStampedDataSet>, usize) =
+                bincode::decode_from_slice(&bytes, bincode::config::standard()).unwrap();
+            assert_eq!(decoded.id, list.id);
+            assert_eq!(decoded.msgs, list.msgs);
+            assert_eq!(decoded.get_state(), CopperListState::BeingSerialized);
+            assert_eq!(used, bytes.len());
+            let (borrowed, used): (CopperList<CuStampedDataSet>, usize) =
+                bincode::borrow_decode_from_slice(&bytes, bincode::config::standard()).unwrap();
+            assert_eq!(borrowed.get_state(), CopperListState::BeingSerialized);
+            assert_eq!(borrowed.msgs, list.msgs);
+            assert_eq!(used, bytes.len());
+            assert_eq!(list.get_state(), state);
+            #[cfg(feature = "std")]
+            {
+                let json = serde_json::to_value(&list).unwrap();
+                assert_eq!(json, serde_json::json!({"id": 42, "msgs": 123}));
+                let decoded: CopperList<CuStampedDataSet> = serde_json::from_value(json).unwrap();
+                assert_eq!(decoded.get_state(), CopperListState::BeingSerialized);
+                assert_eq!(decoded.msgs, list.msgs);
+            }
+        }
     }
 
     #[test]
