@@ -323,6 +323,7 @@ pub fn cu29_runtime::config::CuGraph::get_node_mut(&mut self, node_id: cu29_runt
 pub fn cu29_runtime::config::CuGraph::get_node_output_msg_type(&self, node_id: &str) -> core::option::Option<alloc::string::String>
 pub fn cu29_runtime::config::CuGraph::get_node_output_msg_types(&self, node_id: &str) -> core::option::Option<alloc::vec::Vec<alloc::string::String>>
 pub fn cu29_runtime::config::CuGraph::get_node_output_msg_types_by_id(&self, node_id: cu29_runtime::config::NodeId) -> cu29_traits::CuResult<alloc::vec::Vec<alloc::string::String>>
+pub fn cu29_runtime::config::CuGraph::get_node_output_ports_by_id(&self, node_id: cu29_runtime::config::NodeId) -> cu29_traits::CuResult<alloc::vec::Vec<(alloc::string::String, core::option::Option<alloc::string::String>)>>
 pub fn cu29_runtime::config::CuGraph::get_node_weight(&self, index: cu29_runtime::config::NodeId) -> core::option::Option<&cu29_runtime::config::Node>
 pub fn cu29_runtime::config::CuGraph::get_src_edges(&self, node_id: cu29_runtime::config::NodeId) -> cu29_traits::CuResult<alloc::vec::Vec<usize>>
 pub fn cu29_runtime::config::CuGraph::incoming_neighbor_count(&self, node_id: cu29_runtime::config::NodeId) -> usize
@@ -920,6 +921,7 @@ pub cu29_runtime::curuntime::CuInputMsg::src_port: usize
 pub struct cu29_runtime::curuntime::CuOutputPack
 pub cu29_runtime::curuntime::CuOutputPack::culist_index: u32
 pub cu29_runtime::curuntime::CuOutputPack::msg_types: alloc::vec::Vec<alloc::string::String>
+pub cu29_runtime::curuntime::CuOutputPack::src_channels: alloc::vec::Vec<core::option::Option<alloc::string::String>>
 pub struct cu29_runtime::curuntime::CuRuntime<CT, CB, P: cu29_traits::CopperListTuple, M: cu29_runtime::monitoring::CuMonitor, const NBCL: usize>
 impl<CT, CB, P, M, const NBCL: usize> cu29_runtime::curuntime::CuRuntime<CT, CB, P, M, NBCL> where P: cu29_traits::CopperListTuple + cu29_runtime::copperlist::CuListZeroedInit + core::default::Default + 'static, M: cu29_runtime::monitoring::CuMonitor
 pub fn cu29_runtime::curuntime::CuRuntime<CT, CB, P, M, NBCL>::captures_keyframe(&self, culistid: u64) -> bool

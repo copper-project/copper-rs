@@ -2323,6 +2323,14 @@ impl From<TaskKind> for CuTaskType {
 pub struct CuOutputPack {
     pub culist_index: u32,
     pub msg_types: Vec<String>,
+    /// Per-port source channel, parallel to `msg_types`.
+    ///
+    /// `None` for ports that are not a bridge channel. A node may expose
+    /// several ports sharing the same `msg_type` distinguished only by their
+    /// bridge channel (e.g. a stereo driver publishing `Image` on `left` and
+    /// `right`); keying routing on `msg_type` alone would collapse those ports
+    /// (see #791).
+    pub src_channels: Vec<Option<String>>,
 }
 
 #[derive(Debug, Clone)]
@@ -3756,6 +3764,72 @@ mod tests {
     }
 
     #[test]
+    fn test_runtime_plan_distinguishes_channel_distinct_outputs() {
+        let mut config = CuConfig::default();
+        let graph = config.get_graph_mut(None).unwrap();
+        let src_id = graph.add_node(Node::new("cam", "Cam")).unwrap();
+        let sink_id = graph.add_node(Node::new("sink", "Sink")).unwrap();
+
+        // Two outputs sharing the same message type, distinguished only by
+        // their bridge channel (e.g. a stereo camera publishing `Image` on
+        // `left` and `right`). Regression test for #791.
+        graph
+            .connect_ext(
+                src_id,
+                sink_id,
+                "msg::Image",
+                None,
+                Some("left".to_string()),
+                None,
+            )
+            .unwrap();
+        graph
+            .connect_ext(
+                src_id,
+                sink_id,
+                "msg::Image",
+                None,
+                Some("right".to_string()),
+                None,
+            )
+            .unwrap();
+
+        let runtime = compute_runtime_plan(graph).unwrap();
+
+        let src_step = runtime
+            .steps
+            .iter()
+            .find_map(|step| match step {
+                CuExecutionUnit::Step(step) if step.node_id == src_id => Some(step),
+                _ => None,
+            })
+            .unwrap();
+        let output_pack = src_step.output_msg_pack.as_ref().unwrap();
+        assert_eq!(output_pack.msg_types, vec!["msg::Image", "msg::Image"]);
+        assert_eq!(
+            output_pack.src_channels,
+            vec![Some("left".to_string()), Some("right".to_string())]
+        );
+
+        let sink_step = runtime
+            .steps
+            .iter()
+            .find_map(|step| match step {
+                CuExecutionUnit::Step(step) if step.node_id == sink_id => Some(step),
+                _ => None,
+            })
+            .unwrap();
+
+        assert_eq!(sink_step.input_msg_indices_types.len(), 2);
+        let ports: Vec<usize> = sink_step
+            .input_msg_indices_types
+            .iter()
+            .map(|input| input.src_port)
+            .collect();
+        assert_eq!(ports, vec![0, 1]);
+    }
+
+    #[test]
     fn test_runtime_output_ports_fanout_single() {
         let mut config = CuConfig::default();
         let graph = config.get_graph_mut(None).unwrap();
@@ -4087,6 +4161,7 @@ mod tests {
             output_msg_pack: Some(CuOutputPack {
                 culist_index: output,
                 msg_types: vec!["msg::A".to_string()],
+                src_channels: vec![None],
             }),
         }))
     }
