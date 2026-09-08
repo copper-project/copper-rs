@@ -135,10 +135,11 @@ The ground receiver explicitly sets `remote_addr` to the sender's bound address 
 endpoint to `CuTwinBuilder::with_feedback`. Sharing a socket does not enable feedback implicitly;
 never assign competing readers to the same socket. See the logstream README for FEC bounds and reports.
 
-Packet integrity is supplied by the network/link stack. LogStream adds no packet
-CRC; this carrier relies on external checksum protection being enabled on the
+Data and feedback packet integrity is supplied by the network/link stack. Neither
+LogStream packet format adds a CRC; this carrier relies on external checksum protection being enabled on the
 path. Socket setup leaves UDP checksum generation and validation at their normal
 OS defaults. Deployments that disable network/link integrity need an integrity
 adapter before delivering packets to LogStream FEC. Datagram truncation is still
-rejected by the receive endpoint. Record digests independently verify reconstructed
+rejected by the receive endpoint. Delivery, ordering, and uniqueness are not guaranteed.
+Record digests independently verify reconstructed
 content and bind recovery-point references.

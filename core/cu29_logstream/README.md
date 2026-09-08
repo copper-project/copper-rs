@@ -254,11 +254,13 @@ Shared symbol sizing still reserves room for the largest (RaptorQ) header.
 Packet payload length is derived from the complete packet extent supplied by
 `CuStreamRx`; serial/transparent-radio adapters must frame the byte stream into
 complete packets before decoding. The packet header carries no payload length.
-Packet integrity belongs to the carrier: the common LogStream envelope has no
-CRC. UDP/network and packet-radio carriers rely on their external integrity
-checks. Serial/transparent-radio adapters append a four-byte big endian CRC32C
-to the packet before delimiter escaping, then verify and strip it before delivery.
-They discard damaged frames and resynchronize at the next delimiter, turning
+Both data packets and feedback reports require transport-provided packet integrity;
+neither carries an inner CRC. Delivery, ordering, and uniqueness are not guaranteed.
+UDP supplies integrity through the network stack. Raw serial supplies neither packet
+boundaries nor integrity. The framing adapter between LogStream and raw serial
+appends a four-byte big endian CRC32C before delimiter escaping, then verifies and
+strips it before delivery.
+The adapter discards damaged frames and resynchronizes at the next delimiter, turning
 corruption into packet loss before FEC. Both serial peers must use this framing;
 the older adapter that relied on the common CRC is incompatible.
 Carrier framing/checksum overhead is outside the configured packet MTU and must
@@ -324,8 +326,9 @@ use `FeedbackReporter` with `SessionRouter::feedback_counters`. Programmatic sen
 Omitting feedback preserves one-way operation. The unversioned manifest advertises optional feedback
 capability, destination key, and report cadence. Timeout and adaptation bounds remain in the local
 sender configuration. Reports are also unversioned and require the matching
-application decoder. Reports are bounded
-CRC32C datagrams carrying cumulative counters, receiver identity/sequence, finalized source outcomes,
+application decoder. Reports carry a `CUFB` prefix followed by the fixed-integer bincode payload,
+with integrity supplied by the transport under the same contract as data packets. Reports carry
+cumulative counters, receiver identity/sequence, finalized source outcomes,
 receiver progress/pressure, and an optional request for the latest retained recovery bundle. No data ACKs.
 
 Omit `adaptation` for reports only. Otherwise the existing repair interval is the startup/fallback baseline
@@ -339,8 +342,7 @@ or excessive reports cannot refresh health. After timeout, state is stale and th
 per report period toward baseline. Bitrate, burst, latency, memory, FEC window/field/density, and object FEC
 stay fixed. Feedback failure never stops capture or autonomous recovery; snapshots retain failure state.
 
-Loss excludes the active coding window and unseen history/tails. Invalid packets do not prove corruption;
-CRC is not authentication. Reports and adaptation stay on stream workers. Run `just logstream-feedback-check`.
+Loss excludes the active coding window and unseen history/tails. Reports and adaptation stay on stream workers. Run `just logstream-feedback-check`.
 
 ### TUI bandwidth panel
 

@@ -1,4 +1,10 @@
 //! Transport-independent, packet-oriented stream resource contracts.
+//!
+//! Data and feedback use the same transport guarantees: complete packets with
+//! verified integrity. Delivery, ordering, and uniqueness are not guaranteed.
+//! UDP supplies packet integrity through the network stack. Raw serial supplies
+//! neither packet boundaries nor integrity; the framing adapter between LogStream
+//! and serial adds and verifies a checksum and discards damaged frames.
 
 use core::fmt::Debug;
 
@@ -85,6 +91,11 @@ impl<T: CuStreamRx + ?Sized> CuStreamRx for alloc::boxed::Box<T> {
 /// physical stream carrier. A shared endpoint must have one receive owner and
 /// route complete packet kinds; cloned competing readers cannot provide routing.
 /// Protocol decoding, capability negotiation, and feedback policy belong above it.
+///
+/// The complete-packet integrity contract of [`CuStreamRx`] applies here too.
+/// Discard damaged or truncated frames in the transport adapter before delivery.
+/// Reports may be lost, duplicated, or reordered; report sequencing belongs to
+/// the feedback controller.
 pub trait CuFeedbackRx: Debug + Send + Sync {
     fn try_recv_feedback(
         &mut self,
@@ -92,7 +103,9 @@ pub trait CuFeedbackRx: Debug + Send + Sync {
     ) -> core::result::Result<Option<usize>, CuStreamRxError>;
 }
 
-/// Optional advisory transmit direction; same atomic, bounded contract as stream TX.
+/// Optional advisory transmit direction; same atomic, bounded, complete-packet
+/// integrity contract as [`CuStreamTx`]. Acceptance guarantees neither delivery
+/// nor ordering. A raw byte stream needs a framing and integrity adapter.
 pub trait CuFeedbackTx: Debug + Send + Sync {
     fn try_send_feedback(&mut self, packet: &[u8]) -> core::result::Result<(), CuStreamTxError>;
 }
