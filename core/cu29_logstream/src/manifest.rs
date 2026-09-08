@@ -1,4 +1,4 @@
-//! Resolved stream plans and self-describing session manifests.
+//! Local sender plans and self-describing receiver requirements.
 
 use crate::{
     ContinuousSenderConfig, DensityThreshold, EncodingSymbolId, Error, Field,
@@ -83,26 +83,90 @@ impl ApplicationSchema {
     }
 }
 
-/// Control object carrying transport configuration and application schema checks.
+/// Continuous decoder geometry and record bounds carried by a session manifest.
+/// Receiver-local limits still cap admission; sender pacing and repair policy stay local.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode)]
+pub struct ReceiverRequirements {
+    /// Present when the sender accepts advisory return reports.
+    pub feedback: Option<crate::feedback::FeedbackRequirements>,
+    /// Bytes in each continuous FEC symbol, including its protected fragment header.
+    pub symbol_size: u16,
+    /// Finite field used by the continuous RLC lane.
+    pub field: ResolvedRlcField,
+    /// Maximum symbols retained in the continuous coding window.
+    pub window_symbols: u16,
+    /// Maximum complete framed CopperList record size.
+    pub max_record_bytes: u64,
+}
+
+impl ReceiverRequirements {
+    /// Validates untrusted geometry before constructing a continuous decoder.
+    pub fn validate(&self) -> Result<()> {
+        if self
+            .feedback
+            .is_some_and(|feedback| feedback.report_interval_ms == 0)
+        {
+            return Err(Error::InvalidConfig(
+                "feedback report interval must be nonzero",
+            ));
+        }
+        if usize::from(self.symbol_size) <= crate::rlc::FRAGMENT_HEADER_LEN {
+            return Err(Error::InvalidConfig(
+                "symbol leaves no room for continuous record bytes",
+            ));
+        }
+        if usize::from(self.symbol_size) > crate::DEFAULT_MAX_SYMBOL_SIZE
+            || usize::from(self.window_symbols) > crate::DEFAULT_MAX_WINDOW_SYMBOLS
+        {
+            return Err(Error::InvalidConfig(
+                "receiver requirements exceed supported FEC capacities",
+            ));
+        }
+        if self.window_symbols == 0 || self.max_record_bytes == 0 {
+            return Err(Error::InvalidConfig(
+                "receiver requirements contain a zero bound",
+            ));
+        }
+        if self.max_record_bytes > u64::from(u32::MAX) {
+            return Err(Error::InvalidConfig("maximum record size exceeds u32"));
+        }
+        usize::try_from(self.max_record_bytes)
+            .map_err(|_| Error::InvalidConfig("record bound exceeds usize"))?;
+        self.rlc_config()?;
+        Ok(())
+    }
+
+    /// Constructs the FEC configuration used by the continuous decoder.
+    pub fn rlc_config(&self) -> Result<RlcConfig> {
+        RlcConfig::new(
+            usize::from(self.symbol_size),
+            usize::from(self.window_symbols),
+            self.field.into(),
+        )
+        .map_err(Into::into)
+    }
+}
+
+/// Control object carrying receiver requirements and application schema checks.
 ///
 /// No content or protocol version is encoded. Receivers must use the matching
 /// application's decoder; these schema checks do not establish binary compatibility.
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
 pub struct SessionManifest {
     pub identity: StreamIdentity,
-    pub plan: LogStreamPlan,
+    pub requirements: ReceiverRequirements,
     pub application_schema: ApplicationSchema,
 }
 
 impl SessionManifest {
     pub fn new(
         identity: StreamIdentity,
-        plan: LogStreamPlan,
+        requirements: ReceiverRequirements,
         application_schema: ApplicationSchema,
     ) -> Self {
         Self {
             identity,
-            plan,
+            requirements,
             application_schema,
         }
     }
@@ -128,13 +192,13 @@ impl SessionManifest {
         if consumed != record.payload.len() {
             return Err(Error::Codec("session manifest has trailing bytes".into()));
         }
-        manifest.plan.validate()?;
+        manifest.requirements.validate()?;
         Ok(manifest)
     }
 }
 
 impl LogStreamPlan {
-    /// Resolves one RON destination into the exact values carried by the manifest.
+    /// Resolves one RON destination into local sender policy and wire geometry.
     /// Symbol size is bounded by both the link MTU and preallocated sender storage;
     /// a larger MTU does not increase the runtime's memory footprint.
     pub fn resolve(config: &LogStreamDestinationConfig) -> Result<Self> {
@@ -187,7 +251,7 @@ impl LogStreamPlan {
         Ok(plan)
     }
 
-    /// Validates a resolved plan, including plans decoded from an untrusted manifest.
+    /// Validates local sender policy, capacities, and memory budget.
     pub fn validate(&self) -> Result<()> {
         if let Some(feedback) = self.feedback {
             feedback.validate(self.continuous.repair_every_source_symbols)?;
@@ -256,6 +320,22 @@ impl LogStreamPlan {
         .map_err(Into::into)
     }
 
+    /// Selects only the geometry and bounds needed by the receiver.
+    pub fn receiver_requirements(&self) -> ReceiverRequirements {
+        ReceiverRequirements {
+            feedback: self
+                .feedback
+                .map(|policy| crate::feedback::FeedbackRequirements {
+                    report_interval_ms: policy.report_interval_ms,
+                    destination: crate::feedback::destination_key(&self.destination_id),
+                }),
+            symbol_size: self.symbol_size,
+            field: self.continuous.field,
+            window_symbols: self.continuous.window_symbols,
+            max_record_bytes: self.max_record_bytes,
+        }
+    }
+
     /// Builds both sender lanes and their canonical repeated manifest.
     pub fn sender_config(
         &self,
@@ -265,7 +345,8 @@ impl LogStreamPlan {
         self.validate()?;
         let max_record_bytes = usize::try_from(self.max_record_bytes)
             .map_err(|_| Error::InvalidConfig("record bound exceeds usize"))?;
-        let manifest = SessionManifest::new(identity, self.clone(), schema).encode_record()?;
+        let manifest =
+            SessionManifest::new(identity, self.receiver_requirements(), schema).encode_record()?;
         if manifest.len() as u64 > self.objects.max_object_bytes {
             return Err(Error::ObjectTooLarge {
                 actual: manifest.len() as u64,
@@ -273,6 +354,7 @@ impl LogStreamPlan {
             });
         }
         Ok(LogStreamSenderConfig {
+            feedback: self.feedback,
             pacing: crate::PacingConfig {
                 bitrate_bps: self.bitrate_bps,
                 burst_packets: self.burst_packets,
@@ -281,7 +363,6 @@ impl LogStreamPlan {
             },
             continuous: ContinuousSenderConfig {
                 identity,
-                first_packet_sequence: 0,
                 lane: Lane::ReplayCritical,
                 fec: self.rlc_config()?,
                 max_record_bytes,
@@ -295,7 +376,6 @@ impl LogStreamPlan {
             recovery: RecoverySenderConfig {
                 finite: FiniteObjectSenderConfig {
                     identity,
-                    first_packet_sequence: 0,
                     lane: Lane::Control,
                     symbol_size: self.symbol_size,
                     max_object_bytes: self.objects.max_object_bytes,

@@ -23,7 +23,6 @@ pub type DefaultContinuousCopperListSink<P, T> =
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ContinuousSenderConfig {
     pub identity: StreamIdentity,
-    pub first_packet_sequence: u64,
     pub lane: Lane,
     pub fec: RlcConfig,
     pub max_record_bytes: usize,
@@ -46,6 +45,8 @@ pub struct RecoverySenderConfig {
 /// Complete sender configuration for continuous CopperLists and recovery points.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LogStreamSenderConfig {
+    /// Local timeout and adaptation policy for the feedback worker.
+    pub feedback: Option<crate::feedback::FeedbackPolicy>,
     pub pacing: crate::PacingConfig,
     pub continuous: ContinuousSenderConfig,
     pub recovery: RecoverySenderConfig,
@@ -275,7 +276,6 @@ where
             .ok_or(Error::InvalidConfig("datagram length overflow"))?;
         let encoder = ContinuousEncoder::new(
             config.identity,
-            config.first_packet_sequence,
             config.lane,
             config.fec,
             config.max_record_bytes,

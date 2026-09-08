@@ -59,8 +59,8 @@ pub use error::{Error, Result};
 #[cfg(feature = "std")]
 pub use manifest::new_session_id;
 pub use manifest::{
-    ApplicationOutputSchema, ApplicationSchema, LogStreamPlan, ResolvedContinuousFec,
-    ResolvedObjectFec, ResolvedRlcField, SessionManifest,
+    ApplicationOutputSchema, ApplicationSchema, LogStreamPlan, ReceiverRequirements,
+    ResolvedContinuousFec, ResolvedObjectFec, ResolvedRlcField, SessionManifest,
 };
 pub use object::{
     FiniteObjectDecoder, FiniteObjectEncoder, FiniteObjectLimits, FiniteObjectRecoveryStats,

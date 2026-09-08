@@ -1,7 +1,7 @@
 //! Host driver for the autonomous sender. Only semantic output workers call these sinks.
 
 use crate::feedback::{
-    FEEDBACK_BUFFER_BYTES, FeedbackController, FeedbackSnapshot, ReceiverReport, destination_key,
+    FEEDBACK_BUFFER_BYTES, FeedbackController, FeedbackSnapshot, ReceiverReport,
 };
 use crate::{
     CuFeedbackRx, CuStreamRxError, CuStreamTx, LogStreamSenderConfig, OneWay, SenderCore,
@@ -274,34 +274,39 @@ where
     T: CuStreamTx + CuFeedbackRx + 'static,
 {
     let manifest = crate::SessionManifest::decode_record(&config.recovery.manifest_record);
-    let policy = manifest
+    let policy = config.feedback;
+    let advertised = manifest
         .as_ref()
         .ok()
-        .and_then(|manifest| manifest.plan.feedback);
-    if policy.is_some() != feedback_enabled {
+        .and_then(|manifest| manifest.requirements.feedback);
+    if policy.is_some() != feedback_enabled || advertised.is_some() != feedback_enabled {
         return Err(CuError::from(
             "Feedback transport wiring must match manifest capability",
         ));
     }
-    if policy.is_some() {
-        let manifest = manifest.as_ref().expect("validated feedback manifest");
-        if manifest.identity != config.continuous.identity
-            || usize::from(manifest.plan.continuous.repair_every_source_symbols)
-                != config.continuous.repair_every_source_symbols
-        {
-            return Err(CuError::from(
-                "Feedback manifest identity and baseline must match the sender",
-            ));
-        }
+    if let (Some(policy), Some(advertised)) = (policy, advertised)
+        && (manifest
+            .as_ref()
+            .expect("validated feedback manifest")
+            .identity
+            != config.continuous.identity
+            || advertised.report_interval_ms != policy.report_interval_ms)
+    {
+        return Err(CuError::from(
+            "Feedback manifest identity and cadence must match the sender",
+        ));
     }
     let mut feedback = policy
         .map(|policy| {
-            let manifest = manifest.as_ref().expect("validated feedback manifest");
+            let baseline = u16::try_from(config.continuous.repair_every_source_symbols)
+                .map_err(|_| crate::Error::InvalidConfig("feedback baseline exceeds u16"))?;
             FeedbackController::new(
                 policy,
                 config.continuous.identity,
-                destination_key(&manifest.plan.destination_id),
-                config.continuous.repair_every_source_symbols as u16,
+                advertised
+                    .expect("validated feedback capability")
+                    .destination,
+                baseline,
             )
         })
         .transpose()

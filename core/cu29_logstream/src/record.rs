@@ -5,8 +5,8 @@ use crate::{Error, Result};
 use alloc::vec::Vec;
 
 const RECORD_MAGIC: [u8; 4] = *b"CUSR";
-pub const RECORD_HEADER_LEN: usize = 53;
-const RECORD_DIGEST_OFFSET: usize = 21;
+pub const RECORD_HEADER_LEN: usize = 45;
+const RECORD_DIGEST_OFFSET: usize = 13;
 
 /// Semantic record families carried by the log stream.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -59,7 +59,6 @@ pub fn encode_record(kind: RecordKind, object_id: u64, payload: &[u8]) -> Result
     record.extend_from_slice(&RECORD_MAGIC);
     record.push(kind as u8);
     record.extend_from_slice(&object_id.to_be_bytes());
-    record.extend_from_slice(&payload_len.to_be_bytes());
     record.extend_from_slice(&[0_u8; 32]);
     record.extend_from_slice(payload);
 
@@ -89,13 +88,15 @@ pub(crate) fn encode_record_header(
     header[..4].copy_from_slice(&RECORD_MAGIC);
     header[4] = kind as u8;
     header[5..13].copy_from_slice(&object_id.to_be_bytes());
-    header[13..21].copy_from_slice(&payload_len.to_be_bytes());
     let digest = record_digest(kind, object_id, payload_len, payload);
     header[RECORD_DIGEST_OFFSET..RECORD_HEADER_LEN].copy_from_slice(digest.as_bytes());
     Ok(())
 }
 
 /// Validates and decodes one complete semantic record envelope.
+///
+/// The payload occupies the remainder of the reassembled record. Its derived
+/// length remains part of the digest input, binding the exact payload extent.
 pub fn decode_record(record: &[u8]) -> Result<DecodedRecord<'_>> {
     if record.len() < RECORD_HEADER_LEN {
         return Err(Error::TruncatedRecord);
@@ -105,16 +106,10 @@ pub fn decode_record(record: &[u8]) -> Result<DecodedRecord<'_>> {
     }
     let kind = RecordKind::try_from(record[4])?;
     let object_id = u64::from_be_bytes(record[5..13].try_into().unwrap());
-    let payload_len = u64::from_be_bytes(record[13..21].try_into().unwrap());
-    let payload_len = usize::try_from(payload_len).map_err(|_| Error::RecordLengthMismatch)?;
-    let expected_len = RECORD_HEADER_LEN
-        .checked_add(payload_len)
-        .ok_or(Error::RecordLengthMismatch)?;
-    if record.len() != expected_len {
-        return Err(Error::RecordLengthMismatch);
-    }
     let payload = &record[RECORD_HEADER_LEN..];
-    let expected_digest = record_digest(kind, object_id, payload_len as u64, payload);
+    let payload_len = u64::try_from(payload.len())
+        .map_err(|_| Error::InvalidConfig("record payload length exceeds u64"))?;
+    let expected_digest = record_digest(kind, object_id, payload_len, payload);
     if record[RECORD_DIGEST_OFFSET..RECORD_HEADER_LEN] != expected_digest.as_bytes()[..] {
         return Err(Error::RecordDigestMismatch);
     }
@@ -147,11 +142,10 @@ mod tests {
     #[test]
     fn packed_record_header_contains_only_framing_fields() {
         let record = encode_record(RecordKind::CopperList, 42, &[42]).unwrap();
-        assert_eq!(record.len(), 54);
+        assert_eq!(record.len(), 46);
         assert_eq!(&record[..5], b"CUSR\x01");
         assert_eq!(&record[5..13], &42_u64.to_be_bytes());
-        assert_eq!(&record[13..21], &1_u64.to_be_bytes());
-        assert_eq!(record[53], 42);
+        assert_eq!(record[45], 42);
         assert_eq!(decode_record(&record).unwrap().payload, &[42]);
         let mut header = [0xaa; RECORD_HEADER_LEN];
         encode_record_header(RecordKind::CopperList, 42, &[42], &mut header).unwrap();
@@ -159,15 +153,93 @@ mod tests {
     }
 
     #[test]
-    fn record_digest_binds_identity_and_payload() {
-        let encoded = encode_record(RecordKind::KeyFrame, 42, b"state").unwrap();
-        let decoded = decode_record(&encoded).unwrap();
-        assert_eq!(decoded.kind, RecordKind::KeyFrame);
-        assert_eq!(decoded.object_id, 42);
-        assert_eq!(decoded.payload, b"state");
+    fn record_extent_defines_payload_length_without_changing_digest_binding() {
+        for kind in [
+            RecordKind::Manifest,
+            RecordKind::CopperList,
+            RecordKind::KeyFrame,
+            RecordKind::StructuredLog,
+            RecordKind::Lifecycle,
+            RecordKind::Gap,
+            RecordKind::RecoveryPoint,
+        ] {
+            for object_id in [0, 42, u64::MAX] {
+                for payload_len in [0, 1, 95, 96, 4096] {
+                    let payload = alloc::vec![0xa5; payload_len];
+                    let encoded = encode_record(kind, object_id, &payload).unwrap();
+                    assert_eq!(encoded.len(), 45 + payload_len);
+                    let decoded = decode_record(&encoded).unwrap();
+                    assert_eq!(decoded.kind, kind);
+                    assert_eq!(decoded.object_id, object_id);
+                    assert_eq!(decoded.payload, payload);
+                    assert_eq!(decoded.payload.as_ptr(), encoded[45..].as_ptr());
 
-        let mut corrupted = encoded;
-        *corrupted.last_mut().unwrap() ^= 0x80;
-        assert_eq!(decode_record(&corrupted), Err(Error::RecordDigestMismatch));
+                    // Keep the original digest preimage, including the omitted length.
+                    let mut preimage = alloc::vec![kind as u8];
+                    preimage.extend_from_slice(&object_id.to_be_bytes());
+                    preimage.extend_from_slice(&(payload_len as u64).to_be_bytes());
+                    preimage.extend_from_slice(&payload);
+                    let digest = blake3::hash(&preimage);
+                    assert_eq!(decoded.digest, *digest.as_bytes());
+                    assert_eq!(&encoded[13..45], digest.as_bytes());
+
+                    let mut header = [0xaa; RECORD_HEADER_LEN + 1];
+                    encode_record_header(kind, object_id, &payload, &mut header).unwrap();
+                    assert_eq!(&header[..RECORD_HEADER_LEN], &encoded[..45]);
+                    assert_eq!(header[RECORD_HEADER_LEN], 0xaa);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn record_rejects_truncation_appended_bytes_and_corruption() {
+        for payload in [b"".as_slice(), b"state"] {
+            let encoded = encode_record(RecordKind::KeyFrame, 42, payload).unwrap();
+            for end in 0..encoded.len() {
+                let expected = if end < RECORD_HEADER_LEN {
+                    Error::TruncatedRecord
+                } else {
+                    Error::RecordDigestMismatch
+                };
+                assert_eq!(decode_record(&encoded[..end]), Err(expected));
+            }
+            for extra in [b"\0".as_slice(), b"state", encoded.as_slice()] {
+                let mut extended = encoded.clone();
+                extended.extend_from_slice(extra);
+                assert_eq!(decode_record(&extended), Err(Error::RecordDigestMismatch));
+            }
+            for offset in 0..encoded.len() {
+                let mut corrupted = encoded.clone();
+                corrupted[offset] ^= 1; // Also changes KeyFrame to a valid StructuredLog kind.
+                let expected = if offset < 4 {
+                    Error::InvalidMagic
+                } else {
+                    Error::RecordDigestMismatch
+                };
+                assert_eq!(decode_record(&corrupted), Err(expected));
+            }
+            let mut invalid_kind = encoded;
+            invalid_kind[4] = u8::MAX;
+            assert_eq!(
+                decode_record(&invalid_kind),
+                Err(Error::UnknownRecordKind(u8::MAX))
+            );
+        }
+    }
+
+    #[test]
+    fn record_header_rejects_short_buffers_without_writing() {
+        for len in 0..RECORD_HEADER_LEN {
+            let mut header = [0xaa; RECORD_HEADER_LEN];
+            assert_eq!(
+                encode_record_header(RecordKind::CopperList, 42, b"state", &mut header[..len]),
+                Err(Error::BufferTooSmall {
+                    needed: RECORD_HEADER_LEN,
+                    available: len,
+                })
+            );
+            assert_eq!(header, [0xaa; RECORD_HEADER_LEN]);
+        }
     }
 }

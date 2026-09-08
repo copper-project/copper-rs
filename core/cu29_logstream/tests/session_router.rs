@@ -67,7 +67,6 @@ fn manifest_bootstraps_continuous_decoder_without_out_of_band_fec_config() {
     let record = encode_record(RecordKind::CopperList, 0, b"semantic-copperlist").unwrap();
     let mut continuous = ContinuousEncoder::<1128, 64>::new(
         identity,
-        sender.continuous.first_packet_sequence,
         sender.continuous.lane,
         sender.continuous.fec,
         sender.continuous.max_record_bytes,
@@ -100,7 +99,10 @@ fn manifest_bootstraps_continuous_decoder_without_out_of_band_fec_config() {
             .unwrap();
     }
     assert!(matches!(events.as_slice(), [SessionEvent::Manifest(_)]));
-    assert_eq!(router.session_manifest(identity).unwrap().plan, plan);
+    assert_eq!(
+        router.session_manifest(identity).unwrap().requirements,
+        plan.receiver_requirements()
+    );
 
     for packet in continuous_packets {
         router
@@ -181,7 +183,6 @@ fn continuous(
 ) -> Vec<Vec<u8>> {
     let mut encoder = ContinuousEncoder::<1128, 64>::new(
         sender.continuous.identity,
-        0,
         sender.continuous.lane,
         sender.continuous.fec,
         sender.continuous.max_record_bytes,
@@ -444,7 +445,6 @@ fn warmed_router_reuses_record_buffers_with_reordering_and_consumer_retries() {
     receive(&mut router, &objects(&sender, 0)[0], &mut Vec::new());
     let mut encoder = ContinuousEncoder::<1128, 64>::new(
         sender.continuous.identity,
-        0,
         sender.continuous.lane,
         sender.continuous.fec,
         sender.continuous.max_record_bytes,
@@ -683,4 +683,79 @@ fn drain_processes_symbols_accepted_before_a_consumer_failure() {
         })
         .unwrap();
     assert_eq!(next, 2);
+}
+
+#[test]
+fn manifest_requirements_cannot_exceed_receiver_local_limits() {
+    let (sender, _) = setup();
+    let identity = sender.continuous.identity;
+    let limits = SessionRouterLimits {
+        max_sessions: 1,
+        max_startup_packets: 8,
+        max_recovery_records: 4,
+        max_pending_events: 3,
+        max_record_bytes: 65_536,
+        max_buffered_records: 64,
+        equation_capacity: 64,
+        finite_objects: FiniteObjectLimits::new(4_194_304, 1128, 4),
+    };
+    fn rejected<const S: usize, const W: usize>(
+        sender: &cu29_logstream::LogStreamSenderConfig,
+        limits: SessionRouterLimits,
+    ) {
+        let mut router = SessionRouter::<S, W, 64>::new(limits).unwrap();
+        let mut packets = Vec::new();
+        FiniteObjectEncoder::new(sender.recovery.finite)
+            .unwrap()
+            .push_record(&sender.recovery.manifest_record, &mut packets)
+            .unwrap();
+        let mut rejection = None;
+        for packet in packets {
+            if let Err(error) = router.receive_datagram(&packet, |_| -> Result<(), ()> {
+                panic!("an oversized manifest must not be emitted")
+            }) {
+                rejection = Some(error);
+                break;
+            }
+        }
+        assert!(matches!(
+            rejection,
+            Some(cu29_logstream::ReceiveError::Stream(
+                cu29_logstream::Error::InvalidConfig(
+                    "session manifest exceeds receiver-local limits"
+                )
+            ))
+        ));
+        assert_eq!(router.stats().manifests_accepted, 0);
+        assert!(
+            router
+                .session_manifest(sender.continuous.identity)
+                .is_none()
+        );
+    }
+    rejected::<1024, 64>(&sender, limits);
+    rejected::<1128, 32>(&sender, limits);
+    rejected::<1128, 64>(
+        &sender,
+        SessionRouterLimits {
+            max_record_bytes: 65_535,
+            ..limits
+        },
+    );
+    rejected::<1128, 64>(
+        &sender,
+        SessionRouterLimits {
+            max_buffered_records: 63,
+            ..limits
+        },
+    );
+
+    // The same manifest is admitted when every requirement exactly fits.
+    let mut router = SessionRouter::<1128, 64, 64>::new(limits).unwrap();
+    for packet in &objects(&sender, 0)[0] {
+        router
+            .receive_datagram(packet, |_| Ok::<(), ()>(()))
+            .unwrap();
+    }
+    assert!(router.session_manifest(identity).is_some());
 }

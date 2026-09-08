@@ -611,10 +611,10 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
         limits: SessionRouterLimits,
         manifest: &SessionManifest,
     ) -> Result<ContinuousDecoder<MAX_SYMBOL_SIZE, MAX_WINDOW_SYMBOLS, MAX_EQUATIONS>> {
-        if usize::from(manifest.plan.symbol_size) > MAX_SYMBOL_SIZE
-            || usize::from(manifest.plan.continuous.window_symbols) > MAX_WINDOW_SYMBOLS
-            || manifest.plan.max_record_bytes > limits.max_record_bytes as u64
-            || usize::from(manifest.plan.continuous.window_symbols) > limits.max_buffered_records
+        if usize::from(manifest.requirements.symbol_size) > MAX_SYMBOL_SIZE
+            || usize::from(manifest.requirements.window_symbols) > MAX_WINDOW_SYMBOLS
+            || manifest.requirements.max_record_bytes > limits.max_record_bytes as u64
+            || usize::from(manifest.requirements.window_symbols) > limits.max_buffered_records
         {
             return Err(Error::InvalidConfig(
                 "session manifest exceeds receiver-local limits",
@@ -623,15 +623,15 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
         let mut decoder = ContinuousDecoder::new(
             manifest.identity,
             Lane::ReplayCritical,
-            manifest.plan.rlc_config()?,
+            manifest.requirements.rlc_config()?,
             limits.equation_capacity,
             0,
             ReceiverLimits::new(
-                manifest.plan.max_record_bytes as usize,
+                manifest.requirements.max_record_bytes as usize,
                 limits.max_buffered_records,
             ),
         )?;
-        if manifest.plan.feedback.is_some() {
+        if manifest.requirements.feedback.is_some() {
             decoder.enable_feedback();
         }
         Ok(decoder)

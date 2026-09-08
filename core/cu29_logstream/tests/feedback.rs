@@ -148,7 +148,6 @@ fn real_decoder_finalizes_loss_after_window_expiry_and_handles_reordering() {
     let config = RlcConfig::new(SYMBOL, WINDOW, Field::Gf256).unwrap();
     let mut encoder = ContinuousEncoder::<SYMBOL, WINDOW>::new(
         identity,
-        0,
         Lane::ReplayCritical,
         config,
         256,
@@ -233,7 +232,7 @@ fn reporter_uses_local_cadence_and_advertised_capability() {
             session_id: [1; 16],
             sender_id: 7,
         },
-        plan,
+        plan.receiver_requirements(),
         ApplicationSchema {
             outputs: vec![],
             reconstruction: vec![],

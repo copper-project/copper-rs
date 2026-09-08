@@ -12,12 +12,19 @@ const CRC: crc::Crc<u32> = crc::Crc::<u32>::new(&crc::CRC_32_ISCSI);
 const LOSS_MARGIN_BP: u64 = 200;
 const HEALTHY_REPORTS: u8 = 3;
 
-/// Policy advertised by the manifest; resource bindings remain local to each endpoint.
+/// Local sender policy for feedback cadence, timeout, and FEC adaptation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode)]
 pub struct FeedbackPolicy {
     pub report_interval_ms: u32,
     pub timeout_ms: u32,
     pub adaptation: Option<AdaptationBounds>,
+}
+
+/// Return-report cadence and identity advertised to the receiver.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode)]
+pub struct FeedbackRequirements {
+    pub report_interval_ms: u32,
+    pub destination: [u8; 16],
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode)]
@@ -419,7 +426,7 @@ fn rate(count: u64, micros: u64) -> u64 {
 /// Receiver-side cadence and identity. The caller gathers counters from its router
 /// and attempts one datagram send; backpressure never queues feedback history.
 pub struct FeedbackReporter {
-    pub policy: FeedbackPolicy,
+    pub requirements: FeedbackRequirements,
     identity: StreamIdentity,
     destination: [u8; 16],
     receiver_id: [u8; 16],
@@ -433,14 +440,14 @@ impl FeedbackReporter {
         receiver_id: [u8; 16],
         now: CuTime,
     ) -> Option<Self> {
-        let policy = manifest.plan.feedback?;
+        let requirements = manifest.requirements.feedback?;
         Some(Self {
-            policy,
+            requirements,
             identity: manifest.identity,
-            destination: destination_key(&manifest.plan.destination_id),
+            destination: requirements.destination,
             receiver_id,
             started: now,
-            next_report: now + CuDuration::from_millis(u64::from(policy.report_interval_ms)),
+            next_report: now + CuDuration::from_millis(u64::from(requirements.report_interval_ms)),
             sequence: 0,
         })
     }
@@ -448,7 +455,8 @@ impl FeedbackReporter {
         if now < self.next_report {
             return None;
         }
-        self.next_report = now + CuDuration::from_millis(u64::from(self.policy.report_interval_ms));
+        self.next_report =
+            now + CuDuration::from_millis(u64::from(self.requirements.report_interval_ms));
         self.sequence = self.sequence.saturating_add(1);
         counters.session_id = self.identity.session_id;
         counters.sender_id = self.identity.sender_id;
