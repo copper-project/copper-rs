@@ -16,6 +16,7 @@ demo = ["cu29/logstream", "cu29/reflect", "dep:cu-transform"]
 replay = ["demo", "cu29/remote-debug"]
 tui = ["demo", "dep:ratatui", "dep:cu29-intern-strs"]
 sender-monitor = ["demo", "dep:cu-consolemon"]
+feedback = ["demo"]
 
 [[bin]]
 name = "cu-logstream-demo"

@@ -80,6 +80,45 @@ For a headless receiver, substitute
 without a datagram, or fails if no traffic arrives within 15 seconds. The final
 `just sender` argument optionally changes the default 6000 iterations.
 
+## Compare one-way and two-way streaming
+
+`just telemetry` and `just sender` run one-way. On the robot's **BW** tab,
+**Mode** is **One-way** and **Feedback** is **Disabled**.
+
+For two-way streaming, start these in separate terminals:
+
+```sh
+just telemetry-two-way
+just sender-two-way
+```
+
+The robot binds `127.0.0.1:7448`; telemetry listens on `127.0.0.1:7447` and sends
+receiver reports back to the robot. The `feedback` feature selects a statically
+wired reverse UDP resource from `feedbackconfig.ron`. The recipes build both
+processes with the matching feature set and string index.
+
+On the robot's **BW** tab, **Mode** becomes **Two-way**. **Feedback** starts at
+**Waiting**, becomes **Active** when reports arrive, and becomes **Stale** after
+one second without reports. Watch **Feedback reports**, **RX BW**, **Source loss**,
+and **FEC effective interval**. Healthy feedback gradually increases the interval
+above the baseline of four source symbols, sending fewer continuous repair
+packets. Closing telemetry makes feedback stale and restores baseline repairs;
+restart telemetry to see feedback become active again.
+
+To compare a lossy return-enabled run, use `just telemetry-two-way lossy` before
+`just sender-two-way`. It drops every tenth source packet on the receiver and
+keeps repair packets, exercising source-loss reports and FEC adaptation. Overall
+TX bandwidth also includes manifest and recovery-object traffic.
+
+`just run-two-way all` checks all seven headless scenarios and their native
+archives and replays. The sustained-loss check requires at least 90% of the run,
+the final CopperList, and explicit gap records for any missing history.
+
+The first `telemetry-two-way` argument selects impairment; subsequent arguments
+select the listen address, robot feedback address, and archive path. The
+`sender-two-way` arguments select remote address, robot bind address, archive
+path, and iteration count. Set both endpoints explicitly for separate machines.
+
 ## Use it in your application
 
 The reusable integration is the configured sender plus the generated twin

@@ -27,6 +27,9 @@ enum Command {
     Sender {
         #[arg(long, default_value = "127.0.0.1:7447")]
         remote: SocketAddr,
+        /// Robot endpoint; use a fixed port when the receiver returns feedback.
+        #[arg(long, default_value = "127.0.0.1:0")]
+        bind: SocketAddr,
         #[arg(long)]
         log_base: PathBuf,
         #[arg(long, default_value_t = ITERATIONS, value_parser = clap::value_parser!(u64).range(1..))]
@@ -58,6 +61,8 @@ enum Command {
 enum Impairment {
     Clean,
     Loss,
+    /// Drop every tenth source packet to exercise ongoing FEC adaptation.
+    Lossy,
     Outage,
     Bootstrap,
 }
@@ -65,6 +70,7 @@ enum Impairment {
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum Expectation {
     Complete,
+    Lossy,
     Outage,
     Late,
     Prefix,
@@ -76,9 +82,15 @@ fn prepare_log(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn sender(remote: SocketAddr, path: &Path, iterations: u64, idle_ms: u64) -> Result<()> {
+fn sender(
+    remote: SocketAddr,
+    bind: SocketAddr,
+    path: &Path,
+    iterations: u64,
+    idle_ms: u64,
+) -> Result<()> {
     prepare_log(path)?;
-    cu_logstream_demo::run_sender(remote, path, iterations, idle_ms)?;
+    cu_logstream_demo::run_sender_bound(remote, bind, path, iterations, idle_ms)?;
     println!(
         "Sender finished {iterations} iterations: {}",
         path.display()
@@ -208,6 +220,9 @@ fn verify(
     }
     let valid = match expect {
         Expectation::Complete => ground.len() == onboard.len() && gaps.is_empty(),
+        Expectation::Lossy => {
+            ground.len() as u64 >= iterations - iterations / 10 && next == iterations
+        }
         Expectation::Outage => {
             !gaps.is_empty()
                 && gaps.iter().any(|&(first, _, _)| first > 0)
@@ -242,10 +257,11 @@ fn main() -> Result<()> {
     match Cli::parse().command {
         Command::Sender {
             remote,
+            bind,
             log_base,
             iterations,
             idle_ms,
-        } => sender(remote, &log_base, iterations, idle_ms),
+        } => sender(remote, bind, &log_base, iterations, idle_ms),
         Command::Receiver(options) => receiver::run(&options),
         #[cfg(feature = "tui")]
         Command::Telemetry(options) => telemetry_screen::run(options),

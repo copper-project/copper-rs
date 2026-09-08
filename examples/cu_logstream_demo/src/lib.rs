@@ -7,12 +7,20 @@ pub mod telemetry;
 use cu29::prelude::*;
 
 #[cfg_attr(
-    feature = "sender-monitor",
+    all(feature = "sender-monitor", not(feature = "feedback")),
     copper_runtime(config = "senderconfig.ron")
 )]
 #[cfg_attr(
-    not(feature = "sender-monitor"),
+    all(not(feature = "sender-monitor"), not(feature = "feedback")),
     copper_runtime(config = "copperconfig.ron")
+)]
+#[cfg_attr(
+    all(feature = "sender-monitor", feature = "feedback"),
+    copper_runtime(config = "sender-feedbackconfig.ron")
+)]
+#[cfg_attr(
+    all(not(feature = "sender-monitor"), feature = "feedback"),
+    copper_runtime(config = "feedbackconfig.ron")
 )]
 struct Demo {}
 
@@ -48,7 +56,29 @@ pub fn run_sender(
     iterations: u64,
     idle_ms: u64,
 ) -> CuResult<()> {
+    run_sender_bound(
+        remote,
+        "127.0.0.1:0".parse().unwrap(),
+        path,
+        iterations,
+        idle_ms,
+    )
+}
+
+/// Bind the robot's UDP endpoint explicitly for a configured feedback return path.
+pub fn run_sender_bound(
+    remote: std::net::SocketAddr,
+    bind: std::net::SocketAddr,
+    path: &std::path::Path,
+    iterations: u64,
+    idle_ms: u64,
+) -> CuResult<()> {
     let mut config = CuConfig::deserialize_ron(&Demo::original_config())?;
+    config.resources[0]
+        .config
+        .as_mut()
+        .unwrap()
+        .set("bind_addr", bind.to_string());
     config.resources[0]
         .config
         .as_mut()

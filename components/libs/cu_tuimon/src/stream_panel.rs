@@ -65,6 +65,15 @@ pub(crate) fn rows(
     snapshot: LogStreamStats,
     rates: &StreamRates,
 ) -> Vec<Row<'static>> {
+    let (feedback_state, feedback_color) = match snapshot.feedback {
+        None => ("Disabled", palette::FOREGROUND),
+        Some(feedback) if feedback.failed => ("Failed", palette::LIGHT_RED),
+        Some(feedback) => match feedback.state {
+            LogStreamFeedbackState::Waiting => ("Waiting", palette::YELLOW),
+            LogStreamFeedbackState::Active => ("Active", palette::CYAN),
+            LogStreamFeedbackState::Stale => ("Stale", palette::YELLOW),
+        },
+    };
     let mut rows = vec![
         row(
             "Mode",
@@ -89,6 +98,7 @@ pub(crate) fn rows(
         } else {
             palette::CYAN
         })),
+        row("Feedback", feedback_state).style(Style::default().fg(feedback_color)),
         row(
             "Configured budget",
             format!("{} bit/s", monitor.bitrate_bps),
@@ -121,21 +131,7 @@ pub(crate) fn rows(
     if let Some(feedback) = snapshot.feedback {
         let active = feedback.state == LogStreamFeedbackState::Active && !feedback.failed;
         let current = |value: String| if active { value } else { "n/a".into() };
-        let feedback_state = if feedback.failed {
-            "Failed"
-        } else {
-            match feedback.state {
-                LogStreamFeedbackState::Waiting => "Waiting",
-                LogStreamFeedbackState::Active => "Active",
-                LogStreamFeedbackState::Stale => "Stale",
-            }
-        };
         rows.extend([
-            row("Feedback", feedback_state).style(Style::default().fg(if active {
-                palette::CYAN
-            } else {
-                palette::YELLOW
-            })),
             row(
                 "Report age",
                 feedback.age.map_or_else(

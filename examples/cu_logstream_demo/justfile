@@ -16,11 +16,26 @@ build-tui:
 build-sender:
     cargo +stable build -p cu-logstream-demo --features replay,sender-monitor --bins
 
+build-two-way:
+    cargo +stable build -p cu-logstream-demo --features replay,tui,sender-monitor,feedback --bins
+
+# Start this first, then `just sender-two-way`. Use `lossy` for ongoing source loss.
+telemetry-two-way impairment="clean" listen="127.0.0.1:7447" feedback_to="127.0.0.1:7448" log="logs/telemetry-two-way.copper": build-two-way
+    {{root}}/target/debug/cu-logstream-demo telemetry --listen {{listen}} --feedback-to {{feedback_to}} --impairment {{impairment}} --log-base {{log}}
+
+# Bind the robot endpoint named by telemetry's feedback_to argument.
+sender-two-way remote="127.0.0.1:7447" bind="127.0.0.1:7448" log="logs/sender-two-way.copper" iterations="6000": build-two-way
+    {{root}}/target/debug/cu-logstream-demo sender --remote {{remote}} --bind {{bind}} --log-base {{log}} --iterations {{iterations}}
+
+# Headless archive and replay checks with a real feedback return path.
+run-two-way scenario="clean": build-two-way
+    python3 run.py {{scenario}} --two-way --binary {{root}}/target/debug/cu-logstream-demo
+
 # Start this first, then `just sender` in another terminal. Space pauses only the view.
 telemetry listen="127.0.0.1:7447" log="logs/telemetry.copper": build-tui
     {{root}}/target/debug/cu-logstream-demo telemetry --listen {{listen}} --log-base {{log}}
 
-# Scenarios: clean, loss, outage, late, restart, idle, all.
+# Scenarios: clean, loss, lossy, outage, late, restart, idle, all.
 run scenario="clean": build
     python3 run.py {{scenario}} --binary {{root}}/target/debug/cu-logstream-demo
 

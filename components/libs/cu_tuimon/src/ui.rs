@@ -1267,6 +1267,7 @@ mod tests {
         let text = stream_text(&mut ui, 132, 40);
         assert!(text.contains("Telemetry / TX: ground"));
         assert!(text.contains("One-way"));
+        assert!(text.contains("Disabled"));
         assert!(text.contains("12345"));
         assert!(text.contains("Queue drops"));
         assert!(!text.contains("RX BW"));
@@ -1333,7 +1334,7 @@ mod tests {
         let mut ui = MonitorUi::new(model, MonitorUiOptions::default());
         ui.set_active_screen(MonitorScreen::CopperList);
         ui.scroll(ScrollDirection::Right, 84);
-        ui.scroll(ScrollDirection::Down, 20);
+        ui.scroll(ScrollDirection::Down, 21);
         let text = stream_text(&mut ui, 42, 12);
         assert!(text.contains("Telemetry / TX: second"), "{text}");
         // Tiny terminal sizes and resizing clamp rather than overflow.
