@@ -2082,15 +2082,16 @@ impl CuGraph {
             record_port(msg.clone(), None, order);
         }
 
-        port_order.sort_by(
-            |(order_a, msg_a, ch_a), (order_b, msg_b, ch_b)| {
-                order_a
-                    .cmp(order_b)
-                    .then_with(|| msg_a.cmp(msg_b))
-                    .then_with(|| ch_a.cmp(ch_b))
-            },
-        );
-        Ok(port_order.into_iter().map(|(_, msg, ch)| (msg, ch)).collect())
+        port_order.sort_by(|(order_a, msg_a, ch_a), (order_b, msg_b, ch_b)| {
+            order_a
+                .cmp(order_b)
+                .then_with(|| msg_a.cmp(msg_b))
+                .then_with(|| ch_a.cmp(ch_b))
+        });
+        Ok(port_order
+            .into_iter()
+            .map(|(_, msg, ch)| (msg, ch))
+            .collect())
     }
 
     #[allow(dead_code)]
