@@ -11,7 +11,7 @@ use cu29::units::si::magnetic_flux_density::microtesla;
 use cu29::units::si::ratio::percent;
 use serde::{Deserialize, Serialize};
 
-use crate::{RosMsgAdapter, builtin::Header};
+use crate::{RosMessage, RosMsgAdapter, builtin::Header};
 
 const DATATYPE_UINT32: u8 = 6;
 const DATATYPE_FLOAT32: u8 = 7;
@@ -61,20 +61,9 @@ pub struct Image {
     pub data: Vec<u8>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct Vector3 {
-    pub x: f64,
-    pub y: f64,
-    pub z: f64,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct Quaternion {
-    pub x: f64,
-    pub y: f64,
-    pub z: f64,
-    pub w: f64,
-}
+// Both live in `geometry_msgs` in ROS 2, and that is where they are defined now. Re-exported here
+// because `sensor_msgs::Imu` is built from them and because these paths were public API.
+pub use crate::geometry_msgs::{Quaternion, Vector3};
 
 // sensor_msgs/Imu
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -104,6 +93,99 @@ pub struct Temperature {
     pub variance: f64,
 }
 
+// sensor_msgs/CompressedImage
+//
+// Distinct from `Image`, and the difference is the point: this carries the encoder's own bytes
+// (`format` names them, e.g. "jpeg", "png", "h264"), so a hardware-encoded stream can be
+// published without being expanded and re-encoded first.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+pub struct CompressedImage {
+    pub header: Header,
+    pub format: String,
+    #[serde(with = "serde_bytes")]
+    pub data: Vec<u8>,
+}
+
+impl RosMessage for CompressedImage {
+    const NAMESPACE: &'static str = "sensor_msgs";
+    const TYPE_NAME: &'static str = "CompressedImage";
+    const TYPE_HASH: &'static str =
+        "RIHS01_15640771531571185e2efc8a100baf923961a4d15d5569652e6cb6691e8e371a";
+}
+
+// sensor_msgs/RegionOfInterest
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq)]
+pub struct RegionOfInterest {
+    pub x_offset: u32,
+    pub y_offset: u32,
+    pub height: u32,
+    pub width: u32,
+    pub do_rectify: bool,
+}
+
+// sensor_msgs/CameraInfo
+//
+// `d` is a variable-length sequence (its length depends on `distortion_model`), while `k`, `r`
+// and `p` are fixed 3x3, 3x3 and 3x4 row-major matrices. That distinction is on the wire: only
+// `d` carries a length prefix.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+pub struct CameraInfo {
+    pub header: Header,
+    pub height: u32,
+    pub width: u32,
+    pub distortion_model: String,
+    pub d: Vec<f64>,
+    pub k: [f64; 9],
+    pub r: [f64; 9],
+    pub p: [f64; 12],
+    pub binning_x: u32,
+    pub binning_y: u32,
+    pub roi: RegionOfInterest,
+}
+
+impl RosMessage for CameraInfo {
+    const NAMESPACE: &'static str = "sensor_msgs";
+    const TYPE_NAME: &'static str = "CameraInfo";
+    const TYPE_HASH: &'static str =
+        "RIHS01_b3dfd68ff46c9d56c80fd3bd4ed22c7a4ddce8c8348f2f59c299e73118e7e275";
+}
+
+// The hashes the existing adapters already publish, kept next to the types they identify.
+impl RosMessage for PointField {
+    const NAMESPACE: &'static str = "sensor_msgs";
+    const TYPE_NAME: &'static str = "PointField";
+    const TYPE_HASH: &'static str =
+        "RIHS01_5c6a4750728c2bcfbbf7037225b20b02d4429634732146b742dee1726637ef01";
+}
+
+impl RosMessage for PointCloud2 {
+    const NAMESPACE: &'static str = "sensor_msgs";
+    const TYPE_NAME: &'static str = "PointCloud2";
+    const TYPE_HASH: &'static str =
+        "RIHS01_9198cabf7da3796ae6fe19c4cb3bdd3525492988c70522628af5daa124bae2b5";
+}
+
+impl RosMessage for Image {
+    const NAMESPACE: &'static str = "sensor_msgs";
+    const TYPE_NAME: &'static str = "Image";
+    const TYPE_HASH: &'static str =
+        "RIHS01_d31d41a9a4c4bc8eae9be757b0beed306564f7526c88ea6a4588fb9582527d47";
+}
+
+impl RosMessage for Imu {
+    const NAMESPACE: &'static str = "sensor_msgs";
+    const TYPE_NAME: &'static str = "Imu";
+    const TYPE_HASH: &'static str =
+        "RIHS01_7d9a00ff131080897a5ec7e26e315954b8eae3353c3f995c55faf71574000b5b";
+}
+
+impl RosMessage for MagneticField {
+    const NAMESPACE: &'static str = "sensor_msgs";
+    const TYPE_NAME: &'static str = "MagneticField";
+    const TYPE_HASH: &'static str =
+        "RIHS01_e80f32f56a20486c9923008fc1a1db07bbb273cbbf6a5b3bfa00835ee00e4dff";
+}
+
 impl<const N: usize> RosMsgAdapter<'static> for PointCloudSoa<N> {
     type Output = PointCloud2;
 
@@ -112,11 +194,11 @@ impl<const N: usize> RosMsgAdapter<'static> for PointCloudSoa<N> {
     }
 
     fn type_name() -> &'static str {
-        "PointCloud2"
+        PointCloud2::TYPE_NAME
     }
 
     fn type_hash() -> &'static str {
-        "RIHS01_9198cabf7da3796ae6fe19c4cb3bdd3525492988c70522628af5daa124bae2b5"
+        PointCloud2::TYPE_HASH
     }
 }
 
@@ -128,11 +210,11 @@ impl<const N: usize> RosMsgAdapter<'static> for PointCloudSoaHandle<N> {
     }
 
     fn type_name() -> &'static str {
-        "PointCloud2"
+        PointCloud2::TYPE_NAME
     }
 
     fn type_hash() -> &'static str {
-        "RIHS01_9198cabf7da3796ae6fe19c4cb3bdd3525492988c70522628af5daa124bae2b5"
+        PointCloud2::TYPE_HASH
     }
 }
 
@@ -157,11 +239,11 @@ impl RosMsgAdapter<'static> for CuImage<Vec<u8>> {
     }
 
     fn type_name() -> &'static str {
-        "Image"
+        Image::TYPE_NAME
     }
 
     fn type_hash() -> &'static str {
-        "RIHS01_d31d41a9a4c4bc8eae9be757b0beed306564f7526c88ea6a4588fb9582527d47"
+        Image::TYPE_HASH
     }
 }
 
@@ -173,11 +255,11 @@ impl RosMsgAdapter<'static> for ImuPayload {
     }
 
     fn type_name() -> &'static str {
-        "Imu"
+        Imu::TYPE_NAME
     }
 
     fn type_hash() -> &'static str {
-        "RIHS01_7d9a00ff131080897a5ec7e26e315954b8eae3353c3f995c55faf71574000b5b"
+        Imu::TYPE_HASH
     }
 }
 
@@ -189,11 +271,11 @@ impl RosMsgAdapter<'static> for MagnetometerPayload {
     }
 
     fn type_name() -> &'static str {
-        "MagneticField"
+        MagneticField::TYPE_NAME
     }
 
     fn type_hash() -> &'static str {
-        "RIHS01_e80f32f56a20486c9923008fc1a1db07bbb273cbbf6a5b3bfa00835ee00e4dff"
+        MagneticField::TYPE_HASH
     }
 }
 
@@ -894,5 +976,107 @@ mod tests {
         assert!((mag.mag_x.get::<microtesla>() - recovered.mag_x.get::<microtesla>()).abs() < 1e-3);
         assert!((mag.mag_y.get::<microtesla>() - recovered.mag_y.get::<microtesla>()).abs() < 1e-3);
         assert!((mag.mag_z.get::<microtesla>() - recovered.mag_z.get::<microtesla>()).abs() < 1e-3);
+    }
+}
+
+#[cfg(test)]
+mod message_tests {
+    use super::*;
+    use crate::builtin::Time;
+
+    fn sample_header() -> Header {
+        Header {
+            stamp: Time {
+                sec: 1_700_000_000,
+                nanosec: 500,
+            },
+            frame_id: "camera_left".into(),
+        }
+    }
+
+    #[test]
+    fn compressed_image_roundtrips_and_keeps_its_bytes_opaque() {
+        let value = CompressedImage {
+            header: sample_header(),
+            format: "h264".into(),
+            data: (0u8..64).collect(),
+        };
+
+        let bytes =
+            cdr::serialize::<_, _, cdr::CdrLe>(&value, cdr::Infinite).expect("cdr encode succeeds");
+        let decoded: CompressedImage =
+            cdr::deserialize(bytes.as_slice()).expect("cdr decode succeeds");
+        assert_eq!(decoded, value);
+        // The encoder's payload must survive untouched: this type exists so a hardware-encoded
+        // stream is published as-is rather than expanded into an `Image` and re-encoded.
+        assert_eq!(decoded.data, (0u8..64).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn camera_info_roundtrips() {
+        let value = CameraInfo {
+            header: sample_header(),
+            height: 480,
+            width: 640,
+            distortion_model: "plumb_bob".into(),
+            d: vec![0.0; 5],
+            k: [500.0, 0.0, 320.0, 0.0, 500.0, 240.0, 0.0, 0.0, 1.0],
+            r: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
+            p: [
+                500.0, 0.0, 320.0, -35.0, 0.0, 500.0, 240.0, 0.0, 0.0, 0.0, 1.0, 0.0,
+            ],
+            binning_x: 0,
+            binning_y: 0,
+            roi: RegionOfInterest::default(),
+        };
+
+        let bytes =
+            cdr::serialize::<_, _, cdr::CdrLe>(&value, cdr::Infinite).expect("cdr encode succeeds");
+        let decoded: CameraInfo = cdr::deserialize(bytes.as_slice()).expect("cdr decode succeeds");
+        assert_eq!(decoded, value);
+    }
+
+    #[test]
+    fn camera_info_d_is_a_sequence_while_k_r_p_are_fixed() {
+        let encode = |info: &CameraInfo| {
+            cdr::serialize::<_, _, cdr::CdrLe>(info, cdr::Infinite)
+                .expect("cdr encode succeeds")
+                .len()
+        };
+
+        let mut base = CameraInfo {
+            header: sample_header(),
+            distortion_model: "plumb_bob".into(),
+            d: vec![0.0; 4],
+            ..Default::default()
+        };
+        let four = encode(&base);
+        base.d.push(0.0);
+        let five = encode(&base);
+        // `d` is `float64[]`: one more element is 8 more bytes of content.
+        assert_eq!(five - four, 8);
+
+        // `k`, `r` and `p` are fixed matrices, so changing their VALUES cannot change the size.
+        // If any of them encoded as a sequence there would be a uint32 length here too, and every
+        // field after it would be shifted for a ROS subscriber.
+        let mut changed = base.clone();
+        changed.k = [1.0; 9];
+        changed.r = [2.0; 9];
+        changed.p = [3.0; 12];
+        assert_eq!(encode(&changed), five);
+    }
+
+    #[test]
+    fn fixed_matrices_carry_no_length_prefix() {
+        #[derive(Serialize, Deserialize)]
+        struct ProjectionOnly {
+            p: [f64; 12],
+        }
+
+        let bytes =
+            cdr::serialize::<_, _, cdr::CdrLe>(&ProjectionOnly { p: [1.0; 12] }, cdr::Infinite)
+                .expect("cdr encode succeeds");
+        // 4-byte encapsulation header then twelve bare f64 — no uint32 count.
+        assert_eq!(bytes.len(), 4 + 12 * 8);
     }
 }
