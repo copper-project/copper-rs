@@ -3,15 +3,14 @@
 
 use crate::{Error, RecordKind, Result};
 use alloc::vec::Vec;
-use crc::{CRC_32_ISCSI, Crc};
 
 const PACKET_MAGIC: [u8; 4] = *b"CULS";
 /// Maximum packet header length, used to bound storage and the shared FEC symbol size.
-/// RaptorQ uses 55 bytes; RLC uses 36 for source packets and 40 for repair packets.
-pub const PACKET_HEADER_LEN: usize = 55;
+/// RaptorQ uses 51 bytes; RLC uses 32 for source packets and 36 for repair packets.
+pub const PACKET_HEADER_LEN: usize = 51;
 const COMMON_HEADER_LEN: usize = 28;
-const RLC_SOURCE_HEADER_LEN: usize = 36;
-const RLC_REPAIR_HEADER_LEN: usize = 40;
+const RLC_SOURCE_HEADER_LEN: usize = 32;
+const RLC_REPAIR_HEADER_LEN: usize = 36;
 
 const fn packet_header_len(scheme: FecScheme, kind: FecSymbolKind) -> usize {
     match (scheme, kind) {
@@ -20,7 +19,6 @@ const fn packet_header_len(scheme: FecScheme, kind: FecSymbolKind) -> usize {
         (_, FecSymbolKind::Repair) => RLC_REPAIR_HEADER_LEN,
     }
 }
-const CRC32C: Crc<u32> = Crc::<u32>::new(&CRC_32_ISCSI);
 
 /// Independently scheduled transport lanes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -133,7 +131,7 @@ impl WirePacket {
     }
 }
 
-/// Validated packet view borrowing the transport's receive buffer.
+/// Structurally validated packet view borrowing the transport's receive buffer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WirePacketRef<'a> {
     pub header: WireHeader,
@@ -142,6 +140,8 @@ pub struct WirePacketRef<'a> {
 
 impl<'a> WirePacketRef<'a> {
     /// Decodes exactly one complete packet supplied by the carrier.
+    /// The carrier must verify packet integrity before calling this parser.
+    /// This validates header structure only; FEC cannot correct corrupted symbols.
     /// The payload occupies the remaining packet extent after the header.
     pub fn decode(bytes: &'a [u8]) -> Result<Self> {
         if bytes.len() < COMMON_HEADER_LEN {
@@ -156,17 +156,6 @@ impl<'a> WirePacketRef<'a> {
         if bytes.len() < header_len {
             return Err(Error::TruncatedPacket);
         }
-        let crc_offset = header_len - 4;
-        let expected_checksum =
-            u32::from_be_bytes(bytes[crc_offset..header_len].try_into().unwrap());
-        let mut digest = CRC32C.digest();
-        digest.update(&bytes[..crc_offset]);
-        digest.update(&[0_u8; 4]);
-        digest.update(&bytes[header_len..]);
-        if digest.finalize() != expected_checksum {
-            return Err(Error::CrcMismatch);
-        }
-
         let mut session_id = [0_u8; 16];
         session_id.copy_from_slice(&bytes[8..24]);
         let mut fec_metadata = [0_u8; 12];
@@ -180,8 +169,8 @@ impl<'a> WirePacketRef<'a> {
                 )
             }
             FecScheme::RlcGf2 | FecScheme::RlcGf256 => {
-                let metadata_len = crc_offset - COMMON_HEADER_LEN;
-                fec_metadata[..metadata_len].copy_from_slice(&bytes[COMMON_HEADER_LEN..crc_offset]);
+                let metadata_len = header_len - COMMON_HEADER_LEN;
+                fec_metadata[..metadata_len].copy_from_slice(&bytes[COMMON_HEADER_LEN..header_len]);
                 (0, 0)
             }
         };
@@ -211,7 +200,6 @@ pub fn encode_packet_into(header: WireHeader, payload: &[u8], output: &mut [u8])
         ));
     }
     let header_len = packet_header_len(header.fec_scheme, header.symbol_kind);
-    let crc_offset = header_len - 4;
     let needed = header_len
         .checked_add(payload.len())
         .ok_or(Error::InvalidConfig("packet length overflow"))?;
@@ -239,13 +227,11 @@ pub fn encode_packet_into(header: WireHeader, payload: &[u8], output: &mut [u8])
             bytes[47..51].copy_from_slice(&header.fragment_count.to_be_bytes());
         }
         FecScheme::RlcGf2 | FecScheme::RlcGf256 => {
-            bytes[COMMON_HEADER_LEN..crc_offset]
-                .copy_from_slice(&header.fec_metadata[..crc_offset - COMMON_HEADER_LEN]);
+            bytes[COMMON_HEADER_LEN..header_len]
+                .copy_from_slice(&header.fec_metadata[..header_len - COMMON_HEADER_LEN]);
         }
     }
     bytes[header_len..].copy_from_slice(payload);
-    let checksum = CRC32C.checksum(bytes);
-    bytes[crc_offset..header_len].copy_from_slice(&checksum.to_be_bytes());
     Ok(needed)
 }
 
@@ -275,13 +261,13 @@ mod tests {
     fn fixed_header_has_a_stable_golden_prefix() {
         let encoded = fixture().encode().unwrap();
         assert_eq!(&encoded[..8], &[b'C', b'U', b'L', b'S', 2, 2, 2, 0]);
-        assert_eq!(encoded.len(), 55 + fixture().payload.len());
+        assert_eq!(encoded.len(), 51 + fixture().payload.len());
         assert_eq!(&encoded[8..24], &[0x11; 16]);
         assert_eq!(&encoded[24..28], &0x2233_4455_u32.to_be_bytes());
         assert_eq!(&encoded[28..36], &0x0102_0304_0506_0708_u64.to_be_bytes());
         assert_eq!(&encoded[36..47], &[0, 0, 0, 0, 3, 0, 8, 1, 0, 1, 1]);
         assert_eq!(&encoded[47..51], &1_u32.to_be_bytes());
-        assert_eq!(&encoded[55..], fixture().payload);
+        assert_eq!(&encoded[51..], fixture().payload);
         assert_eq!(WirePacket::decode(&encoded).unwrap(), fixture());
     }
 
@@ -339,8 +325,8 @@ mod tests {
     fn rlc_headers_carry_only_the_active_fec_id() {
         for scheme in [FecScheme::RlcGf2, FecScheme::RlcGf256] {
             for (kind, header_len, id_len) in [
-                (FecSymbolKind::Source, 36, 4),
-                (FecSymbolKind::Repair, 40, 8),
+                (FecSymbolKind::Source, 32, 4),
+                (FecSymbolKind::Repair, 36, 8),
             ] {
                 let packet = rlc_fixture(scheme, kind);
                 let encoded = packet.encode().unwrap();
@@ -364,7 +350,7 @@ mod tests {
                     &encoded[28..28 + id_len],
                     &packet.header.fec_metadata[..id_len]
                 );
-                assert_eq!(header_len, 28 + id_len + 4);
+                assert_eq!(header_len, 28 + id_len);
                 assert_eq!(&encoded[header_len..], packet.payload);
                 assert_eq!(WirePacket::decode(&encoded).unwrap(), packet);
 
@@ -391,7 +377,7 @@ mod tests {
     }
 
     #[test]
-    fn all_header_layouts_reject_truncation_trailing_bytes_and_corruption() {
+    fn all_header_layouts_reject_truncated_headers_and_invalid_tags() {
         for scheme in [FecScheme::RlcGf2, FecScheme::RlcGf256, FecScheme::RaptorQ] {
             for kind in [FecSymbolKind::Source, FecSymbolKind::Repair] {
                 let mut packet = if scheme == FecScheme::RaptorQ {
@@ -404,20 +390,23 @@ mod tests {
                     packet.payload = payload;
                     let encoded = packet.encode().unwrap();
                     assert_eq!(WirePacket::decode(&encoded).unwrap(), packet);
-                    for end in 0..encoded.len() {
-                        assert!(WirePacketRef::decode(&encoded[..end]).is_err());
-                    }
-                    let mut damaged = encoded.clone();
-                    damaged.push(0);
-                    assert_eq!(WirePacketRef::decode(&damaged), Err(Error::CrcMismatch));
-                    damaged.pop();
-                    for offset in 0..damaged.len() {
-                        damaged[offset] ^= 1;
-                        assert!(
-                            WirePacketRef::decode(&damaged).is_err(),
-                            "accepted corruption at {offset} in {scheme:?} {kind:?}"
+                    let header_len = packet_header_len(scheme, kind);
+                    for end in 0..header_len {
+                        assert_eq!(
+                            WirePacketRef::decode(&encoded[..end]),
+                            Err(Error::TruncatedPacket)
                         );
-                        damaged[offset] ^= 1;
+                    }
+                    for (offset, expected) in [
+                        (0, Error::InvalidMagic),
+                        (4, Error::UnknownLane(255)),
+                        (5, Error::UnknownRecordKind(255)),
+                        (6, Error::UnknownFecScheme(255)),
+                        (7, Error::UnknownSymbolKind(255)),
+                    ] {
+                        let mut invalid = encoded.clone();
+                        invalid[offset] = 255;
+                        assert_eq!(WirePacketRef::decode(&invalid), Err(expected));
                     }
                 }
             }
@@ -448,7 +437,16 @@ mod tests {
                     assert_eq!(decoded.header, packet.header);
                     assert_eq!(decoded.payload, packet.payload);
                     assert_eq!(decoded.payload.as_ptr(), storage[header_len..].as_ptr());
-                    assert_eq!(WirePacketRef::decode(&storage), Err(Error::CrcMismatch));
+                    // Complete packet boundaries and integrity belong to the carrier.
+                    let extended = WirePacketRef::decode(&storage).unwrap();
+                    assert_eq!(extended.payload.len(), payload_len + 1);
+                    assert_eq!(extended.payload[payload_len], 0xaa);
+                    for end in [header_len, header_len + payload_len / 2, needed] {
+                        assert_eq!(
+                            WirePacketRef::decode(&storage[..end]).unwrap().payload,
+                            &packet.payload[..end - header_len]
+                        );
+                    }
                     assert_eq!(
                         encode_packet_into(
                             packet.header,
@@ -463,13 +461,6 @@ mod tests {
                 }
             }
         }
-    }
-
-    #[test]
-    fn corruption_is_rejected_before_fec() {
-        let mut encoded = fixture().encode().unwrap();
-        *encoded.last_mut().unwrap() ^= 0x40;
-        assert_eq!(WirePacket::decode(&encoded), Err(Error::CrcMismatch));
     }
 
     #[test]

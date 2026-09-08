@@ -565,9 +565,10 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
         Ok(())
     }
 
-    /// Validates and submits one datagram. Corrupt or foreign packets are counted
+    /// Validates and submits one carrier-verified datagram. Malformed or foreign packets are counted
     /// and ignored before they can contaminate the FEC decoder. Recovered records
     /// and definitive gaps are emitted in CopperList-id order.
+    /// Callers must uphold the packet integrity contract of [`crate::CuStreamRx`].
     pub fn receive_datagram<E>(
         &mut self,
         datagram: &[u8],

@@ -3,6 +3,8 @@
 //! Socket setup happens once, before endpoints enter the output worker. Packet calls
 //! perform one socket operation with no allocation, locking, retry, or acknowledgement.
 //! FEC, pacing, and session policy belong to logstream, above this resource.
+//! Packet integrity relies on external network/link checks; socket setup preserves
+//! OS checksum defaults. The LogStream envelope carries no duplicate checksum.
 
 use cu29::bundle_resources;
 use cu29::config::ComponentConfig;

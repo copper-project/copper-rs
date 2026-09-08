@@ -25,6 +25,11 @@ pub enum CuStreamRxError {
 /// Implementations must return immediately without waiting, locking, allocating,
 /// retrying, acknowledging, or accepting a partial packet. `Ok(())` means only
 /// that the resource accepted this packet once; it does not guarantee delivery.
+///
+/// Carriers must protect complete packet boundaries and integrity. Packet hardware
+/// or the network stack may supply the checksum; adapters over byte streams must
+/// add framing, an integrity check, and receive resynchronization. The common
+/// LogStream envelope has no checksum. Carrier overhead is outside the packet MTU.
 pub trait CuStreamTx: Debug + Send + Sync {
     /// Advance an accepted packet with bounded, nonblocking work. Returns true
     /// while bytes remain. Drivers must keep polling until it returns false.
@@ -51,6 +56,14 @@ impl<T: CuStreamTx + ?Sized> CuStreamTx for alloc::boxed::Box<T> {
 /// `Ok(None)` means no complete packet is available. `Ok(Some(len))` places one
 /// complete packet in `packet[..len]`. This is the receive half of the one-way
 /// data plane; it does not acknowledge traffic or imply a reverse channel.
+///
+/// Only deliver complete packets that passed the carrier's integrity check. Drop
+/// corrupt, truncated, or malformed frames before exposing them to FEC; corruption
+/// must become packet loss, which FEC can recover. Never deliver a partial packet.
+/// Byte-stream adapters must verify and strip their framing checksum and
+/// resynchronize after damaged frames. In-memory carriers must preserve bytes.
+/// Record digests bind reconstructed content and recovery references separately;
+/// they do not replace this carrier integrity contract.
 pub trait CuStreamRx: Debug + Send + Sync {
     fn try_recv(
         &mut self,
