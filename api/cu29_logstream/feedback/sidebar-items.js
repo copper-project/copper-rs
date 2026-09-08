@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["FEEDBACK_BUFFER_BYTES"],"enum":["FeedbackState"],"fn":["destination_key"],"struct":["AdaptationBounds","FeedbackController","FeedbackPolicy","FeedbackReporter","FeedbackSnapshot","ReceiverReport","SourceOutcomes"]};
