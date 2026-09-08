@@ -49,24 +49,74 @@ fn controller(adaptive: bool) -> FeedbackController {
     .unwrap()
 }
 #[test]
-fn bounded_protocol_rejects_truncation_corruption_and_invalid_counts() {
+fn bounded_protocol_uses_packet_extent_and_rejects_malformed_reports() {
     let report = report(1, 100, 80, 15);
     let mut buffer = [0; FEEDBACK_BUFFER_BYTES];
-    let len = report.encode_into(&mut buffer).unwrap();
-    assert_eq!(ReceiverReport::decode(&buffer[..len]).unwrap(), report);
-    for end in 0..len {
-        assert!(ReceiverReport::decode(&buffer[..end]).is_err());
-    }
-    for index in 0..len {
-        buffer[index] ^= 1;
-        assert!(ReceiverReport::decode(&buffer[..len]).is_err());
-        buffer[index] ^= 1;
+    for latest_copperlist in [None, Some(42)] {
+        let report = ReceiverReport {
+            latest_copperlist,
+            ..report
+        };
+        let len = report.encode_into(&mut buffer).unwrap();
+        assert_eq!(
+            len,
+            if latest_copperlist.is_some() {
+                166
+            } else {
+                158
+            }
+        );
+        let payload = bincode::encode_to_vec(
+            report,
+            bincode::config::standard().with_fixed_int_encoding(),
+        )
+        .unwrap();
+        assert_eq!(&buffer[..4], b"CUFB");
+        assert_eq!(&buffer[4..len], payload);
+        assert_eq!(ReceiverReport::decode(&buffer[..len]).unwrap(), report);
+        for end in 0..len {
+            assert!(ReceiverReport::decode(&buffer[..end]).is_err());
+        }
+        assert!(ReceiverReport::decode(&buffer[..len + 1]).is_err());
+        for index in 0..4 {
+            buffer[index] ^= 1;
+            assert!(ReceiverReport::decode(&buffer[..len]).is_err());
+            buffer[index] ^= 1;
+        }
     }
     let mut invalid = report;
     invalid.sources.missing += 1;
     assert!(invalid.encode_into(&mut buffer).is_err());
+    let len = bincode::encode_into_slice(
+        invalid,
+        &mut buffer[4..],
+        bincode::config::standard().with_fixed_int_encoding(),
+    )
+    .unwrap()
+        + 4;
+    assert!(ReceiverReport::decode(&buffer[..len]).is_err());
     assert!(ReceiverReport::decode(&[0; FEEDBACK_BUFFER_BYTES + 1]).is_err());
 }
+
+#[test]
+fn intact_reordered_and_duplicate_reports_do_not_refresh_health() {
+    let mut c = controller(true);
+    let mut buffer = [0; FEEDBACK_BUFFER_BYTES];
+    for (index, sequence) in [3, 1, 3, 2].into_iter().enumerate() {
+        let len = report(sequence, sequence * 100, sequence * 100, 0)
+            .encode_into(&mut buffer)
+            .unwrap();
+        let decoded = ReceiverReport::decode(&buffer[..len]).unwrap();
+        c.receive(decoded, time(1000 + index as u64 * 500));
+    }
+    assert_eq!(c.snapshot().accepted_reports, 1);
+    assert_eq!(c.snapshot().rejected_reports, 3);
+    assert_eq!(c.snapshot().report.unwrap().sequence, 3);
+    assert_eq!(c.snapshot().last_received, Some(time(1000)));
+    c.tick(time(3000));
+    assert_eq!(c.snapshot().state, FeedbackState::Stale);
+}
+
 #[test]
 fn adaptive_fec_moves_both_directions_and_stale_returns_to_baseline() {
     let mut c = controller(true);

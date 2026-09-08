@@ -8,7 +8,6 @@ use cu29_runtime::config::LogStreamFeedbackConfig;
 
 pub const FEEDBACK_BUFFER_BYTES: usize = 320;
 const MAGIC: &[u8; 4] = b"CUFB";
-const CRC: crc::Crc<u32> = crc::Crc::<u32>::new(&crc::CRC_32_ISCSI);
 const LOSS_MARGIN_BP: u64 = 200;
 const HEALTHY_REPORTS: u8 = 3;
 
@@ -117,6 +116,7 @@ impl ReceiverReport {
                 == Some(self.sources.finalized)
     }
 
+    /// Encodes one complete report for an integrity-protected packet transport.
     pub fn encode_into(&self, output: &mut [u8]) -> Result<usize> {
         if output.len() < FEEDBACK_BUFFER_BYTES {
             return Err(Error::BufferTooSmall {
@@ -130,24 +130,25 @@ impl ReceiverReport {
         output[..4].copy_from_slice(MAGIC);
         let len = bincode::encode_into_slice(
             self,
-            &mut output[4..FEEDBACK_BUFFER_BYTES - 4],
+            &mut output[4..FEEDBACK_BUFFER_BYTES],
             bincode::config::standard().with_fixed_int_encoding(),
         )
         .map_err(|_| Error::InvalidConfig("feedback report exceeds packet capacity"))?
             + 4;
-        let checksum = CRC.checksum(&output[..len]);
-        output[len..len + 4].copy_from_slice(&checksum.to_le_bytes());
-        Ok(len + 4)
+        Ok(len)
     }
 
+    /// Decodes a complete report after transport integrity verification.
+    /// Reports may arrive late, out of order, or more than once; the feedback
+    /// controller checks their identity, sequence, and cumulative counters.
     pub fn decode(packet: &[u8]) -> Result<Self> {
-        if packet.len() < 8 || packet.len() > FEEDBACK_BUFFER_BYTES || &packet[..4] != MAGIC {
+        if packet.len() < MAGIC.len()
+            || packet.len() > FEEDBACK_BUFFER_BYTES
+            || &packet[..4] != MAGIC
+        {
             return Err(Error::InvalidConfig("invalid feedback framing"));
         }
-        let end = packet.len() - 4;
-        if CRC.checksum(&packet[..end]) != u32::from_le_bytes(packet[end..].try_into().unwrap()) {
-            return Err(Error::InvalidConfig("invalid feedback checksum"));
-        }
+        let end = packet.len();
         let (report, used): (Self, usize) = bincode::decode_from_slice(
             &packet[4..end],
             bincode::config::standard()

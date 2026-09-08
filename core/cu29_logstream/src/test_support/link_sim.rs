@@ -1,4 +1,4 @@
-//! Deterministic simulation of an unreliable datagram link.
+//! Deterministic simulation of an unreliable datagram link with carrier integrity.
 
 /// Controls the packet loss, corruption, duplication, and reordering introduced
 /// by [`simulate_bad_link`]. Probabilities are expressed in basis points.
@@ -14,6 +14,7 @@ pub struct LinkSimulationConfig {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct LinkSimulationStats {
     pub dropped_datagrams: usize,
+    /// Damaged packets rejected by the simulated carrier integrity check.
     pub corrupted_datagrams: usize,
     pub duplicated_datagrams: usize,
 }
@@ -25,6 +26,8 @@ pub struct LinkSimulationOutput {
 }
 
 /// Simulates a bad datagram link in a deterministic, reproducible way.
+/// Corruption is detected by comparing against the original packet, modeling the
+/// external integrity check. Only intact packets reach the FEC decoder.
 pub fn simulate_bad_link(
     datagrams: &[Vec<u8>],
     config: LinkSimulationConfig,
@@ -56,10 +59,16 @@ pub fn simulate_bad_link(
             stats.corrupted_datagrams = stats.corrupted_datagrams.saturating_add(1);
         }
         let duplicate = rng.basis_points() < config.duplicate_basis_points;
+        if duplicate {
+            stats.duplicated_datagrams = stats.duplicated_datagrams.saturating_add(1);
+        }
+        // A carrier rejects damaged packets, including their duplicate copies.
+        if delivered != *datagram {
+            continue;
+        }
         output.push(delivered.clone());
         if duplicate {
             output.push(delivered);
-            stats.duplicated_datagrams = stats.duplicated_datagrams.saturating_add(1);
         }
     }
 
@@ -113,4 +122,23 @@ fn bad_link_simulation_is_reproducible() {
         simulate_bad_link(&datagrams, config),
         simulate_bad_link(&datagrams, config)
     );
+}
+
+#[test]
+fn carrier_integrity_discards_all_corruption_including_duplicates() {
+    let datagrams = (0..20).map(|value| vec![value; 8]).collect::<Vec<_>>();
+    let result = simulate_bad_link(
+        &datagrams,
+        LinkSimulationConfig {
+            seed: 42,
+            corrupt_basis_points: 10_000,
+            duplicate_basis_points: 10_000,
+            reorder: true,
+            ..LinkSimulationConfig::default()
+        },
+    );
+    assert!(result.datagrams.is_empty());
+    assert_eq!(result.stats.corrupted_datagrams, datagrams.len());
+    assert_eq!(result.stats.duplicated_datagrams, datagrams.len());
+    assert_eq!(result.stats.dropped_datagrams, 0);
 }

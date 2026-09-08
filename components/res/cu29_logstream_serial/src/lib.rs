@@ -363,6 +363,41 @@ mod tests {
     }
 
     #[test]
+    fn framing_protects_data_and_feedback_packets_without_inner_checksums() {
+        use cu29_logstream::feedback::{FEEDBACK_BUFFER_BYTES, ReceiverReport};
+        let report = ReceiverReport {
+            session_id: [DELIMITER; 16],
+            receiver_id: [ESCAPE; 16],
+            sequence: 7,
+            elapsed_us: 1,
+            record_capacity: 1,
+            latest_copperlist: Some(42),
+            ..Default::default()
+        };
+        let mut feedback = [0; FEEDBACK_BUFFER_BYTES];
+        let len = report.encode_into(&mut feedback).unwrap();
+        for packet in [packet(), feedback[..len].to_vec()] {
+            let good = encoded(&packet);
+            assert_eq!(received(good.clone()), vec![packet.clone()]);
+            for offset in 0..good.len() {
+                for bit in 0..8 {
+                    let mut damaged = good.clone();
+                    damaged[offset] ^= 1 << bit;
+                    damaged.extend_from_slice(&good);
+                    assert_eq!(received(damaged), vec![packet.clone()], "{offset}:{bit}");
+                }
+            }
+            for end in 0..good.len() - 1 {
+                let mut truncated = good[..end].to_vec();
+                truncated.extend_from_slice(&good);
+                assert_eq!(received(truncated), vec![packet.clone()], "{end}");
+            }
+        }
+        let delivered = received(encoded(&feedback[..len]));
+        assert_eq!(ReceiverReport::decode(&delivered[0]).unwrap(), report);
+    }
+
+    #[test]
     fn checksum_bytes_are_escaped_and_capacity_includes_them() {
         assert_eq!(SerialLogStreamTx::<Uart>::max_packet_bytes(), 252);
         assert_eq!(SerialLogStreamTx::<Uart, 0>::max_packet_bytes(), 0);

@@ -198,7 +198,8 @@ impl FiniteObjectDecoder {
         self.objects.len().saturating_add(self.ready.len())
     }
 
-    /// Accepts one datagram and emits a digest-verified record when its object completes.
+    /// Accepts one carrier-verified datagram and emits a digest-verified record
+    /// when its object completes. Callers must uphold [`crate::CuStreamRx`] integrity.
     pub fn receive_datagram<E>(
         &mut self,
         datagram: &[u8],

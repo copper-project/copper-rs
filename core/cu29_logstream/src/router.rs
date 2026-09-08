@@ -258,6 +258,8 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
         Ok(true)
     }
 
+    /// Accepts one complete packet whose integrity was verified by the carrier.
+    /// Direct callers must uphold the same contract as [`CuStreamRx`].
     pub fn receive_datagram<E>(
         &mut self,
         datagram: &[u8],

@@ -1,4 +1,10 @@
 //! Transport-independent, packet-oriented stream resource contracts.
+//!
+//! Data and feedback use the same transport guarantees: complete packets with
+//! verified integrity. Delivery, ordering, and uniqueness are not guaranteed.
+//! UDP supplies packet integrity through the network stack. Raw serial supplies
+//! neither packet boundaries nor integrity; the framing adapter between LogStream
+//! and serial adds and verifies a checksum and discards damaged frames.
 
 use core::fmt::Debug;
 
@@ -25,6 +31,11 @@ pub enum CuStreamRxError {
 /// Implementations must return immediately without waiting, locking, allocating,
 /// retrying, acknowledging, or accepting a partial packet. `Ok(())` means only
 /// that the resource accepted this packet once; it does not guarantee delivery.
+///
+/// Carriers must protect complete packet boundaries and integrity. Packet hardware
+/// or the network stack may supply the checksum; adapters over byte streams must
+/// add framing, an integrity check, and receive resynchronization. The common
+/// LogStream envelope has no checksum. Carrier overhead is outside the packet MTU.
 pub trait CuStreamTx: Debug + Send + Sync {
     /// Advance an accepted packet with bounded, nonblocking work. Returns true
     /// while bytes remain. Drivers must keep polling until it returns false.
@@ -51,6 +62,14 @@ impl<T: CuStreamTx + ?Sized> CuStreamTx for alloc::boxed::Box<T> {
 /// `Ok(None)` means no complete packet is available. `Ok(Some(len))` places one
 /// complete packet in `packet[..len]`. This is the receive half of the one-way
 /// data plane; it does not acknowledge traffic or imply a reverse channel.
+///
+/// Only deliver complete packets that passed the carrier's integrity check. Drop
+/// corrupt, truncated, or malformed frames before exposing them to FEC; corruption
+/// must become packet loss, which FEC can recover. Never deliver a partial packet.
+/// Byte-stream adapters must verify and strip their framing checksum and
+/// resynchronize after damaged frames. In-memory carriers must preserve bytes.
+/// Record digests bind reconstructed content and recovery references separately;
+/// they do not replace this carrier integrity contract.
 pub trait CuStreamRx: Debug + Send + Sync {
     fn try_recv(
         &mut self,
@@ -72,6 +91,11 @@ impl<T: CuStreamRx + ?Sized> CuStreamRx for alloc::boxed::Box<T> {
 /// physical stream carrier. A shared endpoint must have one receive owner and
 /// route complete packet kinds; cloned competing readers cannot provide routing.
 /// Protocol decoding, capability negotiation, and feedback policy belong above it.
+///
+/// The complete-packet integrity contract of [`CuStreamRx`] applies here too.
+/// Discard damaged or truncated frames in the transport adapter before delivery.
+/// Reports may be lost, duplicated, or reordered; report sequencing belongs to
+/// the feedback controller.
 pub trait CuFeedbackRx: Debug + Send + Sync {
     fn try_recv_feedback(
         &mut self,
@@ -79,7 +103,9 @@ pub trait CuFeedbackRx: Debug + Send + Sync {
     ) -> core::result::Result<Option<usize>, CuStreamRxError>;
 }
 
-/// Optional advisory transmit direction; same atomic, bounded contract as stream TX.
+/// Optional advisory transmit direction; same atomic, bounded, complete-packet
+/// integrity contract as [`CuStreamTx`]. Acceptance guarantees neither delivery
+/// nor ordering. A raw byte stream needs a framing and integrity adapter.
 pub trait CuFeedbackTx: Debug + Send + Sync {
     fn try_send_feedback(&mut self, packet: &[u8]) -> core::result::Result<(), CuStreamTxError>;
 }
