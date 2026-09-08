@@ -14,8 +14,6 @@ use bincode::{Decode, Encode};
 use cu29_runtime::config::{LogStreamDestinationConfig, LogStreamRepairDensity, LogStreamRlcField};
 use cu29_traits::TaskOutputSpec;
 
-pub const SESSION_MANIFEST_VERSION: u16 = 1;
-
 /// Link and codec policy after RON validation and MTU resolution.
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
 pub struct LogStreamPlan {
@@ -84,10 +82,12 @@ impl ApplicationSchema {
     }
 }
 
-/// Versioned control object from which a receiver constructs its decoders.
+/// Control object carrying transport configuration and application schema checks.
+///
+/// No content or protocol version is encoded. Receivers must use the matching
+/// application's decoder; these schema checks do not establish binary compatibility.
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
 pub struct SessionManifest {
-    pub version: u16,
     pub identity: StreamIdentity,
     pub plan: LogStreamPlan,
     pub application_schema: ApplicationSchema,
@@ -100,7 +100,6 @@ impl SessionManifest {
         application_schema: ApplicationSchema,
     ) -> Self {
         Self {
-            version: SESSION_MANIFEST_VERSION,
             identity,
             plan,
             application_schema,
@@ -128,9 +127,6 @@ impl SessionManifest {
         if consumed != record.payload.len() {
             return Err(Error::Codec("session manifest has trailing bytes".into()));
         }
-        if manifest.version != SESSION_MANIFEST_VERSION {
-            return Err(Error::UnsupportedManifestVersion(manifest.version));
-        }
         manifest.plan.validate()?;
         Ok(manifest)
     }
@@ -138,17 +134,15 @@ impl SessionManifest {
 
 impl LogStreamPlan {
     /// Resolves one RON destination into the exact values carried by the manifest.
+    /// Symbol size is bounded by both the link MTU and preallocated sender storage;
+    /// a larger MTU does not increase the runtime's memory footprint.
     pub fn resolve(config: &LogStreamDestinationConfig) -> Result<Self> {
         let symbol_size = config
             .link
             .mtu_bytes
             .checked_sub(PACKET_HEADER_LEN as u16)
-            .ok_or(Error::InvalidConfig("MTU does not fit the packet header"))?;
-        if usize::from(symbol_size) > crate::DEFAULT_MAX_SYMBOL_SIZE {
-            return Err(Error::InvalidConfig(
-                "MTU exceeds the generated sender symbol capacity",
-            ));
-        }
+            .ok_or(Error::InvalidConfig("MTU does not fit the packet header"))?
+            .min(crate::DEFAULT_MAX_SYMBOL_SIZE as u16);
         if usize::from(config.fec.continuous.window_symbols) > crate::DEFAULT_MAX_WINDOW_SYMBOLS {
             return Err(Error::InvalidConfig(
                 "RLC window exceeds the generated sender capacity",
@@ -190,13 +184,11 @@ impl LogStreamPlan {
 
     /// Validates a resolved plan, including plans decoded from an untrusted manifest.
     pub fn validate(&self) -> Result<()> {
-        let expected_mtu = PACKET_HEADER_LEN
+        let packet_bytes = PACKET_HEADER_LEN
             .checked_add(usize::from(self.symbol_size))
             .ok_or(Error::InvalidConfig("resolved MTU overflow"))?;
-        if usize::from(self.mtu_bytes) != expected_mtu {
-            return Err(Error::InvalidConfig(
-                "resolved symbol size does not match the MTU",
-            ));
+        if usize::from(self.mtu_bytes) < packet_bytes {
+            return Err(Error::InvalidConfig("resolved symbol size exceeds the MTU"));
         }
         if usize::from(self.symbol_size) <= crate::rlc::FRAGMENT_HEADER_LEN {
             return Err(Error::InvalidConfig(

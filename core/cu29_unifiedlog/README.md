@@ -11,15 +11,16 @@ the same log container format in another project.
 - `std` (default): enables memory-mapped file logging backend.
 - `compact` (default): favors compact log layout.
 
-## Format compatibility
+## Encapsulation and application content
 
-Unified log format version 2 records CopperLists as `id` followed by `msgs`.
-Their lifecycle `state` is runtime bookkeeping and is omitted from binary,
-Serde, Python, and remote-debug output. A decoded list reconstructs
-`BeingSerialized` internally; this value is not recorded history.
+`UNIFIED_LOG_FORMAT_VERSION` is **1**, unchanged since Copper's original format.
+It versions only the file/section encapsulation and layout. **Never bump it for
+changes to encoded section content**: CopperLists, payloads, keyframes, and codecs
+are decoded by the logreader built for the exact application version that wrote
+them. The encapsulation version cannot establish content compatibility.
 
-Version 1 logs require a reader built against the older layout. Updated readers
-reject incompatible container versions rather than interpreting the state byte
-as message data. Compressed metadata retains its existing byte format: timestamp
-deltas and metadata backreferences use the selective `cu_bincode::Uleb128`
-wrapper, while ordinary integers keep their existing bincode encoding.
+CopperLists record `id` followed by `msgs`. Their lifecycle `state` is runtime
+bookkeeping and is omitted from binary, Serde, Python, and remote-debug output.
+A decoded list reconstructs `BeingSerialized` internally; this is not recorded
+history. Compressed metadata retains its byte format with the selective
+`cu_bincode::Uleb128` wrapper; ordinary integers retain their bincode encoding.

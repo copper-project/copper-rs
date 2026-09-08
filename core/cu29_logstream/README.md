@@ -187,14 +187,34 @@ captures, one recovery point, one executing frame and 64 display frames; payload
 thread/runtime allocations are additional. `with_frame_capacity` changes display retention.
 
 Production sends the native CopperList format with selected payloads omitted.
-Record framing version 2 carries `id` followed by `msgs`, without the runtime-only
-lifecycle state. Updated endpoints reject older record versions; archived unified
-logs use format version 2. The compressed metadata bytes are unchanged by moving
-ULEB128 timestamp-delta and backreference encoding into `cu-bincode` 2.1.
+CopperLists carry `id` followed by `msgs`, without runtime lifecycle state.
+There are no transmitted version fields in packets, records, RLC fragments, or
+session manifests. Always use the receiver/logreader built for the producing
+application version. Archived unified logs retain encapsulation version **1**;
+that version describes file/section layout only, never encoded content.
+The compressed metadata bytes are unchanged by moving ULEB128 timestamp-delta
+and backreference encoding into `cu-bincode` 2.1.
+
+Headers are packed without reserved alignment bytes or a redundant fixed header
+length field. All multi-byte header fields use big endian encoding:
+
+| Layer | Header fields, in wire order | Bytes |
+| --- | --- | ---: |
+| Packet | magic (4), lane (1), record kind (1), FEC scheme (1), symbol kind (1), session ID (16), sender ID (4), packet sequence (8), object ID (8), FEC metadata (12), fragment count (4), payload length (2), CRC32C (4) | 66 |
+| Record | magic (4), kind (1), object ID (8), payload length (8), BLAKE3 digest (32) | 53 |
+| RLC fragment | magic (4), kind (1), object ID (8), record length (4), fragment index (4), fragment count (4), fragment length (2) | 27 |
+
+Compared with the prior headers, this saves 6 bytes per packet, 3 per record,
+and 5 per RLC source fragment, plus one bincode byte per session manifest.
+Fixed-size FEC symbols use the recovered space for fragment payload; this can
+reduce fragment counts rather than shortening each symbol. Existing symbol
+storage capacity is unchanged: a 1200-byte MTU now emits at most 1194-byte packets.
+
 The native codec already carries original/captured presence. There is no proof envelope,
 per-list verification allocation, or new continuity record. The archive writes the
-received native bytes before replay and never stores synthesized outputs. The unreleased
-session manifest stays at **version 1** and binds the reconstruction ABI to the graph.
+received native bytes before replay and never stores synthesized outputs. The
+session manifest binds the reconstruction ABI to the graph; it is not a content
+version or a substitute for the matching application decoder.
 Packet framing, FEC and recovery from a recovery point are unchanged.
 
 Copper restores keyframes, injects captured inputs, executes reconstructible tasks and
