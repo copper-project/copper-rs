@@ -126,10 +126,11 @@ fn generated_runtime_streams_without_local_copperlist_logging() -> CuResult<()> 
     let impaired: Vec<_> = datagrams
         .iter()
         .filter(|datagram| {
-            let header = WirePacket::decode(datagram).unwrap().header;
-            !(header.record_kind == RecordKind::CopperList
-                && header.symbol_kind == FecSymbolKind::Source
-                && header.object_id == 1)
+            let packet = WirePacket::decode(datagram).unwrap();
+            // Object identity is carried inside the protected source fragment.
+            !(packet.header.record_kind == RecordKind::CopperList
+                && packet.header.symbol_kind == FecSymbolKind::Source
+                && u64::from_be_bytes(packet.payload[5..13].try_into().unwrap()) == 1)
         })
         .cloned()
         .collect();

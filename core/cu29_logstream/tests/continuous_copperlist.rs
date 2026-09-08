@@ -17,6 +17,16 @@ const SYMBOL_SIZE: usize = 160;
 const WINDOW_SYMBOLS: usize = 64;
 const MAX_EQUATIONS: usize = 32;
 
+// Loss selection reads identity from the FEC-protected source fragment.
+fn source_object_id(datagram: &[u8]) -> u64 {
+    let packet = cu29_logstream::WirePacketRef::decode(datagram).unwrap();
+    assert_eq!(
+        packet.header.symbol_kind,
+        cu29_logstream::FecSymbolKind::Source
+    );
+    u64::from_be_bytes(packet.payload[5..13].try_into().unwrap())
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ObservedEvent {
     Record(u64),
@@ -225,10 +235,7 @@ fn missing_unrepaired_fragments_do_not_claim_semantic_recovery() {
     let retained = datagrams
         .into_iter()
         .filter(|datagram| {
-            let object_id = cu29_logstream::WirePacket::decode(datagram)
-                .unwrap()
-                .header
-                .object_id;
+            let object_id = source_object_id(datagram);
             if omitted_objects.contains(&object_id) {
                 true
             } else {
@@ -305,8 +312,7 @@ fn receiver_reports_an_incomplete_record_when_its_missing_fragment_expires() {
     }
     let mut omitted_fragment = false;
     datagrams.retain(|datagram| {
-        let packet = cu29_logstream::WirePacket::decode(datagram).unwrap();
-        if packet.header.object_id == 4 && !omitted_fragment {
+        if source_object_id(datagram) == 4 && !omitted_fragment {
             omitted_fragment = true;
             false
         } else {
@@ -466,10 +472,7 @@ fn receiver_coalesces_wholly_missing_records_after_the_rlc_window_expires() {
         encoder.push_record(&record, &mut datagrams).unwrap();
     }
     datagrams.retain(|datagram| {
-        let object_id = cu29_logstream::WirePacket::decode(datagram)
-            .unwrap()
-            .header
-            .object_id;
+        let object_id = source_object_id(datagram);
         !(4..=6).contains(&object_id)
     });
 
