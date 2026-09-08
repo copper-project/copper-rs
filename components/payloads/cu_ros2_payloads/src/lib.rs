@@ -138,20 +138,40 @@ where
 #[cfg(test)]
 mod tests {
     use super::RosMessage;
+    use std::collections::HashMap;
 
-    /// Every [`RosMessage::TYPE_HASH`] must be a well-formed RIHS01 literal, and no two types may
-    /// share one. A wrong or duplicated hash is invisible at runtime: it goes into the rmw_zenoh
-    /// key expression, so the subscriber simply never matches and neither side reports an error.
-    #[test]
-    fn type_hashes_are_well_formed_and_distinct() {
-        fn entry<T: RosMessage>() -> (&'static str, &'static str, &'static str) {
-            (T::NAMESPACE, T::TYPE_NAME, T::TYPE_HASH)
-        }
+    /// The RIHS01 table this repository already ships, harvested from the ROS 2 Jazzy IDL.
+    const ALL_RIHS: &str = include_str!("../all_rihs.md");
 
-        let entries = [
+    /// `all_rihs.md` rows look like `| geometry_msgs/msg/Point | RIHS01_6963... |`.
+    fn published_hashes() -> HashMap<&'static str, &'static str> {
+        ALL_RIHS
+            .lines()
+            .filter_map(|line| {
+                let mut columns = line.split('|').map(str::trim).filter(|c| !c.is_empty());
+                let type_name = columns.next()?;
+                let hash = columns.next()?;
+                hash.starts_with("RIHS01_").then_some((type_name, hash))
+            })
+            .collect()
+    }
+
+    fn entry<T: RosMessage>() -> (&'static str, &'static str, &'static str) {
+        (T::NAMESPACE, T::TYPE_NAME, T::TYPE_HASH)
+    }
+
+    fn all_entries() -> Vec<(&'static str, &'static str, &'static str)> {
+        vec![
+            entry::<crate::geometry_msgs::Point>(),
+            entry::<crate::geometry_msgs::Pose>(),
             entry::<crate::geometry_msgs::PoseStamped>(),
+            entry::<crate::geometry_msgs::PoseWithCovariance>(),
+            entry::<crate::geometry_msgs::Quaternion>(),
+            entry::<crate::geometry_msgs::Transform>(),
             entry::<crate::geometry_msgs::TransformStamped>(),
             entry::<crate::geometry_msgs::Twist>(),
+            entry::<crate::geometry_msgs::TwistWithCovariance>(),
+            entry::<crate::geometry_msgs::Vector3>(),
             entry::<crate::nav_msgs::Odometry>(),
             entry::<crate::nav_msgs::Path>(),
             entry::<crate::sensor_msgs::CameraInfo>(),
@@ -161,10 +181,41 @@ mod tests {
             entry::<crate::sensor_msgs::MagneticField>(),
             entry::<crate::sensor_msgs::PointCloud2>(),
             entry::<crate::sensor_msgs::PointField>(),
-        ];
+            entry::<crate::sensor_msgs::RegionOfInterest>(),
+        ]
+    }
 
-        for (namespace, type_name, hash) in entries {
-            assert!(!namespace.is_empty(), "{type_name} has no namespace");
+    /// Every `TYPE_HASH` must equal the row `all_rihs.md` publishes for that type.
+    ///
+    /// Before this, the hashes were literals that nothing checked. A wrong one is invisible at
+    /// runtime — it goes into the rmw_zenoh key expression, so the publisher and its subscribers
+    /// simply sit on different keys and the topic is always empty, with no error on either side.
+    #[test]
+    fn type_hashes_match_the_published_rihs_table() {
+        let published = published_hashes();
+        assert!(
+            published.len() > 400,
+            "all_rihs.md parsed as only {} rows; the table format changed",
+            published.len()
+        );
+
+        for (namespace, type_name, hash) in all_entries() {
+            let key = format!("{namespace}/msg/{type_name}");
+            let expected = published
+                .get(key.as_str())
+                .unwrap_or_else(|| panic!("{key} is not listed in all_rihs.md"));
+            assert_eq!(
+                &hash, expected,
+                "{key} carries a type hash that disagrees with all_rihs.md"
+            );
+        }
+    }
+
+    #[test]
+    fn type_hashes_are_well_formed_and_distinct() {
+        let entries = all_entries();
+
+        for (namespace, type_name, hash) in &entries {
             let digest = hash
                 .strip_prefix("RIHS01_")
                 .unwrap_or_else(|| panic!("{namespace}/{type_name} hash lacks the RIHS01 prefix"));

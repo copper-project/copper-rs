@@ -150,6 +150,13 @@ impl RosMessage for CameraInfo {
         "RIHS01_b3dfd68ff46c9d56c80fd3bd4ed22c7a4ddce8c8348f2f59c299e73118e7e275";
 }
 
+impl RosMessage for RegionOfInterest {
+    const NAMESPACE: &'static str = "sensor_msgs";
+    const TYPE_NAME: &'static str = "RegionOfInterest";
+    const TYPE_HASH: &'static str =
+        "RIHS01_ad16bcba5f9131dcdba6fbded19f726f5440e3c513b4fb586dd3027eeed8abb1";
+}
+
 // The hashes the existing adapters already publish, kept next to the types they identify.
 impl RosMessage for PointField {
     const NAMESPACE: &'static str = "sensor_msgs";
