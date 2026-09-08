@@ -326,13 +326,7 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize>
             let esi = self.fec.push_source(active_symbol)?;
             let mut fec_metadata = [0_u8; 12];
             fec_metadata[..4].copy_from_slice(&SourcePayloadId::new(esi).to_bytes());
-            let header = self.packet_header(
-                decoded.kind,
-                decoded.object_id,
-                fragment_count,
-                FecSymbolKind::Source,
-                fec_metadata,
-            );
+            let header = self.packet_header(FecSymbolKind::Source, fec_metadata);
             self.emit_packet_with(header, active_symbol, datagram, emit)?;
             if let Some(schedule) = repair_schedule.as_mut() {
                 schedule.source_symbols_since_repair =
@@ -377,35 +371,22 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize>
         let id = self.fec.encode_repair(parameters, active_symbol)?;
         let mut fec_metadata = [0_u8; 12];
         fec_metadata[..8].copy_from_slice(&id.to_bytes());
-        let header = self.packet_header(
-            RecordKind::CopperList,
-            0,
-            0,
-            FecSymbolKind::Repair,
-            fec_metadata,
-        );
+        let header = self.packet_header(FecSymbolKind::Repair, fec_metadata);
         self.emit_packet_with(header, active_symbol, datagram, &mut emit)?;
         Ok(id)
     }
 
-    fn packet_header(
-        &self,
-        record_kind: RecordKind,
-        object_id: u64,
-        fragment_count: u32,
-        symbol_kind: FecSymbolKind,
-        fec_metadata: [u8; 12],
-    ) -> WireHeader {
+    fn packet_header(&self, symbol_kind: FecSymbolKind, fec_metadata: [u8; 12]) -> WireHeader {
         WireHeader {
             lane: self.lane,
-            record_kind,
+            record_kind: RecordKind::CopperList,
             fec_scheme: fec_scheme(self.config().field()),
             symbol_kind,
             session_id: self.identity.session_id,
             sender_id: self.identity.sender_id,
-            object_id,
+            object_id: 0,
             fec_metadata,
-            fragment_count,
+            fragment_count: 0,
         }
     }
 
@@ -620,26 +601,9 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
     }
 
     fn receive_source_packet(&mut self, packet: &WirePacketRef<'_>) -> Result<bool> {
-        if packet.header.fec_metadata[4..]
-            .iter()
-            .any(|byte| *byte != 0)
-        {
-            self.stats.invalid_datagrams = self.stats.invalid_datagrams.saturating_add(1);
-            return Ok(false);
-        }
         let id = SourcePayloadId::from_bytes(packet.header.fec_metadata[..4].try_into().unwrap());
-        let fragment = match decode_fragment(packet.payload, fragment_capacity(self.fec.config())?)
-        {
-            Ok(fragment) => fragment,
-            Err(_) => {
-                self.stats.invalid_datagrams = self.stats.invalid_datagrams.saturating_add(1);
-                return Ok(false);
-            }
-        };
-        if packet.header.object_id != fragment.object_id
-            || packet.header.fragment_count as usize != fragment.fragment_count
-        {
-            self.stats.inconsistent_datagrams = self.stats.inconsistent_datagrams.saturating_add(1);
+        if decode_fragment(packet.payload, fragment_capacity(self.fec.config())?).is_err() {
+            self.stats.invalid_datagrams = self.stats.invalid_datagrams.saturating_add(1);
             return Ok(false);
         }
         let report = match self.fec.receive_source(id.esi(), packet.payload) {
@@ -663,15 +627,6 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
     }
 
     fn receive_repair_packet(&mut self, packet: &WirePacketRef<'_>) -> Result<bool> {
-        if packet.header.object_id != 0
-            || packet.header.fragment_count != 0
-            || packet.header.fec_metadata[8..]
-                .iter()
-                .any(|byte| *byte != 0)
-        {
-            self.stats.invalid_datagrams = self.stats.invalid_datagrams.saturating_add(1);
-            return Ok(false);
-        }
         let raw_id: [u8; 8] = packet.header.fec_metadata[..8].try_into().unwrap();
         let id = RepairPayloadId::from_bytes(raw_id)?;
         let report = match self.fec.receive_repair(id, packet.payload) {

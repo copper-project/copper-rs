@@ -3,7 +3,7 @@ use crate::{Impairment, Result, prepare_log};
 use cu_logstream_demo::telemetry::Status;
 use cu_logstream_demo::twin::Twin;
 use cu29_logstream::{
-    CuStreamRx, CuStreamRxError, CuTwin, CuTwinReader, FecSymbolKind, RecordKind, WirePacket,
+    CuStreamRx, CuStreamRxError, CuTwin, CuTwinReader, FecSymbolKind, RecordKind, WirePacketRef,
 };
 use cu29_logstream_udp::CuUdpLogStreamConfig;
 use std::net::SocketAddr;
@@ -80,21 +80,28 @@ impl<R: CuStreamRx> CuStreamRx for ImpairedRx<R> {
         );
         self.stats.seen_packet.store(true, Ordering::Release);
         let first = *self.first_packet.get_or_insert(now);
-        let wire = WirePacket::decode(&packet[..len])
+        let wire = WirePacketRef::decode(&packet[..len])
             .map_err(|_| CuStreamRxError::Failed("Invalid demo packet"))?;
         let header = wire.header;
-        if header.record_kind == RecordKind::CopperList
+        // RLC object identity lives inside the protected source fragment.
+        // Repairs span a window and cannot identify a single CopperList.
+        let source_id = if header.record_kind == RecordKind::CopperList
             && header.symbol_kind == FecSymbolKind::Source
         {
-            self.in_outage = (32..160).contains(&header.object_id);
+            let id = wire
+                .payload
+                .get(5..13)
+                .ok_or(CuStreamRxError::Failed("Truncated demo source fragment"))?;
+            Some(u64::from_be_bytes(id.try_into().unwrap()))
+        } else {
+            None
+        };
+        if let Some(id) = source_id {
+            self.in_outage = (32..160).contains(&id);
         }
         let discard = match self.impairment {
             Impairment::Clean => false,
-            Impairment::Loss => {
-                header.record_kind == RecordKind::CopperList
-                    && header.symbol_kind == FecSymbolKind::Source
-                    && header.object_id == 20
-            }
+            Impairment::Loss => source_id == Some(20),
             Impairment::Outage => self.in_outage,
             Impairment::Bootstrap => now.duration_since(first) < Duration::from_millis(300),
         };

@@ -280,10 +280,11 @@ fn recovery_never_overtakes_older_queued_source_records() {
         .unwrap();
     for id in 0..32 {
         assert!(tx.packets[..recovery_point].iter().any(|(_, p)| {
-            let h = WirePacket::decode(p).unwrap().header;
-            h.record_kind == RecordKind::CopperList
-                && h.symbol_kind == FecSymbolKind::Source
-                && h.object_id == id
+            let packet = WirePacket::decode(p).unwrap();
+            packet.header.record_kind == RecordKind::CopperList
+                && packet.header.symbol_kind == FecSymbolKind::Source
+                // Select the source identity from its protected fragment.
+                && u64::from_be_bytes(packet.payload[5..13].try_into().unwrap()) == id
         }));
     }
     assert_eq!(core.stats().expired_packets, 0);
