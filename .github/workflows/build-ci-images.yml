@@ -9,7 +9,6 @@ on:
       - "support/docker/**"
       - ".github/workflows/build-ci-images.yml"
   pull_request:
-    branches: ["master"]
     paths:
       - "support/docker/**"
       - ".github/workflows/build-ci-images.yml"
