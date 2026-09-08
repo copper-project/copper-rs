@@ -96,15 +96,20 @@ type RadioLogTx = cu29_logstream_serial::SerialLogStreamTx<Radio>;
 
 Use `transport: (type: "RadioLogTx", resource: "telemetry.tx")` in an existing
 `log_streaming.destinations` entry. Enable the application's `cu29/logstream`
-feature. The default serial adapter supports packets up to 256 bytes, so use
-`link.mtu_bytes: 256` or less. Start conservatively at `bitrate_bps: 3000` with
-`burst_packets: 1` for 9600-baud UARTs, allowing for serial framing and 8N1 overhead;
+feature. The default serial adapter supports packets up to 252 bytes, so use
+`link.mtu_bytes: 252` or less. Start conservatively at `bitrate_bps: 3000` with
+`burst_packets: 1` for 9600-baud UARTs, allowing for the framing CRC32C, escaping, and 8N1 overhead;
 measure the actual radio link before increasing the rate. This is a low-bandwidth
 telemetry link, so select logged messages and bound record sizes accordingly.
 
 At the receiver, use `SerialLogStreamRxResources<Radio>` and consume
 `telemetry.rx` as `SerialLogStreamRx<Radio>`. Its packets feed the existing
-LogStream receiver/session router. Assign one radio to the TX provider and the
+LogStream receiver/session router. The framing adapter verifies and strips its
+four-byte CRC32C before delivery to FEC, discards damaged frames, and
+resynchronizes at the next delimiter. Both peers must use this framing; an older
+adapter that relies on the common LogStream packet CRC is incompatible.
+The HC-12 transparent byte stream uses this serial integrity check even if the
+radio hardware also checks its own packets. Assign one radio to the TX provider and the
 peer radio to the RX provider for one-way telemetry. See
 [serial framing](../cu29_logstream_serial/README.md).
 
