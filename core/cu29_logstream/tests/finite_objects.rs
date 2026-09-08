@@ -206,7 +206,7 @@ fn a_late_receiver_restarts_the_continuous_stream_at_the_recovery_point() {
         let packet = WirePacket::decode(datagram).unwrap();
         packet.header.symbol_kind == cu29_logstream::FecSymbolKind::Repair
             // Source identity lives in the protected fragment, not the packet header.
-            || u64::from_be_bytes(packet.payload[5..13].try_into().unwrap()) >= RECOVERY_POINT_ID
+            || u64::from_be_bytes(packet.payload[4..12].try_into().unwrap()) >= RECOVERY_POINT_ID
     });
 
     let manifest = encode_record(RecordKind::Manifest, 1, b"late-join-manifest").unwrap();

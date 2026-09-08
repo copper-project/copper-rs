@@ -284,7 +284,7 @@ fn recovery_never_overtakes_older_queued_source_records() {
             packet.header.record_kind == RecordKind::CopperList
                 && packet.header.symbol_kind == FecSymbolKind::Source
                 // Select the source identity from its protected fragment.
-                && u64::from_be_bytes(packet.payload[5..13].try_into().unwrap()) == id
+                && u64::from_be_bytes(packet.payload[4..12].try_into().unwrap()) == id
         }));
     }
     assert_eq!(core.stats().expired_packets, 0);
