@@ -1,7 +1,7 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29_logstream/src/worker.rs`."><title>worker.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-1ed95124.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_logstream" data-themes="" data-resource-suffix="" data-rustdoc-version="1.98.0-nightly (f28ac764c 2026-06-23)" data-channel="nightly" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-417ebf0a.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">cu29_logstream/</div>worker.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Host driver for the autonomous sender. Only semantic output workers call these sinks.
 <a href=#2 id=2 data-nosnippet>2</a>
 <a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span><span class="kw">crate</span>::feedback::{
-<a href=#4 id=4 data-nosnippet>4</a>    FEEDBACK_BUFFER_BYTES, FeedbackController, FeedbackSnapshot, ReceiverReport, destination_key,
+<a href=#4 id=4 data-nosnippet>4</a>    FEEDBACK_BUFFER_BYTES, FeedbackController, FeedbackSnapshot, ReceiverReport,
 <a href=#5 id=5 data-nosnippet>5</a>};
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">use crate</span>::{
 <a href=#7 id=7 data-nosnippet>7</a>    CuFeedbackRx, CuStreamRxError, CuStreamTx, LogStreamSenderConfig, OneWay, SenderCore,
@@ -274,280 +274,285 @@
 <a href=#274 id=274 data-nosnippet>274</a>    T: CuStreamTx + CuFeedbackRx + <span class="lifetime">'static</span>,
 <a href=#275 id=275 data-nosnippet>275</a>{
 <a href=#276 id=276 data-nosnippet>276</a>    <span class="kw">let </span>manifest = <span class="kw">crate</span>::SessionManifest::decode_record(<span class="kw-2">&amp;</span>config.recovery.manifest_record);
-<a href=#277 id=277 data-nosnippet>277</a>    <span class="kw">let </span>policy = manifest
-<a href=#278 id=278 data-nosnippet>278</a>        .as_ref()
-<a href=#279 id=279 data-nosnippet>279</a>        .ok()
-<a href=#280 id=280 data-nosnippet>280</a>        .and_then(|manifest| manifest.plan.feedback);
-<a href=#281 id=281 data-nosnippet>281</a>    <span class="kw">if </span>policy.is_some() != feedback_enabled {
-<a href=#282 id=282 data-nosnippet>282</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(
-<a href=#283 id=283 data-nosnippet>283</a>            <span class="string">"Feedback transport wiring must match manifest capability"</span>,
-<a href=#284 id=284 data-nosnippet>284</a>        ));
-<a href=#285 id=285 data-nosnippet>285</a>    }
-<a href=#286 id=286 data-nosnippet>286</a>    <span class="kw">if </span>policy.is_some() {
-<a href=#287 id=287 data-nosnippet>287</a>        <span class="kw">let </span>manifest = manifest.as_ref().expect(<span class="string">"validated feedback manifest"</span>);
-<a href=#288 id=288 data-nosnippet>288</a>        <span class="kw">if </span>manifest.identity != config.continuous.identity
-<a href=#289 id=289 data-nosnippet>289</a>            || usize::from(manifest.plan.continuous.repair_every_source_symbols)
-<a href=#290 id=290 data-nosnippet>290</a>                != config.continuous.repair_every_source_symbols
-<a href=#291 id=291 data-nosnippet>291</a>        {
-<a href=#292 id=292 data-nosnippet>292</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(
-<a href=#293 id=293 data-nosnippet>293</a>                <span class="string">"Feedback manifest identity and baseline must match the sender"</span>,
-<a href=#294 id=294 data-nosnippet>294</a>            ));
-<a href=#295 id=295 data-nosnippet>295</a>        }
-<a href=#296 id=296 data-nosnippet>296</a>    }
-<a href=#297 id=297 data-nosnippet>297</a>    <span class="kw">let </span><span class="kw-2">mut </span>feedback = policy
-<a href=#298 id=298 data-nosnippet>298</a>        .map(|policy| {
-<a href=#299 id=299 data-nosnippet>299</a>            <span class="kw">let </span>manifest = manifest.as_ref().expect(<span class="string">"validated feedback manifest"</span>);
-<a href=#300 id=300 data-nosnippet>300</a>            FeedbackController::new(
-<a href=#301 id=301 data-nosnippet>301</a>                policy,
-<a href=#302 id=302 data-nosnippet>302</a>                config.continuous.identity,
-<a href=#303 id=303 data-nosnippet>303</a>                destination_key(<span class="kw-2">&amp;</span>manifest.plan.destination_id),
-<a href=#304 id=304 data-nosnippet>304</a>                config.continuous.repair_every_source_symbols <span class="kw">as </span>u16,
-<a href=#305 id=305 data-nosnippet>305</a>            )
-<a href=#306 id=306 data-nosnippet>306</a>        })
-<a href=#307 id=307 data-nosnippet>307</a>        .transpose()
-<a href=#308 id=308 data-nosnippet>308</a>        .map_err(|error| CuError::from(error.to_string()))<span class="question-mark">?</span>;
-<a href=#309 id=309 data-nosnippet>309</a>    <span class="kw">let </span>cl_bytes = config.continuous.max_record_bytes;
-<a href=#310 id=310 data-nosnippet>310</a>    <span class="kw">let </span>kf_bytes = usize::try_from(config.recovery.finite.max_object_bytes)
-<a href=#311 id=311 data-nosnippet>311</a>        .map_err(|<span class="kw">_</span>| CuError::from(<span class="string">"Keyframe limit exceeds usize"</span>))<span class="question-mark">?</span>;
-<a href=#312 id=312 data-nosnippet>312</a>    <span class="kw">let </span>reserved = cl_bytes
-<a href=#313 id=313 data-nosnippet>313</a>        .checked_mul(CL_BUFFERS)
-<a href=#314 id=314 data-nosnippet>314</a>        .and_then(|v| {
-<a href=#315 id=315 data-nosnippet>315</a>            kf_bytes
-<a href=#316 id=316 data-nosnippet>316</a>                .checked_mul(KF_BUFFERS)
-<a href=#317 id=317 data-nosnippet>317</a>                .and_then(|k| v.checked_add(k))
-<a href=#318 id=318 data-nosnippet>318</a>        })
-<a href=#319 id=319 data-nosnippet>319</a>        .ok_or_else(|| CuError::from(<span class="string">"Sender pool size overflow"</span>))<span class="question-mark">?</span>;
-<a href=#320 id=320 data-nosnippet>320</a>    <span class="kw">let </span>shutdown_clock = <span class="kw">if </span>clock.is_mock() {
-<a href=#321 id=321 data-nosnippet>321</a>        RobotClock::new()
-<a href=#322 id=322 data-nosnippet>322</a>    } <span class="kw">else </span>{
-<a href=#323 id=323 data-nosnippet>323</a>        clock.clone()
-<a href=#324 id=324 data-nosnippet>324</a>    };
-<a href=#325 id=325 data-nosnippet>325</a>    <span class="kw">let </span>interval = config.recovery.recovery_interval;
-<a href=#326 id=326 data-nosnippet>326</a>    <span class="kw">let </span>drain_time = config.pacing.max_latency;
-<a href=#327 id=327 data-nosnippet>327</a>    <span class="kw">let </span><span class="kw-2">mut </span>core = SenderCore::new(config, clock.now(), reserved)
-<a href=#328 id=328 data-nosnippet>328</a>        .map_err(|error| CuError::from(error.to_string()))<span class="question-mark">?</span>;
-<a href=#329 id=329 data-nosnippet>329</a>    <span class="kw">let </span>(pending, records) = mpsc::sync_channel::&lt;Record&gt;(CL_BUFFERS + KF_BUFFERS);
-<a href=#330 id=330 data-nosnippet>330</a>    <span class="kw">let </span>(cl_return, cl_free) = mpsc::sync_channel(CL_BUFFERS);
-<a href=#331 id=331 data-nosnippet>331</a>    <span class="kw">let </span>(kf_return, kf_free) = mpsc::sync_channel(KF_BUFFERS);
-<a href=#332 id=332 data-nosnippet>332</a>    <span class="kw">for _ in </span><span class="number">0</span>..CL_BUFFERS {
-<a href=#333 id=333 data-nosnippet>333</a>        cl_return
-<a href=#334 id=334 data-nosnippet>334</a>            .try_send(<span class="macro">vec!</span>[<span class="number">0</span>; cl_bytes].into_boxed_slice())
-<a href=#335 id=335 data-nosnippet>335</a>            .expect(<span class="string">"new pool"</span>);
-<a href=#336 id=336 data-nosnippet>336</a>    }
-<a href=#337 id=337 data-nosnippet>337</a>    <span class="kw">for _ in </span><span class="number">0</span>..KF_BUFFERS {
-<a href=#338 id=338 data-nosnippet>338</a>        kf_return
-<a href=#339 id=339 data-nosnippet>339</a>            .try_send(<span class="macro">vec!</span>[<span class="number">0</span>; kf_bytes].into_boxed_slice())
+<a href=#277 id=277 data-nosnippet>277</a>    <span class="kw">let </span>policy = config.feedback;
+<a href=#278 id=278 data-nosnippet>278</a>    <span class="kw">let </span>advertised = manifest
+<a href=#279 id=279 data-nosnippet>279</a>        .as_ref()
+<a href=#280 id=280 data-nosnippet>280</a>        .ok()
+<a href=#281 id=281 data-nosnippet>281</a>        .and_then(|manifest| manifest.requirements.feedback);
+<a href=#282 id=282 data-nosnippet>282</a>    <span class="kw">if </span>policy.is_some() != feedback_enabled || advertised.is_some() != feedback_enabled {
+<a href=#283 id=283 data-nosnippet>283</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(
+<a href=#284 id=284 data-nosnippet>284</a>            <span class="string">"Feedback transport wiring must match manifest capability"</span>,
+<a href=#285 id=285 data-nosnippet>285</a>        ));
+<a href=#286 id=286 data-nosnippet>286</a>    }
+<a href=#287 id=287 data-nosnippet>287</a>    <span class="kw">if let </span>(<span class="prelude-val">Some</span>(policy), <span class="prelude-val">Some</span>(advertised)) = (policy, advertised)
+<a href=#288 id=288 data-nosnippet>288</a>        &amp;&amp; (manifest
+<a href=#289 id=289 data-nosnippet>289</a>            .as_ref()
+<a href=#290 id=290 data-nosnippet>290</a>            .expect(<span class="string">"validated feedback manifest"</span>)
+<a href=#291 id=291 data-nosnippet>291</a>            .identity
+<a href=#292 id=292 data-nosnippet>292</a>            != config.continuous.identity
+<a href=#293 id=293 data-nosnippet>293</a>            || advertised.report_interval_ms != policy.report_interval_ms)
+<a href=#294 id=294 data-nosnippet>294</a>    {
+<a href=#295 id=295 data-nosnippet>295</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(
+<a href=#296 id=296 data-nosnippet>296</a>            <span class="string">"Feedback manifest identity and cadence must match the sender"</span>,
+<a href=#297 id=297 data-nosnippet>297</a>        ));
+<a href=#298 id=298 data-nosnippet>298</a>    }
+<a href=#299 id=299 data-nosnippet>299</a>    <span class="kw">let </span><span class="kw-2">mut </span>feedback = policy
+<a href=#300 id=300 data-nosnippet>300</a>        .map(|policy| {
+<a href=#301 id=301 data-nosnippet>301</a>            <span class="kw">let </span>baseline = u16::try_from(config.continuous.repair_every_source_symbols)
+<a href=#302 id=302 data-nosnippet>302</a>                .map_err(|<span class="kw">_</span>| <span class="kw">crate</span>::Error::InvalidConfig(<span class="string">"feedback baseline exceeds u16"</span>))<span class="question-mark">?</span>;
+<a href=#303 id=303 data-nosnippet>303</a>            FeedbackController::new(
+<a href=#304 id=304 data-nosnippet>304</a>                policy,
+<a href=#305 id=305 data-nosnippet>305</a>                config.continuous.identity,
+<a href=#306 id=306 data-nosnippet>306</a>                advertised
+<a href=#307 id=307 data-nosnippet>307</a>                    .expect(<span class="string">"validated feedback capability"</span>)
+<a href=#308 id=308 data-nosnippet>308</a>                    .destination,
+<a href=#309 id=309 data-nosnippet>309</a>                baseline,
+<a href=#310 id=310 data-nosnippet>310</a>            )
+<a href=#311 id=311 data-nosnippet>311</a>        })
+<a href=#312 id=312 data-nosnippet>312</a>        .transpose()
+<a href=#313 id=313 data-nosnippet>313</a>        .map_err(|error| CuError::from(error.to_string()))<span class="question-mark">?</span>;
+<a href=#314 id=314 data-nosnippet>314</a>    <span class="kw">let </span>cl_bytes = config.continuous.max_record_bytes;
+<a href=#315 id=315 data-nosnippet>315</a>    <span class="kw">let </span>kf_bytes = usize::try_from(config.recovery.finite.max_object_bytes)
+<a href=#316 id=316 data-nosnippet>316</a>        .map_err(|<span class="kw">_</span>| CuError::from(<span class="string">"Keyframe limit exceeds usize"</span>))<span class="question-mark">?</span>;
+<a href=#317 id=317 data-nosnippet>317</a>    <span class="kw">let </span>reserved = cl_bytes
+<a href=#318 id=318 data-nosnippet>318</a>        .checked_mul(CL_BUFFERS)
+<a href=#319 id=319 data-nosnippet>319</a>        .and_then(|v| {
+<a href=#320 id=320 data-nosnippet>320</a>            kf_bytes
+<a href=#321 id=321 data-nosnippet>321</a>                .checked_mul(KF_BUFFERS)
+<a href=#322 id=322 data-nosnippet>322</a>                .and_then(|k| v.checked_add(k))
+<a href=#323 id=323 data-nosnippet>323</a>        })
+<a href=#324 id=324 data-nosnippet>324</a>        .ok_or_else(|| CuError::from(<span class="string">"Sender pool size overflow"</span>))<span class="question-mark">?</span>;
+<a href=#325 id=325 data-nosnippet>325</a>    <span class="kw">let </span>shutdown_clock = <span class="kw">if </span>clock.is_mock() {
+<a href=#326 id=326 data-nosnippet>326</a>        RobotClock::new()
+<a href=#327 id=327 data-nosnippet>327</a>    } <span class="kw">else </span>{
+<a href=#328 id=328 data-nosnippet>328</a>        clock.clone()
+<a href=#329 id=329 data-nosnippet>329</a>    };
+<a href=#330 id=330 data-nosnippet>330</a>    <span class="kw">let </span>interval = config.recovery.recovery_interval;
+<a href=#331 id=331 data-nosnippet>331</a>    <span class="kw">let </span>drain_time = config.pacing.max_latency;
+<a href=#332 id=332 data-nosnippet>332</a>    <span class="kw">let </span><span class="kw-2">mut </span>core = SenderCore::new(config, clock.now(), reserved)
+<a href=#333 id=333 data-nosnippet>333</a>        .map_err(|error| CuError::from(error.to_string()))<span class="question-mark">?</span>;
+<a href=#334 id=334 data-nosnippet>334</a>    <span class="kw">let </span>(pending, records) = mpsc::sync_channel::&lt;Record&gt;(CL_BUFFERS + KF_BUFFERS);
+<a href=#335 id=335 data-nosnippet>335</a>    <span class="kw">let </span>(cl_return, cl_free) = mpsc::sync_channel(CL_BUFFERS);
+<a href=#336 id=336 data-nosnippet>336</a>    <span class="kw">let </span>(kf_return, kf_free) = mpsc::sync_channel(KF_BUFFERS);
+<a href=#337 id=337 data-nosnippet>337</a>    <span class="kw">for _ in </span><span class="number">0</span>..CL_BUFFERS {
+<a href=#338 id=338 data-nosnippet>338</a>        cl_return
+<a href=#339 id=339 data-nosnippet>339</a>            .try_send(<span class="macro">vec!</span>[<span class="number">0</span>; cl_bytes].into_boxed_slice())
 <a href=#340 id=340 data-nosnippet>340</a>            .expect(<span class="string">"new pool"</span>);
 <a href=#341 id=341 data-nosnippet>341</a>    }
-<a href=#342 id=342 data-nosnippet>342</a>    <span class="kw">let </span>cl_clock = clock.clone();
-<a href=#343 id=343 data-nosnippet>343</a>    <span class="kw">let </span>kf_clock = clock.clone();
-<a href=#344 id=344 data-nosnippet>344</a>    <span class="kw">let </span>shared = Arc::new(Shared::default());
-<a href=#345 id=345 data-nosnippet>345</a>    <span class="kw-2">*</span>shared.snapshot.lock().expect(<span class="string">"new snapshot"</span>) = SenderSnapshot {
-<a href=#346 id=346 data-nosnippet>346</a>        sampled_at: clock.now(),
-<a href=#347 id=347 data-nosnippet>347</a>        feedback: feedback.as_ref().map(FeedbackController::snapshot),
-<a href=#348 id=348 data-nosnippet>348</a>        ..Default::default()
-<a href=#349 id=349 data-nosnippet>349</a>    };
-<a href=#350 id=350 data-nosnippet>350</a>    <span class="kw">let </span>status = shared.clone();
-<a href=#351 id=351 data-nosnippet>351</a>    <span class="kw">let </span>cl_recycled = cl_return.clone();
-<a href=#352 id=352 data-nosnippet>352</a>    <span class="kw">let </span>kf_recycled = kf_return.clone();
-<a href=#353 id=353 data-nosnippet>353</a>    <span class="kw">let </span>handle = std::thread::Builder::new()
-<a href=#354 id=354 data-nosnippet>354</a>        .name(<span class="string">"cu-logstream"</span>.into())
-<a href=#355 id=355 data-nosnippet>355</a>        .spawn(<span class="kw">move </span>|| {
-<a href=#356 id=356 data-nosnippet>356</a>            <span class="kw">let </span><span class="kw-2">mut </span>transport = transport;
-<a href=#357 id=357 data-nosnippet>357</a>            <span class="kw">let </span><span class="kw-2">mut </span>feedback_packet = [<span class="number">0</span>; FEEDBACK_BUFFER_BYTES];
-<a href=#358 id=358 data-nosnippet>358</a>            <span class="kw">let </span><span class="kw-2">mut </span>feedback_failed = <span class="bool-val">false</span>;
-<a href=#359 id=359 data-nosnippet>359</a>            <span class="kw">let </span><span class="kw-2">mut </span>next_snapshot = clock.now();
-<a href=#360 id=360 data-nosnippet>360</a>            <span class="kw">let </span><span class="kw-2">mut </span>stop_at = <span class="prelude-val">None</span>;
-<a href=#361 id=361 data-nosnippet>361</a>            <span class="comment">// Teardown remains finite even for deliberately frozen scheduler test clocks.
-<a href=#362 id=362 data-nosnippet>362</a>            </span><span class="kw">let </span>result = (|| -&gt; <span class="kw">crate</span>::Result&lt;()&gt; {
-<a href=#363 id=363 data-nosnippet>363</a>                <span class="kw">loop </span>{
-<a href=#364 id=364 data-nosnippet>364</a>                    <span class="kw">if </span>status.stop.load(Ordering::Acquire) &amp;&amp; stop_at.is_none() {
-<a href=#365 id=365 data-nosnippet>365</a>                        core.begin_shutdown();
-<a href=#366 id=366 data-nosnippet>366</a>                        stop_at = <span class="prelude-val">Some</span>(shutdown_clock.now() + drain_time);
-<a href=#367 id=367 data-nosnippet>367</a>                    }
-<a href=#368 id=368 data-nosnippet>368</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(controller) = <span class="kw-2">&amp;mut </span>feedback {
-<a href=#369 id=369 data-nosnippet>369</a>                        <span class="kw">for _ in </span><span class="number">0</span>..<span class="number">8 </span>{
-<a href=#370 id=370 data-nosnippet>370</a>                            <span class="kw">if </span>feedback_failed { <span class="kw">break</span>; }
-<a href=#371 id=371 data-nosnippet>371</a>                            <span class="kw">match </span>transport.try_recv_feedback(<span class="kw-2">&amp;mut </span>feedback_packet) {
-<a href=#372 id=372 data-nosnippet>372</a>                                <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(len)) =&gt; <span class="kw">match </span>feedback_packet.get(..len).and_then(|p| ReceiverReport::decode(p).ok()) {
-<a href=#373 id=373 data-nosnippet>373</a>                                    <span class="prelude-val">Some</span>(report) =&gt; { <span class="kw">if </span>controller.receive(report, clock.now()) { core.request_recovery(); } }
-<a href=#374 id=374 data-nosnippet>374</a>                                    <span class="prelude-val">None </span>=&gt; controller.invalid_report(),
-<a href=#375 id=375 data-nosnippet>375</a>                                },
-<a href=#376 id=376 data-nosnippet>376</a>                                <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>) =&gt; <span class="kw">break</span>,
-<a href=#377 id=377 data-nosnippet>377</a>                                <span class="prelude-val">Err</span>(CuStreamRxError::BufferTooSmall { .. }) =&gt; controller.invalid_report(),
-<a href=#378 id=378 data-nosnippet>378</a>                                <span class="prelude-val">Err</span>(CuStreamRxError::Failed(<span class="kw">_</span>)) =&gt; { feedback_failed = <span class="bool-val">true</span>; }
-<a href=#379 id=379 data-nosnippet>379</a>                            }
-<a href=#380 id=380 data-nosnippet>380</a>                        }
-<a href=#381 id=381 data-nosnippet>381</a>                        controller.tick(clock.now());
-<a href=#382 id=382 data-nosnippet>382</a>                        core.set_repair_interval(controller.snapshot().effective_repair_every_source_symbols)<span class="question-mark">?</span>;
-<a href=#383 id=383 data-nosnippet>383</a>                    }
-<a href=#384 id=384 data-nosnippet>384</a>                    <span class="kw">let </span><span class="kw-2">mut </span>received = <span class="number">0</span>;
-<a href=#385 id=385 data-nosnippet>385</a>                    <span class="kw">for _ in </span><span class="number">0</span>..CL_BUFFERS + KF_BUFFERS {
-<a href=#386 id=386 data-nosnippet>386</a>                        <span class="kw">let </span><span class="prelude-val">Ok</span>(record) = records.try_recv() <span class="kw">else </span>{
-<a href=#387 id=387 data-nosnippet>387</a>                            <span class="kw">break</span>;
-<a href=#388 id=388 data-nosnippet>388</a>                        };
-<a href=#389 id=389 data-nosnippet>389</a>                        <span class="kw">let </span>result =
-<a href=#390 id=390 data-nosnippet>390</a>                            core.accept_record(<span class="kw-2">&amp;</span>record.bytes[..record.len], record.queued_at);
-<a href=#391 id=391 data-nosnippet>391</a>                        <span class="kw">let </span>returned = <span class="kw">if </span>record.keyframe {
-<a href=#392 id=392 data-nosnippet>392</a>                            <span class="kw-2">&amp;</span>kf_return
-<a href=#393 id=393 data-nosnippet>393</a>                        } <span class="kw">else </span>{
-<a href=#394 id=394 data-nosnippet>394</a>                            <span class="kw-2">&amp;</span>cl_return
-<a href=#395 id=395 data-nosnippet>395</a>                        };
-<a href=#396 id=396 data-nosnippet>396</a>                        <span class="kw">let _ </span>= returned.try_send(record.bytes);
-<a href=#397 id=397 data-nosnippet>397</a>                        result<span class="question-mark">?</span>;
-<a href=#398 id=398 data-nosnippet>398</a>                        received += <span class="number">1</span>;
-<a href=#399 id=399 data-nosnippet>399</a>                    }
-<a href=#400 id=400 data-nosnippet>400</a>                    <span class="kw">let </span>next = core.poll(clock.now(), <span class="kw-2">&amp;mut </span>transport)<span class="question-mark">?</span>;
-<a href=#401 id=401 data-nosnippet>401</a>                    <span class="kw">let </span>now = clock.now();
-<a href=#402 id=402 data-nosnippet>402</a>                    <span class="kw">if </span>now &gt;= next_snapshot {
-<a href=#403 id=403 data-nosnippet>403</a>                        <span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>snapshot) = status.snapshot.try_lock() {
-<a href=#404 id=404 data-nosnippet>404</a>                            <span class="kw-2">*</span>snapshot = SenderSnapshot { sampled_at: now, stats: core.stats(),
-<a href=#405 id=405 data-nosnippet>405</a>                                inbox_drops: status.inbox_drops.load(Ordering::Relaxed),
-<a href=#406 id=406 data-nosnippet>406</a>                                feedback: feedback.as_ref().map(FeedbackController::snapshot), feedback_failed,
-<a href=#407 id=407 data-nosnippet>407</a>                                ..Default::default() };
-<a href=#408 id=408 data-nosnippet>408</a>                        }
-<a href=#409 id=409 data-nosnippet>409</a>                        next_snapshot = now + CuDuration::from_millis(<span class="number">100</span>);
-<a href=#410 id=410 data-nosnippet>410</a>                    }
-<a href=#411 id=411 data-nosnippet>411</a>                    <span class="kw">if </span>stop_at.is_some_and(|deadline| shutdown_clock.now() &gt;= deadline)
-<a href=#412 id=412 data-nosnippet>412</a>                        || (stop_at.is_some() &amp;&amp; received == <span class="number">0 </span>&amp;&amp; core.is_idle())
-<a href=#413 id=413 data-nosnippet>413</a>                    {
-<a href=#414 id=414 data-nosnippet>414</a>                        <span class="kw">break</span>;
+<a href=#342 id=342 data-nosnippet>342</a>    <span class="kw">for _ in </span><span class="number">0</span>..KF_BUFFERS {
+<a href=#343 id=343 data-nosnippet>343</a>        kf_return
+<a href=#344 id=344 data-nosnippet>344</a>            .try_send(<span class="macro">vec!</span>[<span class="number">0</span>; kf_bytes].into_boxed_slice())
+<a href=#345 id=345 data-nosnippet>345</a>            .expect(<span class="string">"new pool"</span>);
+<a href=#346 id=346 data-nosnippet>346</a>    }
+<a href=#347 id=347 data-nosnippet>347</a>    <span class="kw">let </span>cl_clock = clock.clone();
+<a href=#348 id=348 data-nosnippet>348</a>    <span class="kw">let </span>kf_clock = clock.clone();
+<a href=#349 id=349 data-nosnippet>349</a>    <span class="kw">let </span>shared = Arc::new(Shared::default());
+<a href=#350 id=350 data-nosnippet>350</a>    <span class="kw-2">*</span>shared.snapshot.lock().expect(<span class="string">"new snapshot"</span>) = SenderSnapshot {
+<a href=#351 id=351 data-nosnippet>351</a>        sampled_at: clock.now(),
+<a href=#352 id=352 data-nosnippet>352</a>        feedback: feedback.as_ref().map(FeedbackController::snapshot),
+<a href=#353 id=353 data-nosnippet>353</a>        ..Default::default()
+<a href=#354 id=354 data-nosnippet>354</a>    };
+<a href=#355 id=355 data-nosnippet>355</a>    <span class="kw">let </span>status = shared.clone();
+<a href=#356 id=356 data-nosnippet>356</a>    <span class="kw">let </span>cl_recycled = cl_return.clone();
+<a href=#357 id=357 data-nosnippet>357</a>    <span class="kw">let </span>kf_recycled = kf_return.clone();
+<a href=#358 id=358 data-nosnippet>358</a>    <span class="kw">let </span>handle = std::thread::Builder::new()
+<a href=#359 id=359 data-nosnippet>359</a>        .name(<span class="string">"cu-logstream"</span>.into())
+<a href=#360 id=360 data-nosnippet>360</a>        .spawn(<span class="kw">move </span>|| {
+<a href=#361 id=361 data-nosnippet>361</a>            <span class="kw">let </span><span class="kw-2">mut </span>transport = transport;
+<a href=#362 id=362 data-nosnippet>362</a>            <span class="kw">let </span><span class="kw-2">mut </span>feedback_packet = [<span class="number">0</span>; FEEDBACK_BUFFER_BYTES];
+<a href=#363 id=363 data-nosnippet>363</a>            <span class="kw">let </span><span class="kw-2">mut </span>feedback_failed = <span class="bool-val">false</span>;
+<a href=#364 id=364 data-nosnippet>364</a>            <span class="kw">let </span><span class="kw-2">mut </span>next_snapshot = clock.now();
+<a href=#365 id=365 data-nosnippet>365</a>            <span class="kw">let </span><span class="kw-2">mut </span>stop_at = <span class="prelude-val">None</span>;
+<a href=#366 id=366 data-nosnippet>366</a>            <span class="comment">// Teardown remains finite even for deliberately frozen scheduler test clocks.
+<a href=#367 id=367 data-nosnippet>367</a>            </span><span class="kw">let </span>result = (|| -&gt; <span class="kw">crate</span>::Result&lt;()&gt; {
+<a href=#368 id=368 data-nosnippet>368</a>                <span class="kw">loop </span>{
+<a href=#369 id=369 data-nosnippet>369</a>                    <span class="kw">if </span>status.stop.load(Ordering::Acquire) &amp;&amp; stop_at.is_none() {
+<a href=#370 id=370 data-nosnippet>370</a>                        core.begin_shutdown();
+<a href=#371 id=371 data-nosnippet>371</a>                        stop_at = <span class="prelude-val">Some</span>(shutdown_clock.now() + drain_time);
+<a href=#372 id=372 data-nosnippet>372</a>                    }
+<a href=#373 id=373 data-nosnippet>373</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(controller) = <span class="kw-2">&amp;mut </span>feedback {
+<a href=#374 id=374 data-nosnippet>374</a>                        <span class="kw">for _ in </span><span class="number">0</span>..<span class="number">8 </span>{
+<a href=#375 id=375 data-nosnippet>375</a>                            <span class="kw">if </span>feedback_failed { <span class="kw">break</span>; }
+<a href=#376 id=376 data-nosnippet>376</a>                            <span class="kw">match </span>transport.try_recv_feedback(<span class="kw-2">&amp;mut </span>feedback_packet) {
+<a href=#377 id=377 data-nosnippet>377</a>                                <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(len)) =&gt; <span class="kw">match </span>feedback_packet.get(..len).and_then(|p| ReceiverReport::decode(p).ok()) {
+<a href=#378 id=378 data-nosnippet>378</a>                                    <span class="prelude-val">Some</span>(report) =&gt; { <span class="kw">if </span>controller.receive(report, clock.now()) { core.request_recovery(); } }
+<a href=#379 id=379 data-nosnippet>379</a>                                    <span class="prelude-val">None </span>=&gt; controller.invalid_report(),
+<a href=#380 id=380 data-nosnippet>380</a>                                },
+<a href=#381 id=381 data-nosnippet>381</a>                                <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>) =&gt; <span class="kw">break</span>,
+<a href=#382 id=382 data-nosnippet>382</a>                                <span class="prelude-val">Err</span>(CuStreamRxError::BufferTooSmall { .. }) =&gt; controller.invalid_report(),
+<a href=#383 id=383 data-nosnippet>383</a>                                <span class="prelude-val">Err</span>(CuStreamRxError::Failed(<span class="kw">_</span>)) =&gt; { feedback_failed = <span class="bool-val">true</span>; }
+<a href=#384 id=384 data-nosnippet>384</a>                            }
+<a href=#385 id=385 data-nosnippet>385</a>                        }
+<a href=#386 id=386 data-nosnippet>386</a>                        controller.tick(clock.now());
+<a href=#387 id=387 data-nosnippet>387</a>                        core.set_repair_interval(controller.snapshot().effective_repair_every_source_symbols)<span class="question-mark">?</span>;
+<a href=#388 id=388 data-nosnippet>388</a>                    }
+<a href=#389 id=389 data-nosnippet>389</a>                    <span class="kw">let </span><span class="kw-2">mut </span>received = <span class="number">0</span>;
+<a href=#390 id=390 data-nosnippet>390</a>                    <span class="kw">for _ in </span><span class="number">0</span>..CL_BUFFERS + KF_BUFFERS {
+<a href=#391 id=391 data-nosnippet>391</a>                        <span class="kw">let </span><span class="prelude-val">Ok</span>(record) = records.try_recv() <span class="kw">else </span>{
+<a href=#392 id=392 data-nosnippet>392</a>                            <span class="kw">break</span>;
+<a href=#393 id=393 data-nosnippet>393</a>                        };
+<a href=#394 id=394 data-nosnippet>394</a>                        <span class="kw">let </span>result =
+<a href=#395 id=395 data-nosnippet>395</a>                            core.accept_record(<span class="kw-2">&amp;</span>record.bytes[..record.len], record.queued_at);
+<a href=#396 id=396 data-nosnippet>396</a>                        <span class="kw">let </span>returned = <span class="kw">if </span>record.keyframe {
+<a href=#397 id=397 data-nosnippet>397</a>                            <span class="kw-2">&amp;</span>kf_return
+<a href=#398 id=398 data-nosnippet>398</a>                        } <span class="kw">else </span>{
+<a href=#399 id=399 data-nosnippet>399</a>                            <span class="kw-2">&amp;</span>cl_return
+<a href=#400 id=400 data-nosnippet>400</a>                        };
+<a href=#401 id=401 data-nosnippet>401</a>                        <span class="kw">let _ </span>= returned.try_send(record.bytes);
+<a href=#402 id=402 data-nosnippet>402</a>                        result<span class="question-mark">?</span>;
+<a href=#403 id=403 data-nosnippet>403</a>                        received += <span class="number">1</span>;
+<a href=#404 id=404 data-nosnippet>404</a>                    }
+<a href=#405 id=405 data-nosnippet>405</a>                    <span class="kw">let </span>next = core.poll(clock.now(), <span class="kw-2">&amp;mut </span>transport)<span class="question-mark">?</span>;
+<a href=#406 id=406 data-nosnippet>406</a>                    <span class="kw">let </span>now = clock.now();
+<a href=#407 id=407 data-nosnippet>407</a>                    <span class="kw">if </span>now &gt;= next_snapshot {
+<a href=#408 id=408 data-nosnippet>408</a>                        <span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>snapshot) = status.snapshot.try_lock() {
+<a href=#409 id=409 data-nosnippet>409</a>                            <span class="kw-2">*</span>snapshot = SenderSnapshot { sampled_at: now, stats: core.stats(),
+<a href=#410 id=410 data-nosnippet>410</a>                                inbox_drops: status.inbox_drops.load(Ordering::Relaxed),
+<a href=#411 id=411 data-nosnippet>411</a>                                feedback: feedback.as_ref().map(FeedbackController::snapshot), feedback_failed,
+<a href=#412 id=412 data-nosnippet>412</a>                                ..Default::default() };
+<a href=#413 id=413 data-nosnippet>413</a>                        }
+<a href=#414 id=414 data-nosnippet>414</a>                        next_snapshot = now + CuDuration::from_millis(<span class="number">100</span>);
 <a href=#415 id=415 data-nosnippet>415</a>                    }
-<a href=#416 id=416 data-nosnippet>416</a>                    <span class="kw">if </span>received &gt; <span class="number">0 </span>{
-<a href=#417 id=417 data-nosnippet>417</a>                        <span class="kw">continue</span>;
-<a href=#418 id=418 data-nosnippet>418</a>                    }
-<a href=#419 id=419 data-nosnippet>419</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(deadline) = next {
-<a href=#420 id=420 data-nosnippet>420</a>                        <span class="kw">let </span>now = clock.now();
-<a href=#421 id=421 data-nosnippet>421</a>                        <span class="kw">if </span>deadline &gt; now {
-<a href=#422 id=422 data-nosnippet>422</a>                            <span class="kw">let </span>duration = (deadline - now).min(CuDuration::from_millis(<span class="number">50</span>));
-<a href=#423 id=423 data-nosnippet>423</a>                            std::thread::park_timeout(std::time::Duration::from_nanos(
-<a href=#424 id=424 data-nosnippet>424</a>                                duration.as_nanos(),
-<a href=#425 id=425 data-nosnippet>425</a>                            ));
-<a href=#426 id=426 data-nosnippet>426</a>                        }
-<a href=#427 id=427 data-nosnippet>427</a>                    } <span class="kw">else </span>{
-<a href=#428 id=428 data-nosnippet>428</a>                        std::thread::park_timeout(std::time::Duration::from_millis(<span class="number">50</span>));
-<a href=#429 id=429 data-nosnippet>429</a>                    }
-<a href=#430 id=430 data-nosnippet>430</a>                }
-<a href=#431 id=431 data-nosnippet>431</a>                <span class="prelude-val">Ok</span>(())
-<a href=#432 id=432 data-nosnippet>432</a>            })();
-<a href=#433 id=433 data-nosnippet>433</a>            core.discard_pending();
-<a href=#434 id=434 data-nosnippet>434</a>            <span class="kw">let </span>stats = core.stats();
-<a href=#435 id=435 data-nosnippet>435</a>            <span class="kw-2">*</span>status.final_stats.lock().expect(<span class="string">"sender stats"</span>) = <span class="prelude-val">Some</span>(stats);
-<a href=#436 id=436 data-nosnippet>436</a>            <span class="kw-2">*</span>status.snapshot.lock().expect(<span class="string">"sender snapshot"</span>) = SenderSnapshot {
-<a href=#437 id=437 data-nosnippet>437</a>                sampled_at: clock.now(), stats, inbox_drops: status.inbox_drops.load(Ordering::Relaxed),
-<a href=#438 id=438 data-nosnippet>438</a>                stopped: <span class="bool-val">true</span>, failed: result.is_err(), feedback_failed,
-<a href=#439 id=439 data-nosnippet>439</a>                feedback: feedback.as_ref().map(FeedbackController::snapshot),
-<a href=#440 id=440 data-nosnippet>440</a>            };
-<a href=#441 id=441 data-nosnippet>441</a>            <span class="macro">cu29_log_derive::info!</span>(<span class="string">"Logstream sender stopped: sent={} bytes={} queue_drops={} expired={} transport_drops={} inbox_drops={} shutdown_drops={}"</span>,
-<a href=#442 id=442 data-nosnippet>442</a>                stats.packets_sent, stats.bytes_sent, stats.queue_drops, stats.expired_packets, stats.transport_drops,
-<a href=#443 id=443 data-nosnippet>443</a>                status.inbox_drops.load(Ordering::Relaxed), stats.shutdown_drops);
-<a href=#444 id=444 data-nosnippet>444</a>            <span class="kw">if let </span><span class="prelude-val">Err</span>(error) = result {
-<a href=#445 id=445 data-nosnippet>445</a>                status.failed.store(<span class="bool-val">true</span>, Ordering::Release);
-<a href=#446 id=446 data-nosnippet>446</a>                <span class="macro">cu29_log_derive::error!</span>(<span class="string">"Logstream sender failed: {}"</span>, error.to_string());
-<a href=#447 id=447 data-nosnippet>447</a>            }
-<a href=#448 id=448 data-nosnippet>448</a>        })
-<a href=#449 id=449 data-nosnippet>449</a>        .map_err(|error| CuError::new_with_cause(<span class="string">"Start logstream sender"</span>, error))<span class="question-mark">?</span>;
-<a href=#450 id=450 data-nosnippet>450</a>    <span class="kw">let </span>worker = Arc::new(Worker {
-<a href=#451 id=451 data-nosnippet>451</a>        shared: shared.clone(),
-<a href=#452 id=452 data-nosnippet>452</a>        thread: handle.thread().clone(),
-<a href=#453 id=453 data-nosnippet>453</a>        handle: <span class="prelude-val">Some</span>(handle),
-<a href=#454 id=454 data-nosnippet>454</a>    });
-<a href=#455 id=455 data-nosnippet>455</a>    <span class="prelude-val">Ok</span>((
-<a href=#456 id=456 data-nosnippet>456</a>        ScheduledCopperListSink {
-<a href=#457 id=457 data-nosnippet>457</a>            encoder: <span class="kw">crate</span>::encode_copperlist_record_into,
-<a href=#458 id=458 data-nosnippet>458</a>            inbox: Inbox {
-<a href=#459 id=459 data-nosnippet>459</a>                clock: cl_clock,
-<a href=#460 id=460 data-nosnippet>460</a>                worker: worker.clone(),
-<a href=#461 id=461 data-nosnippet>461</a>                pending: pending.clone(),
-<a href=#462 id=462 data-nosnippet>462</a>                free: Mutex::new(cl_free),
-<a href=#463 id=463 data-nosnippet>463</a>                recycled: cl_recycled,
-<a href=#464 id=464 data-nosnippet>464</a>            },
-<a href=#465 id=465 data-nosnippet>465</a>            _payload: PhantomData,
-<a href=#466 id=466 data-nosnippet>466</a>        },
-<a href=#467 id=467 data-nosnippet>467</a>        ScheduledKeyFrameSink {
-<a href=#468 id=468 data-nosnippet>468</a>            inbox: Inbox {
-<a href=#469 id=469 data-nosnippet>469</a>                clock: kf_clock,
-<a href=#470 id=470 data-nosnippet>470</a>                worker,
-<a href=#471 id=471 data-nosnippet>471</a>                pending,
-<a href=#472 id=472 data-nosnippet>472</a>                free: Mutex::new(kf_free),
-<a href=#473 id=473 data-nosnippet>473</a>                recycled: kf_recycled,
-<a href=#474 id=474 data-nosnippet>474</a>            },
-<a href=#475 id=475 data-nosnippet>475</a>            interval,
-<a href=#476 id=476 data-nosnippet>476</a>        },
-<a href=#477 id=477 data-nosnippet>477</a>        SenderMonitor(shared),
-<a href=#478 id=478 data-nosnippet>478</a>    ))
-<a href=#479 id=479 data-nosnippet>479</a>}
-<a href=#480 id=480 data-nosnippet>480</a>
-<a href=#481 id=481 data-nosnippet>481</a><span class="kw">impl </span>SenderMonitor {
-<a href=#482 id=482 data-nosnippet>482</a>    <span class="doccomment">/// Transfer a read-only worker handle into generated monitoring metadata.
-<a href=#483 id=483 data-nosnippet>483</a>    </span><span class="kw">pub fn </span>into_runtime_monitor(
-<a href=#484 id=484 data-nosnippet>484</a>        <span class="self">self</span>,
-<a href=#485 id=485 data-nosnippet>485</a>        destination: <span class="kw-2">&amp;</span>str,
-<a href=#486 id=486 data-nosnippet>486</a>        bitrate_bps: u64,
-<a href=#487 id=487 data-nosnippet>487</a>        baseline: usize,
-<a href=#488 id=488 data-nosnippet>488</a>    ) -&gt; cu29_runtime::monitoring::LogStreamMonitor {
-<a href=#489 id=489 data-nosnippet>489</a>        cu29_runtime::monitoring::LogStreamMonitor::new(destination, bitrate_bps, baseline, <span class="self">self</span>)
-<a href=#490 id=490 data-nosnippet>490</a>    }
-<a href=#491 id=491 data-nosnippet>491</a>}
-<a href=#492 id=492 data-nosnippet>492</a><span class="kw">impl </span>cu29_runtime::monitoring::LogStreamStatsSource <span class="kw">for </span>SenderMonitor {
-<a href=#493 id=493 data-nosnippet>493</a>    <span class="kw">fn </span>snapshot(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; cu29_runtime::monitoring::LogStreamStats {
-<a href=#494 id=494 data-nosnippet>494</a>        <span class="kw">use </span>cu29_runtime::monitoring::{
-<a href=#495 id=495 data-nosnippet>495</a>            LogStreamFeedbackState, LogStreamFeedbackStats, LogStreamStats,
-<a href=#496 id=496 data-nosnippet>496</a>        };
-<a href=#497 id=497 data-nosnippet>497</a>        <span class="kw">let </span>snapshot = SenderMonitor::snapshot(<span class="self">self</span>);
-<a href=#498 id=498 data-nosnippet>498</a>        <span class="kw">let </span>stats = snapshot.stats;
-<a href=#499 id=499 data-nosnippet>499</a>        LogStreamStats {
-<a href=#500 id=500 data-nosnippet>500</a>            sampled_at: snapshot.sampled_at,
-<a href=#501 id=501 data-nosnippet>501</a>            packets_sent: stats.packets_sent,
-<a href=#502 id=502 data-nosnippet>502</a>            bytes_sent: stats.bytes_sent,
-<a href=#503 id=503 data-nosnippet>503</a>            queue_drops: stats.queue_drops,
-<a href=#504 id=504 data-nosnippet>504</a>            expired_packets: stats.expired_packets,
-<a href=#505 id=505 data-nosnippet>505</a>            transport_drops: stats.transport_drops,
-<a href=#506 id=506 data-nosnippet>506</a>            inbox_drops: snapshot.inbox_drops,
-<a href=#507 id=507 data-nosnippet>507</a>            shutdown_drops: stats.shutdown_drops,
-<a href=#508 id=508 data-nosnippet>508</a>            recovery_rounds: stats.recovery_rounds,
-<a href=#509 id=509 data-nosnippet>509</a>            recovery_superseded: stats.recovery_superseded,
-<a href=#510 id=510 data-nosnippet>510</a>            queue_peak: stats.queue_peak,
-<a href=#511 id=511 data-nosnippet>511</a>            stopped: snapshot.stopped,
-<a href=#512 id=512 data-nosnippet>512</a>            failed: snapshot.failed,
-<a href=#513 id=513 data-nosnippet>513</a>            feedback: snapshot.feedback.map(|feedback| {
-<a href=#514 id=514 data-nosnippet>514</a>                <span class="kw">let </span>report = feedback.report.unwrap_or_default();
-<a href=#515 id=515 data-nosnippet>515</a>                LogStreamFeedbackStats {
-<a href=#516 id=516 data-nosnippet>516</a>                    state: <span class="kw">match </span>feedback.state {
-<a href=#517 id=517 data-nosnippet>517</a>                        <span class="kw">crate</span>::feedback::FeedbackState::Waiting =&gt; LogStreamFeedbackState::Waiting,
-<a href=#518 id=518 data-nosnippet>518</a>                        <span class="kw">crate</span>::feedback::FeedbackState::Active =&gt; LogStreamFeedbackState::Active,
-<a href=#519 id=519 data-nosnippet>519</a>                        <span class="kw">crate</span>::feedback::FeedbackState::Stale =&gt; LogStreamFeedbackState::Stale,
-<a href=#520 id=520 data-nosnippet>520</a>                    },
-<a href=#521 id=521 data-nosnippet>521</a>                    age: feedback.last_received.map(|last| {
-<a href=#522 id=522 data-nosnippet>522</a>                        CuDuration::from_nanos(
-<a href=#523 id=523 data-nosnippet>523</a>                            snapshot
-<a href=#524 id=524 data-nosnippet>524</a>                                .sampled_at
-<a href=#525 id=525 data-nosnippet>525</a>                                .as_nanos()
-<a href=#526 id=526 data-nosnippet>526</a>                                .saturating_sub(last.as_nanos()),
-<a href=#527 id=527 data-nosnippet>527</a>                        )
-<a href=#528 id=528 data-nosnippet>528</a>                    }),
-<a href=#529 id=529 data-nosnippet>529</a>                    failed: snapshot.feedback_failed,
-<a href=#530 id=530 data-nosnippet>530</a>                    reports: feedback.accepted_reports,
-<a href=#531 id=531 data-nosnippet>531</a>                    rejected_reports: feedback.rejected_reports,
-<a href=#532 id=532 data-nosnippet>532</a>                    invalid_reports: feedback.invalid_reports,
-<a href=#533 id=533 data-nosnippet>533</a>                    rates_available: feedback.receiver_rates_available,
-<a href=#534 id=534 data-nosnippet>534</a>                    source_metrics_available: feedback.source_metrics_available,
-<a href=#535 id=535 data-nosnippet>535</a>                    bytes_per_second: feedback.receiver_bytes_per_second,
-<a href=#536 id=536 data-nosnippet>536</a>                    packets_per_second: feedback.receiver_packets_per_second,
-<a href=#537 id=537 data-nosnippet>537</a>                    finalized_symbols: report.sources.finalized,
-<a href=#538 id=538 data-nosnippet>538</a>                    loss_basis_points: feedback.source_loss_basis_points,
-<a href=#539 id=539 data-nosnippet>539</a>                    recovery_basis_points: feedback.source_recovery_basis_points,
-<a href=#540 id=540 data-nosnippet>540</a>                    buffered_records: report.buffered_records,
-<a href=#541 id=541 data-nosnippet>541</a>                    record_capacity: report.record_capacity,
-<a href=#542 id=542 data-nosnippet>542</a>                    latest_copperlist: report.latest_copperlist,
-<a href=#543 id=543 data-nosnippet>543</a>                    effective_repair_every_source_symbols: feedback
-<a href=#544 id=544 data-nosnippet>544</a>                        .effective_repair_every_source_symbols,
-<a href=#545 id=545 data-nosnippet>545</a>                    invalid_packets: report.invalid_packets,
-<a href=#546 id=546 data-nosnippet>546</a>                    duplicate_packets: report.duplicate_packets,
-<a href=#547 id=547 data-nosnippet>547</a>                    expired_records: report.expired_records,
-<a href=#548 id=548 data-nosnippet>548</a>                }
-<a href=#549 id=549 data-nosnippet>549</a>            }),
-<a href=#550 id=550 data-nosnippet>550</a>        }
-<a href=#551 id=551 data-nosnippet>551</a>    }
-<a href=#552 id=552 data-nosnippet>552</a>}
+<a href=#416 id=416 data-nosnippet>416</a>                    <span class="kw">if </span>stop_at.is_some_and(|deadline| shutdown_clock.now() &gt;= deadline)
+<a href=#417 id=417 data-nosnippet>417</a>                        || (stop_at.is_some() &amp;&amp; received == <span class="number">0 </span>&amp;&amp; core.is_idle())
+<a href=#418 id=418 data-nosnippet>418</a>                    {
+<a href=#419 id=419 data-nosnippet>419</a>                        <span class="kw">break</span>;
+<a href=#420 id=420 data-nosnippet>420</a>                    }
+<a href=#421 id=421 data-nosnippet>421</a>                    <span class="kw">if </span>received &gt; <span class="number">0 </span>{
+<a href=#422 id=422 data-nosnippet>422</a>                        <span class="kw">continue</span>;
+<a href=#423 id=423 data-nosnippet>423</a>                    }
+<a href=#424 id=424 data-nosnippet>424</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(deadline) = next {
+<a href=#425 id=425 data-nosnippet>425</a>                        <span class="kw">let </span>now = clock.now();
+<a href=#426 id=426 data-nosnippet>426</a>                        <span class="kw">if </span>deadline &gt; now {
+<a href=#427 id=427 data-nosnippet>427</a>                            <span class="kw">let </span>duration = (deadline - now).min(CuDuration::from_millis(<span class="number">50</span>));
+<a href=#428 id=428 data-nosnippet>428</a>                            std::thread::park_timeout(std::time::Duration::from_nanos(
+<a href=#429 id=429 data-nosnippet>429</a>                                duration.as_nanos(),
+<a href=#430 id=430 data-nosnippet>430</a>                            ));
+<a href=#431 id=431 data-nosnippet>431</a>                        }
+<a href=#432 id=432 data-nosnippet>432</a>                    } <span class="kw">else </span>{
+<a href=#433 id=433 data-nosnippet>433</a>                        std::thread::park_timeout(std::time::Duration::from_millis(<span class="number">50</span>));
+<a href=#434 id=434 data-nosnippet>434</a>                    }
+<a href=#435 id=435 data-nosnippet>435</a>                }
+<a href=#436 id=436 data-nosnippet>436</a>                <span class="prelude-val">Ok</span>(())
+<a href=#437 id=437 data-nosnippet>437</a>            })();
+<a href=#438 id=438 data-nosnippet>438</a>            core.discard_pending();
+<a href=#439 id=439 data-nosnippet>439</a>            <span class="kw">let </span>stats = core.stats();
+<a href=#440 id=440 data-nosnippet>440</a>            <span class="kw-2">*</span>status.final_stats.lock().expect(<span class="string">"sender stats"</span>) = <span class="prelude-val">Some</span>(stats);
+<a href=#441 id=441 data-nosnippet>441</a>            <span class="kw-2">*</span>status.snapshot.lock().expect(<span class="string">"sender snapshot"</span>) = SenderSnapshot {
+<a href=#442 id=442 data-nosnippet>442</a>                sampled_at: clock.now(), stats, inbox_drops: status.inbox_drops.load(Ordering::Relaxed),
+<a href=#443 id=443 data-nosnippet>443</a>                stopped: <span class="bool-val">true</span>, failed: result.is_err(), feedback_failed,
+<a href=#444 id=444 data-nosnippet>444</a>                feedback: feedback.as_ref().map(FeedbackController::snapshot),
+<a href=#445 id=445 data-nosnippet>445</a>            };
+<a href=#446 id=446 data-nosnippet>446</a>            <span class="macro">cu29_log_derive::info!</span>(<span class="string">"Logstream sender stopped: sent={} bytes={} queue_drops={} expired={} transport_drops={} inbox_drops={} shutdown_drops={}"</span>,
+<a href=#447 id=447 data-nosnippet>447</a>                stats.packets_sent, stats.bytes_sent, stats.queue_drops, stats.expired_packets, stats.transport_drops,
+<a href=#448 id=448 data-nosnippet>448</a>                status.inbox_drops.load(Ordering::Relaxed), stats.shutdown_drops);
+<a href=#449 id=449 data-nosnippet>449</a>            <span class="kw">if let </span><span class="prelude-val">Err</span>(error) = result {
+<a href=#450 id=450 data-nosnippet>450</a>                status.failed.store(<span class="bool-val">true</span>, Ordering::Release);
+<a href=#451 id=451 data-nosnippet>451</a>                <span class="macro">cu29_log_derive::error!</span>(<span class="string">"Logstream sender failed: {}"</span>, error.to_string());
+<a href=#452 id=452 data-nosnippet>452</a>            }
+<a href=#453 id=453 data-nosnippet>453</a>        })
+<a href=#454 id=454 data-nosnippet>454</a>        .map_err(|error| CuError::new_with_cause(<span class="string">"Start logstream sender"</span>, error))<span class="question-mark">?</span>;
+<a href=#455 id=455 data-nosnippet>455</a>    <span class="kw">let </span>worker = Arc::new(Worker {
+<a href=#456 id=456 data-nosnippet>456</a>        shared: shared.clone(),
+<a href=#457 id=457 data-nosnippet>457</a>        thread: handle.thread().clone(),
+<a href=#458 id=458 data-nosnippet>458</a>        handle: <span class="prelude-val">Some</span>(handle),
+<a href=#459 id=459 data-nosnippet>459</a>    });
+<a href=#460 id=460 data-nosnippet>460</a>    <span class="prelude-val">Ok</span>((
+<a href=#461 id=461 data-nosnippet>461</a>        ScheduledCopperListSink {
+<a href=#462 id=462 data-nosnippet>462</a>            encoder: <span class="kw">crate</span>::encode_copperlist_record_into,
+<a href=#463 id=463 data-nosnippet>463</a>            inbox: Inbox {
+<a href=#464 id=464 data-nosnippet>464</a>                clock: cl_clock,
+<a href=#465 id=465 data-nosnippet>465</a>                worker: worker.clone(),
+<a href=#466 id=466 data-nosnippet>466</a>                pending: pending.clone(),
+<a href=#467 id=467 data-nosnippet>467</a>                free: Mutex::new(cl_free),
+<a href=#468 id=468 data-nosnippet>468</a>                recycled: cl_recycled,
+<a href=#469 id=469 data-nosnippet>469</a>            },
+<a href=#470 id=470 data-nosnippet>470</a>            _payload: PhantomData,
+<a href=#471 id=471 data-nosnippet>471</a>        },
+<a href=#472 id=472 data-nosnippet>472</a>        ScheduledKeyFrameSink {
+<a href=#473 id=473 data-nosnippet>473</a>            inbox: Inbox {
+<a href=#474 id=474 data-nosnippet>474</a>                clock: kf_clock,
+<a href=#475 id=475 data-nosnippet>475</a>                worker,
+<a href=#476 id=476 data-nosnippet>476</a>                pending,
+<a href=#477 id=477 data-nosnippet>477</a>                free: Mutex::new(kf_free),
+<a href=#478 id=478 data-nosnippet>478</a>                recycled: kf_recycled,
+<a href=#479 id=479 data-nosnippet>479</a>            },
+<a href=#480 id=480 data-nosnippet>480</a>            interval,
+<a href=#481 id=481 data-nosnippet>481</a>        },
+<a href=#482 id=482 data-nosnippet>482</a>        SenderMonitor(shared),
+<a href=#483 id=483 data-nosnippet>483</a>    ))
+<a href=#484 id=484 data-nosnippet>484</a>}
+<a href=#485 id=485 data-nosnippet>485</a>
+<a href=#486 id=486 data-nosnippet>486</a><span class="kw">impl </span>SenderMonitor {
+<a href=#487 id=487 data-nosnippet>487</a>    <span class="doccomment">/// Transfer a read-only worker handle into generated monitoring metadata.
+<a href=#488 id=488 data-nosnippet>488</a>    </span><span class="kw">pub fn </span>into_runtime_monitor(
+<a href=#489 id=489 data-nosnippet>489</a>        <span class="self">self</span>,
+<a href=#490 id=490 data-nosnippet>490</a>        destination: <span class="kw-2">&amp;</span>str,
+<a href=#491 id=491 data-nosnippet>491</a>        bitrate_bps: u64,
+<a href=#492 id=492 data-nosnippet>492</a>        baseline: usize,
+<a href=#493 id=493 data-nosnippet>493</a>    ) -&gt; cu29_runtime::monitoring::LogStreamMonitor {
+<a href=#494 id=494 data-nosnippet>494</a>        cu29_runtime::monitoring::LogStreamMonitor::new(destination, bitrate_bps, baseline, <span class="self">self</span>)
+<a href=#495 id=495 data-nosnippet>495</a>    }
+<a href=#496 id=496 data-nosnippet>496</a>}
+<a href=#497 id=497 data-nosnippet>497</a><span class="kw">impl </span>cu29_runtime::monitoring::LogStreamStatsSource <span class="kw">for </span>SenderMonitor {
+<a href=#498 id=498 data-nosnippet>498</a>    <span class="kw">fn </span>snapshot(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; cu29_runtime::monitoring::LogStreamStats {
+<a href=#499 id=499 data-nosnippet>499</a>        <span class="kw">use </span>cu29_runtime::monitoring::{
+<a href=#500 id=500 data-nosnippet>500</a>            LogStreamFeedbackState, LogStreamFeedbackStats, LogStreamStats,
+<a href=#501 id=501 data-nosnippet>501</a>        };
+<a href=#502 id=502 data-nosnippet>502</a>        <span class="kw">let </span>snapshot = SenderMonitor::snapshot(<span class="self">self</span>);
+<a href=#503 id=503 data-nosnippet>503</a>        <span class="kw">let </span>stats = snapshot.stats;
+<a href=#504 id=504 data-nosnippet>504</a>        LogStreamStats {
+<a href=#505 id=505 data-nosnippet>505</a>            sampled_at: snapshot.sampled_at,
+<a href=#506 id=506 data-nosnippet>506</a>            packets_sent: stats.packets_sent,
+<a href=#507 id=507 data-nosnippet>507</a>            bytes_sent: stats.bytes_sent,
+<a href=#508 id=508 data-nosnippet>508</a>            queue_drops: stats.queue_drops,
+<a href=#509 id=509 data-nosnippet>509</a>            expired_packets: stats.expired_packets,
+<a href=#510 id=510 data-nosnippet>510</a>            transport_drops: stats.transport_drops,
+<a href=#511 id=511 data-nosnippet>511</a>            inbox_drops: snapshot.inbox_drops,
+<a href=#512 id=512 data-nosnippet>512</a>            shutdown_drops: stats.shutdown_drops,
+<a href=#513 id=513 data-nosnippet>513</a>            recovery_rounds: stats.recovery_rounds,
+<a href=#514 id=514 data-nosnippet>514</a>            recovery_superseded: stats.recovery_superseded,
+<a href=#515 id=515 data-nosnippet>515</a>            queue_peak: stats.queue_peak,
+<a href=#516 id=516 data-nosnippet>516</a>            stopped: snapshot.stopped,
+<a href=#517 id=517 data-nosnippet>517</a>            failed: snapshot.failed,
+<a href=#518 id=518 data-nosnippet>518</a>            feedback: snapshot.feedback.map(|feedback| {
+<a href=#519 id=519 data-nosnippet>519</a>                <span class="kw">let </span>report = feedback.report.unwrap_or_default();
+<a href=#520 id=520 data-nosnippet>520</a>                LogStreamFeedbackStats {
+<a href=#521 id=521 data-nosnippet>521</a>                    state: <span class="kw">match </span>feedback.state {
+<a href=#522 id=522 data-nosnippet>522</a>                        <span class="kw">crate</span>::feedback::FeedbackState::Waiting =&gt; LogStreamFeedbackState::Waiting,
+<a href=#523 id=523 data-nosnippet>523</a>                        <span class="kw">crate</span>::feedback::FeedbackState::Active =&gt; LogStreamFeedbackState::Active,
+<a href=#524 id=524 data-nosnippet>524</a>                        <span class="kw">crate</span>::feedback::FeedbackState::Stale =&gt; LogStreamFeedbackState::Stale,
+<a href=#525 id=525 data-nosnippet>525</a>                    },
+<a href=#526 id=526 data-nosnippet>526</a>                    age: feedback.last_received.map(|last| {
+<a href=#527 id=527 data-nosnippet>527</a>                        CuDuration::from_nanos(
+<a href=#528 id=528 data-nosnippet>528</a>                            snapshot
+<a href=#529 id=529 data-nosnippet>529</a>                                .sampled_at
+<a href=#530 id=530 data-nosnippet>530</a>                                .as_nanos()
+<a href=#531 id=531 data-nosnippet>531</a>                                .saturating_sub(last.as_nanos()),
+<a href=#532 id=532 data-nosnippet>532</a>                        )
+<a href=#533 id=533 data-nosnippet>533</a>                    }),
+<a href=#534 id=534 data-nosnippet>534</a>                    failed: snapshot.feedback_failed,
+<a href=#535 id=535 data-nosnippet>535</a>                    reports: feedback.accepted_reports,
+<a href=#536 id=536 data-nosnippet>536</a>                    rejected_reports: feedback.rejected_reports,
+<a href=#537 id=537 data-nosnippet>537</a>                    invalid_reports: feedback.invalid_reports,
+<a href=#538 id=538 data-nosnippet>538</a>                    rates_available: feedback.receiver_rates_available,
+<a href=#539 id=539 data-nosnippet>539</a>                    source_metrics_available: feedback.source_metrics_available,
+<a href=#540 id=540 data-nosnippet>540</a>                    bytes_per_second: feedback.receiver_bytes_per_second,
+<a href=#541 id=541 data-nosnippet>541</a>                    packets_per_second: feedback.receiver_packets_per_second,
+<a href=#542 id=542 data-nosnippet>542</a>                    finalized_symbols: report.sources.finalized,
+<a href=#543 id=543 data-nosnippet>543</a>                    loss_basis_points: feedback.source_loss_basis_points,
+<a href=#544 id=544 data-nosnippet>544</a>                    recovery_basis_points: feedback.source_recovery_basis_points,
+<a href=#545 id=545 data-nosnippet>545</a>                    buffered_records: report.buffered_records,
+<a href=#546 id=546 data-nosnippet>546</a>                    record_capacity: report.record_capacity,
+<a href=#547 id=547 data-nosnippet>547</a>                    latest_copperlist: report.latest_copperlist,
+<a href=#548 id=548 data-nosnippet>548</a>                    effective_repair_every_source_symbols: feedback
+<a href=#549 id=549 data-nosnippet>549</a>                        .effective_repair_every_source_symbols,
+<a href=#550 id=550 data-nosnippet>550</a>                    invalid_packets: report.invalid_packets,
+<a href=#551 id=551 data-nosnippet>551</a>                    duplicate_packets: report.duplicate_packets,
+<a href=#552 id=552 data-nosnippet>552</a>                    expired_records: report.expired_records,
+<a href=#553 id=553 data-nosnippet>553</a>                }
+<a href=#554 id=554 data-nosnippet>554</a>            }),
+<a href=#555 id=555 data-nosnippet>555</a>        }
+<a href=#556 id=556 data-nosnippet>556</a>    }
+<a href=#557 id=557 data-nosnippet>557</a>}
 </code></pre></div></section></main></body></html>

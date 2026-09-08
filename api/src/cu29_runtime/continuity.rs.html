@@ -17,7 +17,7 @@
 <a href=#17 id=17 data-nosnippet>17</a>/// Gaps remain missing history even when a later keyframe permits state replay.
 <a href=#18 id=18 data-nosnippet>18</a></span><span class="attr">#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
 <a href=#19 id=19 data-nosnippet>19</a></span><span class="kw">pub enum </span>StreamContinuityRecord&lt;B = Vec&lt;u8&gt;&gt; {
-<a href=#20 id=20 data-nosnippet>20</a>    <span class="doccomment">/// Canonical, versioned semantic manifest bytes bind identity, plan and schema.
+<a href=#20 id=20 data-nosnippet>20</a>    <span class="doccomment">/// Canonical semantic manifest bytes bind identity, receiver requirements and schema.
 <a href=#21 id=21 data-nosnippet>21</a>    </span>Manifest { record: B },
 <a href=#22 id=22 data-nosnippet>22</a>    Gap {
 <a href=#23 id=23 data-nosnippet>23</a>        first_id: u64,

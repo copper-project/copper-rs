@@ -82,7 +82,7 @@
 <a href=#82 id=82 data-nosnippet>82</a>        decode: ArchiveDecoder&lt;P&gt;,
 <a href=#83 id=83 data-nosnippet>83</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>&gt; {
 <a href=#84 id=84 data-nosnippet>84</a>        <span class="kw">let </span>manifest = received.manifest();
-<a href=#85 id=85 data-nosnippet>85</a>        manifest.plan.validate()<span class="question-mark">?</span>;
+<a href=#85 id=85 data-nosnippet>85</a>        manifest.requirements.validate()<span class="question-mark">?</span>;
 <a href=#86 id=86 data-nosnippet>86</a>        <span class="kw">if </span>manifest.application_schema != expected_schema {
 <a href=#87 id=87 data-nosnippet>87</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(Error::InvalidConfig(
 <a href=#88 id=88 data-nosnippet>88</a>                <span class="string">"archive requires the matching application schema"</span>,

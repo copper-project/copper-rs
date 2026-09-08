@@ -611,10 +611,10 @@
 <a href=#611 id=611 data-nosnippet>611</a>        limits: SessionRouterLimits,
 <a href=#612 id=612 data-nosnippet>612</a>        manifest: <span class="kw-2">&amp;</span>SessionManifest,
 <a href=#613 id=613 data-nosnippet>613</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;ContinuousDecoder&lt;MAX_SYMBOL_SIZE, MAX_WINDOW_SYMBOLS, MAX_EQUATIONS&gt;&gt; {
-<a href=#614 id=614 data-nosnippet>614</a>        <span class="kw">if </span>usize::from(manifest.plan.symbol_size) &gt; MAX_SYMBOL_SIZE
-<a href=#615 id=615 data-nosnippet>615</a>            || usize::from(manifest.plan.continuous.window_symbols) &gt; MAX_WINDOW_SYMBOLS
-<a href=#616 id=616 data-nosnippet>616</a>            || manifest.plan.max_record_bytes &gt; limits.max_record_bytes <span class="kw">as </span>u64
-<a href=#617 id=617 data-nosnippet>617</a>            || usize::from(manifest.plan.continuous.window_symbols) &gt; limits.max_buffered_records
+<a href=#614 id=614 data-nosnippet>614</a>        <span class="kw">if </span>usize::from(manifest.requirements.symbol_size) &gt; MAX_SYMBOL_SIZE
+<a href=#615 id=615 data-nosnippet>615</a>            || usize::from(manifest.requirements.window_symbols) &gt; MAX_WINDOW_SYMBOLS
+<a href=#616 id=616 data-nosnippet>616</a>            || manifest.requirements.max_record_bytes &gt; limits.max_record_bytes <span class="kw">as </span>u64
+<a href=#617 id=617 data-nosnippet>617</a>            || usize::from(manifest.requirements.window_symbols) &gt; limits.max_buffered_records
 <a href=#618 id=618 data-nosnippet>618</a>        {
 <a href=#619 id=619 data-nosnippet>619</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(Error::InvalidConfig(
 <a href=#620 id=620 data-nosnippet>620</a>                <span class="string">"session manifest exceeds receiver-local limits"</span>,
@@ -623,15 +623,15 @@
 <a href=#623 id=623 data-nosnippet>623</a>        <span class="kw">let </span><span class="kw-2">mut </span>decoder = ContinuousDecoder::new(
 <a href=#624 id=624 data-nosnippet>624</a>            manifest.identity,
 <a href=#625 id=625 data-nosnippet>625</a>            Lane::ReplayCritical,
-<a href=#626 id=626 data-nosnippet>626</a>            manifest.plan.rlc_config()<span class="question-mark">?</span>,
+<a href=#626 id=626 data-nosnippet>626</a>            manifest.requirements.rlc_config()<span class="question-mark">?</span>,
 <a href=#627 id=627 data-nosnippet>627</a>            limits.equation_capacity,
 <a href=#628 id=628 data-nosnippet>628</a>            <span class="number">0</span>,
 <a href=#629 id=629 data-nosnippet>629</a>            ReceiverLimits::new(
-<a href=#630 id=630 data-nosnippet>630</a>                manifest.plan.max_record_bytes <span class="kw">as </span>usize,
+<a href=#630 id=630 data-nosnippet>630</a>                manifest.requirements.max_record_bytes <span class="kw">as </span>usize,
 <a href=#631 id=631 data-nosnippet>631</a>                limits.max_buffered_records,
 <a href=#632 id=632 data-nosnippet>632</a>            ),
 <a href=#633 id=633 data-nosnippet>633</a>        )<span class="question-mark">?</span>;
-<a href=#634 id=634 data-nosnippet>634</a>        <span class="kw">if </span>manifest.plan.feedback.is_some() {
+<a href=#634 id=634 data-nosnippet>634</a>        <span class="kw">if </span>manifest.requirements.feedback.is_some() {
 <a href=#635 id=635 data-nosnippet>635</a>            decoder.enable_feedback();
 <a href=#636 id=636 data-nosnippet>636</a>        }
 <a href=#637 id=637 data-nosnippet>637</a>        <span class="prelude-val">Ok</span>(decoder)
