@@ -7,11 +7,11 @@ use crc::{CRC_32_ISCSI, Crc};
 
 const PACKET_MAGIC: [u8; 4] = *b"CULS";
 /// Maximum packet header length, used to bound storage and the shared FEC symbol size.
-/// RaptorQ uses 58 bytes; RLC uses 38 for source packets and 42 for repair packets.
-pub const PACKET_HEADER_LEN: usize = 58;
+/// RaptorQ uses 56 bytes; RLC uses 36 for source packets and 40 for repair packets.
+pub const PACKET_HEADER_LEN: usize = 56;
 const COMMON_HEADER_LEN: usize = 28;
-const RLC_SOURCE_HEADER_LEN: usize = 38;
-const RLC_REPAIR_HEADER_LEN: usize = 42;
+const RLC_SOURCE_HEADER_LEN: usize = 36;
+const RLC_REPAIR_HEADER_LEN: usize = 40;
 
 const fn packet_header_len(scheme: FecScheme, kind: FecSymbolKind) -> usize {
     match (scheme, kind) {
@@ -139,6 +139,8 @@ pub struct WirePacketRef<'a> {
 }
 
 impl<'a> WirePacketRef<'a> {
+    /// Decodes exactly one complete packet supplied by the carrier.
+    /// The payload occupies the remaining packet extent after the header.
     pub fn decode(bytes: &'a [u8]) -> Result<Self> {
         if bytes.len() < COMMON_HEADER_LEN {
             return Err(Error::TruncatedPacket);
@@ -153,13 +155,6 @@ impl<'a> WirePacketRef<'a> {
             return Err(Error::TruncatedPacket);
         }
         let crc_offset = header_len - 4;
-        let length_offset = crc_offset - 2;
-        let payload_len =
-            u16::from_be_bytes(bytes[length_offset..crc_offset].try_into().unwrap()) as usize;
-        if bytes.len() != header_len + payload_len {
-            return Err(Error::PayloadLengthMismatch);
-        }
-
         let expected_checksum =
             u32::from_be_bytes(bytes[crc_offset..header_len].try_into().unwrap());
         let mut digest = CRC32C.digest();
@@ -182,9 +177,8 @@ impl<'a> WirePacketRef<'a> {
                 )
             }
             FecScheme::RlcGf2 | FecScheme::RlcGf256 => {
-                let metadata_len = length_offset - COMMON_HEADER_LEN;
-                fec_metadata[..metadata_len]
-                    .copy_from_slice(&bytes[COMMON_HEADER_LEN..length_offset]);
+                let metadata_len = crc_offset - COMMON_HEADER_LEN;
+                fec_metadata[..metadata_len].copy_from_slice(&bytes[COMMON_HEADER_LEN..crc_offset]);
                 (0, 0)
             }
         };
@@ -208,11 +202,8 @@ impl<'a> WirePacketRef<'a> {
 
 /// Encodes one packet into caller-owned storage and returns its exact length.
 pub fn encode_packet_into(header: WireHeader, payload: &[u8], output: &mut [u8]) -> Result<usize> {
-    let payload_len = u16::try_from(payload.len())
-        .map_err(|_| Error::InvalidConfig("wire payload exceeds u16"))?;
     let header_len = packet_header_len(header.fec_scheme, header.symbol_kind);
     let crc_offset = header_len - 4;
-    let length_offset = crc_offset - 2;
     let needed = header_len
         .checked_add(payload.len())
         .ok_or(Error::InvalidConfig("packet length overflow"))?;
@@ -239,11 +230,10 @@ pub fn encode_packet_into(header: WireHeader, payload: &[u8], output: &mut [u8])
             bytes[48..52].copy_from_slice(&header.fragment_count.to_be_bytes());
         }
         FecScheme::RlcGf2 | FecScheme::RlcGf256 => {
-            bytes[COMMON_HEADER_LEN..length_offset]
-                .copy_from_slice(&header.fec_metadata[..length_offset - COMMON_HEADER_LEN]);
+            bytes[COMMON_HEADER_LEN..crc_offset]
+                .copy_from_slice(&header.fec_metadata[..crc_offset - COMMON_HEADER_LEN]);
         }
     }
-    bytes[length_offset..crc_offset].copy_from_slice(&payload_len.to_be_bytes());
     bytes[header_len..].copy_from_slice(payload);
     let checksum = CRC32C.checksum(bytes);
     bytes[crc_offset..header_len].copy_from_slice(&checksum.to_be_bytes());
@@ -276,12 +266,13 @@ mod tests {
     fn fixed_header_has_a_stable_golden_prefix() {
         let encoded = fixture().encode().unwrap();
         assert_eq!(&encoded[..8], &[b'C', b'U', b'L', b'S', 2, 2, 2, 0]);
-        assert_eq!(encoded.len(), 58 + fixture().payload.len());
+        assert_eq!(encoded.len(), 56 + fixture().payload.len());
         assert_eq!(&encoded[8..24], &[0x11; 16]);
         assert_eq!(&encoded[24..28], &0x2233_4455_u32.to_be_bytes());
         assert_eq!(&encoded[28..36], &0x0102_0304_0506_0708_u64.to_be_bytes());
-        assert_eq!(&encoded[52..54], &12_u16.to_be_bytes());
-        assert_eq!(&encoded[58..], fixture().payload);
+        assert_eq!(&encoded[36..48], &fixture().header.fec_metadata);
+        assert_eq!(&encoded[48..52], &1_u32.to_be_bytes());
+        assert_eq!(&encoded[56..], fixture().payload);
         assert_eq!(WirePacket::decode(&encoded).unwrap(), fixture());
     }
 
@@ -306,8 +297,8 @@ mod tests {
     fn rlc_headers_carry_only_the_active_fec_id() {
         for scheme in [FecScheme::RlcGf2, FecScheme::RlcGf256] {
             for (kind, header_len, id_len) in [
-                (FecSymbolKind::Source, 38, 4),
-                (FecSymbolKind::Repair, 42, 8),
+                (FecSymbolKind::Source, 36, 4),
+                (FecSymbolKind::Repair, 40, 8),
             ] {
                 let packet = rlc_fixture(scheme, kind);
                 let encoded = packet.encode().unwrap();
@@ -331,7 +322,7 @@ mod tests {
                     &encoded[28..28 + id_len],
                     &packet.header.fec_metadata[..id_len]
                 );
-                assert_eq!(&encoded[28 + id_len..30 + id_len], &12_u16.to_be_bytes());
+                assert_eq!(header_len, 28 + id_len + 4);
                 assert_eq!(&encoded[header_len..], packet.payload);
                 assert_eq!(WirePacket::decode(&encoded).unwrap(), packet);
 
@@ -376,10 +367,7 @@ mod tests {
                     }
                     let mut damaged = encoded.clone();
                     damaged.push(0);
-                    assert_eq!(
-                        WirePacketRef::decode(&damaged),
-                        Err(Error::PayloadLengthMismatch)
-                    );
+                    assert_eq!(WirePacketRef::decode(&damaged), Err(Error::CrcMismatch));
                     damaged.pop();
                     for offset in 0..damaged.len() {
                         damaged[offset] ^= 1;
@@ -389,6 +377,47 @@ mod tests {
                         );
                         damaged[offset] ^= 1;
                     }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn packet_extent_defines_payload_length_for_every_layout() {
+        for scheme in [FecScheme::RlcGf2, FecScheme::RlcGf256, FecScheme::RaptorQ] {
+            for kind in [FecSymbolKind::Source, FecSymbolKind::Repair] {
+                let mut packet = if scheme == FecScheme::RaptorQ {
+                    fixture()
+                } else {
+                    rlc_fixture(scheme, kind)
+                };
+                packet.header.symbol_kind = kind;
+                let header_len = packet_header_len(scheme, kind);
+                for payload_len in [0, 1, crate::DEFAULT_MAX_SYMBOL_SIZE, u16::MAX as usize + 1] {
+                    packet.payload = vec![0x5a; payload_len];
+                    let needed = header_len + payload_len;
+                    let mut storage = vec![0xaa; needed + 1];
+                    assert_eq!(
+                        encode_packet_into(packet.header, &packet.payload, &mut storage).unwrap(),
+                        needed
+                    );
+                    assert_eq!(storage[needed], 0xaa);
+                    let decoded = WirePacketRef::decode(&storage[..needed]).unwrap();
+                    assert_eq!(decoded.header, packet.header);
+                    assert_eq!(decoded.payload, packet.payload);
+                    assert_eq!(decoded.payload.as_ptr(), storage[header_len..].as_ptr());
+                    assert_eq!(WirePacketRef::decode(&storage), Err(Error::CrcMismatch));
+                    assert_eq!(
+                        encode_packet_into(
+                            packet.header,
+                            &packet.payload,
+                            &mut storage[..needed - 1]
+                        ),
+                        Err(Error::BufferTooSmall {
+                            needed,
+                            available: needed - 1,
+                        })
+                    );
                 }
             }
         }

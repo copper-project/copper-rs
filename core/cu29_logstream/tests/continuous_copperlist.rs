@@ -129,7 +129,7 @@ fn compact_fragment_fits_and_recovers_a_record_previously_needing_two_symbols() 
         assert_eq!(datagrams.len(), 1);
         let packet = cu29_logstream::WirePacketRef::decode(&datagrams[0]).unwrap();
         assert_eq!(packet.payload.len(), SYMBOL_SIZE);
-        assert_eq!(packet.payload.len() + 38, datagrams[0].len());
+        assert_eq!(packet.payload.len() + 36, datagrams[0].len());
         assert_eq!(&packet.payload[20..], record.as_slice());
         datagrams.clear(); // Lose the only source; recover entirely from its repair.
         encoder
