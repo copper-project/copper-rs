@@ -203,11 +203,11 @@ length field. All multi-byte header fields use big endian encoding:
 | RLC source packet | magic (4), lane (1), record kind (1), FEC scheme (1), symbol kind (1), session ID (16), sender ID (4), source payload ID (4), CRC32C (4) | 36 |
 | RLC repair packet | magic (4), lane (1), record kind (1), FEC scheme (1), symbol kind (1), session ID (16), sender ID (4), repair payload ID (8), CRC32C (4) | 40 |
 | RaptorQ packet | magic (4), lane (1), record kind (1), FEC scheme (1), symbol kind (1), session ID (16), sender ID (4), object ID (8), OTI (12), payload ID (4), CRC32C (4) | 56 |
-| Record | magic (4), kind (1), object ID (8), payload length (8), BLAKE3 digest (32) | 53 |
+| Record | magic (4), kind (1), object ID (8), BLAKE3 digest (32) | 45 |
 | RLC fragment | magic (4), object ID (8), record length (4), fragment index (4) | 20 |
 
 Compared with the original headers, this saves 36 bytes per RLC source packet,
-32 per RLC repair packet, 16 per RaptorQ packet, 3 per record, and 12 per RLC
+32 per RLC repair packet, 16 per RaptorQ packet, 11 per record, and 12 per RLC
 source fragment, plus one bincode byte per session manifest.
 Packet sequence counters are not transmitted; recovery and deduplication use
 FEC symbol identifiers and record identities. RLC packets omit the outer object ID
@@ -217,6 +217,12 @@ from that geometry and the configured symbol capacity. Fragment kind is implicit
 CopperList; the reassembled record must still match that kind and identity and
 pass digest verification. Repairs span a window of fragments. Only the active
 RLC FEC ID bytes are transmitted.
+Record payload length is derived from the complete reassembled record extent,
+saving eight bytes per record. The BLAKE3 input remains kind, object ID, derived
+payload length as a big endian u64, and payload. Recovery-point references retain
+the same digests for the same semantic records. Truncated headers are rejected;
+truncated payloads and appended bytes fail digest verification. Receiver allocation
+bounds still apply to the complete framed record before assembly.
 Savings inside record and fragment headers free symbol payload capacity and can
 reduce fragment counts. Packet-header savings directly shorten each datagram.
 Existing symbol storage capacity is unchanged: a 1200-byte MTU uses at most 1128-byte symbols,
