@@ -100,6 +100,7 @@ pub struct MmapUnifiedLoggerBuilder {
     preallocated_size: Option<usize>,
     write: bool,
     create: bool,
+    append: bool,
 }
 
 impl Default for MmapUnifiedLoggerBuilder {
@@ -115,6 +116,7 @@ impl MmapUnifiedLoggerBuilder {
             preallocated_size: None,
             write: false,
             create: false, // This is the safest default
+            append: false,
         }
     }
 
@@ -139,6 +141,16 @@ impl MmapUnifiedLoggerBuilder {
         self
     }
 
+    /// When `write` and `create` are both set, resume writing at the end of an
+    /// existing log instead of truncating it.
+    ///
+    /// Requires a cleanly closed log (one ending with a permanent end-of-log
+    /// marker). Returns an error if the log does not exist or is incomplete.
+    pub fn append(mut self, append: bool) -> Self {
+        self.append = append;
+        self
+    }
+
     pub fn build(self) -> io::Result<MmapUnifiedLogger> {
         let page_size = page_size::get();
 
@@ -155,7 +167,11 @@ impl MmapUnifiedLoggerBuilder {
                     "Preallocated size is required for write mode",
                 )
             })?;
-            let ulw = MmapUnifiedLoggerWrite::new(&file_path, preallocated_size, page_size)?;
+            let ulw = if self.append {
+                MmapUnifiedLoggerWrite::append(&file_path, preallocated_size)?
+            } else {
+                MmapUnifiedLoggerWrite::new(&file_path, preallocated_size, page_size)?
+            };
             Ok(MmapUnifiedLogger::Write(ulw))
         } else {
             let file_path = self.file_base_name.ok_or_else(|| {
@@ -734,6 +750,73 @@ impl MmapUnifiedLoggerWrite {
         })
     }
 
+    /// Resume writing at the end of a cleanly closed log instead of zapping it.
+    ///
+    /// Scans the existing log for the permanent end-of-log marker, reopens the
+    /// last slab for writing (re-extending it to `slab_size`, since it is trimmed
+    /// on clean shutdown), and positions the cursor right after that marker so new
+    /// sections overwrite it. The main header and earlier slabs are left untouched.
+    fn append(base_file_path: &Path, slab_size: usize) -> io::Result<Self> {
+        // Locate the end-of-log marker using the read side.
+        let mut reader = MmapUnifiedLoggerRead::new(base_file_path)?;
+        let end = reader.end_of_log().map_err(io::Error::other)?;
+        let last_slab_index = end.slab_index;
+        let resume_offset = end.offset;
+        // Preserve the original page alignment recorded in the main header.
+        let original_page_size = reader.raw_main_header().page_size as usize;
+        drop(reader);
+
+        let slab_path = build_slab_path(base_file_path, last_slab_index)?;
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&slab_path)
+            .map_err(|e| {
+                io::Error::new(
+                    e.kind(),
+                    format!(
+                        "Failed to open slab {} for append: {e}",
+                        slab_path.display()
+                    ),
+                )
+            })?;
+
+        // The last slab is trimmed to its used size on clean shutdown; give it
+        // back room for new sections.
+        let current_len = file
+            .metadata()
+            .map_err(|e| {
+                io::Error::new(
+                    e.kind(),
+                    format!("Failed to read metadata for {}", slab_path.display()),
+                )
+            })?
+            .len();
+        if (current_len as usize) < slab_size {
+            file.set_len(slab_size as u64).map_err(|e| {
+                io::Error::new(
+                    e.kind(),
+                    format!(
+                        "Failed to extend slab {} for append: {e}",
+                        slab_path.display()
+                    ),
+                )
+            })?;
+        }
+
+        let mut front_slab = SlabEntry::new(file, original_page_size)?;
+        front_slab.current_global_position = resume_offset;
+        front_slab.flushed_until_offset = resume_offset;
+
+        Ok(Self {
+            front_slab,
+            back_slabs: Vec::new(),
+            base_file_path: base_file_path.to_path_buf(),
+            slab_size,
+            front_slab_suffix: last_slab_index,
+        })
+    }
+
     fn garbage_collect_backslabs(&mut self) {
         self.back_slabs
             .retain_mut(|slab| !slab.sections_offsets_in_flight.is_empty());
@@ -999,6 +1082,27 @@ impl MmapUnifiedLoggerRead {
 
     pub fn raw_main_header(&self) -> &MainHeader {
         &self.main_header
+    }
+
+    /// Scan forward to the permanent end-of-log marker and return its position
+    /// (the offset at which a writer may resume appending).
+    pub fn end_of_log(&mut self) -> CuResult<LogPosition> {
+        loop {
+            if self.current_reading_position >= self.current_mmap_buffer.len() {
+                self.next_slab().map_err(|e| {
+                    CuError::new_with_cause(
+                        "Failed to advance to the next slab while locating the end of the log",
+                        e,
+                    )
+                })?;
+            }
+
+            let header = self.read_section_header()?;
+            if header.entry_type == UnifiedLogType::LastEntry {
+                return Ok(self.position());
+            }
+            self.current_reading_position += header.offset_to_next_section as usize;
+        }
     }
 
     pub fn scan_section_bytes(&mut self, datalogtype: UnifiedLogType) -> CuResult<u64> {
@@ -1484,6 +1588,111 @@ mod tests {
         assert_eq!(logger_guard.front_slab.pending_closed_bytes(), 0);
         drop(logger_guard);
         drop(s1);
+    }
+
+    #[test]
+    fn test_append_preserves_existing_and_adds_new_sections() {
+        let tmp_dir = TempDir::new().expect("could not create a tmp dir");
+        let file_path = tmp_dir.path().join("test.bin");
+
+        // First run: one section with three entries, then a clean close.
+        {
+            let MmapUnifiedLogger::Write(logger) = MmapUnifiedLoggerBuilder::new()
+                .write(true)
+                .create(true)
+                .file_base_name(&file_path)
+                .preallocated_size(LARGE_SLAB)
+                .build()
+                .expect("Failed to create logger")
+            else {
+                panic!("Failed to create logger")
+            };
+            let logger = Arc::new(Mutex::new(logger));
+            {
+                let mut stream = stream_write::<u32, MmapSectionStorage>(
+                    logger.clone(),
+                    UnifiedLogType::StructuredLogLine,
+                    1024,
+                )
+                .unwrap();
+                stream.log(&1u32).unwrap();
+                stream.log(&2u32).unwrap();
+                stream.log(&3u32).unwrap();
+            }
+        } // logger drops -> clean close
+
+        // Second run: append one more section with two entries.
+        {
+            let MmapUnifiedLogger::Write(logger) = MmapUnifiedLoggerBuilder::new()
+                .write(true)
+                .create(true)
+                .append(true)
+                .file_base_name(&file_path)
+                .preallocated_size(LARGE_SLAB)
+                .build()
+                .expect("Failed to append to logger")
+            else {
+                panic!("Failed to append to logger")
+            };
+            let logger = Arc::new(Mutex::new(logger));
+            {
+                let mut stream = stream_write::<u32, MmapSectionStorage>(
+                    logger.clone(),
+                    UnifiedLogType::StructuredLogLine,
+                    1024,
+                )
+                .unwrap();
+                stream.log(&4u32).unwrap();
+                stream.log(&5u32).unwrap();
+            }
+        }
+
+        // Read back both sections: the original three entries then the two appended.
+        let MmapUnifiedLogger::Read(mut dl) = MmapUnifiedLoggerBuilder::new()
+            .file_base_name(&file_path)
+            .build()
+            .expect("Failed to build logger")
+        else {
+            panic!("Failed to build logger")
+        };
+
+        let first = dl
+            .read_next_section_type(UnifiedLogType::StructuredLogLine)
+            .expect("Failed to read first section")
+            .expect("Missing first section");
+        let mut reader = SliceReader::new(&first[..]);
+        assert_eq!(
+            decode_from_reader::<u32, _, _>(&mut reader, standard()).unwrap(),
+            1
+        );
+        assert_eq!(
+            decode_from_reader::<u32, _, _>(&mut reader, standard()).unwrap(),
+            2
+        );
+        assert_eq!(
+            decode_from_reader::<u32, _, _>(&mut reader, standard()).unwrap(),
+            3
+        );
+
+        let second = dl
+            .read_next_section_type(UnifiedLogType::StructuredLogLine)
+            .expect("Failed to read second section")
+            .expect("Missing second section");
+        let mut reader = SliceReader::new(&second[..]);
+        assert_eq!(
+            decode_from_reader::<u32, _, _>(&mut reader, standard()).unwrap(),
+            4
+        );
+        assert_eq!(
+            decode_from_reader::<u32, _, _>(&mut reader, standard()).unwrap(),
+            5
+        );
+
+        assert!(
+            dl.read_next_section_type(UnifiedLogType::StructuredLogLine)
+                .expect("Failed to read past sections")
+                .is_none()
+        );
     }
 
     #[test]
