@@ -11,3 +11,6 @@ keywords.workspace = true
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
+
+[dependencies]
+sha2 = { workspace = true }
