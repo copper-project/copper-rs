@@ -5654,14 +5654,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         cu29::resource::ResourceKey::<()>::new(cu29::resource::BundleIndex::new(#bundle),
                             cu29::resource::resource_index_by_name::<#provider>(#name)).typed::<#ty>()
                     )?.0;
-                    let (#continuous_ident, #recovery_ident, sender_monitor) = ::cu29::logstream::scheduled_feedback_sinks::<#mission_mod::CuStampedDataSet, _>(
+                    let (mut #continuous_ident, #recovery_ident, sender_monitor) = ::cu29::logstream::scheduled_feedback_sinks::<#mission_mod::CuStampedDataSet, _>(
                         ::cu29::logstream::SeparateFeedback { tx: #transport_ident, feedback_rx }, sender_config,
                         if clock.is_mock() { RobotClock::new() } else { clock.clone() },
                     )?;
                 }
             } else {
                 quote! {
-                    let (#continuous_ident, #recovery_ident, sender_monitor) = ::cu29::logstream::scheduled_sinks::<#mission_mod::CuStampedDataSet, _>(
+                    let (mut #continuous_ident, #recovery_ident, sender_monitor) = ::cu29::logstream::scheduled_sinks::<#mission_mod::CuStampedDataSet, _>(
                         #transport_ident, sender_config,
                         if clock.is_mock() { RobotClock::new() } else { clock.clone() },
                     )?;
@@ -5694,6 +5694,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     )?
                     .0;
                 #scheduled
+                let structured_outputs = (#continuous_ident.take_structured_log_sink(), structured_outputs);
                 stream_monitors.push(sender_monitor.into_runtime_monitor(&destination.id,
                     destination.link.bitrate_bps, usize::from(destination.fec.continuous.repair_every_source_symbols)));
                 let #continuous_ident = if logstream_schema.reconstruction.is_empty() {
@@ -5736,6 +5737,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #[allow(unused_mut)]
                 let mut resources = resources;
                 let mut stream_monitors = Vec::with_capacity(#configured_logstream_count + usize::from(logstream.is_some()));
+                let structured_outputs = ();
                 #configured_logstream_session
                 #(#configured_logstream_initializers)*
                 let injected_logstream_sinks = logstream
@@ -5752,20 +5754,22 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         }
                         let bitrate = sender_config.pacing.bitrate_bps;
                         let baseline = sender_config.continuous.repair_every_source_symbols;
-                        let (copperlist, keyframe, sender_monitor) = ::cu29::logstream::scheduled_sinks::<
+                        let (mut copperlist, keyframe, sender_monitor) = ::cu29::logstream::scheduled_sinks::<
                             #mission_mod::CuStampedDataSet, _
                         >(transport, sender_config,
                             if clock.is_mock() { RobotClock::new() } else { clock.clone() })?;
                         stream_monitors.push(sender_monitor.into_runtime_monitor("injected", bitrate, baseline));
+                        let structured = copperlist.take_structured_log_sink();
                         let copperlist = if schema.reconstruction.is_empty() { copperlist }
                             else { copperlist.with_encoder(::cu29::logstream::capture::encode_capture_record_into) };
-                        Ok::<_, CuError>((copperlist, keyframe))
+                        Ok::<_, CuError>(((copperlist, keyframe), structured))
                     })
                     .transpose()?;
                 let stream_monitors: Option<::std::sync::Arc<[cu29::monitoring::LogStreamMonitor]>> =
                     (!stream_monitors.is_empty()).then(|| stream_monitors.into());
-                let (injected_logstream_sink, injected_logstream_keyframe_sink) =
-                    injected_logstream_sinks.unzip();
+                let (injected_logstream_sinks, injected_structured) = injected_logstream_sinks.unzip();
+                let structured_outputs = (injected_structured.flatten(), structured_outputs);
+                let (injected_logstream_sink, injected_logstream_keyframe_sink) = injected_logstream_sinks.unzip();
                 let copperlist_sink = ::cu29::fanout::OptionalWriteStream::new(
                     local_copperlist_output_required.then_some(local_copperlist_sink),
                 );
@@ -5820,6 +5824,40 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! { #mission_mod::monitor_instanciator }
         };
 
+        let local_structured_logger_init = quote! {
+            let local_structured_log_sink = ::cu29::prelude::LogStream::new(
+                ::cu29::prelude::UnifiedLogType::StructuredLogLine,
+                unified_logger.clone(), 4096 * 10,
+            )?;
+        };
+        let (early_structured_logger_init, late_structured_logger_init) = if logstream_enabled {
+            (
+                quote! {},
+                quote! {
+                    #local_structured_logger_init
+                    let logger_runtime = if logstream_output_required {
+                        ::cu29::prelude::LoggerRuntime::init(
+                            clock.clone(),
+                            ::cu29::logstream::StructuredLogStream::new(local_structured_log_sink, structured_outputs),
+                            None::<::cu29::prelude::NullLog>,
+                        )
+                    } else {
+                        ::cu29::prelude::LoggerRuntime::init(clock.clone(), local_structured_log_sink, None::<::cu29::prelude::NullLog>)
+                    };
+                },
+            )
+        } else {
+            (
+                quote! {
+                    #local_structured_logger_init
+                    let logger_runtime = ::cu29::prelude::LoggerRuntime::init(
+                        clock.clone(), local_structured_log_sink, None::<::cu29::prelude::NullLog>,
+                    );
+                },
+                quote! {},
+            )
+        };
+
         let build_with_resources_fn = quote! {
             #build_with_resources_sig {
                 let AppResources {
@@ -5829,19 +5867,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     #build_with_resources_thread_pools_destructure
                 } = app_resources;
 
-                let local_structured_log_sink = ::cu29::prelude::stream_write::<
-                    ::cu29::prelude::CuLogEntry,
-                    S,
-                >(
-                    unified_logger.clone(),
-                    ::cu29::prelude::UnifiedLogType::StructuredLogLine,
-                    4096 * 10,
-                )?;
-                let logger_runtime = ::cu29::prelude::LoggerRuntime::init(
-                    clock.clone(),
-                    local_structured_log_sink,
-                    None::<::cu29::prelude::NullLog>,
-                );
+                #early_structured_logger_init
 
                 // For simple cases we can say the section is just a bunch of Copper Lists.
                 // But we can now have allocations outside of it so we can override it from the config.
@@ -5872,6 +5898,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #local_keyframe_sink_init
 
                 #copperlist_output_graph
+                #late_structured_logger_init
 
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: creating runtime lifecycle stream");

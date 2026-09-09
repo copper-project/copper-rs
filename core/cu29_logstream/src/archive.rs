@@ -37,6 +37,8 @@ pub struct NativeArchive<P: CopperListTuple> {
     copperlists: NativeStream,
     keyframes: NativeStream,
     continuity: NativeStream,
+    structured: NativeStream,
+    last_structured: Option<cu29_log::CuLogEntry>,
     identity: StreamIdentity,
     manifest_digest: [u8; 32],
     manifest_object_id: u64,
@@ -54,7 +56,7 @@ impl Encode for CanonicalEntry<'_> {
 }
 
 impl<P: CopperListTuple> NativeArchive<P> {
-    /// Creates native CopperList, FrozenTasks and StreamContinuity sections.
+    /// Creates native message, task state, continuity and structured log sections.
     /// The section size must fit the largest accepted canonical entry.
     pub fn new(
         path: &Path,
@@ -103,6 +105,7 @@ impl<P: CopperListTuple> NativeArchive<P> {
         };
         let logger = Arc::new(Mutex::new(logger));
         let mut archive = Self {
+            last_structured: None,
             copperlists: NativeStream::new(
                 UnifiedLogType::CopperList,
                 logger.clone(),
@@ -111,6 +114,12 @@ impl<P: CopperListTuple> NativeArchive<P> {
             .map_err(io_error)?,
             keyframes: NativeStream::new(
                 UnifiedLogType::FrozenTasks,
+                logger.clone(),
+                section_bytes,
+            )
+            .map_err(io_error)?,
+            structured: NativeStream::new(
+                UnifiedLogType::StructuredLogLine,
                 logger.clone(),
                 section_bytes,
             )
@@ -143,6 +152,7 @@ impl<P: CopperListTuple> NativeArchive<P> {
     }
 
     fn accept_capture(&mut self, event: &SessionEventRef<'_>) -> Result<Option<CapturedList<P>>> {
+        self.last_structured = None;
         if self.poisoned {
             return Err(Error::InvalidConfig(
                 "archive failed; close it before continuing",
@@ -245,9 +255,31 @@ impl<P: CopperListTuple> NativeArchive<P> {
                     })
                     .map_err(io_error)?;
             }
-            SessionEvent::Object { .. } => {}
+            SessionEvent::Object { record, .. } => {
+                let decoded = record.decoded();
+                if decoded.kind == RecordKind::StructuredLog {
+                    let (entry, used): (cu29_log::CuLogEntry, usize) = bincode::decode_from_slice(
+                        decoded.payload,
+                        bincode::config::standard().with_limit::<4_194_304>(),
+                    )
+                    .map_err(|_| Error::InvalidConfig("invalid structured log entry"))?;
+                    if used != decoded.payload.len() {
+                        return Err(Error::InvalidConfig("trailing structured log bytes"));
+                    }
+                    self.structured
+                        .log(&CanonicalEntry(decoded.payload))
+                        .map_err(io_error)?;
+                    self.last_structured = Some(entry);
+                }
+            }
         }
         Ok(None)
+    }
+
+    /// Move the structured entry decoded during the most recent successful accept.
+    /// Call before accepting another event; publication can reuse this owned value.
+    pub fn take_structured_log(&mut self) -> Option<cu29_log::CuLogEntry> {
+        self.last_structured.take()
     }
 
     /// Records the receiver's final known boundary and closes native sections.
@@ -293,6 +325,11 @@ impl<P: crate::capture::CaptureDataSet> CaptureArchive<P> {
         event: &SessionEventRef<'_>,
     ) -> Result<Option<crate::capture::CapturedList<P>>> {
         self.0.accept_capture(event)
+    }
+
+    /// Move the structured entry from the most recent successful accept.
+    pub fn take_structured_log(&mut self) -> Option<cu29_log::CuLogEntry> {
+        self.0.take_structured_log()
     }
 
     pub fn finish(self) -> Result<()> {

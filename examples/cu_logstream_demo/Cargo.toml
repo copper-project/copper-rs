@@ -14,7 +14,7 @@ verify-reconstruction = ["demo", "cu29/logstream-verify"]
 # Keep async runtime features out of ordinary workspace builds.
 demo = ["cu29/logstream", "cu29/reflect", "dep:cu-transform"]
 replay = ["demo", "cu29/remote-debug"]
-tui = ["demo", "dep:ratatui"]
+tui = ["demo", "dep:ratatui", "dep:cu29-intern-strs"]
 sender-monitor = ["demo", "dep:cu-consolemon"]
 
 [[bin]]
@@ -42,6 +42,7 @@ cu29-export = { workspace = true }
 cu29-unifiedlog = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 serde = { workspace = true }
+cu29-intern-strs = { workspace = true, optional = true }
 ratatui = { version = "0.30", optional = true }
 
 [build-dependencies]

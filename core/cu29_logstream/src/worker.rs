@@ -32,6 +32,93 @@ use std::{
 
 const CL_BUFFERS: usize = 4;
 const KF_BUFFERS: usize = 2;
+const STRUCTURED_BUFFERS: usize = 4;
+use crate::pacing::STRUCTURED_RECORD_BYTES;
+
+struct StructuredRecord {
+    bytes: Box<[u8]>,
+    len: usize,
+    queued_at: CuTime,
+}
+
+struct StructuredInbox {
+    free: crossbeam_queue::ArrayQueue<StructuredRecord>,
+    pending: crossbeam_queue::ArrayQueue<StructuredRecord>,
+}
+
+/// A bounded destination for bytes produced by the local structured-log encoder.
+/// It does not own the sender thread: dropping the CL and keyframe sinks still
+/// drains and joins that worker, even while the global logger holds this sink.
+pub struct ScheduledStructuredLogSink {
+    inbox: Arc<StructuredInbox>,
+    status: Arc<Shared>,
+    thread: Thread,
+    clock: RobotClock,
+    current: Option<StructuredRecord>,
+    oversized: bool,
+}
+
+impl Debug for ScheduledStructuredLogSink {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ScheduledStructuredLogSink")
+            .finish_non_exhaustive()
+    }
+}
+
+impl crate::structured::StructuredLogOutput for ScheduledStructuredLogSink {
+    fn begin(&mut self) {
+        if self.current.is_none()
+            && !self.status.stop.load(Ordering::Acquire)
+            && !self.status.failed.load(Ordering::Acquire)
+        {
+            self.current = self.inbox.free.pop();
+        }
+        if let Some(record) = &mut self.current {
+            record.len = crate::record::RECORD_HEADER_LEN;
+        }
+        self.oversized = false;
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        if let Some(record) = &mut self.current
+            && !self.oversized
+        {
+            if bytes.len() > record.bytes.len() - record.len {
+                self.oversized = true;
+            } else {
+                record.bytes[record.len..record.len + bytes.len()].copy_from_slice(bytes);
+                record.len += bytes.len();
+            }
+        }
+    }
+
+    fn finish(&mut self, success: bool) {
+        let record = self.current.take();
+        if !success
+            || self.oversized
+            || self.status.stop.load(Ordering::Acquire)
+            || self.status.failed.load(Ordering::Acquire)
+        {
+            if let Some(record) = record {
+                let _ = self.inbox.free.push(record);
+            }
+            if success {
+                self.status.inbox_drops.fetch_add(1, Ordering::Relaxed);
+            }
+        } else if let Some(mut record) = record {
+            record.queued_at = self.clock.now();
+            // Every owned buffer has a slot in the bounded pending queue.
+            if let Err(record) = self.inbox.pending.push(record) {
+                let _ = self.inbox.free.push(record);
+                self.status.inbox_drops.fetch_add(1, Ordering::Relaxed);
+            } else {
+                self.thread.unpark();
+            }
+        } else {
+            self.status.inbox_drops.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+}
 
 struct Record {
     bytes: Box<[u8]>,
@@ -162,10 +249,16 @@ impl Inbox {
 /// Encodes directly into a sender-owned buffer on the existing CL output worker.
 pub struct ScheduledCopperListSink<P: CopperListTuple> {
     inbox: Inbox,
+    structured: Option<ScheduledStructuredLogSink>,
     encoder: fn(&CopperList<P>, &mut [u8]) -> crate::Result<usize>,
     _payload: PhantomData<fn() -> P>,
 }
 impl<P: CopperListTuple> ScheduledCopperListSink<P> {
+    /// Take the optional structured-log handoff before installing the CL sink.
+    pub fn take_structured_log_sink(&mut self) -> Option<ScheduledStructuredLogSink> {
+        self.structured.take()
+    }
+
     /// Select the generated capture encoder before handing the sink to its output worker.
     pub fn with_encoder(
         mut self,
@@ -314,12 +407,18 @@ where
     let cl_bytes = config.continuous.max_record_bytes;
     let kf_bytes = usize::try_from(config.recovery.finite.max_object_bytes)
         .map_err(|_| CuError::from("Keyframe limit exceeds usize"))?;
+    let structured_bytes = kf_bytes.min(STRUCTURED_RECORD_BYTES);
     let reserved = cl_bytes
         .checked_mul(CL_BUFFERS)
         .and_then(|v| {
             kf_bytes
                 .checked_mul(KF_BUFFERS)
                 .and_then(|k| v.checked_add(k))
+        })
+        .and_then(|v| {
+            v.checked_add(
+                STRUCTURED_BUFFERS * (structured_bytes + 2 * size_of::<StructuredRecord>()),
+            )
         })
         .ok_or_else(|| CuError::from("Sender pool size overflow"))?;
     let shutdown_clock = if clock.is_mock() {
@@ -344,6 +443,19 @@ where
             .try_send(vec![0; kf_bytes].into_boxed_slice())
             .expect("new pool");
     }
+    let structured = Arc::new(StructuredInbox {
+        free: crossbeam_queue::ArrayQueue::new(STRUCTURED_BUFFERS),
+        pending: crossbeam_queue::ArrayQueue::new(STRUCTURED_BUFFERS),
+    });
+    for _ in 0..STRUCTURED_BUFFERS {
+        let _ = structured.free.push(StructuredRecord {
+            bytes: vec![0; structured_bytes].into_boxed_slice(),
+            len: 0,
+            queued_at: CuTime::default(),
+        });
+    }
+    let structured_worker = structured.clone();
+    let structured_clock = clock.clone();
     let cl_clock = clock.clone();
     let kf_clock = clock.clone();
     let shared = Arc::new(Shared::default());
@@ -363,6 +475,7 @@ where
             let mut feedback_failed = false;
             let mut next_snapshot = clock.now();
             let mut stop_at = None;
+            let mut structured_id = 0u64;
             // Teardown remains finite even for deliberately frozen scheduler test clocks.
             let result = (|| -> crate::Result<()> {
                 loop {
@@ -402,6 +515,18 @@ where
                         result?;
                         received += 1;
                     }
+                    for _ in 0..STRUCTURED_BUFFERS {
+                        let Some(mut record) = structured_worker.pending.pop() else { break; };
+                        let (header, payload) = record.bytes[..record.len].split_at_mut(crate::record::RECORD_HEADER_LEN);
+                        let result = crate::record::encode_record_header(
+                            crate::RecordKind::StructuredLog, structured_id, payload, header,
+                        ).and_then(|()| core.accept_record(&record.bytes[..record.len], record.queued_at));
+                        let _ = structured_worker.free.push(record);
+                        result?;
+                        structured_id = structured_id.checked_add(1)
+                            .ok_or(crate::Error::InvalidConfig("structured log sequence exhausted"))?;
+                        received += 1;
+                    }
                     let next = core.poll(clock.now(), &mut transport)?;
                     let now = clock.now();
                     if now >= next_snapshot {
@@ -435,7 +560,12 @@ where
                 }
                 Ok(())
             })();
+            status.failed.store(result.is_err(), Ordering::Release);
             core.discard_pending();
+            while let Some(record) = structured_worker.pending.pop() {
+                status.inbox_drops.fetch_add(1, Ordering::Relaxed);
+                let _ = structured_worker.free.push(record);
+            }
             let stats = core.stats();
             *status.final_stats.lock().expect("sender stats") = Some(stats);
             *status.snapshot.lock().expect("sender snapshot") = SenderSnapshot {
@@ -459,6 +589,14 @@ where
     });
     Ok((
         ScheduledCopperListSink {
+            structured: Some(ScheduledStructuredLogSink {
+                inbox: structured,
+                status: shared.clone(),
+                thread: worker.thread.clone(),
+                clock: structured_clock,
+                current: None,
+                oversized: false,
+            }),
             encoder: crate::encode_copperlist_record_into,
             inbox: Inbox {
                 clock: cl_clock,

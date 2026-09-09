@@ -231,6 +231,14 @@ logstream-demo-check:
 	cargo +stable test -p cu29-runtime --test replay_primitives --features cu29/async-cl-io
 	just --justfile examples/cu_logstream_demo/justfile check
 
+# Structured-log binary handoff, generated wiring, archive isolation, and remote telemetry.
+logstream-structured-check:
+	cargo +stable test -p cu29-log --lib
+	cargo +stable check -p cu29-log --no-default-features
+	cargo +stable test -p cu29 --features logstream --test logstream_runtime --test logstream_configured_runtime --test logstream_sim_compile
+	just logstream-telemetry-check
+	just logstream-udp-check
+
 # Pull telemetry, reader overruns, archive isolation, and the native terminal UI.
 logstream-telemetry-check:
 	cargo +stable clippy -p cu29-logstream --all-targets -- --deny warnings

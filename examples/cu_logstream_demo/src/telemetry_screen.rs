@@ -26,6 +26,7 @@ use std::{
 const BUFFER_CAPACITY: usize = 64;
 const CHART_CAPACITY: usize = 120;
 const TRAIL_CAPACITY: usize = 1200; // One 12-second loop at 100 Hz, UI storage only.
+const LOG_CAPACITY: usize = 64;
 const UI_TICK: Duration = Duration::from_millis(50);
 
 // Official Catppuccin Mocha colors; omit teal, sky, and sapphire accents.
@@ -58,6 +59,8 @@ struct View {
     session: Option<cu29_logstream::StreamIdentity>,
     history: VecDeque<JointAngles>,
     trail: VecDeque<[f64; 2]>,
+    logs: VecDeque<(cu29::prelude::CuLogLevel, String)>,
+    logs_missed: u64,
 }
 
 impl View {
@@ -74,6 +77,56 @@ impl View {
             self.missed += update.missed;
             self.accept(frame);
         }
+    }
+
+    fn consume_logs(&mut self, reader: &mut cu29_logstream::CuTwinLogReader, strings: &[String]) {
+        if self.paused {
+            return;
+        }
+        for _ in 0..LOG_CAPACITY {
+            let Some(update) = reader.try_read() else {
+                break;
+            };
+            self.logs_missed += update.missed;
+            let entry = &update.frame.entry;
+            let text = cu29::prelude::rebuild_logline(strings, entry).unwrap_or_else(|error| {
+                format!("Cannot render robot log #{}: {error}", entry.msg_index)
+            });
+            if self.logs.len() == LOG_CAPACITY {
+                self.logs.pop_front();
+            }
+            self.logs.push_back((entry.level, text));
+        }
+    }
+
+    fn draw_logs(&self, frame: &mut ratatui::Frame<'_>, area: Rect, received: u64) {
+        let block = panel("Robot logs · received over UDP", BLUE).title_bottom(format!(
+            "Archived: {received} · view missed: {}",
+            self.logs_missed
+        ));
+        let height = block.inner(area).height as usize;
+        let lines: Vec<Line<'_>> = if self.logs.is_empty() {
+            vec![Line::from(Span::styled(
+                "Waiting for robot info! entries…",
+                Style::default().fg(MUTED),
+            ))]
+        } else {
+            self.logs
+                .iter()
+                .skip(self.logs.len().saturating_sub(height))
+                .map(|(level, text)| {
+                    use cu29::prelude::CuLogLevel;
+                    let color = match level {
+                        CuLogLevel::Debug => MUTED,
+                        CuLogLevel::Info => GREEN,
+                        CuLogLevel::Warning => YELLOW,
+                        CuLogLevel::Error | CuLogLevel::Critical => RED,
+                    };
+                    Line::from(Span::styled(text.as_str(), Style::default().fg(color)))
+                })
+                .collect()
+        };
+        frame.render_widget(Paragraph::new(lines).block(block), area);
     }
 
     fn accept(&mut self, frame: &Frame) {
@@ -206,7 +259,7 @@ impl View {
         ));
         if !compact {
             tab_spans.push(Span::styled(
-                " Copper · UDP ground station",
+                " Copper telemetry · remote robot",
                 Style::default().fg(FG),
             ));
         }
@@ -276,6 +329,15 @@ impl View {
             );
             return;
         }
+        let body = if body.height >= 10 {
+            let log_height = if compact { 4 } else { 6 };
+            let [body, logs] =
+                Layout::vertical([Constraint::Min(0), Constraint::Length(log_height)]).areas(body);
+            self.draw_logs(frame, logs, status.structured_logs);
+            body
+        } else {
+            body
+        };
         if compact {
             frame.render_widget(
                 Paragraph::new(vec![
@@ -629,14 +691,22 @@ fn age_metric(label: &str, age: Option<Duration>) -> Vec<Span<'static>> {
 pub fn run(options: ReceiverOptions) -> Result<()> {
     if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
         return Err(
-            "Dashboard needs a terminal; use the receiver command for headless recording".into(),
+            "Telemetry needs a terminal; use the receiver command for headless recording".into(),
         );
     }
+    let index_path = options
+        .log_index
+        .clone()
+        .unwrap_or(std::env::current_exe()?.with_file_name("cu29_log_index"));
+    let strings = cu29_intern_strs::read_interned_strings(&index_path)
+        .map_err(|error| format!("Read robot string index {}: {error}", index_path.display()))?;
     let (mut twin, mut reader, _) = receiver::start(&options)?;
+    let mut logs = twin.take_log_reader().expect("fresh twin log reader");
     let ui_result: std::io::Result<()> = ratatui::run(|terminal| {
         let mut view = View {
             history: VecDeque::with_capacity(CHART_CAPACITY),
             trail: VecDeque::with_capacity(TRAIL_CAPACITY),
+            logs: VecDeque::with_capacity(LOG_CAPACITY),
             ..Default::default()
         };
         let mut redraw = Instant::now();
@@ -662,6 +732,7 @@ pub fn run(options: ReceiverOptions) -> Result<()> {
                 }
             }
             view.consume(&mut reader);
+            view.consume_logs(&mut logs, &strings);
             let status = reader.status();
             if Instant::now() >= redraw {
                 terminal.draw(|frame| {
@@ -686,6 +757,63 @@ pub fn run(options: ReceiverOptions) -> Result<()> {
 mod tests {
     use super::*;
     use ratatui::{Terminal, backend::TestBackend};
+
+    #[test]
+    fn remote_log_pane_rebuilds_binary_entries_and_pause_keeps_recording_independent() {
+        use cu29::prelude::*;
+        use cu29_logstream::{ReceivedStructuredLog, StreamIdentity, telemetry::telemetry_channel};
+        let (mut publisher, mut reader) = telemetry_channel(2.try_into().unwrap(), ());
+        let mut entry = CuLogEntry::new(1, CuLogLevel::Info);
+        for value in [35u64, 3300] {
+            entry.paramname_indexes.push(0);
+            entry.params.push(cu29::prelude::to_value(value).unwrap());
+        }
+        let strings = vec![
+            String::new(),
+            "Simulated encoder health: temperature_c={} supply_mv={}".into(),
+        ];
+        publisher.publish(ReceivedStructuredLog {
+            identity: StreamIdentity {
+                session_id: [1; 16],
+                sender_id: 41,
+            },
+            sequence: 0,
+            entry,
+        });
+        let mut view = View {
+            paused: true,
+            ..Default::default()
+        };
+        view.consume_logs(&mut reader, &strings);
+        assert!(view.logs.is_empty());
+        view.paused = false;
+        view.consume_logs(&mut reader, &strings);
+        assert_eq!(view.logs.len(), 1);
+        let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
+        terminal
+            .draw(|frame| {
+                view.draw(
+                    frame,
+                    Status {
+                        structured_logs: 1,
+                        ..Default::default()
+                    },
+                    0,
+                    "logs/telemetry.copper",
+                )
+            })
+            .unwrap();
+        let screen: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(screen.contains("Robot logs · received over UDP"));
+        assert!(screen.contains("Simulated encoder health: temperature_c=35 supply_mv=3300"));
+        assert!(screen.contains("Archived: 1"));
+    }
 
     #[test]
     fn ages_highlight_at_first_visible_increase_and_clear_on_fresh_data() {

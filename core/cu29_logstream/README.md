@@ -15,7 +15,7 @@ Logreader / replay ← .copper archive ← logstream receiver
 The sender protects log records with recovery data. The receiver reconstructs
 what it can and records explicit gaps for what it cannot. Received archives use
 Copper's native format, so your application's normal logreader and replay tools
-can read them. Sender work runs off the real-time task path.
+can read them. Framing, FEC, and transmission run on background workers.
 
 ## Using it
 
@@ -43,9 +43,9 @@ preserves the received payloads and timestamps.
 - Native archival requires the matching application. `NativeArchive` handles
   full captures; `CaptureArchive` retains selective captures for live/offline replay. Use a separate archive path for each sender session.
 - Generated senders enforce one bitrate/burst budget across continuous data,
-  repairs, and recovery packets. The budget counts Copper packet bytes, excluding
-  UDP/IP or other carrier overhead. Replay and recovery share byte-deficit
-  scheduling with weights 3:1; unused capacity is available to either lane.
+  repairs, recovery packets, and structured logs. The budget counts Copper packet bytes, excluding
+  UDP/IP or other carrier overhead. Replay, recovery, and structured logs share byte-deficit
+  scheduling with weights 3:1:1; unused capacity is available to any ready lane.
 - Manifest and latest complete keyframe/recovery point/boundary recovery repeat on a
   250 ms local deadline, with overlapping requests coalesced. A pending bundle
   finishes before a newer one replaces it. New recovery points wait for older queued
@@ -59,6 +59,59 @@ preserves the received payloads and timestamps.
 Run `just logstream-receiver-check` from the repository root to test reception,
 archival, and replay continuity. See the Rust API docs for receiver limits and
 event handling.
+
+## Structured log records
+
+Configured and injected runtime destinations automatically forward `debug!`,
+`info!`, `warn!`, and `error!` entries alongside local logging. The generated
+static fan-out copies the bytes produced by the existing local serializer into
+one preallocated buffer per destination. Framing, hashing, FEC, and transmission
+run on sender workers. Message templates and parameter names are represented by
+interned numeric IDs; receivers render text with the producing application's
+`cu29_log_index`. Parameter values retain their native types, including strings
+when an application explicitly logs a string value.
+
+The sender reserves four structured-record buffers per destination, each capped
+at 4096 bytes including the existing record header, or `max_object_bytes` when
+smaller. Size overflow, exhausted pools, and stopped destinations increment
+`inbox_drops` while the local record remains intact. These buffers and their
+queue storage count toward `memory_budget_kib`. The demo uses 576 KiB to cover
+its CL/keyframe pools, structured buffers, recovery retention, and packet queues.
+A section rollover resets the copied entry before the local serialization retry;
+only a successful local write admits the completed entry for transmission.
+
+`SenderCore::accept_record` accepts `RecordKind::StructuredLog` records containing
+one native bincode-encoded `CuLogEntry`. Assign increasing object IDs within each
+sender session. The scheduler uses the existing structured-log lane and RaptorQ
+object framing, shares the destination bitrate/burst limit, and reserves a bounded
+packet queue so log traffic cannot fill the replay queue. Object FEC and size bounds
+come from the destination's finite-object policy. Expiry and queue shedding count
+in the sender's ordinary drop counters. Loss beyond object-FEC coverage leaves
+missing entries; the onboard log remains available for complete history.
+
+`SessionRouter` recovers these records independently of CopperList continuity and
+emits `SessionEvent::Object` after the session manifest. Pre-manifest packets share
+the bounded startup buffer. A 64-record window accepts reordering and suppresses
+duplicates; older records are discarded. Structured-object decoder storage uses a
+separate instance of the receiver's finite-object limits.
+
+Pass these events to `NativeArchive` or `CaptureArchive` to retain the original
+entry bytes in `StructuredLogLine` sections. Archived timestamps, levels, origins,
+parameter values, and interned string IDs come from the sender. Entry validation
+uses a 4 MiB bincode decode budget. Use the producing application's string index
+with `extract-text-log` to reconstruct readable text.
+
+A generated live twin exposes `twin.take_log_reader()` once. Its independent
+64-entry ring publishes `ReceivedStructuredLog` after archival succeeds, moving
+the already decoded entry into the display channel. Read `update.frame.entry`
+and render with `rebuild_logline`; `CuTwinStatus::structured_logs` counts archived
+entries. Pausing or dropping either display reader never delays recording.
+Custom archive consumers can obtain the same owned value with
+`archive.take_structured_log()` immediately after `accept`.
+
+Run `just logstream-structured-check` for binary preservation, allocation, local
+section rollover, loss/reordering, shutdown, generated wiring, and telemetry UI
+coverage.
 
 ## Ground-side telemetry
 
@@ -103,7 +156,7 @@ captured payloads alone does not recover task state. Run
 ## Sender storage and lifecycle
 
 `scheduled_sinks` creates one worker owning the transport and FEC state, a pool
-of four encoded CL buffers and two encoded keyframe buffers, and fixed packet
+of four encoded CL buffers, two encoded keyframe buffers, four structured buffers, and fixed packet
 storage. Encoding writes directly into these buffers on the existing output
 workers. Runtime CopperLists and keyframe capture objects are released before
 transmission. Packet staging and recovery retention add bounded copies only on
@@ -127,7 +180,7 @@ shedding are counted. `SenderMonitor::snapshot()` exposes live counters and feed
 the worker also writes its shutdown statistics and failures to Copper structured
 logging. Dropping both sinks stops repetition and drains only until the configured
 latency deadline. An independent running RobotClock bounds teardown of a frozen
-test clock. Production real-time handoff is unchanged.
+test clock. Structured logging adds the bounded byte copy described above; CL and keyframe handoffs retain their existing behavior.
 
 `SenderCore` is available without `std`; callers provide `CuTime` from their
 RobotClock and drive `poll` themselves. The std driver owns thread wakeups.
@@ -139,16 +192,17 @@ checks, including recovery after the entire initial bootstrap transmission is lo
 
 ## Live Copper twin
 
-The demo graph is `counter -> sum -> derived`. The ordinary `Derived` Copper task
-computes `sum % 256` on the robot and in generated ground-side replay. Its payload
-is never transmitted, including repeated recovery point boundaries and FEC repairs. The
-robot's onboard log contains the full output for comparison. Ratatui explicitly
-labels the derived value **reconstructed locally; payload not transmitted**.
+The demo graph is `encoders -> kinematics`. The `Kinematics` Copper task computes
+elbow and fingertip positions from shoulder/elbow angles on the robot and in
+generated ground-side replay. Its payload is omitted from captures, including
+repeated recovery boundaries and FEC repairs. The robot's onboard log contains
+the full output for comparison. The telemetry screen labels the arm pose as
+**reconstructed locally; payload not transmitted**.
 
 Declare the static contract in the same RON used by the robot and ground build:
 
 ```ron
-(id: "derived", type: "tasks::Derived",
+(id: "kinematics", type: "cu_logstream_demo::tasks::Kinematics",
  streaming: (replay: reconstruct, replay_abi: 1)),
 ```
 
@@ -295,7 +349,7 @@ captures and labels them Reconstructed, never Verified.
 Only debug captures that pass comparison are labeled Verified. A mismatch suppresses
 reconstructed frames until the next matching recovery point; native recording continues. Debug
 digests are consumed live and do not add archive sections or change offline log readers.
-Use `just dashboard-verify` and `just sender-verify` to run the development checks.
+Use `just telemetry-verify` and `just sender-verify` to run the development checks.
 `just resim` reconstructs ordinary capture archives offline; the demo's verification
 command compares the result against the full onboard log.
 

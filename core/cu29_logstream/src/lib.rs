@@ -19,7 +19,10 @@ pub mod twin;
 #[cfg(feature = "std")]
 mod twin_session;
 #[cfg(feature = "std")]
-pub use twin_session::{CuTwin, CuTwinBuilder, CuTwinReader, CuTwinRecordingState, CuTwinStatus};
+pub use twin_session::{
+    CuTwin, CuTwinBuilder, CuTwinLogReader, CuTwinReader, CuTwinRecordingState, CuTwinStatus,
+    ReceivedStructuredLog,
+};
 
 /// Bounded ground-side delivery to caller-owned telemetry consumers.
 #[cfg(feature = "std")]
@@ -38,13 +41,17 @@ mod rlc;
 mod router;
 mod sender;
 mod stream;
+#[cfg(feature = "std")]
+pub mod structured;
 mod wire;
 #[cfg(feature = "std")]
 mod worker;
 #[cfg(feature = "std")]
+pub use structured::StructuredLogStream;
+#[cfg(feature = "std")]
 pub use worker::{
-    ScheduledCopperListSink, ScheduledKeyFrameSink, SenderMonitor, SenderSnapshot,
-    scheduled_feedback_sinks, scheduled_sinks,
+    ScheduledCopperListSink, ScheduledKeyFrameSink, ScheduledStructuredLogSink, SenderMonitor,
+    SenderSnapshot, scheduled_feedback_sinks, scheduled_sinks,
 };
 
 /// Utilities for testing log streaming over unreliable datagram links.

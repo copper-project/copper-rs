@@ -759,3 +759,276 @@ fn manifest_requirements_cannot_exceed_receiver_local_limits() {
     }
     assert!(router.session_manifest(identity).is_some());
 }
+
+#[cfg(feature = "std")]
+#[test]
+fn structured_logs_recover_before_manifest_and_archive_native_entries() {
+    use cu29_log::{CuLogEntry, CuLogLevel, CuLogOrigin};
+    use cu29_traits::UnifiedLogType;
+    use cu29_unifiedlog::{UnifiedLogRead, UnifiedLogger, UnifiedLoggerBuilder};
+    let (sender, mut router) = setup();
+    let mut entry = CuLogEntry::new(47, CuLogLevel::Warning);
+    entry.time = 123456.into();
+    entry.origin = CuLogOrigin {
+        culistid: Some(3),
+        component_id: Some(2),
+        task_index: Some(1),
+    };
+    entry.paramname_indexes.push(19);
+    entry.params.push(cu29_value::Value::U64(42));
+    let encoded = bincode::encode_to_vec(&entry, bincode::config::standard()).unwrap();
+    let record = encode_record(RecordKind::StructuredLog, 0, &encoded).unwrap();
+    let mut encoder = FiniteObjectEncoder::new(cu29_logstream::FiniteObjectSenderConfig {
+        lane: cu29_logstream::Lane::StructuredLog,
+        ..sender.recovery.finite
+    })
+    .unwrap();
+    let mut packets = Vec::new();
+    encoder.push_record(&record, &mut packets).unwrap();
+    let logs = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../examples/cu_logstream_demo/logs");
+    std::fs::create_dir_all(&logs).unwrap();
+    let path = logs.join(format!("structured-receiver-{}.copper", std::process::id()));
+    let mut archive = None;
+    let mut received = 0;
+    // Lose the source and deliver a repair before discovery.
+    let repair = packets
+        .iter()
+        .find(|p| {
+            cu29_logstream::WirePacketRef::decode(p)
+                .unwrap()
+                .header
+                .symbol_kind
+                == cu29_logstream::FecSymbolKind::Repair
+        })
+        .unwrap();
+    router
+        .receive_datagram(repair, |_| Ok::<(), ()>(()))
+        .unwrap();
+    for packet in &objects(&sender, 0)[0] {
+        router
+            .receive_datagram(packet, |event| {
+                if let SessionEvent::Manifest(manifest) = &event {
+                    archive = Some(
+                        cu29_logstream::NativeArchive::<EmptyDataSet>::new(
+                            &path,
+                            manifest,
+                            1024 * 1024,
+                            64 * 1024,
+                        )
+                        .unwrap(),
+                    );
+                }
+                if let SessionEvent::Object { record, .. } = &event {
+                    assert_eq!(record.decoded().payload, encoded);
+                    received += 1;
+                }
+                archive.as_mut().unwrap().accept(&event).unwrap();
+                Ok::<(), ()>(())
+            })
+            .unwrap();
+    }
+    for packet in packets.iter().rev() {
+        router
+            .receive_datagram(packet, |_| {
+                received += 1;
+                Ok::<(), ()>(())
+            })
+            .unwrap();
+    }
+    assert_eq!(received, 1);
+    archive.unwrap().finish().unwrap();
+    let UnifiedLogger::Read(mut reader) = UnifiedLoggerBuilder::new()
+        .file_base_name(&path)
+        .build()
+        .unwrap()
+    else {
+        panic!("reader")
+    };
+    let bytes = reader
+        .read_next_section_type(UnifiedLogType::StructuredLogLine)
+        .unwrap()
+        .unwrap();
+    let (actual, used): (CuLogEntry, usize) =
+        bincode::decode_from_slice(&bytes, bincode::config::standard()).unwrap();
+    assert_eq!(actual, entry);
+    assert_eq!(used, bytes.len());
+}
+
+#[test]
+fn structured_logs_retry_and_deduplicate_beyond_finite_cache() {
+    let (sender, mut router) = setup();
+    for packet in &objects(&sender, 0)[0] {
+        router
+            .receive_datagram(packet, |_| Ok::<(), ()>(()))
+            .unwrap();
+    }
+    let mut encoder = FiniteObjectEncoder::new(cu29_logstream::FiniteObjectSenderConfig {
+        lane: cu29_logstream::Lane::StructuredLog,
+        ..sender.recovery.finite
+    })
+    .unwrap();
+    let mut first = Vec::new();
+    let mut seen = Vec::new();
+    for id in [0, 2, 1, 4, 3, 5] {
+        let mut packets = Vec::new();
+        encoder
+            .push_record(
+                &encode_record(RecordKind::StructuredLog, id, b"entry").unwrap(),
+                &mut packets,
+            )
+            .unwrap();
+        if id == 0 {
+            first = packets.clone();
+        }
+        let mut retry = true;
+        for packet in packets {
+            let result = router.receive_datagram(&packet, |event| {
+                if retry {
+                    retry = false;
+                    return Err(());
+                }
+                if let SessionEvent::Object { record, .. } = event {
+                    seen.push(record.decoded().object_id);
+                }
+                Ok(())
+            });
+            if result.is_err() {
+                router
+                    .drain_events(&mut |event| {
+                        if let SessionEvent::Object { record, .. } = event {
+                            seen.push(record.decoded().object_id);
+                        }
+                        Ok::<(), ()>(())
+                    })
+                    .unwrap();
+            }
+        }
+    }
+    for packet in first {
+        router
+            .receive_datagram(&packet, |_| {
+                panic!("duplicate delivered");
+                #[allow(unreachable_code)]
+                Ok::<(), ()>(())
+            })
+            .unwrap();
+    }
+    assert_eq!(seen, [0, 2, 1, 4, 3, 5]);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn structured_handoff_allocates_nothing_preserves_local_logs_and_stops_without_logger_drop() {
+    use cu29_log::{CuLogEntry, CuLogLevel};
+    use cu29_traits::{UnifiedLogType, WriteStream};
+    use cu29_unifiedlog::{LogStream, UnifiedLogRead, UnifiedLogger, UnifiedLoggerBuilder};
+    use std::sync::{Arc, Mutex};
+    #[derive(Debug, Clone, Default)]
+    struct Capture(Arc<Mutex<Vec<Vec<u8>>>>);
+    impl cu29_logstream::CuStreamTx for Capture {
+        fn try_send(&mut self, packet: &[u8]) -> Result<(), cu29_logstream::CuStreamTxError> {
+            self.0.lock().unwrap().push(packet.to_vec());
+            Ok(())
+        }
+    }
+    let mut destination = destination();
+    destination.max_record_bytes = 4096;
+    destination.fec.objects.max_object_bytes = 4096;
+    let config = LogStreamPlan::resolve(&destination)
+        .unwrap()
+        .sender_config(
+            setup().0.continuous.identity,
+            ApplicationSchema {
+                outputs: vec![],
+                reconstruction: vec![],
+            },
+        )
+        .unwrap();
+    let captured = Capture::default();
+    let (mut cl, kf, monitor) = cu29_logstream::scheduled_sinks::<EmptyDataSet, _>(
+        captured.clone(),
+        config.clone(),
+        cu29_clock::RobotClock::new(),
+    )
+    .unwrap();
+    let stream = cl.take_structured_log_sink().unwrap();
+    assert!(cl.take_structured_log_sink().is_none());
+    let logs = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../examples/cu_logstream_demo/logs");
+    std::fs::create_dir_all(&logs).unwrap();
+    let path = logs.join(format!("structured-handoff-{}.copper", std::process::id()));
+    let UnifiedLogger::Write(logger) = UnifiedLoggerBuilder::new()
+        .file_base_name(&path)
+        .preallocated_size(1024 * 1024)
+        .write(true)
+        .create(true)
+        .build()
+        .unwrap()
+    else {
+        panic!("writer")
+    };
+    let local = LogStream::new(
+        UnifiedLogType::StructuredLogLine,
+        Arc::new(Mutex::new(logger)),
+        65536,
+    )
+    .unwrap();
+    let mut sink = cu29_logstream::StructuredLogStream::new(local, stream);
+    let mut entry = CuLogEntry::new(47, CuLogLevel::Info);
+    entry.paramname_indexes.push(0);
+    entry.params.push(cu29_value::Value::U64(42));
+    assert_eq!(count_allocations(|| sink.log(&entry).unwrap()), 0);
+    let mut oversized = CuLogEntry::new(48, CuLogLevel::Warning);
+    for _ in 0..700 {
+        oversized.paramname_indexes.push(0);
+        oversized.params.push(cu29_value::Value::U64(u64::MAX));
+    }
+    assert_eq!(count_allocations(|| sink.log(&oversized).unwrap()), 0);
+    assert_eq!(monitor.inbox_drops(), 1);
+    // The logger still owns the structured handoff when output teardown joins.
+    drop((cl, kf));
+    assert!(monitor.final_stats().is_some());
+    assert!(!monitor.failed());
+    assert_eq!(count_allocations(|| sink.log(&entry).unwrap()), 0);
+    assert_eq!(monitor.inbox_drops(), 2);
+    drop(sink);
+    let mut decoder = cu29_logstream::FiniteObjectDecoder::new(
+        config.continuous.identity,
+        cu29_logstream::Lane::StructuredLog,
+        FiniteObjectLimits::new(4096, 1128, 4),
+    )
+    .unwrap();
+    let mut received = Vec::new();
+    for packet in captured.0.lock().unwrap().iter() {
+        decoder
+            .receive_datagram(packet, |record| {
+                received.push(record.decoded().payload.to_vec());
+                Ok::<(), ()>(())
+            })
+            .unwrap();
+    }
+    assert_eq!(
+        received,
+        [bincode::encode_to_vec(&entry, bincode::config::standard()).unwrap()]
+    );
+    let UnifiedLogger::Read(mut reader) = UnifiedLoggerBuilder::new()
+        .file_base_name(&path)
+        .build()
+        .unwrap()
+    else {
+        panic!("reader")
+    };
+    let bytes = reader
+        .read_next_section_type(UnifiedLogType::StructuredLogLine)
+        .unwrap()
+        .unwrap();
+    let mut remaining = bytes.as_slice();
+    for expected in [&entry, &oversized, &entry] {
+        let (actual, used): (CuLogEntry, usize) =
+            bincode::decode_from_slice(remaining, bincode::config::standard()).unwrap();
+        assert_eq!(&actual, expected);
+        remaining = &remaining[used..];
+    }
+    assert!(remaining.is_empty());
+}
