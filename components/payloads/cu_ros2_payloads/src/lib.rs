@@ -4,6 +4,7 @@ pub mod geometry_msgs;
 pub mod nav_msgs;
 pub mod sensor_msgs;
 pub mod std_msgs;
+pub mod tf2_msgs;
 
 #[cfg(all(feature = "humble", feature = "jazzy"))]
 compile_error!("features `humble` and `jazzy` are mutually exclusive");
@@ -174,14 +175,17 @@ mod tests {
             entry::<crate::geometry_msgs::Vector3>(),
             entry::<crate::nav_msgs::Odometry>(),
             entry::<crate::nav_msgs::Path>(),
+            entry::<crate::sensor_msgs::BatteryState>(),
             entry::<crate::sensor_msgs::CameraInfo>(),
             entry::<crate::sensor_msgs::CompressedImage>(),
             entry::<crate::sensor_msgs::Image>(),
             entry::<crate::sensor_msgs::Imu>(),
+            entry::<crate::sensor_msgs::JointState>(),
             entry::<crate::sensor_msgs::MagneticField>(),
             entry::<crate::sensor_msgs::PointCloud2>(),
             entry::<crate::sensor_msgs::PointField>(),
             entry::<crate::sensor_msgs::RegionOfInterest>(),
+            entry::<crate::tf2_msgs::TFMessage>(),
         ]
     }
 
