@@ -1,5 +1,7 @@
 (
-    includes: [(path: "copperconfig.ron")],
+    includes: [
+        (path: "copperconfig.ron"),
+    ],
     log_streaming: (
         destinations: [
             (

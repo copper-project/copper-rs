@@ -1,4 +1,8 @@
 (
-    includes: [(path: "feedbackconfig.ron")],
-    monitor: (type: "cu_consolemon::CuConsoleMon"),
+    includes: [
+        (path: "feedbackconfig.ron"),
+    ],
+    monitor: (
+        type: "cu_consolemon::CuConsoleMon",
+    ),
 )
