@@ -1,0 +1,49 @@
+(
+    includes: [
+        (path: "copperconfig.ron"),
+    ],
+    log_streaming: (
+        destinations: [
+            (
+                id: "ground",
+                transport: (
+                    type: "cu29_logstream_udp::CuUdpLogStreamTx",
+                    resource: "network.tx",
+                ),
+                feedback: (
+                    transport: (
+                        type: "cu29_logstream_udp::CuUdpLogStreamRx",
+                        resource: "network.rx",
+                    ),
+                    report_interval_ms: 100,
+                    timeout_ms: 1000,
+                    adaptation: (
+                        min_repair_every_source_symbols: 1,
+                        max_repair_every_source_symbols: 16,
+                    ),
+                ),
+                link: (
+                    mtu_bytes: 1200,
+                    bitrate_bps: 2000000,
+                    memory_budget_kib: 576,
+                    max_latency_ms: 250,
+                    burst_packets: 8,
+                ),
+                fec: (
+                    continuous: (
+                        field: Gf256,
+                        window_symbols: 64,
+                        repair_every_source_symbols: 4,
+                        repair_density: Full,
+                    ),
+                    objects: (
+                        max_object_bytes: 65536,
+                        repair_symbols_per_block: 2,
+                    ),
+                ),
+                recovery_interval: 16,
+                max_record_bytes: 4096,
+            ),
+        ],
+    ),
+)

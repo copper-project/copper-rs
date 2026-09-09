@@ -16,6 +16,9 @@ use std::time::{Duration, Instant};
 pub struct ReceiverOptions {
     #[arg(long, default_value = "127.0.0.1:7447")]
     pub listen: SocketAddr,
+    /// Robot UDP endpoint for advisory receiver reports.
+    #[arg(long)]
+    pub feedback_to: Option<SocketAddr>,
     #[arg(long)]
     pub log_base: PathBuf,
     /// Producing application's string index for the telemetry log pane.
@@ -105,6 +108,7 @@ impl<R: CuStreamRx> CuStreamRx for ImpairedRx<R> {
         let discard = match self.impairment {
             Impairment::Clean => false,
             Impairment::Loss => source_id == Some(20),
+            Impairment::Lossy => source_id.is_some_and(|id| id.is_multiple_of(10)),
             Impairment::Outage => self.in_outage,
             Impairment::Bootstrap => now.duration_since(first) < Duration::from_millis(300),
         };
@@ -122,7 +126,8 @@ pub fn start(
     prepare_log(&options.log_base)?;
     let mut socket = CuUdpLogStreamConfig::new(options.listen);
     socket.recv_buffer_bytes = Some(262144);
-    let (_, rx) = socket.open()?;
+    socket.remote_addr = options.feedback_to;
+    let (feedback_tx, rx) = socket.open()?;
     let address = rx.local_addr()?;
     let stats = Arc::new(ImpairmentStats {
         started: Instant::now(),
@@ -138,6 +143,11 @@ pub fn start(
         in_outage: false,
     };
     let builder = Twin::twin(rx).with_log_path(&options.log_base);
+    let builder = if let Some(tx) = feedback_tx {
+        builder.with_feedback(tx)
+    } else {
+        builder
+    };
     let builder = if options.archive_only {
         builder.archive_only()
     } else {

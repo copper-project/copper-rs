@@ -602,6 +602,13 @@ logstream-twin-check:
     just logstream-receiver-check
     just --justfile examples/cu_logstream_demo/justfile check
 
+# Two-way demo, feedback transitions, adaptation, and native archive interoperability.
+logstream-feedback-demo-check:
+    cargo +stable test -p cu-tuimon --no-default-features
+    cargo +stable clippy -p cu-logstream-demo --all-targets --features replay,tui,sender-monitor,feedback -- --deny warnings
+    cargo +stable test -p cu-logstream-demo --features demo,tui,sender-monitor,feedback
+    just --justfile examples/cu_logstream_demo/justfile run-two-way all
+
 # Sender monitor, status metadata, and streamed reconstruction interoperability.
 logstream-sender-check:
     cargo +stable test -p cu-tuimon --no-default-features

@@ -3,18 +3,29 @@
 
 import argparse
 import pathlib
+import socket
 import subprocess
 import time
 
 HERE = pathlib.Path(__file__).resolve().parent
 
 
-def run(binary, scenario):
-    directory = HERE / "logs" / f"{scenario}-{time.time_ns()}"
+def run(binary, scenario, two_way=False):
+    mode = "two-way" if two_way else "one-way"
+    directory = HERE / "logs" / f"{mode}-{scenario}-{time.time_ns()}"
     directory.mkdir(parents=True)
     children = []
+    reservation = None
+    if two_way:
+        reservation = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        reservation.bind(("127.0.0.1", 0))
+        host, port = reservation.getsockname()
+        robot_address = f"{host}:{port}"
 
     def spawn(*args):
+        if two_way and args[0] == "sender":
+            reservation.close()
+            args = (*args, "--bind", robot_address)
         child = subprocess.Popen([str(binary), *map(str, args)], cwd=HERE)
         children.append(child)
         return child
@@ -28,6 +39,8 @@ def run(binary, scenario):
         ready = directory / f"{name}.endpoint"
         args = ["receiver", "--listen", listen, "--log-base", directory / f"{name}.copper",
                 "--ready-file", ready, "--impairment", impairment]
+        if two_way:
+            args += ["--feedback-to", robot_address]
         if stop:
             args += ["--stop-at", "64"]
         child = spawn(*args)
@@ -63,7 +76,7 @@ def run(binary, scenario):
             # This fresh process gets no archive or decoder state from the probe.
             ground, _ = receiver("received", address)
         else:
-            ground, address = receiver("received", impairment=scenario if scenario in ("loss", "outage") else "clean",
+            ground, address = receiver("received", impairment=scenario if scenario in ("loss", "lossy", "outage") else "clean",
                                        stop=scenario == "restart")
             sender = spawn("sender", "--remote", address, "--log-base", directory / "sender.copper")
         if scenario == "restart":
@@ -80,7 +93,7 @@ def run(binary, scenario):
         else:
             wait(sender)
             wait(ground)
-            verify("received", {"idle": "complete", "clean": "complete", "loss": "complete", "outage": "outage", "late": "late"}[scenario])
+            verify("received", {"idle": "complete", "clean": "complete", "loss": "complete", "lossy": "lossy", "outage": "outage", "late": "late"}[scenario])
             replay_names = ["received"]
 
         logreader = binary.with_name("cu-logstream-demo-logreader")
@@ -89,8 +102,10 @@ def run(binary, scenario):
             subprocess.run([str(logreader), str(directory / f"{name}.copper"), "fsck"], check=True, timeout=20, cwd=HERE)
             subprocess.run([str(replay), "--log-base", str(directory / f"{name}.copper"),
                             "--replay-log-base", str(directory / f"{name}-replay.copper")], check=True, timeout=20, cwd=HERE)
-        print(f"PASS {scenario}: {directory}", flush=True)
+        print(f"PASS {mode} {scenario}: {directory}", flush=True)
     finally:
+        if reservation is not None:
+            reservation.close()
         for child in children:
             if child.poll() is None:
                 child.terminate()
@@ -103,9 +118,10 @@ def run(binary, scenario):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("scenario", choices=["clean", "loss", "outage", "late", "restart", "idle", "all"], default="clean", nargs="?")
+    parser.add_argument("scenario", choices=["clean", "loss", "lossy", "outage", "late", "restart", "idle", "all"], default="clean", nargs="?")
     parser.add_argument("--binary", type=pathlib.Path, required=True)
+    parser.add_argument("--two-way", action="store_true", help="Return receiver reports to a feedback-enabled sender")
     args = parser.parse_args()
     binary = args.binary.resolve()
-    for scenario in (["clean", "loss", "outage", "late", "restart", "idle"] if args.scenario == "all" else [args.scenario]):
-        run(binary, scenario)
+    for scenario in (["clean", "loss", "lossy", "outage", "late", "restart", "idle"] if args.scenario == "all" else [args.scenario]):
+        run(binary, scenario, args.two_way)

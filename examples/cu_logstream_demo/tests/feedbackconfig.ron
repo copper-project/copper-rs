@@ -1,0 +1,6 @@
+(
+    includes: [
+        (path: "../feedbackconfig.ron"),
+    ],
+    monitor: (type: "StreamProbe"),
+)
