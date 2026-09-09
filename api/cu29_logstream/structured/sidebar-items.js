@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["StructuredLogStream"],"trait":["StructuredLogOutput"]};
