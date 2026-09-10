@@ -1,0 +1,8 @@
+error: Task 'detect' uses streaming.replay: reconstruct but input 'Image' from 'camera' has logging.enabled: false. Enable logging on 'camera' or use streaming.replay: capture on 'detect'.
+          context:None
+ --> tests/compile_fail/copper_runtime/reconstruct_missing_input.rs:3:1
+  |
+3 | #[copper_runtime(config = "config/reconstruct_missing_input.ron")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `copper_runtime` (in Nightly builds, run with -Z macro-backtrace for more info)

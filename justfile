@@ -602,6 +602,13 @@ logstream-twin-check:
     just logstream-receiver-check
     just --justfile examples/cu_logstream_demo/justfile check
 
+# Compile-time replay input checks and valid downstream reconstruction.
+logstream-replay-inputs-check:
+    cargo +stable clippy -p cu29-runtime -p cu29-derive --lib -- --deny warnings
+    cargo +stable test -p cu29-runtime --test stream_replay_config
+    cargo +stable test -p cu29-derive --lib test_compile_fail
+    cargo +stable test -p cu-logstream-demo --features demo --test twin
+
 # Two-way demo, feedback transitions, adaptation, and native archive interoperability.
 logstream-feedback-demo-check:
     cargo +stable test -p cu-tuimon --no-default-features

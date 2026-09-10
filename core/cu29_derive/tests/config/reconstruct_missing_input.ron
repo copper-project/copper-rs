@@ -1,0 +1,52 @@
+(
+    tasks: [
+        (
+            id: "camera",
+            type: "Camera",
+            logging: (enabled: false),
+        ),
+        (
+            id: "detect",
+            type: "Detect",
+            streaming: (
+                replay: reconstruct,
+            ),
+        ),
+        (
+            id: "track",
+            type: "Track",
+            streaming: (
+                replay: reconstruct,
+            ),
+        ),
+        (
+            id: "plan",
+            type: "Plan",
+            streaming: (
+                replay: reconstruct,
+            ),
+        ),
+    ],
+    cnx: [
+        (
+            src: "camera",
+            dst: "detect",
+            msg: "Image",
+        ),
+        (
+            src: "detect",
+            dst: "track",
+            msg: "Detections",
+        ),
+        (
+            src: "track",
+            dst: "plan",
+            msg: "Tracks",
+        ),
+        (
+            src: "plan",
+            dst: "__nc__",
+            msg: "PlanOutput",
+        ),
+    ],
+)
