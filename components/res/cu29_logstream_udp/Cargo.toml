@@ -32,7 +32,7 @@ name = "configured_feedback"
 required-features = ["runtime-integration"]
 
 [dependencies]
-cu29 = { path = "../../../core/cu29", version = "1.2.0-dev", default-features = false, features = [
+cu29 = { path = "../../../core/cu29", version = "1.3.0-dev", default-features = false, features = [
   "std",
 ] }
 cu29-logstream = { workspace = true, features = ["std"] }
