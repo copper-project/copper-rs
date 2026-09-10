@@ -206,8 +206,6 @@ Declare the static contract in the same RON used by the robot and ground build:
  streaming: (replay: reconstruct)),
 ```
 
-The task implements `CuCrossPlatformDeterministic`. This is
-an explicit promise of deterministic behavior and no external side effects.
 Sources and bridge receives stay captured. Reconstruction currently supports
 ordinary synchronous tasks using the lossless native compressed codec; background,
 anytime, custom codec and selective handle policies are rejected for this path.

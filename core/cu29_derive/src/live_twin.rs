@@ -9,7 +9,6 @@ pub(super) fn dataset_support(
     codecs: &[Option<SlotCodecBinding>],
 ) -> proc_macro2::TokenStream {
     let mut capture = vec![true; packs.len()];
-    let mut contracts = Vec::new();
     for unit in &plan.steps {
         let CuExecutionUnit::Step(step) = unit else {
             continue;
@@ -26,13 +25,6 @@ pub(super) fn dataset_support(
         {
             return quote! { compile_error!("reconstruct requires an ordinary, synchronous, logged deterministic task"); };
         }
-        let task: Type = parse_str(step.node.get_type()).unwrap();
-        contracts.push(quote! {
-            const _: () = {
-                fn assert_deterministic<T: ::cu29::CuCrossPlatformDeterministic>() {}
-                let _ = assert_deterministic::<#task>;
-            };
-        });
         let slot = step.output_msg_pack.as_ref().unwrap().culist_index as usize;
         capture[slot] = false;
     }
@@ -75,7 +67,6 @@ pub(super) fn dataset_support(
     }
     let schema = hybrid.then(|| quote! { schema.reconstruction = Self::RECONSTRUCTION.to_vec(); });
     quote! {
-        #(#contracts)*
         #encode
         impl ::cu29::logstream::capture::CaptureDataSet for CuStampedDataSet {
             const RECONSTRUCTION: &'static [bool] = &[#(#reconstruction),*];

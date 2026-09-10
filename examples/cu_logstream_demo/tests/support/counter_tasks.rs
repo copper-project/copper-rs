@@ -57,7 +57,6 @@ impl Freezable for Accumulator {
     }
 }
 
-impl CuCrossPlatformDeterministic for Accumulator {}
 
 impl CuTask for Accumulator {
     type Resources<'r> = ();
@@ -86,7 +85,6 @@ impl CuTask for Accumulator {
 #[derive(Default, Reflect)]
 pub struct Derived;
 impl Freezable for Derived {}
-impl CuCrossPlatformDeterministic for Derived {}
 impl CuTask for Derived {
     type Resources<'r> = ();
     type Input<'m> = input_msg!(Sample);

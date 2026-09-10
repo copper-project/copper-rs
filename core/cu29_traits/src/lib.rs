@@ -1131,7 +1131,3 @@ mod std_tests {
         assert!(descriptor.children.is_empty());
     }
 }
-
-/// Explicit promise that a task has no external side effects and replays exactly
-/// across supported targets from its captured inputs, clock and frozen state.
-pub trait CuCrossPlatformDeterministic {}
