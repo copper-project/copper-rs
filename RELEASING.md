@@ -4,20 +4,20 @@
 
 ```text
 Development:
-  master -> 1.2.0-dev
+  master -> 1.3.0-dev
 
 Release:
-  tag v1.1.0
-  create release/1.1
+  tag v1.2.0
+  create release/1.2
 
 After release:
-  master        -> 1.2.0-dev
-  release/1.1 -> 1.1.1-dev
+  master        -> 1.3.0-dev
+  release/1.2 -> 1.2.1-dev
 
 Patch release:
-  release/1.1 -> 1.1.1
-  tag v1.1.1
-  then bump branch -> 1.1.2-dev
+  release/1.2 -> 1.2.1
+  tag v1.2.1
+  then bump branch -> 1.2.2-dev
 ```
 
 Development versions are not published or tagged. Release tags use
