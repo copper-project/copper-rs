@@ -1121,7 +1121,6 @@ pub enum StreamReplay {
 pub struct NodeStreaming {
     #[serde(default)]
     pub replay: StreamReplay,
-    pub replay_abi: Option<u32>,
 }
 
 /// A node in the configuration graph.

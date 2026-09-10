@@ -9,8 +9,6 @@ pub(super) fn dataset_support(
     codecs: &[Option<SlotCodecBinding>],
 ) -> proc_macro2::TokenStream {
     let mut capture = vec![true; packs.len()];
-    let mut abis = vec![quote! { None }; packs.len()];
-    let mut contracts = Vec::new();
     for unit in &plan.steps {
         let CuExecutionUnit::Step(step) = unit else {
             continue;
@@ -27,17 +25,8 @@ pub(super) fn dataset_support(
         {
             return quote! { compile_error!("reconstruct requires an ordinary, synchronous, logged deterministic task"); };
         }
-        let Some(abi) = policy.replay_abi.filter(|abi| *abi != 0) else {
-            return quote! { compile_error!("reconstruct requires a nonzero replay_abi"); };
-        };
-        let task: Type = parse_str(step.node.get_type()).unwrap();
-        contracts.push(quote! {
-            const _: () = assert!(<#task as ::cu29::CuCrossPlatformDeterministic>::REPLAY_ABI == #abi,
-                "task deterministic replay ABI does not match RON");
-        });
         let slot = step.output_msg_pack.as_ref().unwrap().culist_index as usize;
         capture[slot] = false;
-        abis[slot] = quote! { Some(#abi) };
     }
     let hybrid = capture.contains(&false);
     if hybrid
@@ -50,7 +39,7 @@ pub(super) fn dataset_support(
     let encode = build_compressed_culist_tuple_encode(packs, helpers, modes, count, Some(&capture));
     let mut validate = Vec::new();
     let mut digests = Vec::new();
-    let mut flat_abis = Vec::new();
+    let mut reconstruction = Vec::new();
     let mut metadata = Vec::new();
     for (i, pack) in packs.iter().enumerate() {
         let slot = syn::Index::from(i);
@@ -69,7 +58,7 @@ pub(super) fn dataset_support(
                 });
                 digests.push(quote! { self.0.#access.payload().encode(encoder)?; });
             }
-            flat_abis.push(abis[i].clone());
+            reconstruction.push(!capture[i]);
             metadata.push(quote! {
                 self.0.#access.tov = captured.0.#access.tov;
                 self.0.#access.metadata = captured.0.#access.metadata.clone();
@@ -78,10 +67,9 @@ pub(super) fn dataset_support(
     }
     let schema = hybrid.then(|| quote! { schema.reconstruction = Self::RECONSTRUCTION.to_vec(); });
     quote! {
-        #(#contracts)*
         #encode
         impl ::cu29::logstream::capture::CaptureDataSet for CuStampedDataSet {
-            const RECONSTRUCTION: &'static [Option<u32>] = &[#(#flat_abis),*];
+            const RECONSTRUCTION: &'static [bool] = &[#(#reconstruction),*];
             fn stream_schema() -> ::cu29::logstream::ApplicationSchema {
                 #[allow(unused_mut)]
                 let mut schema = ::cu29::logstream::ApplicationSchema::from_output_specs(

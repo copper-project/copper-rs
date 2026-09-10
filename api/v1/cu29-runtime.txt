@@ -473,7 +473,6 @@ impl core::default::Default for cu29_runtime::config::NodeLogging
 pub fn cu29_runtime::config::NodeLogging::default() -> Self
 pub struct cu29_runtime::config::NodeStreaming
 pub cu29_runtime::config::NodeStreaming::replay: cu29_runtime::config::StreamReplay
-pub cu29_runtime::config::NodeStreaming::replay_abi: core::option::Option<u32>
 pub struct cu29_runtime::config::PlannerConfig
 impl cu29_runtime::config::PlannerConfig
 pub fn cu29_runtime::config::PlannerConfig::get_config(&self) -> core::option::Option<&cu29_runtime::config::ComponentConfig>

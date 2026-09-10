@@ -61,7 +61,6 @@
             type: "cu_logstream_demo::tasks::Kinematics",
             streaming: (
                 replay: reconstruct,
-                replay_abi: 1,
             ),
         ),
     ],

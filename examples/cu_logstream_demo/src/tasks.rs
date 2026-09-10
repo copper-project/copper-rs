@@ -150,11 +150,6 @@ pub fn forward_kinematics(angles: JointAngles) -> CuResult<ArmPose> {
 #[derive(Default, Reflect)]
 pub struct Kinematics;
 impl Freezable for Kinematics {}
-impl CuCrossPlatformDeterministic for Kinematics {
-    // Bounded integer inputs, scalar f64 const-transform arithmetic, no libm,
-    // SIMD multiplication, wall clock, allocation, or external side effects.
-    const REPLAY_ABI: u32 = 1;
-}
 impl CuTask for Kinematics {
     type Resources<'r> = ();
     type Input<'m> = input_msg!(JointAngles);
