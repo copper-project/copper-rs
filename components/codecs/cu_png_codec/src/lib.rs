@@ -70,11 +70,21 @@ impl<W: BincodeWriter> Write for BincodeWriterAdapter<'_, W> {
 struct BincodeReaderAdapter<'a, R> {
     inner: &'a mut R,
     position: u64,
+    // Used only when the enclosing reader cannot lend bytes (e.g. a file reader).
+    buffer: [u8; 1024],
+    buffered_start: usize,
+    buffered_end: usize,
 }
 
 impl<'a, R> BincodeReaderAdapter<'a, R> {
     fn new(inner: &'a mut R) -> Self {
-        Self { inner, position: 0 }
+        Self {
+            inner,
+            position: 0,
+            buffer: [0; 1024],
+            buffered_start: 0,
+            buffered_end: 0,
+        }
     }
 
     fn peek_window_len(&mut self) -> usize
@@ -114,24 +124,30 @@ impl<'a, R> BincodeReaderAdapter<'a, R> {
         }
     }
 
-    fn fill_from_peek(&mut self) -> io::Result<&[u8]>
+    fn fill_input_buffer(&mut self) -> io::Result<&[u8]>
     where
         R: BincodeReader,
     {
-        let peek_len = self.peek_window_len();
-        if peek_len == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "PNG codec expected more bytes from the bincode decoder",
-            ));
+        if self.buffered_start < self.buffered_end {
+            return Ok(&self.buffer[self.buffered_start..self.buffered_end]);
         }
-
-        self.inner.peek_read(peek_len).ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "PNG codec expected more bytes from the bincode decoder",
-            )
-        })
+        let peek_len = self.peek_window_len();
+        if peek_len != 0 {
+            return self
+                .inner
+                .peek_read(peek_len)
+                .ok_or_else(|| io::Error::other("PNG codec reader lost its peeked bytes"));
+        }
+        self.buffered_start = 0;
+        self.buffered_end = self
+            .inner
+            .read_some(&mut self.buffer)
+            .map_err(|err| match err {
+                DecodeError::UnexpectedEnd { .. } => io::Error::from(io::ErrorKind::UnexpectedEof),
+                DecodeError::Io { inner, .. } => inner,
+                other => io::Error::other(other.to_string()),
+            })?;
+        Ok(&self.buffer[..self.buffered_end])
     }
 }
 
@@ -141,7 +157,7 @@ impl<R: BincodeReader> Read for BincodeReaderAdapter<'_, R> {
             return Ok(0);
         }
 
-        let available = self.fill_from_peek()?;
+        let available = self.fill_input_buffer()?;
         let count = available.len().min(buf.len());
         buf[..count].copy_from_slice(&available[..count]);
         self.consume(count);
@@ -151,11 +167,15 @@ impl<R: BincodeReader> Read for BincodeReaderAdapter<'_, R> {
 
 impl<R: BincodeReader> BufRead for BincodeReaderAdapter<'_, R> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
-        self.fill_from_peek()
+        self.fill_input_buffer()
     }
 
     fn consume(&mut self, amt: usize) {
-        self.inner.consume(amt);
+        if self.buffered_start < self.buffered_end {
+            self.buffered_start += amt.min(self.buffered_end - self.buffered_start);
+        } else {
+            self.inner.consume(amt);
+        }
         self.position = self.position.saturating_add(amt as u64);
     }
 }
@@ -474,6 +494,71 @@ mod tests {
             bytes.to_vec()
         });
         assert_eq!(decoded_bytes, original_bytes);
+    }
+
+    #[test]
+    fn png_codec_adjacent_frames_preserve_pixels_and_following_fields() {
+        let first = sample_image();
+        let mut noise = 1u32;
+        let second = CuImage {
+            seq: 8,
+            format: CuImageBufferFormat {
+                width: 64,
+                height: 48,
+                stride: 64 * 3,
+                pixel_format: *b"RGB3",
+            },
+            buffer_handle: CuHandle::new_detached(
+                (0..64 * 48 * 3)
+                    .map(|_| {
+                        noise = noise.wrapping_mul(1664525).wrapping_add(1013904223);
+                        (noise >> 24) as u8
+                    })
+                    .collect::<Vec<_>>(),
+            ),
+        };
+        let mut storage = [0; 32768];
+        let encoded = |image| EncodedWithCodec {
+            image,
+            codec: std::cell::RefCell::new(CuPngCodec::new(CuPngCodecConfig::default()).unwrap()),
+        };
+        let len = bincode::encode_into_slice(
+            (encoded(&first), encoded(&second), 42u8),
+            &mut storage,
+            standard(),
+        )
+        .unwrap();
+        let ((a, b, tail), consumed): ((DecodedWithCodec, DecodedWithCodec, u8), usize) =
+            decode_from_slice(&storage[..len], standard()).unwrap();
+        assert_eq!(consumed, len);
+        assert!(len > 1024, "exercise multiple file-reader buffer fills");
+        assert_eq!(tail, 42);
+        let mut source = &storage[..len];
+        let (file_a, file_b, file_tail): (DecodedWithCodec, DecodedWithCodec, u8) =
+            bincode::decode_from_std_read(&mut source, standard()).unwrap();
+        assert_eq!(file_a.0.seq, first.seq);
+        assert_eq!(file_b.0.seq, second.seq);
+        assert_eq!(file_tail, 42);
+        assert!(source.is_empty());
+        for (decoded, original) in [
+            (&a.0, &first),
+            (&b.0, &second),
+            (&file_a.0, &first),
+            (&file_b.0, &second),
+        ] {
+            assert_eq!(decoded.seq, original.seq);
+            assert_eq!(decoded.format.width, original.format.width);
+            assert_eq!(decoded.format.height, original.format.height);
+            assert_eq!(decoded.format.stride, original.format.stride);
+            assert_eq!(decoded.format.pixel_format, original.format.pixel_format);
+            decoded.buffer_handle.with_inner(|actual| {
+                original.buffer_handle.with_inner(|expected| {
+                    let actual: &[u8] = actual;
+                    let expected: &[u8] = expected;
+                    assert_eq!(actual, expected);
+                });
+            });
+        }
     }
 
     #[test]

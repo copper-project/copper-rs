@@ -106,6 +106,9 @@ This file defines the Copper V1 public contract. Anything not listed as stable i
   - `high-precision-limiter`
 - Low-level logging codec registry APIs in `cu29::logcodec`.
 - Low-level monitoring probes and allocation counters.
+- `cu29_traits::ObservedWriter` and its bincode writer operations, including
+  `position` and `overwrite` for filling reserved codec headers. Overwrites do
+  not increment appended-byte accounting.
 - Direct unified-log section/header structs.
 
 ## Internal

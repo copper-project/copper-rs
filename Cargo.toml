@@ -292,7 +292,7 @@ cu-ros2-payloads = { path = "components/payloads/cu_ros2_payloads", version = "1
 cu-pid = { path = "components/tasks/cu_pid", version = "1.2.0-dev" }
 
 # External serialization
-bincode = { package = "cu-bincode", version = "2.1", default-features = false, features = [
+bincode = { package = "cu-bincode", version = "2.2", git = "https://github.com/copper-project/cu-bincode", rev = "f10d7ac8b061cf63e9b69a0a13c76919a3a4599a", default-features = false, features = [
   "derive",
   "alloc",
 ] }

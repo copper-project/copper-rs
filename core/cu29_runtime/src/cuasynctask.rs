@@ -61,6 +61,20 @@ impl Writer for BufferWriter<'_> {
         self.0.extend_from_slice(bytes);
         Ok(())
     }
+
+    fn position(&self) -> Result<usize, EncodeError> {
+        Ok(self.0.len())
+    }
+
+    fn overwrite(&mut self, position: usize, bytes: &[u8]) -> Result<(), EncodeError> {
+        let output = self
+            .0
+            .get_mut(position..)
+            .and_then(|tail| tail.get_mut(..bytes.len()))
+            .ok_or(EncodeError::UnexpectedEnd)?;
+        output.copy_from_slice(bytes);
+        Ok(())
+    }
 }
 
 fn encode_value_into(value: &impl Encode, buffer: &mut Vec<u8>) -> Result<(), EncodeError> {
@@ -85,11 +99,23 @@ impl Writer for DynWriter<'_> {
     fn write(&mut self, bytes: &[u8]) -> Result<(), EncodeError> {
         self.0.write(bytes)
     }
+
+    fn position(&self) -> Result<usize, EncodeError> {
+        self.0.position()
+    }
+
+    fn overwrite(&mut self, position: usize, bytes: &[u8]) -> Result<(), EncodeError> {
+        self.0.overwrite(position, bytes)
+    }
 }
 
 struct DynReader<'a>(&'a mut dyn Reader);
 
 impl Reader for DynReader<'_> {
+    fn read_some(&mut self, bytes: &mut [u8]) -> Result<usize, DecodeError> {
+        self.0.read_some(bytes)
+    }
+
     fn read(&mut self, bytes: &mut [u8]) -> Result<(), DecodeError> {
         self.0.read(bytes)
     }

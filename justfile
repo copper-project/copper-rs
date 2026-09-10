@@ -31,6 +31,16 @@ pr-check:
 	just logstream-udp-check
 	just logstream-pacing-check
 
+# Verify codec framing, generated replay, and fixed-storage serialization.
+codec-framing-check:
+	just fmt-check
+	cargo +stable test -p cu29-runtime --lib framing_tests
+	cargo +stable test -p cu29-runtime --test replay_primitives
+	cargo +stable test -p cu-png-codec -p cu-ffv1-codec
+	cargo +stable test -p cu29-unifiedlog -p cu29-traits --lib
+	cargo +stable clippy -p cu29-runtime -p cu29-traits -p cu29-unifiedlog -p cu-png-codec --all-targets -- -D warnings
+	cargo +stable check -p cu29-runtime -p cu29-traits -p cu29-unifiedlog --no-default-features
+
 # Reproduce the scheduled weekly audit and beta checks on the local host.
 weekly: weekly-audit
 	cargo +beta fmt --all -- --check

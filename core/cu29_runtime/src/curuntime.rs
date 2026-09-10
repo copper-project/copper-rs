@@ -1256,6 +1256,20 @@ impl Writer for PreallocatedVecWriter<'_> {
         self.0.extend_from_slice(bytes);
         Ok(())
     }
+
+    fn position(&self) -> Result<usize, EncodeError> {
+        Ok(self.0.len())
+    }
+
+    fn overwrite(&mut self, position: usize, bytes: &[u8]) -> Result<(), EncodeError> {
+        let output = self
+            .0
+            .get_mut(position..)
+            .and_then(|tail| tail.get_mut(..bytes.len()))
+            .ok_or(EncodeError::UnexpectedEnd)?;
+        output.copy_from_slice(bytes);
+        Ok(())
+    }
 }
 
 impl KeyFramesManager {

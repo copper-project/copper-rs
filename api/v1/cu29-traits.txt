@@ -126,6 +126,8 @@ pub fn cu29_traits::ObservedWriter<W>::inner_mut(&mut self) -> &mut W
 pub fn cu29_traits::ObservedWriter<W>::into_inner(self) -> W
 pub const fn cu29_traits::ObservedWriter<W>::new(inner: W) -> Self
 impl<W: cu_bincode::enc::write::Writer> cu_bincode::enc::write::Writer for cu29_traits::ObservedWriter<W>
+pub fn cu29_traits::ObservedWriter<W>::overwrite(&mut self, position: usize, bytes: &[u8]) -> core::result::Result<(), cu_bincode::error::EncodeError>
+pub fn cu29_traits::ObservedWriter<W>::position(&self) -> core::result::Result<usize, cu_bincode::error::EncodeError>
 pub fn cu29_traits::ObservedWriter<W>::write(&mut self, bytes: &[u8]) -> core::result::Result<(), cu_bincode::error::EncodeError>
 pub struct cu29_traits::ReflectSerializedPayloadSchema
 impl cu29_traits::ReflectSerializedPayloadSchema

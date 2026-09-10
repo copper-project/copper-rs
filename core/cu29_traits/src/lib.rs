@@ -435,6 +435,15 @@ impl<W: Writer> Writer for ObservedWriter<W> {
         record_observed_encode_bytes(bytes.len());
         Ok(())
     }
+
+    fn position(&self) -> Result<usize, EncodeError> {
+        self.inner.position()
+    }
+
+    fn overwrite(&mut self, position: usize, bytes: &[u8]) -> Result<(), EncodeError> {
+        // These bytes were counted when the frame header was reserved.
+        self.inner.overwrite(position, bytes)
+    }
 }
 
 /// Defines a basic write, append only stream trait to be able to log or send serializable objects.
