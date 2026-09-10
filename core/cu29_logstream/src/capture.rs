@@ -23,7 +23,8 @@ macro_rules! __with_reconstruction_verification {
 
 /// Generated from RON. Slot dispatch and storage are fixed at compile time.
 pub trait CaptureDataSet: CopperListTuple {
-    const RECONSTRUCTION: &'static [Option<u32>];
+    /// Per-output flags: `true` for reconstructed outputs, `false` for captured outputs.
+    const RECONSTRUCTION: &'static [bool];
     fn stream_schema() -> ApplicationSchema;
     fn encode_capture<E: Encoder>(&self, encoder: &mut E) -> core::result::Result<(), EncodeError>;
     fn validate_capture(&self) -> Result<()>;

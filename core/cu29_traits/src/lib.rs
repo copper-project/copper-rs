@@ -1134,7 +1134,4 @@ mod std_tests {
 
 /// Explicit promise that a task has no external side effects and replays exactly
 /// across supported targets from its captured inputs, clock and frozen state.
-/// Change the nonzero ABI whenever its state encoding or deterministic behavior changes.
-pub trait CuCrossPlatformDeterministic {
-    const REPLAY_ABI: u32;
-}
+pub trait CuCrossPlatformDeterministic {}

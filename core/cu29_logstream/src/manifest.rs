@@ -56,8 +56,8 @@ pub struct ResolvedObjectFec {
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
 pub struct ApplicationSchema {
     pub outputs: Vec<ApplicationOutputSchema>,
-    /// Per-output deterministic ABI; empty means full capture.
-    pub reconstruction: Vec<Option<u32>>,
+    /// Per-output reconstruction flags (`true` means reconstruct); empty means full capture.
+    pub reconstruction: Vec<bool>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]

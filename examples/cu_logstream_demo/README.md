@@ -159,8 +159,8 @@ failure modes; they are demo machinery.
    that bound. For recording alone, use `.archive_only()` before `.spawn()`.
 4. **Optionally omit reconstructible outputs.** Keep outputs captured initially.
    To save payload bandwidth, mark suitable tasks with
-   `streaming: (replay: reconstruct, replay_abi: 1)` and implement
-   `CuCrossPlatformDeterministic` with matching `REPLAY_ABI`, as
+   `streaming: (replay: reconstruct)` and implement
+   `CuCrossPlatformDeterministic`, as
    [Kinematics](src/tasks.rs) does. This promises deterministic behavior across
    platforms and no external side effects. Sources and bridge receives stay
    captured; reconstruction currently supports ordinary synchronous tasks with

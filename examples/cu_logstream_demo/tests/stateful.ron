@@ -15,7 +15,6 @@
             type: "crate::stateful::tasks::Accumulator",
             streaming: (
                 replay: reconstruct,
-                replay_abi: 1,
             ),
         ),
         (
@@ -23,7 +22,6 @@
             type: "crate::stateful::tasks::Derived",
             streaming: (
                 replay: reconstruct,
-                replay_abi: 1,
             ),
         ),
     ],
