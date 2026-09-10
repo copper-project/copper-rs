@@ -210,6 +210,13 @@ Sources and bridge receives stay captured. Reconstruction currently supports
 ordinary synchronous tasks using the lossless native compressed codec; background,
 anytime, custom codec and selective handle policies are rejected for this path.
 
+Every input to a reconstructed task must come from a node with logging enabled.
+Copper rejects missing replay inputs at compile time, naming the producer,
+consumer, and message type. To omit camera images, disable camera logging and
+capture the detector output; downstream tracking and planning tasks can then use
+`streaming: (replay: reconstruct)`. Each reconstructed task's incoming connections
+are checked, including every branch of a multi-input task and each mission graph.
+
 A ground station declares `#[copper_runtime(config = "copperconfig.ron", sim_mode = true)]`.
 The generated application exposes a twin builder:
 

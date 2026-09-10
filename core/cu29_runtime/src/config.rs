@@ -2394,9 +2394,44 @@ pub struct CuConfig {
     pub graphs: ConfigGraphs,
 }
 
+/// Every reconstructed node needs recorded or reconstructed inputs. Checking
+/// direct edges at every reconstructed node also covers chains and fan-in.
+fn validate_reconstruction_inputs(graph: &CuGraph) -> CuResult<()> {
+    for index in graph.0.node_indices() {
+        let node = &graph.0[index];
+        if node.streaming().replay != StreamReplay::Reconstruct {
+            continue;
+        }
+        for edge in graph.0.edges_directed(index, Incoming) {
+            let source = &graph.0[edge.source()];
+            if !source.is_logging_enabled() {
+                return Err(CuError::from(format!(
+                    "Task '{}' uses streaming.replay: reconstruct but input '{}' from '{}' has logging.enabled: false. Enable logging on '{}' or use streaming.replay: capture on '{}'.",
+                    node.id,
+                    edge.weight().msg,
+                    source.id,
+                    source.id,
+                    node.id
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
 impl CuConfig {
-    /// Validates static log-stream topology and bounds before code generation.
+    /// Validates reconstruction inputs, static log-stream topology and bounds before code generation.
     pub fn validate_log_streaming_config(&self) -> CuResult<()> {
+        match &self.graphs {
+            Simple(graph) => validate_reconstruction_inputs(graph)?,
+            Missions(graphs) => {
+                for (mission, graph) in graphs {
+                    validate_reconstruction_inputs(graph)
+                        .map_err(|error| CuError::from(format!("Mission '{mission}': {error}")))?;
+                }
+            }
+        }
+
         let Some(streaming) = &self.log_streaming else {
             return Ok(());
         };
