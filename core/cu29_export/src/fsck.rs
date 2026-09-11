@@ -1,8 +1,7 @@
-use crate::{keyframes_reader, structlog_reader};
+use crate::runs::RunReader;
 use bincode::config::standard;
 use bincode::decode_from_std_read;
 use bincode::error::DecodeError;
-use cu29::prelude::UnifiedLoggerRead;
 use cu29::prelude::*;
 use cu29::{CopperListTuple, CuResult};
 use num_format::{Locale, ToFormattedString};
@@ -243,10 +242,10 @@ fn print_runtime_lifecycle_record(index: usize, entry: &RuntimeLifecycleRecord) 
 }
 
 pub(crate) fn check<P>(
-    dl: &mut UnifiedLoggerRead,
+    dl: &mut RunReader,
     verbose: u8,
     dump_runtime_lifecycle: bool,
-) -> Option<CuResult<()>>
+) -> CuResult<()>
 where
     P: CopperListTuple,
 {
@@ -283,13 +282,17 @@ where
                 match header.entry_type {
                     UnifiedLogType::StructuredLogLine => {
                         structured_log_size += content.len();
-                        let mut reader: Cursor<Vec<u8>> = Cursor::new(content);
-                        let iter = structlog_reader(&mut reader);
-                        for entry in iter {
-                            sl_entries += 1;
-                            if entry.is_err() {
-                                println!("Struct log #{sl_entries} is corrupted: {entry:?}");
+                        let mut reader = Cursor::new(content.as_slice());
+                        while reader.position() < content.len() as u64 {
+                            if let Err(error) =
+                                decode_from_std_read::<CuLogEntry, _, _>(&mut reader, standard())
+                            {
+                                break 'scan Err(CuError::new_with_cause(
+                                    "Corrupted structured log entry",
+                                    error,
+                                ));
                             }
+                            sl_entries += 1;
                         }
                     }
                     UnifiedLogType::CopperList => {
@@ -317,23 +320,28 @@ where
                             };
                             let entry_end = reader.position() as usize;
                             cl_entropy_samples.observe(&content[entry_start..entry_end]);
+                            if let Some(last) = copperlist_sequence.last_id
+                                && entry.id <= last
+                            {
+                                break 'scan Err(CuError::from(format!(
+                                    "CopperList IDs must increase within a recorded run: {} after {}",
+                                    entry.id, last,
+                                )));
+                            }
                             copperlist_sequence.observe(entry.id);
                             section_last_cl = Some(entry.id);
                             if first_ts.is_none() {
                                 first_cl = Some(entry.id);
-                                first_ts = entry
-                                    .cumsgs()
-                                    .first()
-                                    .expect("Empty copperlist")
-                                    .metadata()
-                                    .process_time()
-                                    .start;
+                                if let Some(first) = entry.cumsgs().first() {
+                                    first_ts = first.metadata().process_time().start;
+                                }
                                 if overall_first_ts.is_none() {
                                     overall_first_ts = first_ts;
                                 }
                             }
-                            let last_msg = *entry.cumsgs().last().expect("Empty copperlist");
-                            last_ts = last_msg.metadata().process_time().end;
+                            if let Some(last_msg) = entry.cumsgs().last() {
+                                last_ts = last_msg.metadata().process_time().end;
+                            }
                         }
                         if verbose > 0 {
                             match (first_cl, section_last_cl) {
@@ -346,9 +354,20 @@ where
                     }
                     UnifiedLogType::FrozenTasks => {
                         kfs_size += content.len();
-                        let mut reader: Cursor<Vec<u8>> = Cursor::new(content);
-                        let iter = keyframes_reader(&mut reader);
-                        for entry in iter {
+                        let mut reader = Cursor::new(content.as_slice());
+                        while reader.position() < content.len() as u64 {
+                            let entry = match decode_from_std_read::<KeyFrame, _, _>(
+                                &mut reader,
+                                standard(),
+                            ) {
+                                Ok(entry) => entry,
+                                Err(error) => {
+                                    break 'scan Err(CuError::new_with_cause(
+                                        "Corrupted keyframe",
+                                        error,
+                                    ));
+                                }
+                            };
                             keyframes += 1;
                             if verbose > 0 {
                                 println!(
@@ -424,6 +443,11 @@ where
                         }
                     }
                     UnifiedLogType::LastEntry => {
+                        if header.is_open {
+                            break Err(CuError::from(
+                                "The log has a temporary end marker; its writer has not closed it cleanly",
+                            ));
+                        }
                         if verbose > 0 {
                             println!("Last Entry / EOF.");
                             println!();
@@ -585,7 +609,7 @@ where
         runtime_lifecycle_size.to_formatted_string(l)
     );
 
-    None
+    result
 }
 
 #[cfg(test)]
