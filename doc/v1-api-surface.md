@@ -9,6 +9,10 @@ This file defines the Copper V1 public contract. Anything not listed as stable i
 - `internal`: public only because proc macros, generated code, tests, or rustdoc need a path.
 - `deprecated`: still callable, but not part of new V1 design.
 
+The logreader CLI parser types (`cu29_export::LogReaderCli`, `Command`, and
+`ExportFormat`) are experimental. `list-instances` and the global `--instance`
+option select runtime instances identified by `Instantiated` lifecycle records.
+
 ## Stable
 
 - `cu29::prelude`: canonical import surface for application crates.

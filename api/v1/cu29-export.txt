@@ -68,8 +68,9 @@ pub cu29_export::Command::ExtractTextLog::log_index: std::path::PathBuf
 pub cu29_export::Command::Fsck
 pub cu29_export::Command::Fsck::dump_runtime_lifecycle: bool
 pub cu29_export::Command::Fsck::verbose: u8
+pub cu29_export::Command::ListInstances
 pub cu29_export::Command::LogStats
-pub cu29_export::Command::LogStats::config: std::path::PathBuf
+pub cu29_export::Command::LogStats::config: core::option::Option<std::path::PathBuf>
 pub cu29_export::Command::LogStats::features: alloc::vec::Vec<alloc::string::String>
 pub cu29_export::Command::LogStats::mission: core::option::Option<alloc::string::String>
 pub cu29_export::Command::LogStats::output: std::path::PathBuf
@@ -80,6 +81,7 @@ impl core::fmt::Display for cu29_export::ExportFormat
 pub fn cu29_export::ExportFormat::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct cu29_export::LogReaderCli
 pub cu29_export::LogReaderCli::command: cu29_export::Command
+pub cu29_export::LogReaderCli::instance: core::option::Option<usize>
 pub cu29_export::LogReaderCli::unifiedlog_base: std::path::PathBuf
 pub fn cu29_export::assert_unified_log_mission(unifiedlog_base: &std::path::Path, expected_mission: &str) -> cu29_traits::CuResult<()>
 pub fn cu29_export::copperlists_reader<P: cu29_traits::CopperListTuple>(src: impl std::io::Read) -> impl core::iter::traits::iterator::Iterator<Item = cu29_runtime::copperlist::CopperList<P>>

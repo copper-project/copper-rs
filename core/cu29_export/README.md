@@ -16,6 +16,47 @@ see
 - CopperList export helpers
 - optional Python bindings for iterating logs without going through JSON first
 
+## Selecting a Runtime Instance
+
+A unified log can contain multiple runtime instances after a mission change or an
+appended restart. Each `Instantiated` lifecycle record announces a fresh runtime.
+Its CopperList IDs and clock can start over independently of the previous instance.
+
+Use the application's logreader binary to list the instances and select one:
+
+```sh
+logreader logs/robot.copper list-instances
+logreader logs/robot.copper --instance 1 fsck --dump-runtime-lifecycle
+logreader logs/robot.copper --instance 1 extract-copperlists
+logreader logs/robot.copper --instance 1 extract-text-log target/debug/cu29_log_index
+logreader logs/robot.copper --instance 1 log-stats --output instance-1.json
+logreader logs/robot.copper --instance 1 export-mcap --output instance-1.mcap
+```
+
+Indices are zero-based and follow `Instantiated` record order. They are distinct
+from the recorded `instance_id`, which can repeat across process restarts.
+`list-instances` reads lifecycle metadata without decoding application payloads.
+It shows the mission, application, runtime instance ID, start time, and whether
+`ShutdownCompleted` was recorded.
+
+Single-instance logs select their instance automatically. Logs from standalone
+writers with no `Instantiated` record are treated as one implicit instance.
+Multi-instance logs require `--instance` for extraction, fsck, statistics, and MCAP
+export. The selection includes the runtime's initial stream reservations and all
+of its CL, keyframe, lifecycle, and structured-log sections. A multi-instance log
+whose startup section ordering cannot be recognized is listed but rejected for
+selection.
+
+The selected instance supplies the recorded configuration used by logging codecs.
+Statistics also default to that configuration and its recorded mission; `--config`
+and `--mission` provide explicit overrides. Without a recorded configuration,
+statistics use `copperconfig.ron`. Use a logreader and string index built for the
+application version that produced the selected instance.
+
+`fsck` checks CopperList IDs within the selected instance, reports decoding errors,
+and returns an error for repeated or decreasing IDs and an unclean final log close.
+An ID reset at the next `Instantiated` belongs to that next instance.
+
 ## Python Support
 
 Python support lives behind the `python` feature and is not supported on macOS in
