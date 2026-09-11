@@ -1099,6 +1099,13 @@ impl MmapUnifiedLoggerRead {
 
             let header = self.read_section_header()?;
             if header.entry_type == UnifiedLogType::LastEntry {
+                if header.is_open {
+                    return Err(CuError::from(format!(
+                        "Log {} was not cleanly closed: temporary end-of-log marker in slab {}",
+                        self.base_file_path.display(),
+                        self.current_slab_index,
+                    )));
+                }
                 return Ok(self.position());
             }
             self.current_reading_position += header.offset_to_next_section as usize;
@@ -1588,6 +1595,59 @@ mod tests {
         assert_eq!(logger_guard.front_slab.pending_closed_bytes(), 0);
         drop(logger_guard);
         drop(s1);
+    }
+
+    #[test]
+    fn test_append_rejects_log_without_clean_close() {
+        let tmp_dir =
+            TempDir::new_in(env!("CARGO_MANIFEST_DIR")).expect("could not create a tmp dir");
+        let (logger, file_path) = make_a_logger(&tmp_dir, LARGE_SLAB);
+        {
+            let mut stream = stream_write::<u32, MmapSectionStorage>(
+                logger.clone(),
+                UnifiedLogType::StructuredLogLine,
+                1024,
+            )
+            .unwrap();
+            stream.log(&1u32).unwrap();
+        }
+
+        // Reproduce #1385: a killed writer never runs Drop to replace the
+        // temporary end-of-log marker with a permanent one.
+        std::mem::forget(logger);
+
+        let MmapUnifiedLogger::Read(mut reader) = MmapUnifiedLoggerBuilder::new()
+            .file_base_name(&file_path)
+            .build()
+            .expect("Failed to open logger for reading")
+        else {
+            panic!("Failed to open logger for reading")
+        };
+        let section = reader
+            .read_next_section_type(UnifiedLogType::StructuredLogLine)
+            .unwrap()
+            .expect("Missing logged section");
+        assert_eq!(
+            decode_from_slice::<u32, _>(&section, standard()).unwrap().0,
+            1
+        );
+        let header = reader.read_section_header().unwrap();
+        assert_eq!(header.entry_type, UnifiedLogType::LastEntry);
+        assert!(header.is_open, "Expected a temporary end-of-log marker");
+        drop(reader);
+
+        let result = MmapUnifiedLoggerBuilder::new()
+            .write(true)
+            .create(true)
+            .append(true)
+            .file_base_name(&file_path)
+            .preallocated_size(LARGE_SLAB)
+            .build();
+
+        assert!(
+            result.is_err(),
+            "Append must reject a log with a temporary end-of-log marker"
+        );
     }
 
     #[test]
