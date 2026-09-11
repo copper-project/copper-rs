@@ -76,7 +76,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#v111-2026-08-31" class="md-skip">
+        <a href="#v120-upcoming" class="md-skip">
           Skip to content
         </a>
       
@@ -1019,10 +1019,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#high-level" class="md-nav__link">
+  <a href="#watch-your-robot-liveand-replay-the-same-run-later" class="md-nav__link">
     <span class="md-ellipsis">
       
-        High Level
+        Watch your robot live—and replay the same run later
       
     </span>
   </a>
@@ -1030,10 +1030,54 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#fixes" class="md-nav__link">
+  <a href="#stereo-depth-that-improves-as-more-time-becomes-available" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Fixes
+        Stereo depth that improves as more time becomes available
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#connect-serial-devices-and-radios-through-reusable-resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Connect serial devices and radios through reusable resources
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#more-ros-2-messages-with-less-conversion-code" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        More ROS 2 messages, with less conversion code
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#more-control-over-execution-and-better-tools-for-recordings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        More control over execution and better tools for recordings
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#upgrading" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Upgrading
       
     </span>
   </a>
@@ -1249,10 +1293,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#high-level" class="md-nav__link">
+  <a href="#watch-your-robot-liveand-replay-the-same-run-later" class="md-nav__link">
     <span class="md-ellipsis">
       
-        High Level
+        Watch your robot live—and replay the same run later
       
     </span>
   </a>
@@ -1260,10 +1304,54 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#fixes" class="md-nav__link">
+  <a href="#stereo-depth-that-improves-as-more-time-becomes-available" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Fixes
+        Stereo depth that improves as more time becomes available
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#connect-serial-devices-and-radios-through-reusable-resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Connect serial devices and radios through reusable resources
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#more-ros-2-messages-with-less-conversion-code" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        More ROS 2 messages, with less conversion code
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#more-control-over-execution-and-better-tools-for-recordings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        More control over execution and better tools for recordings
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#upgrading" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Upgrading
       
     </span>
   </a>
@@ -1290,6 +1378,34 @@
   
 
 
+<h1 id="v120-upcoming">v1.2.0 - Upcoming<a class="headerlink" href="#v120-upcoming" title="Permanent link">&para;</a></h1>
+<p>Copper 1.2 brings the robot's execution log to your ground station while it runs. Watch live telemetry, inspect the robot's own diagnostics, and keep a recording you can replay afterward—even over a link that drops packets. A live Copper twin can also run selected tasks on the ground, reconstructing results from the inputs you transmit.</p>
+<p>This release also puts anytime computation to work on stereo vision, adds serial and HC-12 radio building blocks, and expands the messages you can exchange with ROS 2.</p>
+<h2 id="watch-your-robot-liveand-replay-the-same-run-later">Watch your robot live—and replay the same run later<a class="headerlink" href="#watch-your-robot-liveand-replay-the-same-run-later" title="Permanent link">&para;</a></h2>
+<p><strong>Log streaming makes remote recording part of the Copper application.</strong> Configure a streaming destination alongside your onboard log. The receiver writes native <code>.copper</code> archives for your usual logreader and replay tools, preserving captured payloads and timestamps. Structured robot logs travel over the same link, so diagnostics appear alongside live outputs. Pausing the display leaves recording running. (<a href="https://github.com/copper-project/copper-rs/pull/1315">#1315</a>, <a href="https://github.com/copper-project/copper-rs/pull/1322">#1322</a>, <a href="https://github.com/copper-project/copper-rs/pull/1372">#1372</a>)</p>
+<p><strong>The live twin trades ground-station computation for less radio traffic.</strong> In the robot-arm demo, the robot sends shoulder and elbow angles; the ground station runs the same kinematics task to reconstruct the arm and fingertip trajectory. Generated twin builders connect reception, recording, and replay. Optional verification checks reconstructed results against the sender, and compile-time checks reject reconstruction when required inputs were not captured. (<a href="https://github.com/copper-project/copper-rs/pull/1330">#1330</a>, <a href="https://github.com/copper-project/copper-rs/pull/1337">#1337</a>, <a href="https://github.com/copper-project/copper-rs/pull/1379">#1379</a>)</p>
+<p>Under the hood, sliding-window forward error correction supplies repair data for the continuous stream, while RaptorQ protects recovery objects such as task-state snapshots. Receivers can join late or resume at a later recovery point after an interruption. Buffer and bitrate budgets bound the stream; loss beyond the recovery window becomes an explicit gap. Optional receiver feedback adjusts the repair rate within configured limits. Framing, error correction, and transmission run on background workers. <a href="https://github.com/copper-project/copper-rs/tree/93e215085697f714e07a15b05a0cebb22887679e/core/cu29_logstream">Read how streaming works</a>.</p>
+<p><strong>Try it:</strong> in <a href="https://github.com/copper-project/copper-rs/tree/93e215085697f714e07a15b05a0cebb22887679e/examples/cu_logstream_demo"><code>examples/cu_logstream_demo</code></a>, run <code>just telemetry</code> and <code>just sender</code> in separate terminals. Explore the live arm, robot logs, and link-health counters; the demo also includes loss and restart scenarios.</p>
+<h2 id="stereo-depth-that-improves-as-more-time-becomes-available">Stereo depth that improves as more time becomes available<a class="headerlink" href="#stereo-depth-that-improves-as-more-time-becomes-available" title="Permanent link">&para;</a></h2>
+<p>The new <strong><code>cu-anynet</code></strong> task turns a rectified stereo pair into a depth map in meters. It builds on the anytime task model introduced in 1.1: the first inference stage publishes an initial result, and two further stages refine it as the runtime grants more work. The Candle implementation supports CPU and optional CUDA execution. (<a href="https://github.com/copper-project/copper-rs/pull/1281">#1281</a>)</p>
+<p>The <a href="https://github.com/copper-project/copper-rs/tree/93e215085697f714e07a15b05a0cebb22887679e/examples/cu_anytime_anynet">AnyNet demo</a> shows each stage beside KITTI ground truth, measured error, latency, and a colored 3D reconstruction. Run <code>just</code> for synthetic input or <code>just kitti</code> for real stereo data; the latter downloads the dataset on first use. A background mode keeps the graph responsive while inference runs on a worker.</p>
+<p><img alt="AnyNet stereo-depth demo: camera input, KITTI ground truth, three refinement stages, and a colored 3D reconstruction" src="https://raw.githubusercontent.com/copper-project/copper-rs/93e215085697f714e07a15b05a0cebb22887679e/examples/cu_anytime_anynet/doc/still.png" /></p>
+<h2 id="connect-serial-devices-and-radios-through-reusable-resources">Connect serial devices and radios through reusable resources<a class="headerlink" href="#connect-serial-devices-and-radios-through-reusable-resources" title="Permanent link">&para;</a></h2>
+<p>New nonblocking serial I/O, a buffered byte bridge, and serial LogStream framing provide building blocks for UART and radio links. <strong><code>cu-hc12</code></strong> configures an HC-12 radio at startup and exposes it as a serial resource, with channel selection in RON. The driver and serial adapters support <code>no_std</code>. <a href="https://github.com/copper-project/copper-rs/tree/93e215085697f714e07a15b05a0cebb22887679e/components/res/cu_hc12">See the HC-12 wiring and examples</a>.</p>
+<p>Resources can now be composed from other resources: a radio can own its UART, control pin, and startup delay. Copper resolves those dependencies at construction and shows them in the generated DAG. (<a href="https://github.com/copper-project/copper-rs/pull/1343">#1343</a>, <a href="https://github.com/copper-project/copper-rs/pull/1344">#1344</a>)</p>
+<p>The recovery engine is reusable too: <strong><a href="https://github.com/copper-project/copper-rs/tree/93e215085697f714e07a15b05a0cebb22887679e/components/libs/cu_fec"><code>cu-fec</code></a></strong> implements RFC 8681 sliding-window coding in a dependency-free, allocator-free <code>no_std</code> crate, usable outside Copper.</p>
+<h2 id="more-ros-2-messages-with-less-conversion-code">More ROS 2 messages, with less conversion code<a class="headerlink" href="#more-ros-2-messages-with-less-conversion-code" title="Permanent link">&para;</a></h2>
+<p><code>cu-ros2-payloads</code> adds poses, transforms, odometry, paths, <code>CompressedImage</code>, <code>CameraInfo</code>, <code>JointState</code>, <code>BatteryState</code>, and TF messages. Adapters connect Copper's spatial payloads to ROS geometry messages, making existing robot visualization and navigation tooling easier to connect. (<a href="https://github.com/copper-project/copper-rs/pull/1365">#1365</a>, <a href="https://github.com/copper-project/copper-rs/pull/1366">#1366</a>, <a href="https://github.com/copper-project/copper-rs/pull/1371">#1371</a>)</p>
+<h2 id="more-control-over-execution-and-better-tools-for-recordings">More control over execution and better tools for recordings<a class="headerlink" href="#more-control-over-execution-and-better-tools-for-recordings" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Catch lifecycle mistakes at compile time.</strong> Typed application handles track initialized, running, stopped, and faulted states, guiding you through valid transitions. (<a href="https://github.com/copper-project/copper-rs/pull/1272">#1272</a>)</li>
+<li><strong>Choose task ordering at build time.</strong> Pluggable execution planners support default ordering, pinned orders, and application-defined planners. Copper validates the result and bakes it into the generated runtime. (<a href="https://github.com/copper-project/copper-rs/pull/1277">#1277</a>)</li>
+<li><strong>Record less repeated metadata.</strong> CopperLists compress timestamps and repeated metadata; <code>fsck</code> reports byte entropy to help assess recorded data. The unified logger can also append to a cleanly closed recording. (<a href="https://github.com/copper-project/copper-rs/pull/1303">#1303</a>, <a href="https://github.com/copper-project/copper-rs/pull/1304">#1304</a>, <a href="https://github.com/copper-project/copper-rs/pull/1375">#1375</a>)</li>
+<li><strong>Measure complete execution chains.</strong> The <a href="https://github.com/copper-project/copper-rs/tree/93e215085697f714e07a15b05a0cebb22887679e/examples/cu_autoware">Autoware reference-system benchmark</a> compares a synthetic callback workload with the LaME executor, reporting chain latency, deadline misses, CPU use, and memory. Run the included comparison on your own machine.</li>
+</ul>
+<h2 id="upgrading">Upgrading<a class="headerlink" href="#upgrading" title="Permanent link">&para;</a></h2>
+<p>Use receivers and logreaders built for the producing application version: CopperList encoding changes make that pairing important. For application startup, prefer <code>run_until_shutdown()</code> or typed <code>start()</code> / <code>stop()</code> transitions; the older manual lifecycle methods are deprecated. The <a href="https://github.com/copper-project/copper-rs/tree/93e215085697f714e07a15b05a0cebb22887679e/examples/cu_caterpillar">Caterpillar example</a> shows the current pattern.</p>
+<p>The v1.1.1 fixes are included, together with fixes for transform matrix layout, multi-output planning, and PNG stream reads. Thanks to everyone who contributed code, examples, testing, and fixes to this release.</p>
 <h1 id="v111-2026-08-31">v1.1.1 - 2026-08-31<a class="headerlink" href="#v111-2026-08-31" title="Permanent link">&para;</a></h1>
 <h2 id="high-level">High Level<a class="headerlink" href="#high-level" title="Permanent link">&para;</a></h2>
 <p>Copper v1.1.1 is a focused correctness and compatibility release. It makes keyframes safe when background or parallel work is still in flight, restores direct unit payloads in builds without reflection, updates remote debugging for Zenoh 1.10 with observable log indexing, fixes the flight-controller replay targets, and keeps the workspace lint-clean on macOS. There are no intentional breaking Rust API changes.</p>
