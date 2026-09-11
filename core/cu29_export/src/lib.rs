@@ -14,8 +14,8 @@
 //! For runtime Python task prototyping, see `cu-python-task` instead.
 
 mod fsck;
-mod instances;
 pub mod logstats;
+mod runs;
 
 #[cfg(feature = "mcap")]
 pub mod mcap_export;
@@ -116,9 +116,9 @@ pub struct LogReaderCli {
     /// for example for toto_0.copper, toto_1.copper ... the base name is toto.copper
     pub unifiedlog_base: PathBuf,
 
-    /// Select the runtime instance by its zero-based index from list-instances.
+    /// Select the recorded run by its zero-based index from list-runs.
     #[arg(long, global = true)]
-    pub instance: Option<usize>,
+    pub run: Option<usize>,
 
     #[command(subcommand)]
     pub command: Command,
@@ -126,8 +126,8 @@ pub struct LogReaderCli {
 
 #[derive(Subcommand)]
 pub enum Command {
-    /// List runtime instances announced by Instantiated lifecycle records.
-    ListInstances,
+    /// List recorded runs announced by Instantiated lifecycle records.
+    ListRuns,
     /// Extract logs
     ExtractTextLog { log_index: PathBuf },
     /// Extract copperlists
@@ -148,7 +148,7 @@ pub enum Command {
         /// Output JSON file path
         #[arg(short, long, default_value = "cu29_logstats.json")]
         output: PathBuf,
-        /// Config override; defaults to the selected instance's recorded configuration.
+        /// Config override; defaults to the selected run's recorded configuration.
         #[arg(long)]
         config: Option<PathBuf>,
         /// Mission id override; defaults to the mission recorded in the log
@@ -257,37 +257,35 @@ where
         return mcap_info(mcap_file, *schemas, *sample_messages);
     }
 
-    let instances = instances::discover(&unifiedlog_base)?;
-    if matches!(args.command, Command::ListInstances) {
-        for instance in &instances {
+    let runs = runs::discover(&unifiedlog_base)?;
+    if matches!(args.command, Command::ListRuns) {
+        for run in &runs {
             println!(
-                "Instance {}: mission={} app={} instance_id={} started={} shutdown={}",
-                instance.index,
-                instance.missions.join(","),
-                instance
-                    .stack
+                "Run {}: mission={} app={} instance_id={} started={} shutdown={}",
+                run.index,
+                run.missions.join(","),
+                run.stack
                     .as_ref()
                     .map_or("unknown", |stack| stack.app_name.as_str()),
-                instance.stack.as_ref().map_or_else(
+                run.stack.as_ref().map_or_else(
                     || "unknown".to_string(),
                     |stack| stack.instance_id.to_string()
                 ),
-                instance
-                    .started_at
+                run.started_at
                     .map_or_else(|| "unknown".to_string(), |time| time.to_string()),
-                instance.shutdown_completed,
+                run.shutdown_completed,
             );
         }
         return Ok(());
     }
-    let instance = instances::select(&instances, args.instance)?;
-    if let Some(config) = &instance.config {
+    let run = runs::select(&runs, args.run)?;
+    if let Some(config) = &run.config {
         cu29::logcodec::set_effective_config_ron::<P>(config);
     }
-    let mut dl = instance.reader(&unifiedlog_base)?;
+    let mut dl = run.reader(&unifiedlog_base)?;
 
     match args.command {
-        Command::ListInstances => unreachable!("instance listing handled before selection"),
+        Command::ListRuns => unreachable!("run listing handled before selection"),
         Command::ExtractTextLog { log_index } => {
             let reader = dl.stream(UnifiedLogType::StructuredLogLine);
             textlog_dump(reader, &log_index)?;
@@ -347,7 +345,7 @@ where
             mission,
             features,
         } => {
-            run_logstats::<P>(instance, dl, output, config, mission, &features)?;
+            run_logstats::<P>(run, dl, output, config, mission, &features)?;
         }
         #[cfg(feature = "mcap")]
         Command::ExportMcap {
@@ -359,7 +357,7 @@ where
 
             let show_progress = should_show_progress(progress, quiet);
             let total_bytes = if show_progress {
-                Some(instance.copperlist_bytes)
+                Some(run.copperlist_bytes)
             } else {
                 None
             };
@@ -392,8 +390,8 @@ where
 }
 
 fn run_logstats<P>(
-    instance: &instances::RuntimeInstance,
-    dl: instances::InstanceReader,
+    run: &runs::RecordedRun,
+    dl: runs::RunReader,
     output: PathBuf,
     config: Option<PathBuf>,
     mission: Option<String>,
@@ -402,9 +400,9 @@ fn run_logstats<P>(
 where
     P: CopperListTuple + CuPayloadRawBytes,
 {
-    let cfg = if config.is_none() && instance.config.is_some() {
-        CuConfig::deserialize_ron(instance.config.as_deref().unwrap()).map_err(|e| {
-            CuError::new_with_cause("Failed to read the selected instance's configuration", e)
+    let cfg = if config.is_none() && run.config.is_some() {
+        CuConfig::deserialize_ron(run.config.as_deref().unwrap()).map_err(|e| {
+            CuError::new_with_cause("Failed to read the selected run's configuration", e)
         })?
     } else {
         let config = config.unwrap_or_else(|| PathBuf::from("copperconfig.ron"));
@@ -415,7 +413,7 @@ where
         cu29::config::read_configuration_with_features(config_path, &feature_refs)
             .map_err(|e| CuError::new_with_cause("Failed to read configuration", e))?
     };
-    let mission = resolve_logstats_mission(&cfg, mission, instance.missions.first().cloned())?;
+    let mission = resolve_logstats_mission(&cfg, mission, run.missions.first().cloned())?;
     let reader = dl.stream(UnifiedLogType::CopperList);
     let stats = compute_logstats::<P>(reader, &cfg, mission.as_deref())?;
     write_logstats(&stats, &output)

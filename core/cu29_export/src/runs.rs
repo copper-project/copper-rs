@@ -1,4 +1,4 @@
-//! Runtime instance discovery and bounded access to a selected instance's sections.
+//! Recorded run discovery and bounded access to a selected run's sections.
 
 use crate::build_read_logger;
 use bincode::config::standard;
@@ -19,7 +19,7 @@ use std::io::{self, Read};
 use std::path::Path;
 
 #[derive(Debug)]
-pub(crate) struct RuntimeInstance {
+pub(crate) struct RecordedRun {
     pub index: usize,
     pub started_at: Option<CuTime>,
     pub stack: Option<RuntimeLifecycleStackInfo>,
@@ -32,7 +32,7 @@ pub(crate) struct RuntimeInstance {
     boundary_known: bool,
 }
 
-impl RuntimeInstance {
+impl RecordedRun {
     fn new(index: usize, start: LogPosition) -> Self {
         Self {
             index,
@@ -48,10 +48,10 @@ impl RuntimeInstance {
         }
     }
 
-    pub fn reader(&self, path: &Path) -> CuResult<InstanceReader> {
+    pub fn reader(&self, path: &Path) -> CuResult<RunReader> {
         let mut inner = build_read_logger(path)?;
         inner.seek(self.start)?;
-        Ok(InstanceReader {
+        Ok(RunReader {
             inner,
             end: self.end,
         })
@@ -59,10 +59,10 @@ impl RuntimeInstance {
 }
 
 /// Inspect lifecycle records without decoding application-specific payloads.
-pub(crate) fn discover(path: &Path) -> CuResult<Vec<RuntimeInstance>> {
+pub(crate) fn discover(path: &Path) -> CuResult<Vec<RecordedRun>> {
     let mut reader = build_read_logger(path)?;
     let beginning = reader.position();
-    let mut instances = Vec::<RuntimeInstance>::new();
+    let mut runs = Vec::<RecordedRun>::new();
     let mut sections = Vec::new();
     let mut startup_prefix = None;
     let mut previous_marker = 0;
@@ -103,7 +103,7 @@ pub(crate) fn discover(path: &Path) -> CuResult<Vec<RuntimeInstance>> {
                             ));
                         }
                         // Generated runtimes reserve their streams before the lifecycle
-                        // stream. Instantiated still identifies the new instance; include
+                        // stream. Instantiated still identifies the new run; include
                         // those initial reservations in its physical section range.
                         let prefix = startup_reservations(&sections[previous_marker..]);
                         let has_prefix = *startup_prefix.get_or_insert(!sections.is_empty());
@@ -112,24 +112,24 @@ pub(crate) fn discover(path: &Path) -> CuResult<Vec<RuntimeInstance>> {
                         } else {
                             position
                         };
-                        let mut instance = RuntimeInstance::new(instances.len(), start);
-                        instance.boundary_known = !has_prefix || prefix.is_some();
+                        let mut run = RecordedRun::new(runs.len(), start);
+                        run.boundary_known = !has_prefix || prefix.is_some();
                         previous_marker = sections.len();
-                        instance.started_at = Some(record.timestamp);
-                        instance.config = Some(effective_config_ron);
-                        instance.stack = Some(stack);
-                        instances.push(instance);
+                        run.started_at = Some(record.timestamp);
+                        run.config = Some(effective_config_ron);
+                        run.stack = Some(stack);
+                        runs.push(run);
                     }
                     RuntimeLifecycleEvent::MissionStarted { mission } => {
-                        if let Some(instance) = instances.last_mut()
-                            && !instance.missions.contains(&mission)
+                        if let Some(run) = runs.last_mut()
+                            && !run.missions.contains(&mission)
                         {
-                            instance.missions.push(mission);
+                            run.missions.push(mission);
                         }
                     }
                     RuntimeLifecycleEvent::ShutdownCompleted => {
-                        if let Some(instance) = instances.last_mut() {
-                            instance.shutdown_completed = true;
+                        if let Some(run) = runs.last_mut() {
+                            run.shutdown_completed = true;
                         }
                     }
                     _ => {}
@@ -140,39 +140,39 @@ pub(crate) fn discover(path: &Path) -> CuResult<Vec<RuntimeInstance>> {
         sections.push((position, header.entry_type, header.used));
     }
 
-    if instances.is_empty() {
+    if runs.is_empty() {
         // Logs from standalone writers can have no runtime lifecycle stream.
-        instances.push(RuntimeInstance::new(0, beginning));
-    } else if instances.len() == 1 {
+        runs.push(RecordedRun::new(0, beginning));
+    } else if runs.len() == 1 {
         // Include streams reserved before Instantiated by older runtime builders.
-        instances[0].start = beginning;
-        instances[0].boundary_known = true;
+        runs[0].start = beginning;
+        runs[0].boundary_known = true;
     }
 
-    // An unresolved boundary also makes the preceding instance's end ambiguous.
-    if instances.iter().any(|instance| !instance.boundary_known) {
-        for instance in &mut instances {
-            instance.boundary_known = false;
+    // An unresolved boundary also makes the preceding run's end ambiguous.
+    if runs.iter().any(|run| !run.boundary_known) {
+        for run in &mut runs {
+            run.boundary_known = false;
         }
     }
 
-    for index in 0..instances.len().saturating_sub(1) {
-        instances[index].end = Some(instances[index + 1].start);
+    for index in 0..runs.len().saturating_sub(1) {
+        runs[index].end = Some(runs[index + 1].start);
     }
-    for instance in &mut instances {
-        instance.copperlist_bytes = sections
+    for run in &mut runs {
+        run.copperlist_bytes = sections
             .iter()
             .filter(|(position, kind, _)| {
                 *kind == UnifiedLogType::CopperList
-                    && position_key(*position) >= position_key(instance.start)
-                    && instance
+                    && position_key(*position) >= position_key(run.start)
+                    && run
                         .end
                         .is_none_or(|end| position_key(*position) < position_key(end))
             })
             .map(|(_, _, used)| u64::from(*used))
             .sum();
     }
-    Ok(instances)
+    Ok(runs)
 }
 
 fn startup_reservations(sections: &[(LogPosition, UnifiedLogType, u32)]) -> Option<LogPosition> {
@@ -203,39 +203,36 @@ fn position_key(position: LogPosition) -> (usize, usize) {
     (position.slab_index, position.offset)
 }
 
-pub(crate) fn select(
-    instances: &[RuntimeInstance],
-    requested: Option<usize>,
-) -> CuResult<&RuntimeInstance> {
+pub(crate) fn select(runs: &[RecordedRun], requested: Option<usize>) -> CuResult<&RecordedRun> {
     let index = match requested {
         Some(index) => index,
-        None if instances.len() == 1 => 0,
+        None if runs.len() == 1 => 0,
         None => {
             return Err(CuError::from(format!(
-                "Log contains {} runtime instances; use list-instances and select --instance <index>",
-                instances.len()
+                "Log contains {} recorded runs; use list-runs and select --run <index>",
+                runs.len()
             )));
         }
     };
-    let instance = instances.get(index).ok_or_else(|| {
+    let run = runs.get(index).ok_or_else(|| {
         CuError::from(format!(
-            "Runtime instance {index} does not exist; use list-instances to see available instances"
+            "Recorded run {index} does not exist; use list-runs to see available runs"
         ))
     })?;
-    if !instance.boundary_known {
+    if !run.boundary_known {
         return Err(CuError::from(
-            "Cannot isolate runtime instances: startup sections do not match the recorded runtime layout",
+            "Cannot isolate recorded runs: startup sections do not match the recorded runtime layout",
         ));
     }
-    Ok(instance)
+    Ok(run)
 }
 
-pub(crate) struct InstanceReader {
+pub(crate) struct RunReader {
     inner: UnifiedLoggerRead,
     end: Option<LogPosition>,
 }
 
-impl InstanceReader {
+impl RunReader {
     pub fn raw_main_header(&self) -> &MainHeader {
         self.inner.raw_main_header()
     }
@@ -277,8 +274,8 @@ impl InstanceReader {
         Ok(None)
     }
 
-    pub fn stream(self, kind: UnifiedLogType) -> InstanceStream {
-        InstanceStream {
+    pub fn stream(self, kind: UnifiedLogType) -> RunStream {
+        RunStream {
             reader: self,
             kind,
             buffer: Vec::new(),
@@ -288,15 +285,15 @@ impl InstanceReader {
     }
 }
 
-pub(crate) struct InstanceStream {
-    reader: InstanceReader,
+pub(crate) struct RunStream {
+    reader: RunReader,
     kind: UnifiedLogType,
     buffer: Vec<u8>,
     offset: usize,
     finished: bool,
 }
 
-impl Read for InstanceStream {
+impl Read for RunStream {
     fn read(&mut self, destination: &mut [u8]) -> io::Result<usize> {
         if destination.is_empty() || self.finished {
             return Ok(0);
@@ -366,11 +363,11 @@ mod tests {
         Arc::new(Mutex::new(writer))
     }
 
-    fn write_instance(logger: &Arc<Mutex<UnifiedLoggerWrite>>, value: u32, mission: &str) {
-        write_instance_with_options(logger, value, mission, false, true, 3);
+    fn write_run(logger: &Arc<Mutex<UnifiedLoggerWrite>>, value: u32, mission: &str) {
+        write_run_with_options(logger, value, mission, false, true, 3);
     }
 
-    fn write_instance_with_options(
+    fn write_run_with_options(
         logger: &Arc<Mutex<UnifiedLoggerWrite>>,
         value: u32,
         mission: &str,
@@ -415,7 +412,7 @@ mod tests {
                     config_source: RuntimeLifecycleConfigSource::BundledDefault,
                     effective_config_ron: format!("(missions: [(id: \"drive\"), (id: \"park\")], tasks: [], cnx: [], // {value}\n)"),
                     stack: RuntimeLifecycleStackInfo {
-                        app_name: "instance-test".to_string(),
+                        app_name: "run-test".to_string(),
                         app_version: "1".to_string(),
                         git_commit: None,
                         git_dirty: None,
@@ -455,24 +452,18 @@ mod tests {
             .unwrap();
     }
 
-    fn assert_instances(path: &Path) {
+    fn assert_runs(path: &Path) {
         let catalog = discover(path).unwrap();
         assert_eq!(catalog.len(), 2);
         assert!(select(&catalog, None).is_err());
         assert!(select(&catalog, Some(2)).is_err());
         for (index, expected) in [17, 29].into_iter().enumerate() {
-            let instance = select(&catalog, Some(index)).unwrap();
-            assert_eq!(instance.stack.as_ref().unwrap().instance_id, 0);
-            assert_eq!(
-                instance.missions,
-                [if index == 0 { "drive" } else { "park" }]
-            );
-            assert!(instance.shutdown_completed);
+            let run = select(&catalog, Some(index)).unwrap();
+            assert_eq!(run.stack.as_ref().unwrap().instance_id, 0);
+            assert_eq!(run.missions, [if index == 0 { "drive" } else { "park" }]);
+            assert!(run.shutdown_completed);
             let entries = copperlists_reader::<Messages>(
-                instance
-                    .reader(path)
-                    .unwrap()
-                    .stream(UnifiedLogType::CopperList),
+                run.reader(path).unwrap().stream(UnifiedLogType::CopperList),
             )
             .collect::<Vec<_>>();
             assert_eq!(
@@ -480,14 +471,13 @@ mod tests {
                 [0, 1, 2]
             );
             assert!(entries.iter().all(|entry| entry.msgs.0 == expected));
-            crate::fsck::check::<Messages>(&mut instance.reader(path).unwrap(), 0, false).unwrap();
+            crate::fsck::check::<Messages>(&mut run.reader(path).unwrap(), 0, false).unwrap();
             for kind in [
                 UnifiedLogType::StructuredLogLine,
                 UnifiedLogType::FrozenTasks,
             ] {
                 let mut bytes = Vec::new();
-                instance
-                    .reader(path)
+                run.reader(path)
                     .unwrap()
                     .stream(kind)
                     .read_to_end(&mut bytes)
@@ -517,10 +507,10 @@ mod tests {
         let dir = TempDir::new_in(env!("CARGO_MANIFEST_DIR")).unwrap();
         let path = dir.path().join("missions.copper");
         let logger = writer(&path, false);
-        write_instance(&logger, 17, "drive");
-        write_instance(&logger, 29, "park");
+        write_run(&logger, 17, "drive");
+        write_run(&logger, 29, "park");
         drop(logger);
-        assert_instances(&path);
+        assert_runs(&path);
     }
 
     #[test]
@@ -528,16 +518,16 @@ mod tests {
         let dir = TempDir::new_in(env!("CARGO_MANIFEST_DIR")).unwrap();
         let path = dir.path().join("restart.copper");
         let logger = writer(&path, false);
-        write_instance(&logger, 17, "drive");
+        write_run(&logger, 17, "drive");
         drop(logger);
         let logger = writer(&path, true);
-        write_instance(&logger, 29, "park");
+        write_run(&logger, 29, "park");
         drop(logger);
-        assert_instances(&path);
+        assert_runs(&path);
     }
 
     #[test]
-    fn test_log_without_lifecycle_has_one_implicit_instance() {
+    fn test_log_without_lifecycle_has_one_implicit_run() {
         let dir = TempDir::new_in(env!("CARGO_MANIFEST_DIR")).unwrap();
         let path = dir.path().join("standalone.copper");
         drop(writer(&path, false));
@@ -550,17 +540,16 @@ mod tests {
         let dir = TempDir::new_in(env!("CARGO_MANIFEST_DIR")).unwrap();
         let path = dir.path().join("slabs.copper");
         let logger = writer(&path, false);
-        write_instance_with_options(&logger, 17, "drive", true, false, 10_000);
-        write_instance_with_options(&logger, 29, "park", false, true, 10_000);
+        write_run_with_options(&logger, 17, "drive", true, false, 10_000);
+        write_run_with_options(&logger, 29, "park", false, true, 10_000);
         drop(logger);
         let catalog = discover(&path).unwrap();
         assert_eq!(catalog.len(), 2);
         assert!(catalog[1].start.slab_index > 0);
         for (index, expected) in [17, 29].into_iter().enumerate() {
-            let instance = select(&catalog, Some(index)).unwrap();
+            let run = select(&catalog, Some(index)).unwrap();
             let entries = copperlists_reader::<Messages>(
-                instance
-                    .reader(&path)
+                run.reader(&path)
                     .unwrap()
                     .stream(UnifiedLogType::CopperList),
             )
@@ -570,16 +559,16 @@ mod tests {
                 assert_eq!(entry.id, id as u64);
                 assert_eq!(entry.msgs.0, expected);
             }
-            crate::fsck::check::<Messages>(&mut instance.reader(&path).unwrap(), 0, false).unwrap();
+            crate::fsck::check::<Messages>(&mut run.reader(&path).unwrap(), 0, false).unwrap();
         }
     }
 
     #[test]
-    fn test_selection_does_not_decode_other_instances_payloads() {
+    fn test_selection_does_not_decode_other_runs_payloads() {
         let dir = TempDir::new_in(env!("CARGO_MANIFEST_DIR")).unwrap();
         let path = dir.path().join("schemas.copper");
         let logger = writer(&path, false);
-        write_instance(&logger, 17, "drive");
+        write_run(&logger, 17, "drive");
         {
             let mut different_schema = stream_write::<String, MmapSectionStorage>(
                 logger.clone(),
@@ -591,7 +580,7 @@ mod tests {
                 .log(&"a different application payload".to_string())
                 .unwrap();
         }
-        write_instance(&logger, 29, "park");
+        write_run(&logger, 29, "park");
         drop(logger);
         let catalog = discover(&path).unwrap();
         let selected = select(&catalog, Some(1)).unwrap();
@@ -603,7 +592,7 @@ mod tests {
         let dir = TempDir::new_in(env!("CARGO_MANIFEST_DIR")).unwrap();
         let path = dir.path().join("reset.copper");
         let logger = writer(&path, false);
-        write_instance(&logger, 17, "drive");
+        write_run(&logger, 17, "drive");
         {
             let mut stream = stream_write::<CopperList<Messages>, MmapSectionStorage>(
                 logger.clone(),
@@ -626,7 +615,7 @@ mod tests {
         let dir = TempDir::new_in(env!("CARGO_MANIFEST_DIR")).unwrap();
         let path = dir.path().join("incomplete.copper");
         let logger = writer(&path, false);
-        write_instance(&logger, 17, "drive");
+        write_run(&logger, 17, "drive");
         let catalog = discover(&path).unwrap();
         let selected = select(&catalog, None).unwrap();
         let error = crate::fsck::check::<Messages>(&mut selected.reader(&path).unwrap(), 0, false)
@@ -654,7 +643,7 @@ mod tests {
         let dir = TempDir::new_in(env!("CARGO_MANIFEST_DIR")).unwrap();
         let path = dir.path().join("unknown.copper");
         let logger = writer(&path, false);
-        write_instance(&logger, 17, "drive");
+        write_run(&logger, 17, "drive");
         let catalog = discover(&path).unwrap();
         let mut lifecycle = crate::runtime_lifecycle_reader(
             catalog[0]
@@ -693,28 +682,26 @@ mod tests {
         let dir = TempDir::new_in(env!("CARGO_MANIFEST_DIR")).unwrap();
         let path = dir.path().join("cli.copper");
         let logger = writer(&path, false);
-        write_instance(&logger, 17, "drive");
-        write_instance(&logger, 29, "park");
+        write_run(&logger, 17, "drive");
+        write_run(&logger, 29, "park");
         drop(logger);
         let path = path.to_str().unwrap();
-        let args =
-            crate::LogReaderCli::try_parse_from(["logreader", path, "list-instances"]).unwrap();
+        let args = crate::LogReaderCli::try_parse_from(["logreader", path, "list-runs"]).unwrap();
         crate::run_cli_with_args::<Messages>(args).unwrap();
         let args = crate::LogReaderCli::try_parse_from(["logreader", path, "fsck"]).unwrap();
         assert!(
             crate::run_cli_with_args::<Messages>(args)
                 .unwrap_err()
                 .to_string()
-                .contains("--instance")
+                .contains("--run")
         );
         let args =
-            crate::LogReaderCli::try_parse_from(["logreader", path, "fsck", "--instance", "1"])
-                .unwrap();
+            crate::LogReaderCli::try_parse_from(["logreader", path, "fsck", "--run", "1"]).unwrap();
         crate::run_cli_with_args::<Messages>(args).unwrap();
         let args = crate::LogReaderCli::try_parse_from([
             "logreader",
             path,
-            "--instance",
+            "--run",
             "1",
             "extract-copperlists",
         ])
@@ -724,7 +711,7 @@ mod tests {
         let args = crate::LogReaderCli::try_parse_from([
             "logreader",
             path,
-            "--instance",
+            "--run",
             "1",
             "log-stats",
             "--output",

@@ -1,4 +1,4 @@
-use crate::instances::InstanceReader;
+use crate::runs::RunReader;
 use bincode::config::standard;
 use bincode::decode_from_std_read;
 use bincode::error::DecodeError;
@@ -242,7 +242,7 @@ fn print_runtime_lifecycle_record(index: usize, entry: &RuntimeLifecycleRecord) 
 }
 
 pub(crate) fn check<P>(
-    dl: &mut InstanceReader,
+    dl: &mut RunReader,
     verbose: u8,
     dump_runtime_lifecycle: bool,
 ) -> CuResult<()>
@@ -324,7 +324,7 @@ where
                                 && entry.id <= last
                             {
                                 break 'scan Err(CuError::from(format!(
-                                    "CopperList IDs must increase within a runtime instance: {} after {}",
+                                    "CopperList IDs must increase within a recorded run: {} after {}",
                                     entry.id, last,
                                 )));
                             }
