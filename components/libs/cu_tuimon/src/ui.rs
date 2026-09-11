@@ -162,7 +162,7 @@ const TAB_DEFS: &[TabDef] = &[
     #[cfg(feature = "neighbors")]
     TabDef {
         screen: MonitorScreen::Neighbors,
-        label: "NEIGHBORS",
+        label: "HOP",
     },
     TabDef {
         screen: MonitorScreen::Latency,

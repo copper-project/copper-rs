@@ -1,7 +1,9 @@
 //! Fixed-column neighborhood view using the Catppuccin Mocha palette.
 
 use super::Column;
+use super::NEIGHBOR_HEIGHT;
 use super::NeighborsView;
+use cu29::monitoring::ComponentType;
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -26,7 +28,7 @@ pub(super) fn draw(frame: &mut Frame<'_>, app: &mut NeighborsView, area: Rect) {
     );
     if area.width < 100 || area.height < 16 {
         frame.render_widget(
-            Paragraph::new("Neighbor explorer · enlarge the view to 100 × 16 or larger")
+            Paragraph::new("HOP · enlarge the view to 100 × 16 or larger")
                 .wrap(Wrap { trim: true }),
             area,
         );
@@ -165,7 +167,11 @@ pub(super) fn draw(frame: &mut Frame<'_>, app: &mut NeighborsView, area: Rect) {
                 " ←/→ or Tab: choose list   ↑/↓ or wheel: select   Enter or click: follow neighbor   Backspace: back",
             ),
             Line::from(vec![
-                Span::raw(" /: search · Type in Nodes to filter · Esc: clear     "),
+                Span::raw(if app.searching {
+                    " Search: type to filter · Enter: apply · Esc: clear     "
+                } else {
+                    " /: search · Number keys: tabs · Esc: clear filter     "
+                }),
                 Span::styled("output", Style::default().fg(GREEN)),
                 Span::styled(" → ", Style::default().fg(MUTED)),
                 Span::styled("input", Style::default().fg(MAUVE)),
@@ -191,6 +197,32 @@ fn centered_rows(area: Rect, count: usize) -> Rect {
     rows
 }
 
+fn neighbor_rows(area: Rect, count: usize) -> Rect {
+    let mut rows = centered_rows(area, count.saturating_mul(usize::from(NEIGHBOR_HEIGHT)));
+    // Keep every visible connection complete, including its clickable detail line.
+    rows.height -= rows.height % NEIGHBOR_HEIGHT;
+    rows
+}
+
+fn meaningful_port(port: &str, kind: ComponentType) -> Option<&str> {
+    if kind == ComponentType::Bridge {
+        return Some(port);
+    }
+    let name = port.split_once(": ").map_or(port, |(name, _)| name);
+    let generated = ["in", "out"].iter().any(|prefix| {
+        name.strip_prefix(prefix)
+            .is_some_and(|suffix| suffix.chars().all(|c| c.is_ascii_digit()))
+    });
+    (!generated && name != "input" && name != "output").then_some(name)
+}
+
+fn short_type(name: &str) -> String {
+    // Shorten each path separately to preserve nested generics, tuples and arrays.
+    name.split_inclusive(|c: char| !c.is_alphanumeric() && c != '_' && c != ':')
+        .map(|part| part.rsplit("::").next().unwrap_or(part))
+        .collect()
+}
+
 fn neighbors(
     frame: &mut Frame<'_>,
     app: &mut NeighborsView,
@@ -202,8 +234,7 @@ fn neighbors(
     let count = edges.len();
     let items: Vec<_> = edges
         .iter()
-        .enumerate()
-        .map(|(row, edge)| {
+        .map(|edge| {
             let topology = app.model.topology();
             let connection = &topology.connections[edge.connection];
             let name = &topology.nodes[edge.neighbor].id;
@@ -227,46 +258,41 @@ fn neighbors(
                 .as_deref()
                 .or_else(|| topology.nodes[dst].inputs.first().map(String::as_str))
                 .unwrap_or("input");
-            let mut ports = vec![
-                Span::styled(output.to_owned(), Style::default().fg(GREEN)),
-                Span::styled(" → ", Style::default().fg(MUTED)),
-                Span::styled(input.to_owned(), Style::default().fg(MAUVE)),
-            ];
-            let ports_width: usize = ports.iter().map(Span::width).sum();
-            let width = usize::from(area.width.saturating_sub(2));
-            let name_budget = width.saturating_sub(ports_width + 5);
-            let mut short_name = name.clone();
-            if Line::from(short_name.as_str()).width() > name_budget {
-                while !short_name.is_empty()
-                    && Line::from(short_name.as_str()).width() + 1 > name_budget
-                {
-                    short_name.pop();
-                }
-                if name_budget > 0 {
-                    short_name.push('…');
+            let output = meaningful_port(output, topology.nodes[src].kind);
+            let input = meaningful_port(input, topology.nodes[dst].kind);
+            let (neighbor_port, focus_port) = if column == Column::Incoming {
+                (output, input)
+            } else {
+                (input, output)
+            };
+            let mut heading = vec![Span::styled(
+                name.as_str(),
+                Style::default().fg(TEXT).add_modifier(Modifier::BOLD),
+            )];
+            if let Some(port) = neighbor_port {
+                heading.push(Span::styled(
+                    format!(" · {port}"),
+                    Style::default().fg(color),
+                ));
+            }
+            let mut detail = vec![Span::styled(
+                short_type(&connection.msg),
+                Style::default().fg(color),
+            )];
+            if let Some(port) = focus_port {
+                if column == Column::Incoming {
+                    detail.push(Span::styled(
+                        format!(" → {port}"),
+                        Style::default().fg(MAUVE),
+                    ));
+                } else {
+                    detail.insert(
+                        0,
+                        Span::styled(format!("{port} → "), Style::default().fg(GREEN)),
+                    );
                 }
             }
-            let gap =
-                width.saturating_sub(ports_width + Line::from(short_name.as_str()).width() + 4);
-            let chosen = app.lists[column.index()].selected() == Some(row);
-            let spans = if column == Column::Incoming {
-                let mut spans = vec![
-                    Span::raw(if chosen { "› " } else { "  " }),
-                    Span::raw(short_name),
-                    Span::raw(" ".repeat(gap + 1)),
-                ];
-                spans.append(&mut ports);
-                spans.push(Span::raw(" "));
-                spans
-            } else {
-                let mut spans = vec![Span::raw(" ")];
-                spans.append(&mut ports);
-                spans.push(Span::raw(" ".repeat(gap + 1)));
-                spans.push(Span::raw(short_name));
-                spans.push(Span::raw(if chosen { " ‹" } else { "  " }));
-                spans
-            };
-            ListItem::new(Line::from(spans))
+            ListItem::new(vec![Line::from(heading), Line::from(detail)])
         })
         .collect();
     let selected = app.lists[column.index()].selected().unwrap_or(0);
@@ -284,10 +310,11 @@ fn neighbors(
         ),
         area,
     );
-    let rows = centered_rows(area, count);
+    let rows = neighbor_rows(area, count);
     app.list_areas[column.index()] = rows;
     frame.render_stateful_widget(
         List::new(items)
+            .highlight_symbol("› ")
             .style(Style::default().fg(color))
             .highlight_style(Style::default().add_modifier(Modifier::BOLD)),
         rows,
@@ -312,15 +339,16 @@ fn rails(
     if count == 0 || area.height < 4 {
         return;
     }
+    let rows = neighbor_rows(area, count);
     let visible = count
         .saturating_sub(offset)
-        .min(usize::from(area.height - 2));
+        .min(usize::from(rows.height / NEIGHBOR_HEIGHT));
     if visible == 0 {
         return;
     }
     let middle = area.height / 2;
-    let row_start = centered_rows(area, count).y - area.y;
-    let row_end = row_start + visible as u16 - 1;
+    let row_start = rows.y - area.y + 1;
+    let row_end = row_start + (visible as u16 - 1) * NEIGHBOR_HEIGHT;
     let first = row_start.min(middle);
     let last = row_end.max(middle);
     let before = offset > 0;
@@ -337,8 +365,9 @@ fn rails(
             }
             continue;
         }
-        // Each single-line entry meets its connector at the port mapping.
-        let branch = y >= row_start && y <= row_end;
+        // Connect the message line of each two-line entry.
+        let branch =
+            y >= row_start && y <= row_end && (y - row_start).is_multiple_of(NEIGHBOR_HEIGHT);
         let west = (incoming && branch) || (!incoming && y == middle);
         let east = (!incoming && branch) || (incoming && y == middle);
         let north = y > first || before;
@@ -381,7 +410,8 @@ mod tests {
             .unwrap();
         let buffer = terminal.backend().buffer();
         assert_eq!(buffer[(1, 5)].symbol(), "╮");
-        assert_eq!(buffer[(1, 6)].symbol(), "┴");
+        assert_eq!(buffer[(1, 6)].symbol(), "├");
+        assert_eq!(buffer[(1, 7)].symbol(), "╯");
         assert_eq!(buffer[(1, 0)].symbol(), " ");
         assert_eq!(buffer[(1, 11)].symbol(), " ");
         terminal

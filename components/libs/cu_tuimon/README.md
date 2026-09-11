@@ -2,29 +2,32 @@
 
 `cu_tuimon` is the shared Ratatui UI library for Copper monitors.
 
-The `DAG` and `NEIGHBORS` tabs offer two views of the same `MonitorTopology` and
-`MonitorModel`. DAG lays out the full graph on a scrollable canvas. Neighbors shows
+The `DAG` and `HOP` tabs offer two views of the same `MonitorTopology` and
+`MonitorModel`. DAG lays out the full graph on a scrollable canvas. HOP shows
 one node, its incoming and outgoing connections, and live component status and timing
 inside the supplied content rectangle. Both work in terminal and Bevy monitors.
 
 The `dag` and `neighbors` Cargo features independently enable their renderer, state,
 and tab. Both are enabled by default. `cu-consolemon` and `cu-bevymon` forward these
 features; for example, use `default-features = false, features = ["neighbors"]` on a
-monitor dependency to select only the neighbors view. The initial screen is DAG when
-enabled, otherwise Neighbors, otherwise Latency. Tab numbers follow the enabled tabs.
+monitor dependency to select only the HOP view. The initial screen is DAG when
+enabled, otherwise HOP, otherwise Latency. Tab numbers follow the enabled tabs.
 
-Select `NEIGHBORS` in the monitor’s top bar (content area: at least 100 × 16).
+Select `HOP` in the monitor’s top bar (content area: at least 100 × 16).
 
 - Left/Right or Tab selects a list; Up/Down selects a row. Nodes activate immediately.
 - Enter or a row click follows a neighbor. Backspace returns to the previous node.
-- Type in Nodes to filter, Backspace edits, and Escape clears the filter. Typing
-  belongs to the filter while Nodes has focus, including numeric tab keys and `q`;
-  `/` starts search. Select another list to use monitor shortcuts, or click a tab.
+- Press `/` to search Nodes. While searching, typing (including numbers and `q`)
+  edits the filter and Backspace deletes characters. Enter applies the filter and
+  ends search; Escape clears it. Selecting another list also ends search.
+  Outside search, number keys switch tabs.
 - The mouse wheel selects rows in the hovered list, including the space around centered
-  neighbors. Green labels identify outputs; mauve labels identify inputs. Dotted rail
-  extensions mark connections above or below the visible list.
-- Ctrl-C quits the console monitor from any list; `q` quits when a
-  neighbor list has focus.
+  neighbors. Each connection shows the neighboring node name above its short message
+  type. Named ports appear beside their node; ports on the focused node appear with
+  an arrow on the message line. Bridge channels retain their names. Green identifies
+  outgoing connections and mauve incoming connections. Dotted rail extensions mark
+  connections above or below the visible list.
+- Ctrl-C quits the console monitor from any list; `q` quits outside search.
 
 `MonitorUi` owns navigation and event dispatch. Backends translate Enter, Backspace,
 Tab and Escape into `MonitorUiKey`; pointer wheels use `MonitorUiEvent::ScrollAt` with

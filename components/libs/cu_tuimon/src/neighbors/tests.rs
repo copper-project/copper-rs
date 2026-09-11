@@ -113,6 +113,8 @@ fn test_filtering_owns_characters_and_preserves_navigation() {
     assert_eq!(view.focus, Some(6));
     view.handle_key(MonitorUiKey::Esc);
     assert_eq!(view.lists[0].selected(), Some(6));
+    assert!(!view.handle_key(MonitorUiKey::Char('o')));
+    view.handle_key(MonitorUiKey::Char('/'));
     for c in "qhjkl123".chars() {
         assert!(view.handle_key(MonitorUiKey::Char(c)));
     }
@@ -122,6 +124,7 @@ fn test_filtering_owns_characters_and_preserves_navigation() {
     view.handle_key(MonitorUiKey::Backspace);
     assert_eq!(view.query, "qhjkl12");
     view.handle_key(MonitorUiKey::Esc);
+    view.handle_key(MonitorUiKey::Char('/'));
     for c in "isolated".chars() {
         view.handle_key(MonitorUiKey::Char(c));
     }
@@ -129,6 +132,10 @@ fn test_filtering_owns_characters_and_preserves_navigation() {
     view.handle_key(MonitorUiKey::Enter);
     assert_eq!(view.focus, Some(3));
     assert!(view.neighbors(Column::Incoming).is_empty());
+    view.handle_key(MonitorUiKey::Char('/'));
+    view.scroll(ScrollDirection::Right, 1);
+    view.scroll(ScrollDirection::Left, 1);
+    assert!(!view.searching);
 }
 
 #[test]
@@ -157,15 +164,116 @@ fn test_render_uses_live_component_mapping_and_preserves_error() {
 }
 
 #[test]
+fn test_neighbor_names_and_message_types_fit_both_columns() {
+    let nodes = [
+        ("merge_pids", ComponentType::Task),
+        ("balance_pid", ComponentType::Task),
+        ("motors", ComponentType::Sink),
+        ("sensors", ComponentType::Bridge),
+        ("telemetry", ComponentType::Bridge),
+    ]
+    .into_iter()
+    .map(|(id, kind)| MonitorNode {
+        id: id.into(),
+        type_name: None,
+        kind,
+        inputs: vec!["in".into()],
+        outputs: vec![],
+    })
+    .collect();
+    let connections = [
+        (
+            "balance_pid",
+            "merge_pids",
+            "out0: cu_pid::PIDControlOutput",
+            "in",
+            "cu_pid::PIDControlOutput",
+        ),
+        (
+            "merge_pids",
+            "motors",
+            "out0: cu_rp_sn754410_new::MotorPayload",
+            "in",
+            "cu_rp_sn754410_new::MotorPayload",
+        ),
+        (
+            "sensors",
+            "merge_pids",
+            "accel",
+            "in",
+            "wrapper::Batch<robot::Pose>",
+        ),
+        (
+            "merge_pids",
+            "telemetry",
+            "out0: robot::Pose",
+            "out0",
+            "robot::Pose",
+        ),
+    ]
+    .into_iter()
+    .map(|(src, dst, output, input, msg)| MonitorConnection {
+        src: src.into(),
+        dst: dst.into(),
+        src_port: Some(output.into()),
+        dst_port: Some(input.into()),
+        msg: msg.into(),
+    })
+    .collect();
+    let mut view = NeighborsView::new(MonitorModel::from_parts(
+        &[],
+        CopperListInfo::new(0, 0),
+        MonitorTopology { nodes, connections },
+    ));
+    for width in [100, 160] {
+        let mut terminal = Terminal::new(TestBackend::new(width, 25)).unwrap();
+        terminal
+            .draw(|frame| view.draw(frame, frame.area()))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let panel_text = |column: usize| {
+            let area = view.list_areas[column];
+            (area.y..area.bottom())
+                .map(|y| {
+                    (area.x..area.right())
+                        .map(|x| buffer[(x, y)].symbol())
+                        .collect::<String>()
+                })
+                .collect::<Vec<_>>()
+        };
+        let incoming = panel_text(1);
+        let outgoing = panel_text(2);
+        assert!(incoming[0].contains("balance_pid"));
+        assert!(incoming[1].contains("PIDControlOutput"));
+        assert!(incoming[2].contains("sensors · accel"));
+        assert!(incoming[3].contains("Batch<Pose>"));
+        assert!(outgoing[0].contains("motors"));
+        assert!(outgoing[1].contains("MotorPayload"));
+        // A bridge channel named out0 is meaningful and must remain visible.
+        assert!(outgoing[2].contains("telemetry · out0"));
+        assert!(outgoing[3].contains("Pose"));
+        assert!(!incoming.join("\n").contains("out0"));
+        assert!(!incoming.join("\n").contains("::"));
+        assert!(!outgoing.join("\n").contains("::"));
+    }
+}
+
+#[test]
 fn test_fanout_scrolling_hitboxes_resize_and_back() {
     let mut view = view();
     let mut terminal = Terminal::new(TestBackend::new(150, 35)).unwrap();
     let area = Rect::new(4, 3, 140, 30);
     terminal.draw(|frame| view.draw(frame, area)).unwrap();
+    let nodes = view.panel_areas[0];
+    view.handle_key(MonitorUiKey::Char('/'));
+    view.scroll_at(nodes.x + 1, nodes.y + 1, ScrollDirection::Up, 1);
+    assert!(view.searching);
+    view.scroll_at(nodes.x + 1, nodes.y + 1, ScrollDirection::Down, 1);
     let incoming = view.panel_areas[1];
     assert!(incoming.y + 1 < view.list_areas[1].y);
     view.scroll_at(incoming.x + 1, incoming.y + 1, ScrollDirection::Down, 1);
     assert_eq!(view.column, Column::Incoming);
+    assert!(!view.searching);
     assert_eq!(view.lists[1].selected(), Some(1));
     assert_eq!(view.focus, Some(1));
     let outgoing = view.panel_areas[2];
@@ -182,7 +290,7 @@ fn test_fanout_scrolling_hitboxes_resize_and_back() {
     assert!(view.lists[2].offset() > 0);
     let rows = view.list_areas[2];
     let row = 36 - view.lists[2].offset();
-    view.click(rows.x, rows.y + row as u16);
+    view.click(rows.x, rows.y + row as u16 * NEIGHBOR_HEIGHT + 1);
     assert_eq!(view.focus, Some(40));
     view.back();
     assert_eq!(view.focus, Some(1));
@@ -234,10 +342,48 @@ fn test_monitor_tabs_and_input_dispatch() {
     ui.set_active_screen(MonitorScreen::Neighbors);
     assert_eq!(
         ui.handle_key(MonitorUiKey::Char('q')),
+        MonitorUiAction::QuitRequested
+    );
+    ui.handle_key(MonitorUiKey::Char('/'));
+    for key in "q12345".chars() {
+        assert_eq!(
+            ui.handle_key(MonitorUiKey::Char(key)),
+            MonitorUiAction::None
+        );
+        assert_eq!(ui.active_screen(), MonitorScreen::Neighbors);
+    }
+    // Deleting the whole query, including Backspace on an empty query, stays in search.
+    for _ in 0..7 {
+        ui.handle_key(MonitorUiKey::Backspace);
+    }
+    assert_eq!(
+        ui.handle_key(MonitorUiKey::Char('q')),
         MonitorUiAction::None
     );
+    ui.handle_key(MonitorUiKey::Enter);
+    assert_eq!(
+        ui.handle_key(MonitorUiKey::Char('q')),
+        MonitorUiAction::QuitRequested
+    );
+    // Applying a filter restores the same numeric shortcuts as every other screen.
+    let mut reference = MonitorUi::new(model(), MonitorUiOptions::default());
+    for key in "12345".chars() {
+        ui.set_active_screen(MonitorScreen::Neighbors);
+        reference.set_active_screen(MonitorScreen::Latency);
+        reference.handle_key(MonitorUiKey::Char(key));
+        ui.handle_key(MonitorUiKey::Char(key));
+        assert_eq!(ui.active_screen(), reference.active_screen());
+    }
+    ui.set_active_screen(MonitorScreen::Neighbors);
+    ui.handle_key(MonitorUiKey::Char('/'));
     ui.handle_key(MonitorUiKey::Esc);
+    assert_eq!(
+        ui.handle_key(MonitorUiKey::Char('q')),
+        MonitorUiAction::QuitRequested
+    );
+    ui.handle_key(MonitorUiKey::Char('/'));
     ui.handle_key(MonitorUiKey::Tab);
+    ui.handle_key(MonitorUiKey::Left);
     assert_eq!(
         ui.handle_key(MonitorUiKey::Char('q')),
         MonitorUiAction::QuitRequested
@@ -248,7 +394,7 @@ fn test_monitor_tabs_and_input_dispatch() {
         .iter()
         .map(|cell| cell.symbol())
         .collect();
-    assert!(row.contains("NEIGHBORS"));
+    assert!(row.contains("HOP"));
     #[cfg(feature = "dag")]
     {
         assert!(row.contains("DAG"));

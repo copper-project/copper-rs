@@ -14,6 +14,7 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 
 const HISTORY_CAPACITY: usize = 128;
+const NEIGHBOR_HEIGHT: u16 = 2;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Column {
@@ -145,17 +146,15 @@ impl NeighborsView {
             self.searching = true;
             return true;
         }
-        if self.column == Column::Nodes {
+        if self.searching && self.column == Column::Nodes {
             match key {
                 MonitorUiKey::Char(c) if !c.is_control() => {
                     self.query.push(c);
-                    self.searching = true;
                     self.filter();
                     return true;
                 }
-                MonitorUiKey::Backspace if !self.query.is_empty() => {
+                MonitorUiKey::Backspace => {
                     self.query.pop();
-                    self.searching = !self.query.is_empty();
                     self.filter();
                     return true;
                 }
@@ -169,13 +168,15 @@ impl NeighborsView {
             }
             MonitorUiKey::Up | MonitorUiKey::Char('k') => self.move_selection(false),
             MonitorUiKey::Down | MonitorUiKey::Char('j') => self.move_selection(true),
-            MonitorUiKey::Enter => self.follow(),
-            MonitorUiKey::Backspace => self.back(),
-            MonitorUiKey::Char('/') => {
-                self.column = Column::Nodes;
-                self.searching = true;
+            MonitorUiKey::Enter => {
+                self.searching = false;
+                self.follow();
             }
+            MonitorUiKey::Backspace => self.back(),
             _ => return false,
+        }
+        if self.column != Column::Nodes {
+            self.searching = false;
         }
         true
     }
@@ -195,6 +196,9 @@ impl NeighborsView {
                 }
             }
         }
+        if self.column != Column::Nodes {
+            self.searching = false;
+        }
     }
 
     pub(crate) fn scroll_at(&mut self, x: u16, y: u16, direction: ScrollDirection, steps: usize) {
@@ -204,7 +208,6 @@ impl NeighborsView {
             .position(|area| area.contains(Position::new(x, y)))
         {
             self.column = Column::ALL[column];
-            self.searching = false;
             self.scroll(direction, steps);
         }
     }
@@ -217,7 +220,13 @@ impl NeighborsView {
         else {
             return;
         };
-        let row = self.lists[column].offset() + usize::from(y - self.list_areas[column].y);
+        let height = if column == Column::Nodes.index() {
+            1
+        } else {
+            NEIGHBOR_HEIGHT
+        };
+        let row =
+            self.lists[column].offset() + usize::from((y - self.list_areas[column].y) / height);
         let column = Column::ALL[column];
         if row >= self.count(column) {
             return;
