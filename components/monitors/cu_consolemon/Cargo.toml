@@ -18,7 +18,9 @@ domains = ["monitor/visualization", "ui/tui"]
 environments = ["host"]
 
 [features]
-default = ["debug_pane"]
+default = ["debug_pane", "dag", "neighbors"]
+dag = ["cu-tuimon/dag"]
+neighbors = ["cu-tuimon/neighbors"]
 # Enables 'Debug Output' Pane
 debug_pane = ["cu-tuimon/log_pane", "cu-tuimon/stderr_capture", "dep:arboard"]
 sysinfo = ["cu-tuimon/sysinfo_pane"]

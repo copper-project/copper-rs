@@ -1,6 +1,9 @@
 mod model;
+#[cfg(feature = "neighbors")]
+mod neighbors;
 mod palette;
 mod stream_panel;
+#[cfg(feature = "dag")]
 mod tui_nodes;
 mod ui;
 
