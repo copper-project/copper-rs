@@ -50,8 +50,10 @@ pub const SECTION_MAGIC: [u8; 2] = [0xFA, 0x57]; // FAST
 /// to CopperLists, payload types, keyframes, or their serialization must not bump
 /// this value. Decode content with the logreader built for the exact application
 /// version that produced it; this header cannot establish content compatibility.
-/// The encapsulation remains version 1, unchanged since Copper's original format.
-pub const UNIFIED_LOG_FORMAT_VERSION: u8 = 1;
+/// Version 2 adds rollover support: the main header now carries the head pointer
+/// (first retained section) and the slab-ring geometry. Older readers reject this
+/// version and this reader rejects older versions.
+pub const UNIFIED_LOG_FORMAT_VERSION: u8 = 2;
 
 pub const SECTION_HEADER_COMPACT_SIZE: u16 = 512; // Usual minimum size for a disk sector.
 
@@ -65,6 +67,19 @@ pub struct MainHeader {
     pub format_version: u8,
     pub first_section_offset: u16, // This is to align with a page at write time.
     pub page_size: u16,
+    /// Index of the first retained slab when rollover is enabled; always 0 when
+    /// the log is unbounded (`max_slabs == 0`).
+    pub head_slab_index: u32,
+    /// Offset of the first retained section. For the slab-based (std) backend this
+    /// is the offset within [`MainHeader::head_slab_index`]; for block-device
+    /// (no_std) backends it is an absolute byte offset over the log. Always a
+    /// section boundary, never the middle of a section.
+    pub head_offset: u64,
+    /// Number of slabs in the rollover ring; 0 means unbounded (no rollover).
+    pub max_slabs: u32,
+    /// Size in bytes of each slab. Persisted so `append(true)` can fail loudly when
+    /// a restart requests a different ring geometry (rollover size or slab size).
+    pub slab_size: u64,
 }
 
 impl Display for MainHeader {
@@ -76,7 +91,11 @@ impl Display for MainHeader {
         )?;
         writeln!(f, "  format_version -> {}", self.format_version)?;
         writeln!(f, "  first_section_offset -> {}", self.first_section_offset)?;
-        writeln!(f, "  page_size -> {}", self.page_size)
+        writeln!(f, "  page_size -> {}", self.page_size)?;
+        writeln!(f, "  head_slab_index -> {}", self.head_slab_index)?;
+        writeln!(f, "  head_offset -> {}", self.head_offset)?;
+        writeln!(f, "  max_slabs -> {}", self.max_slabs)?;
+        writeln!(f, "  slab_size -> {}", self.slab_size)
     }
 }
 
