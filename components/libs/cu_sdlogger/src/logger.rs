@@ -218,6 +218,10 @@ impl<BD: BlockDevice> EMMCLogger<BD> {
             format_version: UNIFIED_LOG_FORMAT_VERSION,
             first_section_offset: BLK as u16,
             page_size: BLK as u16,
+            head_slab_index: 0,
+            head_offset: BLK as u64,
+            max_slabs: 0,
+            slab_size: 0,
         };
         let mut block: Block = Block::new();
 
