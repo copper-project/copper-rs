@@ -478,7 +478,7 @@ jobs:
         with:
           components: rustfmt
       - name: Install taplo-cli
-        uses: taiki-e/install-action@v2.87.3
+        uses: taiki-e/install-action@v2.87.8
         with:
           tool: taplo-cli, fmtron, typos
       - name: Check Rust, TOML, RON formatting
