@@ -48,7 +48,10 @@ bevy = { workspace = true, default-features = false, features = [
   "bevy_ui",
   "bevy_ui_render",
 ] }
-cu-bevymon = { path = "../../components/monitors/cu_bevymon", version = "1.3.0-dev", default-features = false }
+cu-bevymon = { path = "../../components/monitors/cu_bevymon", version = "1.3.0-dev", default-features = false, features = [
+  "dag",
+  "neighbors",
+] }
 
 [[bin]]
 name = "cu-bevymon-demo"

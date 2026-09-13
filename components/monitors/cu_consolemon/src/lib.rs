@@ -14,7 +14,8 @@ use cu29::monitoring::{
 use cu29::{CuError, CuResult};
 use ratatui::backend::CrosstermBackend;
 use ratatui::crossterm::event::{
-    DisableMouseCapture, EnableMouseCapture, Event, KeyCode, MouseButton, MouseEventKind,
+    DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers,
+    MouseButton, MouseEventKind,
 };
 use ratatui::crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
@@ -100,14 +101,30 @@ impl UI {
         }
     }
 
-    fn handle_key(&mut self, key: KeyCode) -> bool {
-        let action = match key {
+    fn handle_key(&mut self, key: KeyEvent) -> bool {
+        if key.kind == KeyEventKind::Release {
+            return false;
+        }
+        if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+            return true;
+        }
+        if key
+            .modifiers
+            .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+        {
+            return false;
+        }
+        let action = match key.code {
             KeyCode::Char(ch) => {
                 self.monitor_ui
                     .handle_event(MonitorUiEvent::Key(MonitorUiKey::Char(
                         ch.to_ascii_lowercase(),
                     )))
             }
+            KeyCode::Enter => self.monitor_ui.handle_key(MonitorUiKey::Enter),
+            KeyCode::Backspace => self.monitor_ui.handle_key(MonitorUiKey::Backspace),
+            KeyCode::Tab => self.monitor_ui.handle_key(MonitorUiKey::Tab),
+            KeyCode::Esc => self.monitor_ui.handle_key(MonitorUiKey::Esc),
             KeyCode::Left => self
                 .monitor_ui
                 .handle_event(MonitorUiEvent::Key(MonitorUiKey::Left)),
@@ -148,19 +165,27 @@ impl UI {
                     row: mouse.row,
                 })
             }
-            MouseEventKind::ScrollDown => self.monitor_ui.handle_event(MonitorUiEvent::Scroll {
+            MouseEventKind::ScrollDown => self.monitor_ui.handle_event(MonitorUiEvent::ScrollAt {
+                col: mouse.column,
+                row: mouse.row,
                 direction: ScrollDirection::Down,
                 steps: 1,
             }),
-            MouseEventKind::ScrollUp => self.monitor_ui.handle_event(MonitorUiEvent::Scroll {
+            MouseEventKind::ScrollUp => self.monitor_ui.handle_event(MonitorUiEvent::ScrollAt {
+                col: mouse.column,
+                row: mouse.row,
                 direction: ScrollDirection::Up,
                 steps: 1,
             }),
-            MouseEventKind::ScrollLeft => self.monitor_ui.handle_event(MonitorUiEvent::Scroll {
+            MouseEventKind::ScrollLeft => self.monitor_ui.handle_event(MonitorUiEvent::ScrollAt {
+                col: mouse.column,
+                row: mouse.row,
                 direction: ScrollDirection::Left,
                 steps: 5,
             }),
-            MouseEventKind::ScrollRight => self.monitor_ui.handle_event(MonitorUiEvent::Scroll {
+            MouseEventKind::ScrollRight => self.monitor_ui.handle_event(MonitorUiEvent::ScrollAt {
+                col: mouse.column,
+                row: mouse.row,
                 direction: ScrollDirection::Right,
                 steps: 5,
             }),
@@ -206,7 +231,7 @@ impl UI {
 
             if event::poll(Duration::from_millis(50))? {
                 match event::read()? {
-                    Event::Key(key) if self.handle_key(key.code) => {
+                    Event::Key(key) if self.handle_key(key) => {
                         break;
                     }
                     Event::Mouse(mouse) => self.handle_mouse_event(mouse),

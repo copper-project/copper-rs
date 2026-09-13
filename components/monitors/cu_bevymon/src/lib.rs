@@ -269,14 +269,9 @@ fn handle_monitor_pointer_input(
     let Some((node, transform)) = panels.iter().next() else {
         return;
     };
-    let Some(local_point) = focus::local_cursor_position(&window, node, transform) else {
+    let Some((col, row)) = monitor_cell_position(&window, node, transform, &context) else {
         return;
     };
-
-    let char_width = context.backend().char_width.max(1) as f32;
-    let char_height = context.backend().char_height.max(1) as f32;
-    let col = (local_point.x / char_width).floor().max(0.0) as u16;
-    let row = (local_point.y / char_height).floor().max(0.0) as u16;
     let event = if mouse_buttons.just_pressed(MouseButton::Left) {
         MonitorUiEvent::MouseDown { col, row }
     } else {
@@ -285,38 +280,52 @@ fn handle_monitor_pointer_input(
     let _ = ui_state.0.handle_event(event);
 }
 
+fn monitor_cell_position(
+    window: &Window,
+    node: &ComputedNode,
+    transform: &bevy::ui::UiGlobalTransform,
+    context: &CuBevyMonTerminal,
+) -> Option<(u16, u16)> {
+    let point = focus::local_cursor_position(window, node, transform)?;
+    let char_width = context.backend().char_width.max(1) as f32;
+    let char_height = context.backend().char_height.max(1) as f32;
+    Some((
+        (point.x / char_width).floor().max(0.0) as u16,
+        (point.y / char_height).floor().max(0.0) as u16,
+    ))
+}
+
 fn handle_monitor_scroll_input(
     focus: Res<CuBevyMonFocus>,
+    window: Single<&Window, With<PrimaryWindow>>,
+    context: Res<CuBevyMonTerminal>,
+    panels: Query<(&ComputedNode, &bevy::ui::UiGlobalTransform), With<CuBevyMonPanel>>,
     mut wheel_events: MessageReader<MouseWheel>,
     mut ui_state: ResMut<CuBevyMonUiState>,
 ) {
     if focus.0 != CuBevyMonSurface::Monitor {
         return;
     }
-
+    let Some((node, transform)) = panels.iter().next() else {
+        return;
+    };
+    let Some((col, row)) = monitor_cell_position(&window, node, transform, &context) else {
+        return;
+    };
     for event in wheel_events.read() {
-        if event.y > 0.0 {
-            let _ = ui_state.0.handle_event(MonitorUiEvent::Scroll {
-                direction: ScrollDirection::Up,
-                steps: 1,
-            });
-        } else if event.y < 0.0 {
-            let _ = ui_state.0.handle_event(MonitorUiEvent::Scroll {
-                direction: ScrollDirection::Down,
-                steps: 1,
-            });
-        }
-
-        if event.x > 0.0 {
-            let _ = ui_state.0.handle_event(MonitorUiEvent::Scroll {
-                direction: ScrollDirection::Right,
-                steps: 5,
-            });
-        } else if event.x < 0.0 {
-            let _ = ui_state.0.handle_event(MonitorUiEvent::Scroll {
-                direction: ScrollDirection::Left,
-                steps: 5,
-            });
+        for (amount, positive, negative, steps) in [
+            (event.y, ScrollDirection::Up, ScrollDirection::Down, 1),
+            (event.x, ScrollDirection::Right, ScrollDirection::Left, 5),
+        ] {
+            if amount != 0.0 {
+                let direction = if amount > 0.0 { positive } else { negative };
+                let _ = ui_state.0.handle_event(MonitorUiEvent::ScrollAt {
+                    col,
+                    row,
+                    direction,
+                    steps,
+                });
+            }
         }
     }
 }
@@ -378,6 +387,10 @@ fn dispatch_monitor_event(
 
 fn monitor_navigation_key(key_code: KeyCode) -> Option<MonitorUiKey> {
     match key_code {
+        KeyCode::Enter => Some(MonitorUiKey::Enter),
+        KeyCode::Backspace => Some(MonitorUiKey::Backspace),
+        KeyCode::Tab => Some(MonitorUiKey::Tab),
+        KeyCode::Escape => Some(MonitorUiKey::Esc),
         KeyCode::ArrowLeft => Some(MonitorUiKey::Left),
         KeyCode::ArrowRight => Some(MonitorUiKey::Right),
         KeyCode::ArrowUp => Some(MonitorUiKey::Up),

@@ -18,6 +18,17 @@ PREK_FMT_CI_HOOKS := "trailing-whitespace check-merge-conflict detect-private-ke
 default:
 	just pr-check
 
+# Shared monitor feature combinations and frontend integration.
+tuimon-check:
+	cargo test -p cu-tuimon --no-default-features
+	cargo test -p cu-tuimon --no-default-features --features dag
+	cargo test -p cu-tuimon --no-default-features --features neighbors
+	cargo test -p cu-tuimon
+	cargo clippy -p cu-tuimon --all-targets --no-default-features -- --deny warnings
+	cargo clippy -p cu-tuimon --all-targets --no-default-features --features neighbors -- --deny warnings
+	cargo clippy -p cu-tuimon -p cu-consolemon -p cu-bevymon --all-targets -- --deny warnings
+	cargo test -p cu-consolemon
+
 # Replace logs/vit-extracted with replayable VitFly tensors and UI-style previews.
 vit-extract:
 	just --justfile "{{ROOT}}/examples/cu_flight_controller/justfile" vit-extract

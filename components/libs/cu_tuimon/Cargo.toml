@@ -18,7 +18,9 @@ domains = ["ui/tui"]
 environments = ["host"]
 
 [features]
-default = []
+default = ["dag", "neighbors"]
+dag = []
+neighbors = []
 log_pane = ["dep:cu29-log", "dep:cu29-log-runtime"]
 stderr_capture = ["log_pane", "dep:gag"]
 sysinfo_pane = [
