@@ -1,6 +1,9 @@
+#[cfg(feature = "hop")]
+mod hop;
 mod model;
 mod palette;
 mod stream_panel;
+#[cfg(feature = "dag")]
 mod tui_nodes;
 mod ui;
 

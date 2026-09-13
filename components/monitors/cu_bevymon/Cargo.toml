@@ -18,7 +18,9 @@ domains = ["monitor/visualization", "ui/bevy"]
 environments = ["host"]
 
 [features]
-default = ["stderr_capture"]
+default = ["stderr_capture", "dag", "hop"]
+dag = ["cu-tuimon/dag"]
+hop = ["cu-tuimon/hop"]
 stderr_capture = ["cu-tuimon/stderr_capture"]
 
 [dependencies]

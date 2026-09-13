@@ -397,6 +397,9 @@ For offline analysis:
 
 ## Design Biases
 
+- Always use the Catppuccin Mocha palette for UI colors, including prototypes and diagrams.
+- Avoid cyan or amber. Avoid Copper color.
+
 - Static over dynamic.
 - Compile-time guarantees over runtime validation where feasible.
 - Macros/codegen/types over stringly-typed late binding.
