@@ -15,6 +15,7 @@
 
 mod fsck;
 pub mod logstats;
+mod runs;
 
 #[cfg(feature = "mcap")]
 pub mod mcap_export;
@@ -115,12 +116,18 @@ pub struct LogReaderCli {
     /// for example for toto_0.copper, toto_1.copper ... the base name is toto.copper
     pub unifiedlog_base: PathBuf,
 
+    /// Select the recorded run by its zero-based index from list-runs.
+    #[arg(long, global = true)]
+    pub run: Option<usize>,
+
     #[command(subcommand)]
     pub command: Command,
 }
 
 #[derive(Subcommand)]
 pub enum Command {
+    /// List recorded runs announced by Instantiated lifecycle records.
+    ListRuns,
     /// Extract logs
     ExtractTextLog { log_index: PathBuf },
     /// Extract copperlists
@@ -141,9 +148,9 @@ pub enum Command {
         /// Output JSON file path
         #[arg(short, long, default_value = "cu29_logstats.json")]
         output: PathBuf,
-        /// Config file used to map outputs to edges
-        #[arg(long, default_value = "copperconfig.ron")]
-        config: PathBuf,
+        /// Config override; defaults to the selected run's recorded configuration.
+        #[arg(long)]
+        config: Option<PathBuf>,
         /// Mission id override; defaults to the mission recorded in the log
         #[arg(long)]
         mission: Option<String>,
@@ -228,25 +235,64 @@ where
     run_cli_inner::<P>()
 }
 
-#[cfg(feature = "mcap")]
 fn run_cli_inner<P>() -> CuResult<()>
 where
     P: CopperListTuple + CuPayloadRawBytes + 'static,
 {
-    let args = LogReaderCli::parse();
-    let unifiedlog_base = args.unifiedlog_base;
-    let _ = cu29::logcodec::seed_effective_config_from_log::<P>(&unifiedlog_base)?;
+    run_cli_with_args::<P>(LogReaderCli::parse())
+}
 
-    let mut dl = build_read_logger(&unifiedlog_base)?;
+fn run_cli_with_args<P>(args: LogReaderCli) -> CuResult<()>
+where
+    P: CopperListTuple + CuPayloadRawBytes + 'static,
+{
+    let unifiedlog_base = args.unifiedlog_base;
+    #[cfg(feature = "mcap")]
+    if let Command::McapInfo {
+        mcap_file,
+        schemas,
+        sample_messages,
+    } = &args.command
+    {
+        return mcap_info(mcap_file, *schemas, *sample_messages);
+    }
+
+    let runs = runs::discover(&unifiedlog_base)?;
+    if matches!(args.command, Command::ListRuns) {
+        for run in &runs {
+            println!(
+                "Run {}: mission={} app={} instance_id={} started={} shutdown={}",
+                run.index,
+                run.missions.join(","),
+                run.stack
+                    .as_ref()
+                    .map_or("unknown", |stack| stack.app_name.as_str()),
+                run.stack.as_ref().map_or_else(
+                    || "unknown".to_string(),
+                    |stack| stack.instance_id.to_string()
+                ),
+                run.started_at
+                    .map_or_else(|| "unknown".to_string(), |time| time.to_string()),
+                run.shutdown_completed,
+            );
+        }
+        return Ok(());
+    }
+    let run = runs::select(&runs, args.run)?;
+    if let Some(config) = &run.config {
+        cu29::logcodec::set_effective_config_ron::<P>(config);
+    }
+    let mut dl = run.reader(&unifiedlog_base)?;
 
     match args.command {
+        Command::ListRuns => unreachable!("run listing handled before selection"),
         Command::ExtractTextLog { log_index } => {
-            let reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::StructuredLogLine);
+            let reader = dl.stream(UnifiedLogType::StructuredLogLine);
             textlog_dump(reader, &log_index)?;
         }
         Command::ExtractCopperlists { export_format } => {
             println!("Extracting copperlists with format: {export_format}");
-            let mut reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
+            let mut reader = dl.stream(UnifiedLogType::CopperList);
             let iter = copperlists_reader::<P>(&mut reader);
 
             match export_format {
@@ -291,9 +337,7 @@ where
             verbose,
             dump_runtime_lifecycle,
         } => {
-            if let Some(value) = check::<P>(&mut dl, verbose, dump_runtime_lifecycle) {
-                return value;
-            }
+            check::<P>(&mut dl, verbose, dump_runtime_lifecycle)?;
         }
         Command::LogStats {
             output,
@@ -301,7 +345,7 @@ where
             mission,
             features,
         } => {
-            run_logstats::<P>(&unifiedlog_base, dl, output, config, mission, &features)?;
+            run_logstats::<P>(run, dl, output, config, mission, &features)?;
         }
         #[cfg(feature = "mcap")]
         Command::ExportMcap {
@@ -313,12 +357,12 @@ where
 
             let show_progress = should_show_progress(progress, quiet);
             let total_bytes = if show_progress {
-                Some(copperlist_total_bytes(&unifiedlog_base)?)
+                Some(run.copperlist_bytes)
             } else {
                 None
             };
 
-            let reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
+            let reader = dl.stream(UnifiedLogType::CopperList);
 
             // Export to MCAP with schemas derived from generated output metadata.
             let stats = if let Some(total_bytes) = total_bytes {
@@ -345,111 +389,32 @@ where
     Ok(())
 }
 
-#[cfg(not(feature = "mcap"))]
-fn run_cli_inner<P>() -> CuResult<()>
-where
-    P: CopperListTuple + CuPayloadRawBytes + 'static,
-{
-    let args = LogReaderCli::parse();
-    let unifiedlog_base = args.unifiedlog_base;
-    let _ = cu29::logcodec::seed_effective_config_from_log::<P>(&unifiedlog_base)?;
-
-    let mut dl = build_read_logger(&unifiedlog_base)?;
-
-    match args.command {
-        Command::ExtractTextLog { log_index } => {
-            let reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::StructuredLogLine);
-            textlog_dump(reader, &log_index)?;
-        }
-        Command::ExtractCopperlists { export_format } => {
-            println!("Extracting copperlists with format: {export_format}");
-            let mut reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
-            let iter = copperlists_reader::<P>(&mut reader);
-
-            match export_format {
-                ExportFormat::Json => {
-                    for entry in iter {
-                        write_json_pretty(&entry)?;
-                    }
-                }
-                ExportFormat::Csv => {
-                    let mut first = true;
-                    for origin in P::get_all_task_ids() {
-                        if !first {
-                            print!(", ");
-                        } else {
-                            print!("id, ");
-                        }
-                        print!("{origin}_time, {origin}_tov, {origin},");
-                        first = false;
-                    }
-                    println!();
-                    for entry in iter {
-                        let mut first = true;
-                        for msg in entry.cumsgs() {
-                            if let Some(payload) = msg.payload() {
-                                if !first {
-                                    print!(", ");
-                                } else {
-                                    print!("{}, ", entry.id);
-                                }
-                                let metadata = msg.metadata();
-                                print!("{}, {}, ", metadata.process_time(), msg.tov());
-                                write_json(payload)?;
-                                first = false;
-                            }
-                        }
-                        println!();
-                    }
-                }
-            }
-        }
-        Command::Fsck {
-            verbose,
-            dump_runtime_lifecycle,
-        } => {
-            if let Some(value) = check::<P>(&mut dl, verbose, dump_runtime_lifecycle) {
-                return value;
-            }
-        }
-        Command::LogStats {
-            output,
-            config,
-            mission,
-            features,
-        } => {
-            run_logstats::<P>(&unifiedlog_base, dl, output, config, mission, &features)?;
-        }
-    }
-
-    Ok(())
-}
-
 fn run_logstats<P>(
-    unifiedlog_base: &Path,
-    dl: UnifiedLoggerRead,
+    run: &runs::RecordedRun,
+    dl: runs::RunReader,
     output: PathBuf,
-    config: PathBuf,
+    config: Option<PathBuf>,
     mission: Option<String>,
     features: &[String],
 ) -> CuResult<()>
 where
     P: CopperListTuple + CuPayloadRawBytes,
 {
-    let config_path = config
-        .to_str()
-        .ok_or_else(|| CuError::from("Config path is not valid UTF-8"))?;
-    let feature_refs = features.iter().map(String::as_str).collect::<Vec<_>>();
-    let cfg = cu29::config::read_configuration_with_features(config_path, &feature_refs)
-        .map_err(|e| CuError::new_with_cause("Failed to read configuration", e))?;
-    let logged_mission =
-        if mission.is_none() && matches!(&cfg.graphs, cu29::config::ConfigGraphs::Missions(_)) {
-            unified_log_mission(unifiedlog_base)?
-        } else {
-            None
-        };
-    let mission = resolve_logstats_mission(&cfg, mission, logged_mission);
-    let reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
+    let cfg = if config.is_none() && run.config.is_some() {
+        CuConfig::deserialize_ron(run.config.as_deref().unwrap()).map_err(|e| {
+            CuError::new_with_cause("Failed to read the selected run's configuration", e)
+        })?
+    } else {
+        let config = config.unwrap_or_else(|| PathBuf::from("copperconfig.ron"));
+        let config_path = config
+            .to_str()
+            .ok_or_else(|| CuError::from("Config path is not valid UTF-8"))?;
+        let feature_refs = features.iter().map(String::as_str).collect::<Vec<_>>();
+        cu29::config::read_configuration_with_features(config_path, &feature_refs)
+            .map_err(|e| CuError::new_with_cause("Failed to read configuration", e))?
+    };
+    let mission = resolve_logstats_mission(&cfg, mission, run.missions.first().cloned())?;
+    let reader = dl.stream(UnifiedLogType::CopperList);
     let stats = compute_logstats::<P>(reader, &cfg, mission.as_deref())?;
     write_logstats(&stats, &output)
 }
@@ -458,22 +423,23 @@ fn resolve_logstats_mission(
     config: &CuConfig,
     requested: Option<String>,
     logged: Option<String>,
-) -> Option<String> {
-    if requested.is_some() {
-        return requested;
-    }
+) -> CuResult<Option<String>> {
+    let mission = requested.or(logged);
     let cu29::config::ConfigGraphs::Missions(graphs) = &config.graphs else {
-        return None;
+        return Ok(None);
     };
-    if let Some(logged) = logged
-        && graphs.contains_key(&logged)
-    {
-        return Some(logged);
+    if let Some(mission) = mission {
+        if !graphs.contains_key(&mission) {
+            return Err(CuError::from(format!(
+                "Mission '{mission}' is absent from the statistics configuration"
+            )));
+        }
+        return Ok(Some(mission));
     }
     if graphs.contains_key("default") {
-        return Some("default".to_string());
+        return Ok(Some("default".to_string()));
     }
-    graphs.keys().min().cloned()
+    Ok(graphs.keys().min().cloned())
 }
 
 /// Helper function for MCAP export.
@@ -528,15 +494,6 @@ fn make_progress_bar(total_bytes: u64) -> ProgressBar {
 #[cfg(feature = "mcap")]
 fn should_show_progress(force_progress: bool, quiet: bool) -> bool {
     !quiet && (force_progress || std::io::stderr().is_terminal())
-}
-
-#[cfg(feature = "mcap")]
-fn copperlist_total_bytes(log_base: &Path) -> CuResult<u64> {
-    let mut reader = UnifiedLoggerRead::new(log_base)
-        .map_err(|e| CuError::new_with_cause("Failed to open log for progress estimation", e))?;
-    reader
-        .scan_section_bytes(UnifiedLogType::CopperList)
-        .map_err(|e| CuError::new_with_cause("Failed to scan log for progress estimation", e))
 }
 
 fn read_next_entry<T: Decode<()>>(src: &mut impl Read) -> Option<T> {
@@ -1627,15 +1584,16 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            resolve_logstats_mission(&config, None, Some("zeta".to_string())).as_deref(),
+            resolve_logstats_mission(&config, None, Some("zeta".to_string()))
+                .unwrap()
+                .as_deref(),
             Some("zeta")
         );
+        assert!(resolve_logstats_mission(&config, None, Some("missing".to_string())).is_err());
         assert_eq!(
-            resolve_logstats_mission(&config, None, Some("missing".to_string())).as_deref(),
-            Some("default")
-        );
-        assert_eq!(
-            resolve_logstats_mission(&config, Some("alpha".to_string()), None).as_deref(),
+            resolve_logstats_mission(&config, Some("alpha".to_string()), None)
+                .unwrap()
+                .as_deref(),
             Some("alpha")
         );
 
@@ -1648,7 +1606,9 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            resolve_logstats_mission(&config, None, None).as_deref(),
+            resolve_logstats_mission(&config, None, None)
+                .unwrap()
+                .as_deref(),
             Some("alpha")
         );
     }

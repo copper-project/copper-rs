@@ -16,6 +16,47 @@ see
 - CopperList export helpers
 - optional Python bindings for iterating logs without going through JSON first
 
+## Selecting a Recorded Run
+
+A unified log can contain multiple recorded runs after a mission change or an
+appended restart. Each `Instantiated` lifecycle record begins a recorded run.
+Its CopperList IDs and clock can start over independently of the previous run.
+
+Use the application's logreader binary to list the runs and select one:
+
+```sh
+logreader logs/robot.copper list-runs
+logreader logs/robot.copper --run 1 fsck --dump-runtime-lifecycle
+logreader logs/robot.copper --run 1 extract-copperlists
+logreader logs/robot.copper --run 1 extract-text-log target/debug/cu29_log_index
+logreader logs/robot.copper --run 1 log-stats --output run-1.json
+logreader logs/robot.copper --run 1 export-mcap --output run-1.mcap
+```
+
+Indices are zero-based and follow `Instantiated` record order. They are distinct
+from the recorded `instance_id`, which can repeat across process restarts.
+`list-runs` reads lifecycle metadata without decoding application payloads.
+It shows the mission, application, runtime instance ID, start time, and whether
+`ShutdownCompleted` was recorded.
+
+Single-run logs select their run automatically. Logs from standalone
+writers with no `Instantiated` record are treated as one implicit run.
+Multi-run logs require `--run` for extraction, fsck, statistics, and MCAP
+export. The selection includes the runtime's initial stream reservations and all
+of its CL, keyframe, lifecycle, and structured-log sections. A multi-run log
+whose startup section ordering cannot be recognized is listed but rejected for
+selection.
+
+The selected run supplies the recorded configuration used by logging codecs.
+Statistics also default to that configuration and its recorded mission; `--config`
+and `--mission` provide explicit overrides. Without a recorded configuration,
+statistics use `copperconfig.ron`. Use a logreader and string index built for the
+application version that produced the selected run.
+
+`fsck` checks CopperList IDs within the selected run, reports decoding errors,
+and returns an error for repeated or decreasing IDs and an unclean final log close.
+An ID reset at the next `Instantiated` belongs to that next run.
+
 ## Python Support
 
 Python support lives behind the `python` feature and is not supported on macOS in
