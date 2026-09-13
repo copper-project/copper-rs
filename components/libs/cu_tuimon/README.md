@@ -14,6 +14,8 @@ monitor dependency to select only the HOP view. The initial screen is DAG when
 enabled, otherwise HOP, otherwise Latency. Tab numbers follow the enabled tabs.
 
 Select `HOP` in the monitor’s top bar (content area: at least 100 × 16).
+Node names use the same symbols as DAG throughout HOP: `◈` source, `⚙` task,
+`⭳` sink, and `⇆` bridge.
 
 - Left/Right or Tab selects a list; Up/Down selects a row. Nodes activate immediately.
 - Enter or a row click follows a neighbor. Backspace returns to the previous node.

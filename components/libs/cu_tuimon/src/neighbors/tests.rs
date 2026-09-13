@@ -32,6 +32,7 @@ fn model() -> MonitorModel {
             outputs: vec!["out".into()],
         })
         .collect();
+    nodes[0].kind = ComponentType::Source;
     nodes[4].kind = ComponentType::Bridge;
     let mut connections: Vec<_> = [
         ("imu", "fusion", "accel", "accel"),
@@ -155,6 +156,8 @@ fn test_render_uses_live_component_mapping_and_preserves_error() {
     let buffer = terminal.backend().buffer();
     let screen: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
     assert!(screen.contains("IMU failed"));
+    assert!(screen.contains("◈ imu"));
+    assert!(screen.contains("⚙ fusion"));
     assert!(screen.contains("42"));
     assert!(screen.contains("accel"));
     assert!(screen.contains("gyro"));
@@ -243,14 +246,14 @@ fn test_neighbor_names_and_message_types_fit_both_columns() {
         };
         let incoming = panel_text(1);
         let outgoing = panel_text(2);
-        assert!(incoming[0].contains("balance_pid"));
+        assert!(incoming[0].contains("⚙ balance_pid"));
         assert!(incoming[1].contains("PIDControlOutput"));
-        assert!(incoming[2].contains("sensors · accel"));
+        assert!(incoming[2].contains("⇆ sensors · accel"));
         assert!(incoming[3].contains("Batch<Pose>"));
-        assert!(outgoing[0].contains("motors"));
+        assert!(outgoing[0].contains("⭳ motors"));
         assert!(outgoing[1].contains("MotorPayload"));
         // A bridge channel named out0 is meaningful and must remain visible.
-        assert!(outgoing[2].contains("telemetry · out0"));
+        assert!(outgoing[2].contains("⇆ telemetry · out0"));
         assert!(outgoing[3].contains("Pose"));
         assert!(!incoming.join("\n").contains("out0"));
         assert!(!incoming.join("\n").contains("::"));
@@ -367,7 +370,12 @@ fn test_monitor_tabs_and_input_dispatch() {
     );
     // Applying a filter restores the same numeric shortcuts as every other screen.
     let mut reference = MonitorUi::new(model(), MonitorUiOptions::default());
-    for key in "12345".chars() {
+    let tab_keys = if cfg!(feature = "dag") {
+        "12345"
+    } else {
+        "1234"
+    };
+    for key in tab_keys.chars() {
         ui.set_active_screen(MonitorScreen::Neighbors);
         reference.set_active_screen(MonitorScreen::Latency);
         reference.handle_key(MonitorUiKey::Char(key));

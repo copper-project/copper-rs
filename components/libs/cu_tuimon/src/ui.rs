@@ -1457,8 +1457,8 @@ fn format_rate_bytes_or_na(bytes: u64, rate_hz: f64) -> String {
 }
 
 #[derive(Copy, Clone)]
-#[cfg(feature = "dag")]
-enum NodeType {
+#[cfg(any(feature = "dag", feature = "neighbors"))]
+pub(super) enum NodeType {
     Unknown,
     Source,
     Sink,
@@ -1466,7 +1466,7 @@ enum NodeType {
     Bridge,
 }
 
-#[cfg(feature = "dag")]
+#[cfg(any(feature = "dag", feature = "neighbors"))]
 impl std::fmt::Display for NodeType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -1475,6 +1475,19 @@ impl std::fmt::Display for NodeType {
             Self::Task => write!(f, "⚙"),
             Self::Sink => write!(f, "⭳"),
             Self::Bridge => write!(f, "⇆"),
+        }
+    }
+}
+
+#[cfg(any(feature = "dag", feature = "neighbors"))]
+impl From<ComponentType> for NodeType {
+    fn from(kind: ComponentType) -> Self {
+        match kind {
+            ComponentType::Source => Self::Source,
+            ComponentType::Task => Self::Task,
+            ComponentType::Sink => Self::Sink,
+            ComponentType::Bridge => Self::Bridge,
+            _ => Self::Unknown,
         }
     }
 }
@@ -1560,13 +1573,7 @@ impl NodesScrollableWidgetState {
             .collect();
 
         for node in &model.topology().nodes {
-            let node_type = match node.kind {
-                ComponentType::Source => NodeType::Source,
-                ComponentType::Task => NodeType::Task,
-                ComponentType::Sink => NodeType::Sink,
-                ComponentType::Bridge => NodeType::Bridge,
-                _ => NodeType::Unknown,
-            };
+            let node_type = NodeType::from(node.kind);
 
             display_nodes.push(DisplayNode {
                 id: node.id.clone(),

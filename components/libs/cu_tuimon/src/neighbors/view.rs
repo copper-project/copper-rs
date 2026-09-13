@@ -3,6 +3,7 @@
 use super::Column;
 use super::NEIGHBOR_HEIGHT;
 use super::NeighborsView;
+use crate::ui::NodeType;
 use cu29::monitoring::ComponentType;
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
@@ -53,7 +54,10 @@ pub(super) fn draw(frame: &mut Frame<'_>, app: &mut NeighborsView, area: Rect) {
     let tasks = &app.matches;
     let items: Vec<_> = tasks
         .iter()
-        .map(|&index| ListItem::new(app.model.topology().nodes[index].id.as_str()))
+        .map(|&index| {
+            let node = &app.model.topology().nodes[index];
+            ListItem::new(format!("{} {}", NodeType::from(node.kind), node.id))
+        })
         .collect();
     let title = if app.searching {
         format!(" /{}▏ ", app.query)
@@ -154,7 +158,11 @@ pub(super) fn draw(frame: &mut Frame<'_>, app: &mut NeighborsView, area: Rect) {
             Paragraph::new(lines)
                 .centered()
                 .wrap(Wrap { trim: false })
-                .block(panel(format!(" {} ", node.id), true, LAVENDER)),
+                .block(panel(
+                    format!(" {} {} ", NodeType::from(node.kind), node.id),
+                    true,
+                    LAVENDER,
+                )),
             center,
         );
     } else {
@@ -237,7 +245,7 @@ fn neighbors(
         .map(|edge| {
             let topology = app.model.topology();
             let connection = &topology.connections[edge.connection];
-            let name = &topology.nodes[edge.neighbor].id;
+            let node = &topology.nodes[edge.neighbor];
             let src = if column == Column::Incoming {
                 edge.neighbor
             } else {
@@ -266,7 +274,7 @@ fn neighbors(
                 (input, output)
             };
             let mut heading = vec![Span::styled(
-                name.as_str(),
+                format!("{} {}", NodeType::from(node.kind), node.id),
                 Style::default().fg(TEXT).add_modifier(Modifier::BOLD),
             )];
             if let Some(port) = neighbor_port {
