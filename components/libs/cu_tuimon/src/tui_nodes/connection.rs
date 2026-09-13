@@ -1,3 +1,4 @@
+use compact_str::CompactString;
 use ratatui::{
     buffer::Buffer,
     layout::{Position, Rect},
@@ -192,6 +193,17 @@ pub const ALIAS_CHARS: [&str; 24] = [
     "υ", "φ", "χ", "ψ", "ω",
 ];
 
+// Keep the first alphabet unchanged, then distinguish subsequent alphabets by number.
+fn connection_alias(index: usize) -> CompactString {
+    let letter = ALIAS_CHARS[index % ALIAS_CHARS.len()];
+    let generation = index / ALIAS_CHARS.len();
+    if generation == 0 {
+        CompactString::new(letter)
+    } else {
+        compact_str::format_compact!("{letter}{generation}")
+    }
+}
+
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Edge {
     #[default]
@@ -210,7 +222,7 @@ pub struct ConnectionsLayout {
     edge_targets: Betweens<Option<(bool, usize, usize)>>,
     width: usize,
     height: usize,
-    pub alias_connections: Map<(bool, usize, usize), &'static str>,
+    pub alias_connections: Map<(bool, usize, usize), CompactString>,
     line_types: Map<usize, LineType>,
     line_styles: Map<usize, Style>,
 }
@@ -357,11 +369,12 @@ impl ConnectionsLayout {
                         .alias_connections
                         .entry((false, ea_conn.0.from_node, ea_conn.0.from_port))
                     {
-                        entry.insert(ALIAS_CHARS[idx_next_alias]);
+                        entry.insert(connection_alias(idx_next_alias));
                         idx_next_alias += 1;
                     }
-                    let alias =
-                        self.alias_connections[&(false, ea_conn.0.from_node, ea_conn.0.from_port)];
+                    let alias = self.alias_connections
+                        [&(false, ea_conn.0.from_node, ea_conn.0.from_port)]
+                        .clone();
                     self.alias_connections
                         .insert((true, ea_conn.0.to_node, ea_conn.0.to_port), alias);
                     continue 'outer;
@@ -638,6 +651,34 @@ fn resolve_mixed_symbol(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_aliases_beyond_greek_alphabet() {
+        let mut layout = ConnectionsLayout::new(4, 3);
+        // Isolate the endpoints so every connection must use an alias.
+        layout.block_zone(Rect::new(0, 0, 4, 3));
+        for source in 0..100 {
+            layout.insert_port(false, source, 0, (1, 1));
+            for destination in [100 + source, 200 + source] {
+                layout.insert_port(true, destination, 0, (2, 1));
+                layout.push_connection((Connection::new(source, 0, destination, 0), source + 1));
+            }
+        }
+        layout.calculate();
+
+        let mut aliases = std::collections::BTreeSet::<&str>::new();
+        for source in 0..100 {
+            let alias = &layout.alias_connections[&(false, source, 0)];
+            assert!(aliases.insert(alias.as_ref()));
+            for destination in [100 + source, 200 + source] {
+                assert_eq!(alias, &layout.alias_connections[&(true, destination, 0)]);
+            }
+        }
+        assert_eq!(layout.alias_connections[&(false, 0, 0)], "α");
+        assert_eq!(layout.alias_connections[&(false, 23, 0)], "ω");
+        assert_eq!(layout.alias_connections[&(false, 24, 0)], "α1");
+        assert_eq!(layout.alias_connections[&(false, 48, 0)], "α2");
+    }
 
     fn symbol_for(north: Edge, south: Edge, east: Edge, west: Edge) -> &'static str {
         resolve_mixed_symbol(north, south, east, west, &|edge| {
