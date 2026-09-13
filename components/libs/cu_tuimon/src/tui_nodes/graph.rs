@@ -365,17 +365,13 @@ impl<'a> NodeGraph<'a> {
                             .alias_connections
                             .get(&(true, idx_node, ea_conn.to_port))
                     {
-                        let y = pos.top() + ea_conn.to_port as u16 + 1;
-                        if pos.left() > 0 && y < area.width {
-                            buf.cell_mut(Position::new(pos.left() - 1, y))
-                                .unwrap()
-                                .set_symbol(alias_char)
-                                .set_style(
-                                    Style::default()
-                                        .add_modifier(Modifier::BOLD)
-                                        .bg(palette::RED),
-                                );
-                        }
+                        draw_alias(
+                            buf,
+                            area,
+                            Position::new(pos.left(), pos.top() + ea_conn.to_port as u16 + 1),
+                            alias_char,
+                            true,
+                        );
                     }
 
                     // draw port
@@ -397,16 +393,12 @@ impl<'a> NodeGraph<'a> {
                         idx_node,
                         ea_conn.from_port,
                     )) {
-                        buf.cell_mut(Position::new(
-                            pos.right(),
-                            pos.top() + ea_conn.from_port as u16 + 1,
-                        ))
-                        .unwrap()
-                        .set_symbol(alias_char)
-                        .set_style(
-                            Style::default()
-                                .add_modifier(Modifier::BOLD)
-                                .bg(palette::RED),
+                        draw_alias(
+                            buf,
+                            area,
+                            Position::new(pos.right(), pos.top() + ea_conn.from_port as u16 + 1),
+                            alias_char,
+                            false,
                         );
                     }
 
@@ -575,5 +567,91 @@ fn set_cell(buf: &mut Buffer, x: i32, y: i32, symbol: &str, style: Style, area: 
     }
     if let Some(cell) = buf.cell_mut(Position::new(x as u16, y as u16)) {
         cell.set_symbol(symbol).set_style(style);
+    }
+}
+
+// Render the whole label beside its port. Partial labels would identify the wrong edge.
+fn draw_alias(buf: &mut Buffer, area: Rect, port: Position, alias: &str, is_input: bool) {
+    let area = area.intersection(buf.area);
+    // Generated aliases contain only single-column Greek letters and ASCII digits.
+    let Ok(width) = u16::try_from(alias.chars().count()) else {
+        return;
+    };
+    let x = if is_input {
+        let Some(x) = port.x.checked_sub(width) else {
+            return;
+        };
+        x
+    } else {
+        port.x
+    };
+    if x < area.left()
+        || x.checked_add(width).is_none_or(|end| end > area.right())
+        || port.y < area.top()
+        || port.y >= area.bottom()
+    {
+        return;
+    }
+    buf.set_string(
+        x,
+        port.y,
+        alias,
+        Style::default()
+            .add_modifier(Modifier::BOLD)
+            .bg(palette::RED),
+    );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_multicolumn_aliases_render_at_both_ports() {
+        let area = Rect::new(10, 20, 20, 10);
+        let mut buf = Buffer::empty(area);
+        let mut graph = NodeGraph::new(
+            vec![NodeLayout::new((4, 3)), NodeLayout::new((4, 3))],
+            vec![Connection::new(0, 0, 1, 0)],
+            20,
+            10,
+        );
+        // Stored x coordinates run from right to left.
+        graph.placements.insert(0, Rect::new(14, 0, 4, 3));
+        graph.placements.insert(1, Rect::new(2, 0, 4, 3));
+        for port in [(false, 0, 0), (true, 1, 0)] {
+            graph
+                .conn_layout
+                .alias_connections
+                .insert(port, "α1".into());
+        }
+        graph.render_into(area, &mut buf);
+        for x in [16, 22] {
+            assert_eq!(buf[(x, 21)].symbol(), "α");
+            assert_eq!(buf[(x + 1, 21)].symbol(), "1");
+        }
+    }
+
+    #[test]
+    fn test_aliases_at_viewport_edges_are_not_truncated() {
+        let area = Rect::new(10, 20, 8, 12);
+        let mut buf = Buffer::empty(area);
+        for (port, is_input) in [
+            (Position::new(11, 21), true),
+            (Position::new(17, 21), false),
+            (Position::new(18, 21), false),
+            (Position::new(12, 19), true),
+            (Position::new(12, 32), true),
+            (Position::new(0, 21), true),
+        ] {
+            draw_alias(&mut buf, area, port, "α1", is_input);
+        }
+        assert_eq!(buf, Buffer::empty(area));
+        draw_alias(&mut buf, area, Position::new(12, 31), "α1", true);
+        draw_alias(&mut buf, area, Position::new(16, 31), "α1", false);
+        for x in [10, 16] {
+            assert_eq!(buf[(x, 31)].symbol(), "α");
+            assert_eq!(buf[(x + 1, 31)].symbol(), "1");
+        }
     }
 }
