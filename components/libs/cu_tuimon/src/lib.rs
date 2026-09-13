@@ -1,6 +1,6 @@
+#[cfg(feature = "hop")]
+mod hop;
 mod model;
-#[cfg(feature = "neighbors")]
-mod neighbors;
 mod palette;
 mod stream_panel;
 #[cfg(feature = "dag")]

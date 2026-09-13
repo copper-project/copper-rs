@@ -175,9 +175,9 @@ fn normalize_text_colors_replaces_reset_fg_and_bg() {
 #[cfg(not(feature = "dag"))]
 fn monitor_ui_starts_on_first_available_view() {
     let ui = MonitorUi::new(test_monitor_model(), MonitorUiOptions::default());
-    #[cfg(feature = "neighbors")]
-    assert_eq!(ui.active_screen(), MonitorScreen::Neighbors);
-    #[cfg(not(feature = "neighbors"))]
+    #[cfg(feature = "hop")]
+    assert_eq!(ui.active_screen(), MonitorScreen::Hop);
+    #[cfg(not(feature = "hop"))]
     assert_eq!(ui.active_screen(), MonitorScreen::Latency);
 }
 

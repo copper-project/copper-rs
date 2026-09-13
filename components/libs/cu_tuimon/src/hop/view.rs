@@ -1,8 +1,8 @@
 //! Fixed-column neighborhood view using the Catppuccin Mocha palette.
 
 use super::Column;
+use super::HopView;
 use super::NEIGHBOR_HEIGHT;
-use super::NeighborsView;
 use crate::ui::NodeType;
 use cu29::monitoring::ComponentType;
 use ratatui::Frame;
@@ -19,7 +19,7 @@ const MAUVE: Color = Color::Rgb(203, 166, 247);
 const GREEN: Color = Color::Rgb(166, 227, 161);
 const LAVENDER: Color = Color::Rgb(180, 190, 254);
 
-pub(super) fn draw(frame: &mut Frame<'_>, app: &mut NeighborsView, area: Rect) {
+pub(super) fn draw(frame: &mut Frame<'_>, app: &mut HopView, area: Rect) {
     app.list_areas = [Rect::default(); 3];
     app.panel_areas = [Rect::default(); 3];
     let area = area.intersection(frame.area());
@@ -231,13 +231,7 @@ fn short_type(name: &str) -> String {
         .collect()
 }
 
-fn neighbors(
-    frame: &mut Frame<'_>,
-    app: &mut NeighborsView,
-    column: Column,
-    area: Rect,
-    color: Color,
-) {
+fn neighbors(frame: &mut Frame<'_>, app: &mut HopView, column: Column, area: Rect, color: Color) {
     let edges = app.neighbors(column);
     let count = edges.len();
     let items: Vec<_> = edges

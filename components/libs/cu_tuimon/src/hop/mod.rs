@@ -47,7 +47,7 @@ struct Navigation {
     query: String,
 }
 
-pub(crate) struct NeighborsView {
+pub(crate) struct HopView {
     model: MonitorModel,
     // Topology node order is independent of runtime component order (notably bridges).
     component_ids: Vec<Option<ComponentId>>,
@@ -65,7 +65,7 @@ pub(crate) struct NeighborsView {
     history: VecDeque<Navigation>,
 }
 
-impl NeighborsView {
+impl HopView {
     pub(crate) fn new(model: MonitorModel) -> Self {
         let topology = model.topology();
         let node_lookup: HashMap<_, _> = topology

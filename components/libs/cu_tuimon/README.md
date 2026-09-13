@@ -7,9 +7,9 @@ The `DAG` and `HOP` tabs offer two views of the same `MonitorTopology` and
 one node, its incoming and outgoing connections, and live component status and timing
 inside the supplied content rectangle. Both work in terminal and Bevy monitors.
 
-The `dag` and `neighbors` Cargo features independently enable their renderer, state,
+The `dag` and `hop` Cargo features independently enable their renderer, state,
 and tab. Both are enabled by default. `cu-consolemon` and `cu-bevymon` forward these
-features; for example, use `default-features = false, features = ["neighbors"]` on a
+features; for example, use `default-features = false, features = ["hop"]` on a
 monitor dependency to select only the HOP view. The initial screen is DAG when
 enabled, otherwise HOP, otherwise Latency. Tab numbers follow the enabled tabs.
 
@@ -44,7 +44,7 @@ monitor frontend checks.
 It does not implement `CuMonitor` itself. Instead, it provides:
 
 - `MonitorModel`: shared monitor state updated from Copper runtime data
-- `MonitorUi`: reusable Ratatui rendering for system info, DAG, neighbors, latency, bandwidth, pool, and log views
+- `MonitorUi`: reusable Ratatui rendering for system info, DAG, HOP, latency, bandwidth, pool, and log views
 - `MonitorUiEvent` and `MonitorUiKey`: backend-neutral monitor input events shared by multiple frontends
 - `MonitorLogCapture`: shared live Copper log and optional `stderr` capture for monitor frontends
 - shared scrolling and screen-selection behavior used by multiple frontends

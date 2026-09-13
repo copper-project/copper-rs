@@ -36,8 +36,8 @@ pub enum MonitorScreen {
     System,
     #[cfg(feature = "dag")]
     Dag,
-    #[cfg(feature = "neighbors")]
-    Neighbors,
+    #[cfg(feature = "hop")]
+    Hop,
     Latency,
     CopperList,
     MemoryPools,
@@ -159,9 +159,9 @@ const TAB_DEFS: &[TabDef] = &[
         screen: MonitorScreen::Dag,
         label: "DAG",
     },
-    #[cfg(feature = "neighbors")]
+    #[cfg(feature = "hop")]
     TabDef {
-        screen: MonitorScreen::Neighbors,
+        screen: MonitorScreen::Hop,
         label: "HOP",
     },
     TabDef {
@@ -192,8 +192,8 @@ pub struct MonitorUi {
     help_hitboxes: Vec<HelpHitbox>,
     #[cfg(feature = "dag")]
     nodes_scrollable_widget_state: NodesScrollableWidgetState,
-    #[cfg(feature = "neighbors")]
-    neighbors: crate::neighbors::NeighborsView,
+    #[cfg(feature = "hop")]
+    hop: crate::hop::HopView,
     latency_scroll_state: ScrollViewState,
     bandwidth_scroll_state: ScrollViewState,
     stream_rates: Vec<crate::stream_panel::StreamRates>,
@@ -218,8 +218,8 @@ impl MonitorUi {
                 .collect()
         });
         Self {
-            #[cfg(feature = "neighbors")]
-            neighbors: crate::neighbors::NeighborsView::new(model.clone()),
+            #[cfg(feature = "hop")]
+            hop: crate::hop::HopView::new(model.clone()),
             model,
             runtime_node_col_width,
             active_screen: default_screen(),
@@ -262,9 +262,9 @@ impl MonitorUi {
                 direction,
                 steps,
             } => {
-                #[cfg(feature = "neighbors")]
-                if self.active_screen == MonitorScreen::Neighbors {
-                    self.neighbors.scroll_at(col, row, direction, steps);
+                #[cfg(feature = "hop")]
+                if self.active_screen == MonitorScreen::Hop {
+                    self.hop.scroll_at(col, row, direction, steps);
                     return MonitorUiAction::None;
                 }
                 let _ = (col, row);
@@ -284,8 +284,8 @@ impl MonitorUi {
     }
 
     pub fn handle_key(&mut self, key: MonitorUiKey) -> MonitorUiAction {
-        #[cfg(feature = "neighbors")]
-        if self.active_screen == MonitorScreen::Neighbors && self.neighbors.handle_key(key) {
+        #[cfg(feature = "hop")]
+        if self.active_screen == MonitorScreen::Hop && self.hop.handle_key(key) {
             return MonitorUiAction::None;
         }
         match key {
@@ -327,8 +327,8 @@ impl MonitorUi {
 
     pub fn scroll(&mut self, direction: ScrollDirection, steps: usize) {
         match (self.active_screen, direction) {
-            #[cfg(feature = "neighbors")]
-            (MonitorScreen::Neighbors, direction) => self.neighbors.scroll(direction, steps),
+            #[cfg(feature = "hop")]
+            (MonitorScreen::Hop, direction) => self.hop.scroll(direction, steps),
             (MonitorScreen::CopperList, direction) => {
                 for _ in 0..steps {
                     match direction {
@@ -422,9 +422,9 @@ impl MonitorUi {
             return MonitorUiAction::None;
         }
 
-        #[cfg(feature = "neighbors")]
-        if self.active_screen == MonitorScreen::Neighbors {
-            self.neighbors.click(x, y);
+        #[cfg(feature = "hop")]
+        if self.active_screen == MonitorScreen::Hop {
+            self.hop.click(x, y);
         }
 
         #[cfg(feature = "log_pane")]
@@ -468,8 +468,8 @@ impl MonitorUi {
         match self.active_screen {
             #[cfg(feature = "dag")]
             MonitorScreen::Dag => self.draw_nodes(f, area),
-            #[cfg(feature = "neighbors")]
-            MonitorScreen::Neighbors => self.neighbors.draw(f, area),
+            #[cfg(feature = "hop")]
+            MonitorScreen::Hop => self.hop.draw(f, area),
             MonitorScreen::Latency => self.draw_latency_table(f, area),
             MonitorScreen::CopperList => self.draw_copperlist_stats(f, area),
             MonitorScreen::MemoryPools => self.draw_memory_pools(f, area),
@@ -1290,11 +1290,11 @@ fn default_screen() -> MonitorScreen {
     {
         MonitorScreen::Dag
     }
-    #[cfg(all(not(feature = "dag"), feature = "neighbors"))]
+    #[cfg(all(not(feature = "dag"), feature = "hop"))]
     {
-        MonitorScreen::Neighbors
+        MonitorScreen::Hop
     }
-    #[cfg(not(any(feature = "dag", feature = "neighbors")))]
+    #[cfg(not(any(feature = "dag", feature = "hop")))]
     {
         MonitorScreen::Latency
     }
@@ -1457,7 +1457,7 @@ fn format_rate_bytes_or_na(bytes: u64, rate_hz: f64) -> String {
 }
 
 #[derive(Copy, Clone)]
-#[cfg(any(feature = "dag", feature = "neighbors"))]
+#[cfg(any(feature = "dag", feature = "hop"))]
 pub(super) enum NodeType {
     Unknown,
     Source,
@@ -1466,7 +1466,7 @@ pub(super) enum NodeType {
     Bridge,
 }
 
-#[cfg(any(feature = "dag", feature = "neighbors"))]
+#[cfg(any(feature = "dag", feature = "hop"))]
 impl std::fmt::Display for NodeType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -1479,7 +1479,7 @@ impl std::fmt::Display for NodeType {
     }
 }
 
-#[cfg(any(feature = "dag", feature = "neighbors"))]
+#[cfg(any(feature = "dag", feature = "hop"))]
 impl From<ComponentType> for NodeType {
     fn from(kind: ComponentType) -> Self {
         match kind {

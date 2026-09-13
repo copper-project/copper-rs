@@ -75,8 +75,8 @@ fn model() -> MonitorModel {
     )
 }
 
-fn view() -> NeighborsView {
-    let mut view = NeighborsView::new(model());
+fn view() -> HopView {
+    let mut view = HopView::new(model());
     view.move_selection(true);
     view.column = Column::Outgoing;
     view
@@ -144,7 +144,7 @@ fn test_render_uses_live_component_mapping_and_preserves_error() {
     let model = model();
     model.set_component_error(ComponentId::new(2), "IMU failed");
     model.record_component_latency(ComponentId::new(2), CuDuration::from_micros(42));
-    let mut view = NeighborsView::new(model.clone());
+    let mut view = HopView::new(model.clone());
     let mut terminal = Terminal::new(TestBackend::new(150, 35)).unwrap();
     let area = Rect::new(4, 3, 140, 30);
     terminal
@@ -223,7 +223,7 @@ fn test_neighbor_names_and_message_types_fit_both_columns() {
         msg: msg.into(),
     })
     .collect();
-    let mut view = NeighborsView::new(MonitorModel::from_parts(
+    let mut view = HopView::new(MonitorModel::from_parts(
         &[],
         CopperListInfo::new(0, 0),
         MonitorTopology { nodes, connections },
@@ -309,7 +309,7 @@ fn test_fanout_scrolling_hitboxes_resize_and_back() {
 
 #[test]
 fn test_empty_topology_and_bounded_history() {
-    let mut empty = NeighborsView::new(MonitorModel::from_parts(
+    let mut empty = HopView::new(MonitorModel::from_parts(
         &[],
         CopperListInfo::new(0, 0),
         MonitorTopology::default(),
@@ -342,7 +342,7 @@ fn test_monitor_tabs_and_input_dispatch() {
             show_quit_hint: true,
         },
     );
-    ui.set_active_screen(MonitorScreen::Neighbors);
+    ui.set_active_screen(MonitorScreen::Hop);
     assert_eq!(
         ui.handle_key(MonitorUiKey::Char('q')),
         MonitorUiAction::QuitRequested
@@ -353,7 +353,7 @@ fn test_monitor_tabs_and_input_dispatch() {
             ui.handle_key(MonitorUiKey::Char(key)),
             MonitorUiAction::None
         );
-        assert_eq!(ui.active_screen(), MonitorScreen::Neighbors);
+        assert_eq!(ui.active_screen(), MonitorScreen::Hop);
     }
     // Deleting the whole query, including Backspace on an empty query, stays in search.
     for _ in 0..7 {
@@ -376,13 +376,13 @@ fn test_monitor_tabs_and_input_dispatch() {
         "1234"
     };
     for key in tab_keys.chars() {
-        ui.set_active_screen(MonitorScreen::Neighbors);
+        ui.set_active_screen(MonitorScreen::Hop);
         reference.set_active_screen(MonitorScreen::Latency);
         reference.handle_key(MonitorUiKey::Char(key));
         ui.handle_key(MonitorUiKey::Char(key));
         assert_eq!(ui.active_screen(), reference.active_screen());
     }
-    ui.set_active_screen(MonitorScreen::Neighbors);
+    ui.set_active_screen(MonitorScreen::Hop);
     ui.handle_key(MonitorUiKey::Char('/'));
     ui.handle_key(MonitorUiKey::Esc);
     assert_eq!(
@@ -423,11 +423,7 @@ fn test_switching_views_does_not_consume_component_errors() {
     model.set_component_error(ComponentId::new(2), "IMU failed");
     let mut ui = MonitorUi::new(model.clone(), MonitorUiOptions::default());
     let mut terminal = Terminal::new(TestBackend::new(160, 35)).unwrap();
-    for screen in [
-        MonitorScreen::Dag,
-        MonitorScreen::Neighbors,
-        MonitorScreen::Dag,
-    ] {
+    for screen in [MonitorScreen::Dag, MonitorScreen::Hop, MonitorScreen::Dag] {
         ui.set_active_screen(screen);
         terminal.draw(|frame| ui.draw(frame)).unwrap();
         assert!(model.inner.component_statuses.lock().unwrap()[2].is_error);

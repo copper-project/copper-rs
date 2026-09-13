@@ -22,10 +22,10 @@ default:
 tuimon-check:
 	cargo test -p cu-tuimon --no-default-features
 	cargo test -p cu-tuimon --no-default-features --features dag
-	cargo test -p cu-tuimon --no-default-features --features neighbors
+	cargo test -p cu-tuimon --no-default-features --features hop
 	cargo test -p cu-tuimon
 	cargo clippy -p cu-tuimon --all-targets --no-default-features -- --deny warnings
-	cargo clippy -p cu-tuimon --all-targets --no-default-features --features neighbors -- --deny warnings
+	cargo clippy -p cu-tuimon --all-targets --no-default-features --features hop -- --deny warnings
 	cargo clippy -p cu-tuimon -p cu-consolemon -p cu-bevymon --all-targets -- --deny warnings
 	cargo test -p cu-consolemon
 
