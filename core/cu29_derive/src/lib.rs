@@ -1531,15 +1531,16 @@ fn gen_culist_support(
         // Adds the type erased CuStampedDataSet support (to help generic serialized conversions)
         #erasedmsg_trait_impl
 
-        // SAFETY: The initializer writes all message slots and the I/O cache.
-        unsafe impl CuListZeroedInit for CuStampedDataSet {
-            unsafe fn init_in_place(dst: *mut Self) {
+        impl CuListZeroedInit for CuStampedDataSet {
+            fn init_in_place(storage: &mut core::mem::MaybeUninit<Self>) -> &mut Self {
+                let dst = storage.as_mut_ptr();
                 // SAFETY: The pool supplies uninitialized dataset storage. Every
                 // message and the I/O cache are written before it is borrowed.
                 unsafe {
                     #(#in_place_init_tokens)*
                     core::ptr::addr_of_mut!((*dst).1)
                         .write(cu29::monitoring::CuMsgIoCache::default());
+                    storage.assume_init_mut()
                 }
             }
 

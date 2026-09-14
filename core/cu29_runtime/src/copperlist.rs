@@ -119,7 +119,12 @@ impl<P: CopperListTuple> CopperList<P> {
         unsafe {
             core::ptr::addr_of_mut!((*dst).id).write(0);
             core::ptr::addr_of_mut!((*dst).state).write(CopperListState::Free);
-            P::init_in_place(core::ptr::addr_of_mut!((*dst).msgs));
+            let msgs = core::ptr::addr_of_mut!((*dst).msgs);
+            let initialized = P::init_in_place(&mut *msgs.cast::<core::mem::MaybeUninit<P>>());
+            assert!(
+                core::ptr::eq(initialized, msgs),
+                "initializer returned a different slot"
+            );
         }
     }
 }
@@ -160,24 +165,19 @@ pub type AscIterMut<'a, T> = Chain<SliceIterMut<'a, T>, SliceIterMut<'a, T>>;
 ///
 /// Pool slots contain valid values before the runtime borrows them.
 ///
-/// # Safety
-/// `init_in_place` must leave a fully initialized `Self` at the supplied address
-/// on normal return. The runtime relies on this before exposing or dropping slots.
-pub unsafe trait CuListZeroedInit: CopperListTuple {
+/// Existing implementations use `Default` for startup initialization.
+pub trait CuListZeroedInit: CopperListTuple {
     /// Resets per-cycle metadata on an already initialized dataset.
     fn init_zeroed(&mut self);
 
     /// Constructs a valid dataset in its pool storage, once at startup.
     /// Generated datasets override this to initialize messages individually.
     ///
-    /// # Safety
-    /// `dst` must point to aligned, writable storage for one `Self`. Its previous
-    /// contents are overwritten without being dropped. Implementations must
-    /// initialize every field before returning.
+    /// Returns the initialized value in `dst`. The pool checks that the returned
+    /// reference points to the supplied slot before exposing or dropping it.
     #[doc(hidden)]
-    unsafe fn init_in_place(dst: *mut Self) {
-        // SAFETY: The caller supplies storage for a complete dataset.
-        unsafe { dst.write(Self::default()) };
+    fn init_in_place(dst: &mut core::mem::MaybeUninit<Self>) -> &mut Self {
+        dst.write(Self::default())
     }
 }
 
@@ -386,9 +386,37 @@ mod tests {
         }
     }
 
-    // SAFETY: The default in-place initializer writes a complete valid dataset.
-    unsafe impl CuListZeroedInit for CuStampedDataSet {
+    impl CuListZeroedInit for CuStampedDataSet {
         fn init_zeroed(&mut self) {}
+    }
+
+    #[derive(Debug, Default, Encode, Decode, Serialize, Deserialize)]
+    struct WrongSlot;
+
+    impl ErasedCuStampedDataSet for WrongSlot {
+        fn cumsgs(&self) -> Vec<&dyn ErasedCuStampedData> {
+            Vec::new()
+        }
+    }
+
+    impl MatchingTasks for WrongSlot {
+        fn get_all_task_ids() -> &'static [&'static str] {
+            &[]
+        }
+    }
+
+    impl CuListZeroedInit for WrongSlot {
+        fn init_zeroed(&mut self) {}
+
+        fn init_in_place(_dst: &mut core::mem::MaybeUninit<Self>) -> &mut Self {
+            Box::leak(Box::new(Self))
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "initializer returned a different slot")]
+    fn rejects_initializer_returning_another_slot() {
+        let _ = CuListsManager::<WrongSlot, 1>::new();
     }
 
     #[test]
@@ -806,13 +834,15 @@ mod tests {
         }
     }
 
-    // SAFETY: The in-place initializer writes every byte of the byte-array payload.
-    unsafe impl CuListZeroedInit for TestStruct {
+    impl CuListZeroedInit for TestStruct {
         fn init_zeroed(&mut self) {}
 
-        unsafe fn init_in_place(dst: *mut Self) {
+        fn init_in_place(dst: &mut core::mem::MaybeUninit<Self>) -> &mut Self {
             // SAFETY: TestStruct contains only bytes, all initialized to zero.
-            unsafe { dst.write_bytes(0, 1) };
+            unsafe {
+                dst.as_mut_ptr().write_bytes(0, 1);
+                dst.assume_init_mut()
+            }
         }
     }
 

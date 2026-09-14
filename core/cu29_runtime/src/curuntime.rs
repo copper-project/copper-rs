@@ -2769,8 +2769,7 @@ mod tests {
         }
     }
 
-    // SAFETY: The default in-place initializer writes a complete valid dataset.
-    unsafe impl CuListZeroedInit for Msgs {
+    impl CuListZeroedInit for Msgs {
         fn init_zeroed(&mut self) {}
     }
 
@@ -2789,8 +2788,7 @@ mod tests {
         }
     }
 
-    // SAFETY: The default in-place initializer writes a complete valid dataset.
-    unsafe impl CuListZeroedInit for IntMsgs {
+    impl CuListZeroedInit for IntMsgs {
         fn init_zeroed(&mut self) {}
     }
 

@@ -719,7 +719,7 @@ impl<P: cu29_traits::CopperListTuple + core::fmt::Debug, const N: usize> core::f
 pub fn cu29_runtime::copperlist::CuListsManager<P, N>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl<P: cu29_traits::CopperListTuple + cu29_runtime::copperlist::CuListZeroedInit, const N: usize> core::default::Default for cu29_runtime::copperlist::CuListsManager<P, N>
 pub fn cu29_runtime::copperlist::CuListsManager<P, N>::default() -> Self
-pub unsafe trait cu29_runtime::copperlist::CuListZeroedInit: cu29_traits::CopperListTuple
+pub trait cu29_runtime::copperlist::CuListZeroedInit: cu29_traits::CopperListTuple
 pub fn cu29_runtime::copperlist::CuListZeroedInit::init_zeroed(&mut self)
 pub type cu29_runtime::copperlist::AscIter<'a, T> = core::iter::adapters::chain::Chain<core::slice::iter::Iter<'a, T>, core::slice::iter::Iter<'a, T>>
 pub type cu29_runtime::copperlist::AscIterMut<'a, T> = core::iter::adapters::chain::Chain<core::slice::iter::IterMut<'a, T>, core::slice::iter::IterMut<'a, T>>

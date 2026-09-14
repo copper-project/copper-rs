@@ -123,7 +123,7 @@ option select recorded runs identified by `Instantiated` lifecycle records.
 - `ProcessStepOutcome`.
 - `ProcessStepResult`.
 - `SyncCopperListsManager`.
-- `CuListZeroedInit`: unsafe contract for initializing pool storage in place and
+- `CuListZeroedInit`: hook for initializing pool storage in place and
   resetting per-cycle metadata. Generated message datasets implement it.
 - `AsyncCopperListsManager`.
 - `OwnedCopperListSubmission`.

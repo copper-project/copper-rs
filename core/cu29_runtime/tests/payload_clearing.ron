@@ -6,7 +6,7 @@
         (
             src: "source",
             dst: "__nc__",
-            msg: "(bool, cu29::pool::CuHandle<Vec<u8>>)",
+            msg: "(bool, Vec<u8>)",
         ),
     ],
 )
