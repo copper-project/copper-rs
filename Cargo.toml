@@ -408,7 +408,7 @@ gstreamer = { version = "0.25", default-features = false }
 image = { version = "0.25.6", default-features = false }
 png = "0.18.1"
 libc = { version = "0.2", default-features = false }
-linux-embedded-hal = "0.4.0"
+linux-embedded-hal = "0.5.0"
 log = { version = "0.4", default-features = false }
 minicbor = { version = "2.2.1", default-features = false }
 minicbor-serde = { version = "0.7.0", default-features = false }
