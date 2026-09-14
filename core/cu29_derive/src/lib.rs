@@ -1175,6 +1175,7 @@ fn gen_culist_support(
         })
         .collect();
     let mut zeroed_init_tokens: Vec<proc_macro2::TokenStream> = Vec::new();
+    let mut in_place_init_tokens: Vec<proc_macro2::TokenStream> = Vec::new();
     for idx in culist_indices_in_plan_order {
         let slot_index = syn::Index::from(*idx);
         let pack = output_packs
@@ -1183,6 +1184,9 @@ fn gen_culist_support(
         if pack.is_multi() {
             for port_idx in 0..pack.msg_types.len() {
                 let port_index = syn::Index::from(port_idx);
+                in_place_init_tokens.push(quote! {
+                    CuMsg::init_in_place(core::ptr::addr_of_mut!((*dst).0.#slot_index.#port_index));
+                });
                 zeroed_init_tokens.push(quote! {
                     self.0.#slot_index.#port_index.metadata.status_txt = CuCompactString::default();
                     self.0.#slot_index.#port_index.metadata.process_time.start =
@@ -1193,6 +1197,9 @@ fn gen_culist_support(
                 });
             }
         } else {
+            in_place_init_tokens.push(quote! {
+                CuMsg::init_in_place(core::ptr::addr_of_mut!((*dst).0.#slot_index));
+            });
             zeroed_init_tokens.push(quote! {
                 self.0.#slot_index.metadata.status_txt = CuCompactString::default();
                 self.0.#slot_index.metadata.process_time.start = cu29::clock::OptionCuTime::none();
@@ -1524,7 +1531,18 @@ fn gen_culist_support(
         // Adds the type erased CuStampedDataSet support (to help generic serialized conversions)
         #erasedmsg_trait_impl
 
-        impl CuListZeroedInit for CuStampedDataSet {
+        // SAFETY: The initializer writes all message slots and the I/O cache.
+        unsafe impl CuListZeroedInit for CuStampedDataSet {
+            unsafe fn init_in_place(dst: *mut Self) {
+                // SAFETY: The pool supplies uninitialized dataset storage. Every
+                // message and the I/O cache are written before it is borrowed.
+                unsafe {
+                    #(#in_place_init_tokens)*
+                    core::ptr::addr_of_mut!((*dst).1)
+                        .write(cu29::monitoring::CuMsgIoCache::default());
+                }
+            }
+
             fn init_zeroed(&mut self) {
                 self.1.clear();
                 #(#zeroed_init_tokens)*

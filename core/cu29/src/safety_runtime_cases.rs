@@ -25,7 +25,8 @@ impl MatchingTasks for IntMsgs {
     }
 }
 
-impl CuListZeroedInit for IntMsgs {
+// SAFETY: The default in-place initializer writes a complete valid dataset.
+unsafe impl CuListZeroedInit for IntMsgs {
     fn init_zeroed(&mut self) {}
 }
 
