@@ -1273,6 +1273,13 @@ impl MmapUnifiedLoggerRead {
             self.current_slab_index = pos.slab_index;
         }
         self.current_reading_position = pos.offset;
+        // Count the destination's distance from the head, so rereading a slab
+        // does not consume the traversal limit a second time.
+        self.slabs_read = if pos.slab_index >= self.head_slab_index {
+            pos.slab_index - self.head_slab_index + 1
+        } else {
+            self.max_slabs - self.head_slab_index + pos.slab_index + 1
+        };
         Ok(())
     }
 
@@ -2127,6 +2134,59 @@ mod tests {
             }
         }
         assert_eq!(total_readback, 10000);
+    }
+
+    #[test]
+    fn test_seek_and_reread_across_slab_boundaries() {
+        for max_slabs in [0, 3] {
+            let tmp_dir = TempDir::new().unwrap();
+            let file_path = tmp_dir.path().join("seek.bin");
+            let page_size = page_size::get();
+            {
+                let mut writer =
+                    MmapUnifiedLoggerWrite::new(&file_path, 4 * page_size, page_size, max_slabs)
+                        .unwrap();
+                for _ in 0..24 {
+                    let mut section = writer
+                        .add_section(UnifiedLogType::CopperList, page_size)
+                        .unwrap();
+                    writer.flush_section(&mut section);
+                }
+            }
+
+            let mut reader = MmapUnifiedLoggerRead::new(&file_path).unwrap();
+            let beginning = reader.position();
+            let mut expected = 0;
+            while reader.raw_skip_section().unwrap().entry_type != UnifiedLogType::LastEntry {
+                expected += 1;
+            }
+            assert!(expected > 0);
+            if max_slabs == 0 {
+                assert_eq!(expected, 24);
+            } else {
+                assert!(expected < 24);
+                assert_ne!(beginning.slab_index, 0);
+            }
+
+            // Run discovery skips headers, then seeks back to decode selected sections.
+            // A saved position can be at the end of the preceding slab.
+            for _ in 0..2 {
+                reader.seek(beginning).unwrap();
+                let mut actual = 0;
+                loop {
+                    let position = reader.position();
+                    let header = reader.raw_skip_section().unwrap();
+                    if header.entry_type == UnifiedLogType::LastEntry {
+                        break;
+                    }
+                    reader.seek(position).unwrap();
+                    let (reread, _) = reader.raw_read_section().unwrap();
+                    assert_eq!(reread.entry_type, header.entry_type);
+                    actual += 1;
+                }
+                assert_eq!(actual, expected);
+            }
+        }
     }
 
     #[test]
