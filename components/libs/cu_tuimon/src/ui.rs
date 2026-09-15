@@ -1941,14 +1941,19 @@ impl StatefulWidget for NodesScrollableWidget<'_> {
             let graph = state.graph();
             let zones = graph.split(scroll_view.area());
 
-            let statuses = state.model.inner.component_statuses.lock().unwrap();
+            let mut statuses = state.model.inner.component_statuses.lock().unwrap();
             for (idx, zone) in zones.into_iter().enumerate() {
                 let status = state
                     .status_index_map
                     .get(idx)
                     .and_then(|component_id| *component_id)
-                    .and_then(|component_id| statuses.get(component_id.index()))
-                    .cloned()
+                    .and_then(|component_id| statuses.get_mut(component_id.index()))
+                    .map(|status| {
+                        let snapshot = status.clone();
+                        // Show each reported error once, then resume the live status.
+                        status.is_error = false;
+                        snapshot
+                    })
                     .unwrap_or_default();
                 let node = &state.display_nodes[idx];
                 let status_line = if status.is_error {

@@ -140,7 +140,7 @@ fn test_filtering_owns_characters_and_preserves_navigation() {
 }
 
 #[test]
-fn test_render_uses_live_component_mapping_and_preserves_error() {
+fn test_render_uses_live_component_mapping_and_recovers_from_error() {
     let model = model();
     model.set_component_error(ComponentId::new(2), "IMU failed");
     model.record_component_latency(ComponentId::new(2), CuDuration::from_micros(42));
@@ -163,7 +163,17 @@ fn test_render_uses_live_component_mapping_and_preserves_error() {
     assert!(screen.contains("gyro"));
     assert_eq!(buffer[(0, 0)].symbol(), "o");
     assert_eq!(view.panel_areas[0].x, area.x);
-    assert!(model.inner.component_statuses.lock().unwrap()[2].is_error);
+    model.set_component_status(ComponentId::new(2), "IMU ready");
+    terminal.draw(|frame| view.draw(frame, area)).unwrap();
+    let screen: String = terminal
+        .backend()
+        .buffer()
+        .content
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect();
+    assert!(screen.contains("IMU ready"));
+    assert!(!screen.contains("IMU failed"));
 }
 
 #[test]
@@ -418,16 +428,45 @@ fn test_monitor_tabs_and_input_dispatch() {
 
 #[cfg(feature = "dag")]
 #[test]
-fn test_switching_views_does_not_consume_component_errors() {
-    let model = model();
-    model.set_component_error(ComponentId::new(2), "IMU failed");
-    let mut ui = MonitorUi::new(model.clone(), MonitorUiOptions::default());
-    let mut terminal = Terminal::new(TestBackend::new(160, 35)).unwrap();
-    for screen in [MonitorScreen::Dag, MonitorScreen::Hop, MonitorScreen::Dag] {
+fn test_views_show_repeated_errors_and_resume_live_status() {
+    for screen in [MonitorScreen::Dag, MonitorScreen::Hop] {
+        let fixture = model();
+        let model = MonitorModel::from_parts(
+            fixture.components(),
+            CopperListInfo::new(0, 0),
+            MonitorTopology {
+                nodes: vec![fixture.topology().nodes[0].clone()],
+                connections: Vec::new(),
+            },
+        );
+        let mut ui = MonitorUi::new(model.clone(), MonitorUiOptions::default());
         ui.set_active_screen(screen);
-        terminal.draw(|frame| ui.draw(frame)).unwrap();
-        assert!(model.inner.component_statuses.lock().unwrap()[2].is_error);
+        let mut terminal = Terminal::new(TestBackend::new(160, 35)).unwrap();
+        for _ in 0..2 {
+            model.set_component_error(ComponentId::new(2), "IMU failed");
+            terminal.draw(|frame| ui.draw(frame)).unwrap();
+            let text: String = terminal
+                .backend()
+                .buffer()
+                .content
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect();
+            assert!(text.contains("IMU failed"), "{screen:?}");
+        }
+        model.set_component_status(ComponentId::new(2), "IMU ready");
+        for next_screen in [screen, MonitorScreen::Hop, MonitorScreen::Dag] {
+            ui.set_active_screen(next_screen);
+            terminal.draw(|frame| ui.draw(frame)).unwrap();
+            let text: String = terminal
+                .backend()
+                .buffer()
+                .content
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect();
+            assert!(text.contains("IMU ready"), "{next_screen:?}");
+            assert!(!text.contains("IMU failed"), "{next_screen:?}");
+        }
     }
-    model.clear_component_error(ComponentId::new(2));
-    assert!(!model.inner.component_statuses.lock().unwrap()[2].is_error);
 }

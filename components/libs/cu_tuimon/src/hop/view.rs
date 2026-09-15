@@ -118,7 +118,14 @@ pub(super) fn draw(frame: &mut Frame<'_>, app: &mut HopView, area: Rect) {
                 .component_statuses
                 .lock()
                 .ok()
-                .and_then(|statuses| statuses.get(component_id.index()).cloned());
+                .and_then(|mut statuses| {
+                    statuses.get_mut(component_id.index()).map(|status| {
+                        let snapshot = status.clone();
+                        // Show each reported error once, then resume the live status.
+                        status.is_error = false;
+                        snapshot
+                    })
+                });
             if let Some(status) = status {
                 let color = if status.is_error {
                     Color::Rgb(243, 139, 168)
