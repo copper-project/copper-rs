@@ -1,0 +1,17 @@
+(
+    tasks: [
+        (id: "source", type: "Unused"),
+    ],
+    cnx: [
+        (
+            src: "source",
+            dst: "__nc__",
+            msg: "[[[[u8; 32]; 32]; 32]; 32]",
+        ),
+        (
+            src: "source",
+            dst: "__nc__",
+            msg: "bool",
+        ),
+    ],
+)
