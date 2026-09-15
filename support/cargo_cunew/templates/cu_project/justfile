@@ -47,7 +47,7 @@ dag:
   if [[ -z "$renderer" ]]; then
     echo "cu29-rendercfg not found on PATH; installing it now..." >&2
     {% if copper_source == "crates.io" %}
-    cargo install --locked cu29-runtime --version "{{copper_version}}" --bin cu29-rendercfg
+    cargo install --locked cu29-runtime --version "~{{copper_version}}" --bin cu29-rendercfg
     {% elsif copper_source == "git" %}
     cargo install --locked --git "{{copper_git_url}}" {% if copper_git_branch != "__none__" %}--branch "{{copper_git_branch}}" {% elsif copper_git_tag != "__none__" %}--tag "{{copper_git_tag}}" {% elsif copper_git_rev != "__none__" %}--rev "{{copper_git_rev}}" {% endif %} --bin cu29-rendercfg cu29-runtime
     {% endif %}
@@ -100,7 +100,7 @@ plan *options:
   if [[ -z "$planner" ]]; then
     echo "cu29-plan not found on PATH; installing it now..." >&2
     {% if copper_source == "crates.io" %}
-    cargo install --locked cu29-runtime --version "{{copper_version}}" --bin cu29-plan
+    cargo install --locked cu29-runtime --version "~{{copper_version}}" --bin cu29-plan
     {% elsif copper_source == "git" %}
     cargo install --locked --git "{{copper_git_url}}" {% if copper_git_branch != "__none__" %}--branch "{{copper_git_branch}}" {% elsif copper_git_tag != "__none__" %}--tag "{{copper_git_tag}}" {% elsif copper_git_rev != "__none__" %}--rev "{{copper_git_rev}}" {% endif %} --bin cu29-plan cu29-runtime
     {% endif %}

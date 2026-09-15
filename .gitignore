@@ -17,6 +17,7 @@
 *.mcap
 *.profraw
 cu29_logstats.json
+copper-crash-*.txt
 Cargo.lock
 /examples/**/logs/*
 

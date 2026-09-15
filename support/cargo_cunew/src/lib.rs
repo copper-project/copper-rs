@@ -600,11 +600,11 @@ mod tests {
         let justfile = fs::read_to_string(project.join("justfile")).expect("justfile");
 
         assert!(manifest.contains("edition = \"2024\""));
-        assert!(manifest.contains("version = \"9.9.9\""));
-        assert!(manifest.contains("version = \"9.9.8\""));
+        assert!(manifest.contains("version = \"~9.9.9\""));
+        assert!(manifest.contains("version = \"~9.9.8\""));
         assert!(manifest.contains("cu29-export"));
         assert!(!manifest.contains("\n[workspace]\n"));
-        assert!(justfile.contains("cargo install --locked cu29-runtime --version \"9.9.9\""));
+        assert!(justfile.contains("cargo install --locked cu29-runtime --version \"~9.9.9\""));
         assert!(justfile.contains("dag:"));
         assert!(justfile.contains("[positional-arguments]"));
         assert!(justfile.contains("plan *options:"));
