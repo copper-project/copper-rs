@@ -2,7 +2,7 @@
 name = "cu29-derive"
 description = "This is the copper project runtime generator. It cannot be used independently from the copper project."
 documentation = "https://docs.rs/cu29-derive"
-version.workspace = true
+version = "1.2.1"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true

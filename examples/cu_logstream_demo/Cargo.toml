@@ -35,8 +35,8 @@ required-features = ["replay"]
 
 [dependencies]
 cu29 = { workspace = true }
-cu-transform = { path = "../../components/libs/cu_transform", optional = true }
-cu-consolemon = { path = "../../components/monitors/cu_consolemon", default-features = false, optional = true }
+cu-transform = { version = "~1.2.1", path = "../../components/libs/cu_transform", optional = true }
+cu-consolemon = { version = "~1.2.1", path = "../../components/monitors/cu_consolemon", default-features = false, optional = true }
 cu29-logstream = { workspace = true, features = ["std"] }
 cu29-logstream-udp = { workspace = true }
 cu29-export = { workspace = true }

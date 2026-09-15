@@ -23,4 +23,4 @@ ignored = ["serde"]
 [build-dependencies]
 cu29-build = { workspace = true }
 cu29 = { workspace = true }
-custom-planner = { path = "planner" }
+custom-planner = { version = "~1.2.1", path = "planner" }
