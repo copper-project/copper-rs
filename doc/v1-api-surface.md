@@ -118,6 +118,8 @@ This file defines the Copper V1 public contract. Anything not listed as stable i
 - `ProcessStepOutcome`.
 - `ProcessStepResult`.
 - `SyncCopperListsManager`.
+- `CuListZeroedInit`: hook for initializing pool storage in place and
+  resetting per-cycle metadata. Generated message datasets implement it.
 - `AsyncCopperListsManager`.
 - `OwnedCopperListSubmission`.
 - Generated mission modules and generated helper functions.

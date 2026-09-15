@@ -1,0 +1,12 @@
+(
+    tasks: [
+        (id: "source", type: "Unused"),
+    ],
+    cnx: [
+        (
+            src: "source",
+            dst: "__nc__",
+            msg: "(bool, Vec<u8>)",
+        ),
+    ],
+)

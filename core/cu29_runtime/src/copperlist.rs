@@ -3,10 +3,8 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
-use alloc::alloc::{alloc_zeroed, handle_alloc_error};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::alloc::Layout;
 
 use bincode::{Decode, Encode};
 use core::fmt;
@@ -86,9 +84,8 @@ impl<P: CopperListTuple> CopperList<P> {
         self.state
     }
 
-    /// Restores the lifecycle state expected at allocation time and reruns
-    /// zero-memory fixups for payload containers that cannot remain valid after
-    /// raw zeroing. This does not imply a full `P::default()` payload reset.
+    /// Restores the lifecycle state and per-cycle metadata of an initialized slot.
+    /// Existing payloads remain available for reuse by tasks.
     #[doc(hidden)]
     pub fn reset_for_runtime_use(&mut self, id: u64)
     where
@@ -97,6 +94,29 @@ impl<P: CopperListTuple> CopperList<P> {
         self.id = id;
         self.state = CopperListState::Initialized;
         self.msgs.init_zeroed();
+    }
+
+    /// Initializes a pool slot directly in its allocated storage.
+    ///
+    /// # Safety
+    /// `dst` must point to aligned, writable storage for one `Self`. Its previous
+    /// contents are overwritten without being dropped.
+    pub(crate) unsafe fn init_in_place(dst: *mut Self)
+    where
+        P: CuListZeroedInit,
+    {
+        // SAFETY: The caller supplies storage for every field. No reference to
+        // the CopperList is formed before its message dataset is initialized.
+        unsafe {
+            core::ptr::addr_of_mut!((*dst).id).write(0);
+            core::ptr::addr_of_mut!((*dst).state).write(CopperListState::Free);
+            let msgs = core::ptr::addr_of_mut!((*dst).msgs);
+            let initialized = P::init_in_place(&mut *msgs.cast::<core::mem::MaybeUninit<P>>());
+            assert!(
+                core::ptr::eq(initialized, msgs),
+                "initializer returned a different slot"
+            );
+        }
     }
 }
 
@@ -132,12 +152,24 @@ pub type IterMut<'a, T> = Chain<Rev<SliceIterMut<'a, T>>, Rev<SliceIterMut<'a, T
 pub type AscIter<'a, T> = Chain<SliceIter<'a, T>, SliceIter<'a, T>>;
 pub type AscIterMut<'a, T> = Chain<SliceIterMut<'a, T>, SliceIterMut<'a, T>>;
 
-/// Initializes fields that cannot be zeroed after allocating a zeroed
-/// [`CopperList`].
+/// Initializes CopperList storage and resets per-cycle metadata on reuse.
+///
+/// Pool slots contain valid values before the runtime borrows them.
+///
+/// Existing implementations use `Default` for startup initialization.
 pub trait CuListZeroedInit: CopperListTuple {
-    /// Fixes up a zero-initialized copper list so that all internal fields are
-    /// in a valid state.
+    /// Resets per-cycle metadata on an already initialized dataset.
     fn init_zeroed(&mut self);
+
+    /// Constructs a valid dataset in its pool storage, once at startup.
+    /// Generated datasets override this to initialize messages individually.
+    ///
+    /// Returns the initialized value in `dst`. The pool checks that the returned
+    /// reference points to the supplied slot before exposing or dropping it.
+    #[doc(hidden)]
+    fn init_in_place(dst: &mut core::mem::MaybeUninit<Self>) -> &mut Self {
+        dst.write(Self::default())
+    }
 }
 
 impl<P: CopperListTuple + CuListZeroedInit, const N: usize> Default for CuListsManager<P, N> {
@@ -151,27 +183,26 @@ impl<P: CopperListTuple, const N: usize> CuListsManager<P, N> {
     where
         P: CuListZeroedInit,
     {
-        // SAFETY: We allocate zeroed memory and immediately initialize required fields.
-        let data = unsafe {
-            let layout = Layout::new::<[CopperList<P>; N]>();
-            let ptr = alloc_zeroed(layout) as *mut [CopperList<P>; N];
-            if ptr.is_null() {
-                handle_alloc_error(layout);
+        let mut slots = Vec::<CopperList<P>>::with_capacity(N);
+        for index in 0..N {
+            // SAFETY: Capacity is N and this slot has not been initialized yet.
+            // Advancing the length afterwards also makes Vec drop all completed
+            // slots if initialization of a later slot unwinds.
+            unsafe {
+                CopperList::init_in_place(slots.as_mut_ptr().add(index));
+                slots.set_len(index + 1);
             }
-            Box::from_raw(ptr)
+        }
+        // SAFETY: Exactly N initialized slots were placed in the boxed slice.
+        let data = unsafe {
+            Box::from_raw(Box::into_raw(slots.into_boxed_slice()) as *mut [CopperList<P>; N])
         };
-        let mut manager = CuListsManager {
+        CuListsManager {
             data,
             length: 0,
             insertion_index: 0,
             current_cl_id: 0,
-        };
-
-        for cl in manager.data.iter_mut() {
-            cl.msgs.init_zeroed();
         }
-
-        manager
     }
 
     /// Returns the current number of elements in the queue.
@@ -343,6 +374,35 @@ mod tests {
 
     impl CuListZeroedInit for CuStampedDataSet {
         fn init_zeroed(&mut self) {}
+    }
+
+    #[derive(Debug, Default, Encode, Decode, Serialize, Deserialize)]
+    struct WrongSlot;
+
+    impl ErasedCuStampedDataSet for WrongSlot {
+        fn cumsgs(&self) -> Vec<&dyn ErasedCuStampedData> {
+            Vec::new()
+        }
+    }
+
+    impl MatchingTasks for WrongSlot {
+        fn get_all_task_ids() -> &'static [&'static str] {
+            &[]
+        }
+    }
+
+    impl CuListZeroedInit for WrongSlot {
+        fn init_zeroed(&mut self) {}
+
+        fn init_in_place(_dst: &mut core::mem::MaybeUninit<Self>) -> &mut Self {
+            Box::leak(Box::new(Self))
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "initializer returned a different slot")]
+    fn rejects_initializer_returning_another_slot() {
+        let _ = CuListsManager::<WrongSlot, 1>::new();
     }
 
     #[test]
@@ -718,6 +778,14 @@ mod tests {
 
     impl CuListZeroedInit for TestStruct {
         fn init_zeroed(&mut self) {}
+
+        fn init_in_place(dst: &mut core::mem::MaybeUninit<Self>) -> &mut Self {
+            // SAFETY: TestStruct contains only bytes, all initialized to zero.
+            unsafe {
+                dst.as_mut_ptr().write_bytes(0, 1);
+                dst.assume_init_mut()
+            }
+        }
     }
 
     #[test]

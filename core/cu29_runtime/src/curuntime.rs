@@ -47,8 +47,6 @@ use cu29_log_runtime::log_debug_mode;
 #[allow(unused_imports)]
 use cu29_value::to_value;
 
-#[cfg(all(feature = "std", any(feature = "async-cl-io", feature = "parallel-rt")))]
-use alloc::alloc::{alloc_zeroed, handle_alloc_error};
 use alloc::boxed::Box;
 use alloc::collections::{BTreeSet, VecDeque};
 use alloc::format;
@@ -60,8 +58,6 @@ use bincode::enc::EncoderImpl;
 use bincode::enc::write::{SizeWriter, Writer};
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
-#[cfg(all(feature = "std", any(feature = "async-cl-io", feature = "parallel-rt")))]
-use core::alloc::Layout;
 use core::fmt::Result as FmtResult;
 use core::fmt::{Debug, Formatter};
 use core::marker::PhantomData;
@@ -608,21 +604,16 @@ struct AsyncCopperListCompletion<P: CopperListTuple> {
 }
 
 #[cfg(all(feature = "std", any(feature = "async-cl-io", feature = "parallel-rt")))]
-fn allocate_zeroed_copperlist<P>() -> Box<CopperList<P>>
+fn allocate_copperlist<P>() -> Box<CopperList<P>>
 where
     P: CopperListTuple + CuListZeroedInit,
 {
-    // SAFETY: We allocate zeroed memory and immediately initialize required fields.
-    let mut culist = unsafe {
-        let layout = Layout::new::<CopperList<P>>();
-        let ptr = alloc_zeroed(layout) as *mut CopperList<P>;
-        if ptr.is_null() {
-            handle_alloc_error(layout);
-        }
-        Box::from_raw(ptr)
-    };
-    culist.msgs.init_zeroed();
-    culist
+    let mut culist = Box::<CopperList<P>>::new_uninit();
+    // SAFETY: The initializer writes every field before the box is assumed valid.
+    unsafe {
+        CopperList::init_in_place(culist.as_mut_ptr());
+        culist.assume_init()
+    }
 }
 
 #[cfg(all(feature = "std", feature = "parallel-rt"))]
@@ -632,7 +623,7 @@ where
 {
     let mut free_pool = Vec::with_capacity(NBCL);
     for _ in 0..NBCL {
-        free_pool.push(allocate_zeroed_copperlist::<P>());
+        free_pool.push(allocate_copperlist::<P>());
     }
     free_pool
 }
@@ -664,7 +655,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
     {
         let mut free_pool = Vec::with_capacity(NBCL);
         for _ in 0..NBCL {
-            free_pool.push(allocate_zeroed_copperlist::<P>());
+            free_pool.push(allocate_copperlist::<P>());
         }
 
         let (pending_sender, completion_receiver, worker_handle) = if let Some(mut logger) = logger

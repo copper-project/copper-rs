@@ -294,6 +294,28 @@ where
     T: CuMsgPayload,
     M: Metadata,
 {
+    /// Initializes an empty message directly in preallocated pool storage.
+    ///
+    /// # Safety
+    /// `dst` must point to aligned, writable storage for one `Self`. Its previous
+    /// contents are overwritten without being dropped.
+    #[doc(hidden)]
+    pub unsafe fn init_in_place(dst: *mut Self) {
+        // SAFETY: Each field is written independently before a reference to the
+        // message is formed. An empty payload does not construct a T.
+        unsafe {
+            // Copy from a promoted constant so debug builds do not materialize
+            // a potentially large Option<T> temporary on the startup stack.
+            core::ptr::copy_nonoverlapping(
+                const { &None::<T> },
+                core::ptr::addr_of_mut!((*dst).payload),
+                1,
+            );
+            core::ptr::addr_of_mut!((*dst).tov).write(Tov::default());
+            core::ptr::addr_of_mut!((*dst).metadata).write(M::default());
+        }
+    }
+
     pub(crate) fn from_parts(payload: Option<T>, tov: Tov, metadata: M) -> Self {
         CuStampedData {
             payload,
