@@ -101,6 +101,7 @@ pub struct MmapUnifiedLoggerBuilder {
     write: bool,
     create: bool,
     append: bool,
+    rollover_size: Option<usize>,
 }
 
 impl Default for MmapUnifiedLoggerBuilder {
@@ -117,6 +118,7 @@ impl MmapUnifiedLoggerBuilder {
             write: false,
             create: false, // This is the safest default
             append: false,
+            rollover_size: None,
         }
     }
 
@@ -151,6 +153,15 @@ impl MmapUnifiedLoggerBuilder {
         self
     }
 
+    /// When `write` and `create` are both set, keep the log bounded on disk:
+    /// slabs form a ring of `max(1, size / slab_size)` files and, once the ring
+    /// is full, the oldest slab is overwritten so only the most recent logs are
+    /// retained.
+    pub fn rollover(mut self, size: usize) -> Self {
+        self.rollover_size = Some(size);
+        self
+    }
+
     pub fn build(self) -> io::Result<MmapUnifiedLogger> {
         let page_size = page_size::get();
 
@@ -167,10 +178,14 @@ impl MmapUnifiedLoggerBuilder {
                     "Preallocated size is required for write mode",
                 )
             })?;
+            let max_slabs = match self.rollover_size {
+                Some(size) => (size / preallocated_size).max(1),
+                None => 0,
+            };
             let ulw = if self.append {
-                MmapUnifiedLoggerWrite::append(&file_path, preallocated_size)?
+                MmapUnifiedLoggerWrite::append(&file_path, preallocated_size, max_slabs)?
             } else {
-                MmapUnifiedLoggerWrite::new(&file_path, preallocated_size, page_size)?
+                MmapUnifiedLoggerWrite::new(&file_path, preallocated_size, page_size, max_slabs)?
             };
             Ok(MmapUnifiedLogger::Write(ulw))
         } else {
@@ -191,6 +206,10 @@ struct SlabEntry {
     flushed_until_offset: usize,
     page_size: usize,
     temporary_end_marker: Option<usize>,
+    /// Whether the file is trimmed to its used size on drop. Rollover rings keep
+    /// every slab at its full preallocated size so `slab_size` stays derivable
+    /// from the on-disk geometry; linear logs trim to save space.
+    trim_on_drop: bool,
     #[cfg(test)]
     closed_sections: Vec<(usize, usize)>,
     #[cfg(test)]
@@ -204,7 +223,9 @@ impl Drop for SlabEntry {
         self.flush_until(self.current_global_position);
         // SAFETY: We own the mapping and must drop it before trimming the file.
         unsafe { ManuallyDrop::drop(&mut self.mmap_buffer) };
-        if let Err(error) = self.file.set_len(self.current_global_position as u64) {
+        if self.trim_on_drop
+            && let Err(error) = self.file.set_len(self.current_global_position as u64)
+        {
             eprintln!("Failed to trim datalogger file: {}", error);
         }
         self.sync_file();
@@ -230,6 +251,7 @@ impl SlabEntry {
             flushed_until_offset: 0,
             page_size,
             temporary_end_marker: None,
+            trim_on_drop: true,
             #[cfg(test)]
             closed_sections: Vec::new(),
             #[cfg(test)]
@@ -501,6 +523,12 @@ pub struct MmapUnifiedLoggerWrite {
     slab_size: usize,
     /// current suffix for the backing files.
     front_slab_suffix: usize,
+    /// number of slabs in the rollover ring; 0 means unbounded (no rollover).
+    max_slabs: usize,
+    /// index of the oldest retained slab (the first retained section).
+    head_slab_index: usize,
+    /// byte offset of the first retained section within its slab.
+    head_offset: u64,
 }
 
 fn build_slab_path(base_file_path: &Path, slab_index: usize) -> io::Result<PathBuf> {
@@ -717,17 +745,24 @@ impl UnifiedLogWrite<MmapSectionStorage> for MmapUnifiedLoggerWrite {
 }
 
 impl MmapUnifiedLoggerWrite {
-    fn next_slab(&mut self) -> io::Result<File> {
-        let next_suffix = self.front_slab_suffix + 1;
-        let file = make_slab_file(&self.base_file_path, self.slab_size, next_suffix)?;
-        self.front_slab_suffix = next_suffix;
-        Ok(file)
+    fn next_suffix(&self) -> usize {
+        if self.max_slabs > 0 {
+            (self.front_slab_suffix + 1) % self.max_slabs
+        } else {
+            self.front_slab_suffix + 1
+        }
     }
 
-    fn new(base_file_path: &Path, slab_size: usize, page_size: usize) -> io::Result<Self> {
+    fn new(
+        base_file_path: &Path,
+        slab_size: usize,
+        page_size: usize,
+        max_slabs: usize,
+    ) -> io::Result<Self> {
         let file = make_slab_file(base_file_path, slab_size, 0)?;
         create_base_alias_link(base_file_path)?;
         let mut front_slab = SlabEntry::new(file, page_size)?;
+        front_slab.trim_on_drop = max_slabs == 0;
 
         // This is the first slab so add the main header.
         let main_header = MainHeader {
@@ -735,6 +770,7 @@ impl MmapUnifiedLoggerWrite {
             format_version: UNIFIED_LOG_FORMAT_VERSION,
             first_section_offset: page_size as u16,
             page_size: page_size as u16,
+            head_offset: page_size as u64,
         };
         let nb_bytes = encode_into_slice(&main_header, &mut front_slab.mmap_buffer[..], standard())
             .map_err(|e| io::Error::other(format!("Failed to encode main header: {e}")))?;
@@ -747,6 +783,9 @@ impl MmapUnifiedLoggerWrite {
             base_file_path: base_file_path.to_path_buf(),
             slab_size,
             front_slab_suffix: 0,
+            max_slabs,
+            head_slab_index: 0,
+            head_offset: page_size as u64,
         })
     }
 
@@ -756,14 +795,41 @@ impl MmapUnifiedLoggerWrite {
     /// last slab for writing (re-extending it to `slab_size`, since it is trimmed
     /// on clean shutdown), and positions the cursor right after that marker so new
     /// sections overwrite it. The main header and earlier slabs are left untouched.
-    fn append(base_file_path: &Path, slab_size: usize) -> io::Result<Self> {
+    fn append(base_file_path: &Path, slab_size: usize, max_slabs: usize) -> io::Result<Self> {
         // Locate the end-of-log marker using the read side.
         let mut reader = MmapUnifiedLoggerRead::new(base_file_path)?;
+        let (existing_slab_size, existing_max_slabs) = reader.geometry();
+        // Only rollover rings keep every slab at its full preallocated size, so
+        // the slab size is only derivable (and only needs validating) for a ring.
+        // A linear log trims its last slab on clean shutdown and the requested
+        // preallocated size is simply re-applied on resume.
+        if max_slabs > 0 {
+            if existing_slab_size != slab_size {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        "append(true) slab size mismatch: log has slab_size={existing_slab_size}; requested slab_size={slab_size}"
+                    ),
+                ));
+            }
+            // The ring extent is only derivable from the slab files present on
+            // disk, so a not-yet-wrapped ring reports fewer slabs than requested.
+            // Accept it as long as the on-disk geometry does not exceed the ring.
+            if existing_max_slabs > max_slabs {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        "append(true) ring geometry mismatch: log has {existing_max_slabs} slabs; requested max_slabs={max_slabs}"
+                    ),
+                ));
+            }
+        }
         let end = reader.end_of_log().map_err(io::Error::other)?;
         let last_slab_index = end.slab_index;
         let resume_offset = end.offset;
         // Preserve the original page alignment recorded in the main header.
         let original_page_size = reader.raw_main_header().page_size as usize;
+        let (head_slab_index, head_offset) = reader.head_position();
         drop(reader);
 
         let slab_path = build_slab_path(base_file_path, last_slab_index)?;
@@ -805,6 +871,7 @@ impl MmapUnifiedLoggerWrite {
         }
 
         let mut front_slab = SlabEntry::new(file, original_page_size)?;
+        front_slab.trim_on_drop = max_slabs == 0;
         front_slab.current_global_position = resume_offset;
         front_slab.flushed_until_offset = resume_offset;
 
@@ -814,6 +881,9 @@ impl MmapUnifiedLoggerWrite {
             base_file_path: base_file_path.to_path_buf(),
             slab_size,
             front_slab_suffix: last_slab_index,
+            max_slabs,
+            head_slab_index,
+            head_offset,
         })
     }
 
@@ -844,11 +914,84 @@ impl MmapUnifiedLoggerWrite {
     }
 
     fn create_slab(&mut self) -> CuResult<SlabEntry> {
-        let file = self
-            .next_slab()
+        let next_suffix = self.next_suffix();
+        let wrapping = self.max_slabs > 0 && next_suffix == self.head_slab_index;
+        let file = make_slab_file(&self.base_file_path, self.slab_size, next_suffix)
             .map_err(|e| CuError::new_with_cause("Failed to create slab file", e))?;
-        SlabEntry::new(file, self.front_slab.page_size)
-            .map_err(|e| CuError::new_with_cause("Failed to create slab memory map", e))
+        self.front_slab_suffix = next_suffix;
+
+        if wrapping {
+            // The ring wrapped: the slab being overwritten is the head, so the
+            // head advances to the next slab in the ring.
+            self.head_slab_index = (next_suffix + 1) % self.max_slabs;
+            self.head_offset = if self.head_slab_index == 0 {
+                self.front_slab.page_size as u64
+            } else {
+                0
+            };
+        }
+
+        let mut slab = SlabEntry::new(file, self.front_slab.page_size)
+            .map_err(|e| CuError::new_with_cause("Failed to create slab memory map", e))?;
+        slab.trim_on_drop = self.max_slabs == 0;
+
+        if next_suffix == 0 {
+            // Slab 0 always carries the main header.
+            self.write_main_header(&mut slab)
+                .map_err(|e| CuError::new_with_cause("Failed to write main header", e))?;
+        } else if wrapping {
+            // Wrapped onto a non-zero slab: persist the new head pointer in slab 0.
+            self.persist_head()
+                .map_err(|e| CuError::new_with_cause("Failed to persist head pointer", e))?;
+        }
+
+        Ok(slab)
+    }
+
+    fn page_size(&self) -> usize {
+        self.front_slab.page_size
+    }
+
+    fn absolute_head_offset(&self) -> u64 {
+        (self.head_slab_index as u64) * (self.slab_size as u64) + self.head_offset
+    }
+
+    fn main_header(&self) -> MainHeader {
+        MainHeader {
+            magic: MAIN_MAGIC,
+            format_version: UNIFIED_LOG_FORMAT_VERSION,
+            first_section_offset: self.page_size() as u16,
+            page_size: self.page_size() as u16,
+            head_offset: self.absolute_head_offset(),
+        }
+    }
+
+    fn write_main_header(&self, slab: &mut SlabEntry) -> io::Result<()> {
+        let header = self.main_header();
+        let nb_bytes = encode_into_slice(&header, &mut slab.mmap_buffer[..], standard())
+            .map_err(|e| io::Error::other(format!("Failed to encode main header: {e}")))?;
+        debug_assert!(nb_bytes < self.page_size());
+        slab.current_global_position = self.page_size();
+        Ok(())
+    }
+
+    fn persist_head(&self) -> io::Result<()> {
+        let slab0_path = build_slab_path(&self.base_file_path, 0)?;
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&slab0_path)?;
+        let mut mmap = unsafe { MmapMut::map_mut(&file) }.map_err(|e| {
+            io::Error::new(
+                e.kind(),
+                format!("Failed to map slab 0 for header update: {e}"),
+            )
+        })?;
+        let header = self.main_header();
+        encode_into_slice(&header, &mut mmap[..], standard())
+            .map_err(|e| io::Error::other(format!("Failed to encode main header: {e}")))?;
+        mmap.flush()
+            .map_err(|e| io::Error::new(e.kind(), format!("Failed to flush main header: {e}")))
     }
 }
 
@@ -867,6 +1010,37 @@ impl Drop for MmapUnifiedLoggerWrite {
         #[cfg(debug_assertions)]
         eprintln!("Unified Logger flushed."); // Note this cannot be a structured log writing in this log.
     }
+}
+
+fn discover_slab_geometry(base_file_path: &Path) -> io::Result<(usize, usize)> {
+    let mut slab_size = None;
+    let mut count = 0usize;
+    loop {
+        let path = build_slab_path(base_file_path, count)?;
+        match std::fs::metadata(&path) {
+            Ok(meta) => {
+                let len = meta.len() as usize;
+                if count == 0 {
+                    slab_size = Some(len);
+                }
+                count += 1;
+            }
+            Err(e) if e.kind() == io::ErrorKind::NotFound => break,
+            Err(e) => {
+                return Err(io::Error::new(
+                    e.kind(),
+                    format!("Failed to inspect slab file {}: {e}", path.display()),
+                ));
+            }
+        }
+    }
+    let slab_size = slab_size.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("No slab files found for {}", base_file_path.display()),
+        )
+    })?;
+    Ok((slab_size, count))
 }
 
 fn open_slab_index(
@@ -926,6 +1100,14 @@ pub struct MmapUnifiedLoggerRead {
     current_file: File,
     current_slab_index: usize,
     current_reading_position: usize,
+    max_slabs: usize,
+    slabs_read: usize,
+    /// Slab size derived from slab 0's on-disk file size.
+    slab_size: usize,
+    /// Head slab index derived from the absolute head offset and `slab_size`.
+    head_slab_index: usize,
+    /// Head offset within `head_slab_index`.
+    head_offset_within: u64,
 }
 
 /// Absolute position inside a unified log (slab index + byte offset).
@@ -1029,19 +1211,43 @@ impl MmapUnifiedLoggerRead {
     }
 
     pub fn new(base_file_path: &Path) -> io::Result<Self> {
-        let (file, mmap, prolog, header) = open_slab_index(base_file_path, 0)?;
+        let (_, _, _, header) = open_slab_index(base_file_path, 0)?;
         let main_header = header.ok_or_else(|| {
             io::Error::new(io::ErrorKind::InvalidData, "Missing main header in slab 0")
         })?;
+        let (slab_size, max_slabs) = discover_slab_geometry(base_file_path)?;
+        let head_offset_abs = main_header.head_offset as usize;
+        // The ring geometry is not persisted, so split the absolute head pointer
+        // against the on-disk slab size. For a linear log the head is always in
+        // slab 0 (the persisted offset equals the first-section offset) and the
+        // division yields 0.
+        let head_slab = head_offset_abs / slab_size;
+        let head_offset = head_offset_abs % slab_size;
+        let (file, mmap, _prolog, _) = open_slab_index(base_file_path, head_slab)?;
 
         Ok(Self {
             base_file_path: base_file_path.to_path_buf(),
             main_header,
             current_file: file,
             current_mmap_buffer: mmap,
-            current_slab_index: 0,
-            current_reading_position: prolog as usize,
+            current_slab_index: head_slab,
+            current_reading_position: head_offset,
+            max_slabs,
+            slabs_read: 1,
+            slab_size,
+            head_slab_index: head_slab,
+            head_offset_within: head_offset as u64,
         })
+    }
+
+    /// Derived slab geometry: `(slab_size, ring_extent)`.
+    pub fn geometry(&self) -> (usize, usize) {
+        (self.slab_size, self.max_slabs)
+    }
+
+    /// Derived head position: `(slab_index, offset_within_slab)`.
+    pub fn head_position(&self) -> (usize, u64) {
+        (self.head_slab_index, self.head_offset_within)
     }
 
     /// Current cursor position (start of next section header).
@@ -1067,16 +1273,34 @@ impl MmapUnifiedLoggerRead {
             self.current_slab_index = pos.slab_index;
         }
         self.current_reading_position = pos.offset;
+        // Count the destination's distance from the head, so rereading a slab
+        // does not consume the traversal limit a second time.
+        self.slabs_read = if pos.slab_index >= self.head_slab_index {
+            pos.slab_index - self.head_slab_index + 1
+        } else {
+            self.max_slabs - self.head_slab_index + pos.slab_index + 1
+        };
         Ok(())
     }
 
     fn next_slab(&mut self) -> io::Result<()> {
-        self.current_slab_index += 1;
+        if self.max_slabs > 0 && self.slabs_read >= self.max_slabs {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Reached the start of the ring without finding the end-of-log marker",
+            ));
+        }
+        self.current_slab_index = if self.max_slabs > 0 {
+            (self.current_slab_index + 1) % self.max_slabs
+        } else {
+            self.current_slab_index + 1
+        };
         let (file, mmap, prolog, _) =
             open_slab_index(&self.base_file_path, self.current_slab_index)?;
         self.current_file = file;
         self.current_mmap_buffer = mmap;
         self.current_reading_position = prolog as usize;
+        self.slabs_read += 1;
         Ok(())
     }
 
@@ -1910,5 +2134,165 @@ mod tests {
             }
         }
         assert_eq!(total_readback, 10000);
+    }
+
+    #[test]
+    fn test_seek_and_reread_across_slab_boundaries() {
+        for max_slabs in [0, 3] {
+            let tmp_dir = TempDir::new().unwrap();
+            let file_path = tmp_dir.path().join("seek.bin");
+            let page_size = page_size::get();
+            {
+                let mut writer =
+                    MmapUnifiedLoggerWrite::new(&file_path, 4 * page_size, page_size, max_slabs)
+                        .unwrap();
+                for _ in 0..24 {
+                    let mut section = writer
+                        .add_section(UnifiedLogType::CopperList, page_size)
+                        .unwrap();
+                    writer.flush_section(&mut section);
+                }
+            }
+
+            let mut reader = MmapUnifiedLoggerRead::new(&file_path).unwrap();
+            let beginning = reader.position();
+            let mut expected = 0;
+            while reader.raw_skip_section().unwrap().entry_type != UnifiedLogType::LastEntry {
+                expected += 1;
+            }
+            assert!(expected > 0);
+            if max_slabs == 0 {
+                assert_eq!(expected, 24);
+            } else {
+                assert!(expected < 24);
+                assert_ne!(beginning.slab_index, 0);
+            }
+
+            // Run discovery skips headers, then seeks back to decode selected sections.
+            // A saved position can be at the end of the preceding slab.
+            for _ in 0..2 {
+                reader.seek(beginning).unwrap();
+                let mut actual = 0;
+                loop {
+                    let position = reader.position();
+                    let header = reader.raw_skip_section().unwrap();
+                    if header.entry_type == UnifiedLogType::LastEntry {
+                        break;
+                    }
+                    reader.seek(position).unwrap();
+                    let (reread, _) = reader.raw_read_section().unwrap();
+                    assert_eq!(reread.entry_type, header.entry_type);
+                    actual += 1;
+                }
+                assert_eq!(actual, expected);
+            }
+        }
+    }
+
+    #[test]
+    fn test_rollover_keeps_only_last_slabs() {
+        let tmp_dir = TempDir::new().expect("could not create a tmp dir");
+        let file_path = tmp_dir.path().join("test.bin");
+        // Ring of 2 slabs.
+        let rollover_size = SMALL_SLAB * 2;
+        {
+            let MmapUnifiedLogger::Write(logger) = MmapUnifiedLoggerBuilder::new()
+                .write(true)
+                .create(true)
+                .file_base_name(&file_path)
+                .preallocated_size(SMALL_SLAB)
+                .rollover(rollover_size)
+                .build()
+                .expect("Failed to create logger")
+            else {
+                panic!("Failed to create logger")
+            };
+            let logger = Arc::new(Mutex::new(logger));
+            {
+                let mut stream =
+                    stream_write(logger.clone(), UnifiedLogType::CopperList, 1024).unwrap();
+                let cl0 = CopperList {
+                    state: CopperListStateMock::Free,
+                    payload: (1u32, 2u32, 3u32),
+                };
+                // Enough entries to span many slabs and wrap the ring.
+                for _ in 0..10000 {
+                    stream.log(&cl0).unwrap();
+                }
+            }
+        } // logger drops -> clean close
+
+        // The ring must not have grown past max_slabs (2) files.
+        assert!(build_slab_path(&file_path, 0).unwrap().exists());
+        assert!(build_slab_path(&file_path, 1).unwrap().exists());
+        assert!(!build_slab_path(&file_path, 2).unwrap().exists());
+
+        let MmapUnifiedLogger::Read(mut dl) = MmapUnifiedLoggerBuilder::new()
+            .file_base_name(&file_path)
+            .build()
+            .expect("Failed to build reader")
+        else {
+            panic!("Failed to build reader")
+        };
+
+        let mut total_readback = 0;
+        loop {
+            let section = dl.read_next_section_type(UnifiedLogType::CopperList);
+            if section.is_err() {
+                break;
+            }
+            let section = section.unwrap();
+            if section.is_none() {
+                break;
+            }
+            let section = section.unwrap();
+            let mut reader = SliceReader::new(&section[..]);
+            loop {
+                let maybe_cl: Result<CopperList<(u32, u32, u32)>, _> =
+                    decode_from_reader(&mut reader, standard());
+                if maybe_cl.is_ok() {
+                    total_readback += 1;
+                } else {
+                    break;
+                }
+            }
+        }
+        // Rollover must have dropped the oldest entries, but retained some.
+        assert!(total_readback > 0);
+        assert!(total_readback < 10000);
+    }
+
+    #[test]
+    fn test_append_rollover_geometry_mismatch_fails() {
+        let tmp_dir = TempDir::new().expect("could not create a tmp dir");
+        let file_path = tmp_dir.path().join("test.bin");
+        {
+            let MmapUnifiedLogger::Write(_logger) = MmapUnifiedLoggerBuilder::new()
+                .write(true)
+                .create(true)
+                .file_base_name(&file_path)
+                .preallocated_size(SMALL_SLAB)
+                .rollover(SMALL_SLAB * 2)
+                .build()
+                .expect("Failed to create logger")
+            else {
+                panic!("Failed to create logger")
+            };
+        }
+
+        // Append with a different slab size must fail loudly (geometry mismatch).
+        let err = match MmapUnifiedLoggerBuilder::new()
+            .write(true)
+            .create(true)
+            .append(true)
+            .file_base_name(&file_path)
+            .preallocated_size(LARGE_SLAB)
+            .rollover(LARGE_SLAB * 2)
+            .build()
+        {
+            Ok(_) => panic!("append(true) should have failed on geometry mismatch"),
+            Err(e) => e,
+        };
+        assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
     }
 }
