@@ -50,8 +50,10 @@ pub const SECTION_MAGIC: [u8; 2] = [0xFA, 0x57]; // FAST
 /// to CopperLists, payload types, keyframes, or their serialization must not bump
 /// this value. Decode content with the logreader built for the exact application
 /// version that produced it; this header cannot establish content compatibility.
-/// The encapsulation remains version 1, unchanged since Copper's original format.
-pub const UNIFIED_LOG_FORMAT_VERSION: u8 = 1;
+/// Version 2 adds rollover support: the main header now carries the absolute
+/// head pointer (first retained section). Older readers reject this version and
+/// this reader rejects older versions.
+pub const UNIFIED_LOG_FORMAT_VERSION: u8 = 2;
 
 pub const SECTION_HEADER_COMPACT_SIZE: u16 = 512; // Usual minimum size for a disk sector.
 
@@ -65,6 +67,13 @@ pub struct MainHeader {
     pub format_version: u8,
     pub first_section_offset: u16, // This is to align with a page at write time.
     pub page_size: u16,
+    /// Absolute byte offset of the first retained section over the whole log.
+    /// For the slab-based (std) backend this is `head_slab_index * slab_size +
+    /// offset_within_slab`, where `slab_size` and the ring extent are derived from
+    /// the slab files present on disk (the ring is not persisted). For
+    /// block-device (no_std) backends it is the absolute byte offset over the
+    /// block device. Always a section boundary, never the middle of a section.
+    pub head_offset: u64,
 }
 
 impl Display for MainHeader {
@@ -76,7 +85,8 @@ impl Display for MainHeader {
         )?;
         writeln!(f, "  format_version -> {}", self.format_version)?;
         writeln!(f, "  first_section_offset -> {}", self.first_section_offset)?;
-        writeln!(f, "  page_size -> {}", self.page_size)
+        writeln!(f, "  page_size -> {}", self.page_size)?;
+        writeln!(f, "  head_offset -> {}", self.head_offset)
     }
 }
 

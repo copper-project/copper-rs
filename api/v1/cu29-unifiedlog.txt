@@ -27,12 +27,15 @@ pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::create(self, create: b
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::file_base_name(self, file_path: &std::path::Path) -> Self
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::new() -> Self
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::preallocated_size(self, preallocated_size: usize) -> Self
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::rollover(self, size: usize) -> Self
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::write(self, write: bool) -> Self
 impl core::default::Default for cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::default() -> Self
 pub struct cu29_unifiedlog::memmap::MmapUnifiedLoggerRead
 impl cu29_unifiedlog::memmap::MmapUnifiedLoggerRead
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::end_of_log(&mut self) -> cu29_traits::CuResult<cu29_unifiedlog::memmap::LogPosition>
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::geometry(&self) -> (usize, usize)
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::head_position(&self) -> (usize, u64)
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::new(base_file_path: &std::path::Path) -> std::io::error::Result<Self>
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::position(&self) -> cu29_unifiedlog::memmap::LogPosition
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::raw_main_header(&self) -> &cu29_unifiedlog::MainHeader
@@ -104,6 +107,7 @@ pub fn cu29_unifiedlog::LogStream<S, L>::drop(&mut self)
 pub struct cu29_unifiedlog::MainHeader
 pub cu29_unifiedlog::MainHeader::first_section_offset: u16
 pub cu29_unifiedlog::MainHeader::format_version: u8
+pub cu29_unifiedlog::MainHeader::head_offset: u64
 pub cu29_unifiedlog::MainHeader::magic: [u8; 4]
 pub cu29_unifiedlog::MainHeader::page_size: u16
 impl core::fmt::Display for cu29_unifiedlog::MainHeader
@@ -167,6 +171,7 @@ pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::create(self, create: b
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::file_base_name(self, file_path: &std::path::Path) -> Self
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::new() -> Self
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::preallocated_size(self, preallocated_size: usize) -> Self
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::rollover(self, size: usize) -> Self
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::write(self, write: bool) -> Self
 impl core::default::Default for cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::default() -> Self
@@ -178,6 +183,8 @@ pub fn cu29_unifiedlog::memmap::UnifiedLoggerIOReader::read(&mut self, buf: &mut
 pub struct cu29_unifiedlog::UnifiedLoggerRead
 impl cu29_unifiedlog::memmap::MmapUnifiedLoggerRead
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::end_of_log(&mut self) -> cu29_traits::CuResult<cu29_unifiedlog::memmap::LogPosition>
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::geometry(&self) -> (usize, usize)
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::head_position(&self) -> (usize, u64)
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::new(base_file_path: &std::path::Path) -> std::io::error::Result<Self>
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::position(&self) -> cu29_unifiedlog::memmap::LogPosition
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::raw_main_header(&self) -> &cu29_unifiedlog::MainHeader
