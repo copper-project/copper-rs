@@ -89,6 +89,34 @@ pub enum TraceEntry {
 
 static TRACE_LOG: LazyLock<Mutex<Vec<TraceEntry>>> = LazyLock::new(|| Mutex::new(Vec::new()));
 
+pub struct ShutdownMonitor;
+
+impl CuMonitor for ShutdownMonitor {
+    fn new(
+        _metadata: cu29::monitoring::CuMonitoringMetadata,
+        _runtime: cu29::monitoring::CuMonitoringRuntime,
+    ) -> CuResult<Self> {
+        Ok(Self)
+    }
+
+    fn process_copperlist(
+        &self,
+        _ctx: &CuContext,
+        _view: cu29::monitoring::CopperListView<'_>,
+    ) -> CuResult<()> {
+        Ok(())
+    }
+
+    fn process_error(
+        &self,
+        _component_id: cu29::monitoring::ComponentId,
+        _step: CuComponentState,
+        _error: &CuError,
+    ) -> Decision {
+        Decision::Shutdown
+    }
+}
+
 fn record_trace(entry: TraceEntry) {
     TRACE_LOG.lock().unwrap().push(entry);
 }
@@ -205,6 +233,7 @@ pub mod tasks {
     pub struct SequenceSrc {
         source_id: u8,
         emit_limit: u32,
+        fail_after_emit: bool,
         busy_spin_iters: u64,
         compute_rounds: u32,
         #[reflect(ignore)]
@@ -225,6 +254,7 @@ pub mod tasks {
             Ok(Self {
                 source_id: param_u8(config, "source_id", 1)?,
                 emit_limit: param_u32(config, "emit_limit", DEFAULT_EMIT_LIMIT as u32)?,
+                fail_after_emit: param_u64(config, "fail_after_emit", 0)? != 0,
                 busy_spin_iters: param_u64(config, "busy_spin_iters", 0)?,
                 compute_rounds: param_u32(config, "compute_rounds", DEFAULT_COMPUTE_ROUNDS)?,
                 scratch: init_compute_scratch(
@@ -239,6 +269,9 @@ pub mod tasks {
             let now = ctx.now();
             stamp_now(&mut output.metadata, now);
             if self.next_seq >= self.emit_limit {
+                if self.fail_after_emit {
+                    return Err(CuError::from("intentional runtime matrix source failure"));
+                }
                 output.clear_payload();
                 return Ok(());
             }
@@ -1066,6 +1099,20 @@ impl MissionApp {
             MissionApp::ManyToManyBackground(app) => app.stop_all_tasks(),
             MissionApp::BridgeFanout(app) => app.stop_all_tasks(),
             MissionApp::BridgeFanoutBackground(app) => app.stop_all_tasks(),
+        }
+    }
+
+    #[cfg(test)]
+    fn run(&mut self) -> CuResult<()> {
+        match self {
+            MissionApp::OneToMany(app) => app.run(),
+            MissionApp::OneToManyBackground(app) => app.run(),
+            MissionApp::ManyToOne(app) => app.run(),
+            MissionApp::ManyToOneBackground(app) => app.run(),
+            MissionApp::ManyToMany(app) => app.run(),
+            MissionApp::ManyToManyBackground(app) => app.run(),
+            MissionApp::BridgeFanout(app) => app.run(),
+            MissionApp::BridgeFanoutBackground(app) => app.run(),
         }
     }
 }
@@ -1975,6 +2022,66 @@ mod tests {
                 mission
             );
         }
+    }
+
+    #[test]
+    fn run_stops_on_task_error_without_publishing_partial_copperlists() {
+        const COMPLETED_LISTS: u64 = 12;
+
+        let _guard = TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        let mission = MissionArg::OneToMany;
+        let log_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("logs");
+        std::fs::create_dir_all(&log_dir).expect("create runtime matrix log directory");
+        let tmp_dir = tempfile::TempDir::new_in(log_dir).expect("create temporary log directory");
+        let log_path = tmp_dir.path().join("pipeline-error.copper");
+        let (clock, _) = RobotClock::mock();
+        let mut config = load_runtime_matrix_config().expect("load runtime matrix config");
+        configure_runtime_matrix(
+            &mut config,
+            COMPLETED_LISTS,
+            0,
+            TEST_COMPUTE_WORDS,
+            TEST_COMPUTE_ROUNDS,
+            true,
+        )
+        .expect("configure runtime matrix");
+        let graph = config
+            .get_graph_mut(Some(mission.as_str()))
+            .expect("OneToMany graph");
+        let source = graph
+            .node_indices()
+            .into_iter()
+            .map(|index| u32::try_from(index.index()).expect("node index should fit in u32"))
+            .find(|node_id| graph.get_node(*node_id).unwrap().get_id() == "otm_src")
+            .expect("OneToMany source");
+        graph
+            .get_node_mut(source)
+            .expect("OneToMany source")
+            .set_param("fail_after_emit", 1_u64);
+
+        let mut app = build_mission_app(mission, clock, &log_path, 0, config)
+            .expect("build runtime matrix app");
+        let error = app.run().expect_err("source should terminate the run");
+        assert!(
+            error
+                .to_string()
+                .contains("intentional runtime matrix source failure"),
+            "unexpected run error: {error}"
+        );
+        drop(app);
+
+        let copperlists =
+            read_mission_copperlists(mission, &log_path).expect("read committed CopperLists");
+        assert_eq!(copperlists.len(), COMPLETED_LISTS as usize);
+        assert_eq!(
+            copperlists
+                .iter()
+                .map(|copperlist| copperlist.id)
+                .collect::<Vec<_>>(),
+            (0..COMPLETED_LISTS).collect::<Vec<_>>()
+        );
     }
 
     /// Thread pool affinity/policy are performance-only knobs: changing them

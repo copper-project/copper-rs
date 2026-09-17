@@ -1,4 +1,13 @@
 (
+    includes: [
+        (
+            path: "pipeline.ron",
+            when: Feature(
+                "parallel-rt",
+            ),
+        ),
+        (path: "runtime.ron"),
+    ],
     missions: [
         (id: "OneToMany"),
         (id: "OneToManyBackground"),
@@ -19,15 +28,7 @@
         section_size_mib: 4,
         keyframe_interval: 2,
     ),
-    runtime: (
-        thread_pools: [
-            (
-                id: "background",
-                threads: 2,
-            ),
-            (id: "rt", threads: 1),
-        ],
-    ),
+    monitor: (type: "ShutdownMonitor"),
     tasks: [
         (
             id: "otm_src",

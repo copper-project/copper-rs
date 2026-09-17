@@ -40,7 +40,7 @@ parallel:
   #!/usr/bin/env bash
   set -euo pipefail
   cd "{{ROOT}}"
-  cargo build -p cu-parallel-mandelbrot --bin cu-parallel-mandelbrot --release --features 'cu29/parallel-rt'
+  cargo build -p cu-parallel-mandelbrot --bin cu-parallel-mandelbrot --release --features 'parallel-rt'
   start="$(python3 -c 'import time; print(time.perf_counter())')"
   set +e
   "{{ROOT}}/target/release/cu-parallel-mandelbrot"
@@ -55,7 +55,7 @@ parallel-fsync:
   #!/usr/bin/env bash
   set -euo pipefail
   cd "{{ROOT}}"
-  cargo build -p cu-parallel-mandelbrot --bin cu-parallel-mandelbrot --release --features 'cu29/parallel-rt mmap-fsync'
+  cargo build -p cu-parallel-mandelbrot --bin cu-parallel-mandelbrot --release --features 'parallel-rt mmap-fsync'
   start="$(python3 -c 'import time; print(time.perf_counter())')"
   set +e
   "{{ROOT}}/target/release/cu-parallel-mandelbrot"
@@ -70,7 +70,7 @@ monitor-parallel:
   #!/usr/bin/env bash
   set -euo pipefail
   cd "{{ROOT}}"
-  cargo build -p cu-parallel-mandelbrot --bin cu-parallel-mandelbrot --release --features 'cu29/parallel-rt'
+  cargo build -p cu-parallel-mandelbrot --bin cu-parallel-mandelbrot --release --features 'parallel-rt'
   "{{ROOT}}/target/release/cu-parallel-mandelbrot"
 
 # Run the parallel+fsync release binary in the foreground so the TUI monitor stays interactive.
@@ -78,7 +78,7 @@ monitor-parallel-fsync:
   #!/usr/bin/env bash
   set -euo pipefail
   cd "{{ROOT}}"
-  cargo build -p cu-parallel-mandelbrot --bin cu-parallel-mandelbrot --release --features 'cu29/parallel-rt mmap-fsync'
+  cargo build -p cu-parallel-mandelbrot --bin cu-parallel-mandelbrot --release --features 'parallel-rt mmap-fsync'
   "{{ROOT}}/target/release/cu-parallel-mandelbrot"
 
 # Run the live viewer mission without parallel-rt from the compiled release binary.
@@ -101,7 +101,7 @@ viewer-parallel:
   #!/usr/bin/env bash
   set -euo pipefail
   cd "{{ROOT}}"
-  cargo build -p cu-parallel-mandelbrot --bin cu-parallel-mandelbrot-viewer --release --features 'cu29/parallel-rt'
+  cargo build -p cu-parallel-mandelbrot --bin cu-parallel-mandelbrot-viewer --release --features 'parallel-rt'
   start="$(python3 -c 'import time; print(time.perf_counter())')"
   set +e
   "{{ROOT}}/target/release/cu-parallel-mandelbrot-viewer"

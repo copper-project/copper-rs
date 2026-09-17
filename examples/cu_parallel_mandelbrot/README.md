@@ -1,6 +1,6 @@
 # cu-parallel-mandelbrot
 
-This example is a synthetic Copper graph built to expose `parallel-rt` behavior on a deterministic, stateful, compute-bound workload.
+This example is a synthetic Copper graph built to exercise `PlannerKind::Pipeline` on a deterministic, stateful, compute-bound workload. The `parallel-rt` feature enables the executor, while the feature-gated `pipeline.ron` selects it.
 
 It is not pretending Mandelbrot is a robotics task. The point is to isolate scheduler behavior from device IO, clocks, driver jitter, and transport noise while still exercising the same runtime property that matters in robot graphs: stateful stages must stay deterministic even when multiple CopperLists are in flight.
 
@@ -40,6 +40,7 @@ The most important knobs for packing more CPU are:
 - the number of `band_*` tasks
 - the work assigned to each band
 - `logging.copperlist_count`
+- `runtime.planner.config.max_in_flight` in `pipeline.ron`
 - the source `pool_slots`
 
 Those values need to move together. More in-flight CopperLists without a wider graph just creates idle workers. More graph stages without enough in-flight CopperLists leaves the pipeline empty.
