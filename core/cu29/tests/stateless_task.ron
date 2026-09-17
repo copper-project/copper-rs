@@ -18,7 +18,15 @@
         (id: "sink", type: "Sink"),
     ],
     cnx: [
-        (src: "src", dst: "double", msg: "u32"),
-        (src: "double", dst: "sink", msg: "u32"),
+        (
+            src: "src",
+            dst: "double",
+            msg: "u32",
+        ),
+        (
+            src: "double",
+            dst: "sink",
+            msg: "u32",
+        ),
     ],
 )
