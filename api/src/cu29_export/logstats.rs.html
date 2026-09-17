@@ -3,7 +3,7 @@
 <a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>cu29::config::{CuConfig, CuGraph, DEFAULT_MISSION_ID, Flavor};
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>cu29::curuntime::{CuExecutionUnit, CuStepPhase};
 <a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>cu29::monitoring::CuDurationStatistics;
-<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>cu29::planner::{PlanEntityKind, assemble_runtime_plan, assemble_runtime_plan_from_step_keys};
+<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>cu29::planner::{PlanEntityKind, assemble_runtime_plan};
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>cu29::prelude::{CopperListTuple, CuMsgMetadataTrait, CuPayloadRawBytes};
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>cu29::{CuError, CuResult};
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>serde::{Deserialize, Serialize};
@@ -308,7 +308,7 @@
 <a href=#308 id=308 data-nosnippet>308</a>{
 <a href=#309 id=309 data-nosnippet>309</a>    <span class="kw">let </span>graph = config.get_graph(mission)<span class="question-mark">?</span>;
 <a href=#310 id=310 data-nosnippet>310</a>    <span class="kw">let </span>signature = build_graph_signature(graph, mission);
-<a href=#311 id=311 data-nosnippet>311</a>    <span class="kw">let </span>output_slots = build_output_slots::&lt;P&gt;(config, graph, mission).map_err(|e| {
+<a href=#311 id=311 data-nosnippet>311</a>    <span class="kw">let </span>output_slots = build_output_slots::&lt;P&gt;(config, graph).map_err(|e| {
 <a href=#312 id=312 data-nosnippet>312</a>        CuError::from(<span class="macro">format!</span>(
 <a href=#313 id=313 data-nosnippet>313</a>            <span class="string">"mission '{}': {e}"</span>,
 <a href=#314 id=314 data-nosnippet>314</a>            mission.unwrap_or(DEFAULT_MISSION_ID)
@@ -647,409 +647,400 @@
 <a href=#647 id=647 data-nosnippet>647</a><span class="kw">fn </span>build_output_slots&lt;P: CopperListTuple&gt;(
 <a href=#648 id=648 data-nosnippet>648</a>    config: <span class="kw-2">&amp;</span>CuConfig,
 <a href=#649 id=649 data-nosnippet>649</a>    graph: <span class="kw-2">&amp;</span>CuGraph,
-<a href=#650 id=650 data-nosnippet>650</a>    mission: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;,
-<a href=#651 id=651 data-nosnippet>651</a>) -&gt; CuResult&lt;Vec&lt;OutputSlot&gt;&gt; {
-<a href=#652 id=652 data-nosnippet>652</a>    <span class="kw">let </span>specs = P::get_output_specs();
-<a href=#653 id=653 data-nosnippet>653</a>    <span class="kw">if </span>specs.is_empty() {
-<a href=#654 id=654 data-nosnippet>654</a>        <span class="kw">let </span>resolved = config.planner_resolved_order(mission.unwrap_or(DEFAULT_MISSION_ID));
-<a href=#655 id=655 data-nosnippet>655</a>        <span class="kw">return </span>build_output_slots_from_plan(config, graph, resolved);
-<a href=#656 id=656 data-nosnippet>656</a>    }
-<a href=#657 id=657 data-nosnippet>657</a>    <span class="prelude-val">Ok</span>(specs
-<a href=#658 id=658 data-nosnippet>658</a>        .iter()
-<a href=#659 id=659 data-nosnippet>659</a>        .map(|spec| OutputSlot {
-<a href=#660 id=660 data-nosnippet>660</a>            edges: graph
-<a href=#661 id=661 data-nosnippet>661</a>                .edges()
-<a href=#662 id=662 data-nosnippet>662</a>                .filter(|edge| edge.msg == spec.msg_type &amp;&amp; edge_matches_origin(edge, spec.task_id))
-<a href=#663 id=663 data-nosnippet>663</a>                .map(edge_key_from_connection)
-<a href=#664 id=664 data-nosnippet>664</a>                .collect(),
-<a href=#665 id=665 data-nosnippet>665</a>        })
-<a href=#666 id=666 data-nosnippet>666</a>        .collect())
-<a href=#667 id=667 data-nosnippet>667</a>}
-<a href=#668 id=668 data-nosnippet>668</a>
-<a href=#669 id=669 data-nosnippet>669</a><span class="kw">fn </span>edge_matches_origin(edge: <span class="kw-2">&amp;</span>cu29::config::Cnx, origin: <span class="kw-2">&amp;</span>str) -&gt; bool {
-<a href=#670 id=670 data-nosnippet>670</a>    <span class="kw">if </span>edge.src == origin {
-<a href=#671 id=671 data-nosnippet>671</a>        <span class="kw">return </span><span class="bool-val">true</span>;
-<a href=#672 id=672 data-nosnippet>672</a>    }
-<a href=#673 id=673 data-nosnippet>673</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(rest) = origin.strip_prefix(<span class="string">"bridge::"</span>) <span class="kw">else </span>{
-<a href=#674 id=674 data-nosnippet>674</a>        <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#675 id=675 data-nosnippet>675</a>    };
-<a href=#676 id=676 data-nosnippet>676</a>    <span class="kw">let </span><span class="kw-2">mut </span>parts = rest.split(<span class="string">"::"</span>);
-<a href=#677 id=677 data-nosnippet>677</a>    <span class="kw">let </span>(<span class="prelude-val">Some</span>(bridge), <span class="prelude-val">Some</span>(direction), <span class="prelude-val">Some</span>(channel), <span class="prelude-val">None</span>) =
-<a href=#678 id=678 data-nosnippet>678</a>        (parts.next(), parts.next(), parts.next(), parts.next())
-<a href=#679 id=679 data-nosnippet>679</a>    <span class="kw">else </span>{
-<a href=#680 id=680 data-nosnippet>680</a>        <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#681 id=681 data-nosnippet>681</a>    };
-<a href=#682 id=682 data-nosnippet>682</a>    direction == <span class="string">"rx" </span>&amp;&amp; edge.src == bridge &amp;&amp; edge.src_channel.as_deref() == <span class="prelude-val">Some</span>(channel)
-<a href=#683 id=683 data-nosnippet>683</a>}
-<a href=#684 id=684 data-nosnippet>684</a>
-<a href=#685 id=685 data-nosnippet>685</a><span class="kw">fn </span>edge_key_from_connection(cnx: <span class="kw-2">&amp;</span>cu29::config::Cnx) -&gt; EdgeKey {
-<a href=#686 id=686 data-nosnippet>686</a>    EdgeKey {
-<a href=#687 id=687 data-nosnippet>687</a>        src: cnx.src.clone(),
-<a href=#688 id=688 data-nosnippet>688</a>        src_channel: cnx.src_channel.clone(),
-<a href=#689 id=689 data-nosnippet>689</a>        dst: cnx.dst.clone(),
-<a href=#690 id=690 data-nosnippet>690</a>        dst_channel: cnx.dst_channel.clone(),
-<a href=#691 id=691 data-nosnippet>691</a>        msg: cnx.msg.clone(),
-<a href=#692 id=692 data-nosnippet>692</a>    }
-<a href=#693 id=693 data-nosnippet>693</a>}
-<a href=#694 id=694 data-nosnippet>694</a>
-<a href=#695 id=695 data-nosnippet>695</a><span class="doccomment">/// Recover the culist slot layout from the config alone, for logs whose payload
-<a href=#696 id=696 data-nosnippet>696</a>/// type carries no output specs. Each slot lists the graph edges feeding it.
-<a href=#697 id=697 data-nosnippet>697</a></span><span class="kw">fn </span>build_output_slots_from_plan(
-<a href=#698 id=698 data-nosnippet>698</a>    config: <span class="kw-2">&amp;</span>CuConfig,
-<a href=#699 id=699 data-nosnippet>699</a>    graph: <span class="kw-2">&amp;</span>CuGraph,
-<a href=#700 id=700 data-nosnippet>700</a>    resolved: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>[String]&gt;,
-<a href=#701 id=701 data-nosnippet>701</a>) -&gt; CuResult&lt;Vec&lt;OutputSlot&gt;&gt; {
-<a href=#702 id=702 data-nosnippet>702</a>    <span class="comment">// Share the generated-runtime construction path (bridge stages, slot
-<a href=#703 id=703 data-nosnippet>703</a>    // indices) so this cannot drift from the compiled plan.
-<a href=#704 id=704 data-nosnippet>704</a>    </span><span class="kw">let </span>plan = <span class="kw">match </span>resolved {
-<a href=#705 id=705 data-nosnippet>705</a>        <span class="prelude-val">Some</span>(step_keys) =&gt; assemble_runtime_plan_from_step_keys(config, graph, step_keys)<span class="question-mark">?</span>,
-<a href=#706 id=706 data-nosnippet>706</a>        <span class="prelude-val">None </span>=&gt; assemble_runtime_plan(config, graph)<span class="question-mark">?</span>,
-<a href=#707 id=707 data-nosnippet>707</a>    };
-<a href=#708 id=708 data-nosnippet>708</a>
-<a href=#709 id=709 data-nosnippet>709</a>    <span class="kw">let </span><span class="kw-2">mut </span>packs: Vec&lt;(u32, String, Vec&lt;String&gt;)&gt; = Vec::new();
-<a href=#710 id=710 data-nosnippet>710</a>    <span class="kw">for </span>unit <span class="kw">in </span><span class="kw-2">&amp;</span>plan.execution.steps {
-<a href=#711 id=711 data-nosnippet>711</a>        <span class="kw">let </span>CuExecutionUnit::Step(step) = unit <span class="kw">else </span>{
-<a href=#712 id=712 data-nosnippet>712</a>            <span class="kw">continue</span>;
-<a href=#713 id=713 data-nosnippet>713</a>        };
-<a href=#714 id=714 data-nosnippet>714</a>        <span class="comment">// Anytime refine steps reuse their base step's culist slot; counting
-<a href=#715 id=715 data-nosnippet>715</a>        // them would emit duplicate slots and misalign every later slot.
-<a href=#716 id=716 data-nosnippet>716</a>        </span><span class="kw">if </span>step.phase == CuStepPhase::AnytimeRefine {
-<a href=#717 id=717 data-nosnippet>717</a>            <span class="kw">continue</span>;
-<a href=#718 id=718 data-nosnippet>718</a>        }
-<a href=#719 id=719 data-nosnippet>719</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(output_pack) = <span class="kw-2">&amp;</span>step.output_msg_pack <span class="kw">else </span>{
-<a href=#720 id=720 data-nosnippet>720</a>            <span class="kw">continue</span>;
-<a href=#721 id=721 data-nosnippet>721</a>        };
-<a href=#722 id=722 data-nosnippet>722</a>        <span class="kw">let </span>entity = <span class="kw-2">&amp;</span>plan.entities[step.node_id <span class="kw">as </span>usize];
-<a href=#723 id=723 data-nosnippet>723</a>        <span class="kw">let </span>origin = <span class="kw">match </span>entity.kind {
-<a href=#724 id=724 data-nosnippet>724</a>            PlanEntityKind::Task { .. } =&gt; entity.label.clone(),
-<a href=#725 id=725 data-nosnippet>725</a>            PlanEntityKind::BridgeRx { .. } | PlanEntityKind::BridgeTx { .. } =&gt; {
-<a href=#726 id=726 data-nosnippet>726</a>                <span class="macro">format!</span>(<span class="string">"bridge::{}"</span>, entity.label)
-<a href=#727 id=727 data-nosnippet>727</a>            }
-<a href=#728 id=728 data-nosnippet>728</a>        };
-<a href=#729 id=729 data-nosnippet>729</a>        packs.push((
-<a href=#730 id=730 data-nosnippet>730</a>            output_pack.culist_index,
-<a href=#731 id=731 data-nosnippet>731</a>            origin,
-<a href=#732 id=732 data-nosnippet>732</a>            output_pack.msg_types.clone(),
-<a href=#733 id=733 data-nosnippet>733</a>        ));
-<a href=#734 id=734 data-nosnippet>734</a>    }
-<a href=#735 id=735 data-nosnippet>735</a>
-<a href=#736 id=736 data-nosnippet>736</a>    packs.sort_by_key(|(culist_index, <span class="kw">_</span>, <span class="kw">_</span>)| <span class="kw-2">*</span>culist_index);
-<a href=#737 id=737 data-nosnippet>737</a>    <span class="prelude-val">Ok</span>(packs
-<a href=#738 id=738 data-nosnippet>738</a>        .into_iter()
-<a href=#739 id=739 data-nosnippet>739</a>        .flat_map(|(<span class="kw">_</span>, origin, msg_types)| {
-<a href=#740 id=740 data-nosnippet>740</a>            msg_types.into_iter().map(<span class="kw">move </span>|msg| OutputSlot {
-<a href=#741 id=741 data-nosnippet>741</a>                edges: graph
-<a href=#742 id=742 data-nosnippet>742</a>                    .edges()
-<a href=#743 id=743 data-nosnippet>743</a>                    .filter(|edge| edge.msg == msg &amp;&amp; edge_matches_origin(edge, <span class="kw-2">&amp;</span>origin))
-<a href=#744 id=744 data-nosnippet>744</a>                    .map(edge_key_from_connection)
-<a href=#745 id=745 data-nosnippet>745</a>                    .collect(),
-<a href=#746 id=746 data-nosnippet>746</a>            })
-<a href=#747 id=747 data-nosnippet>747</a>        })
-<a href=#748 id=748 data-nosnippet>748</a>        .collect())
-<a href=#749 id=749 data-nosnippet>749</a>}
-<a href=#750 id=750 data-nosnippet>750</a>
-<a href=#751 id=751 data-nosnippet>751</a><span class="kw">fn </span>build_edge_accumulators(graph: <span class="kw-2">&amp;</span>CuGraph) -&gt; HashMap&lt;EdgeKey, EdgeAccumulator&gt; {
-<a href=#752 id=752 data-nosnippet>752</a>    <span class="kw">let </span><span class="kw-2">mut </span>acc = HashMap::new();
-<a href=#753 id=753 data-nosnippet>753</a>    <span class="kw">for </span>cnx <span class="kw">in </span>graph.edges() {
-<a href=#754 id=754 data-nosnippet>754</a>        <span class="kw">let </span>key = EdgeKey {
-<a href=#755 id=755 data-nosnippet>755</a>            src: cnx.src.clone(),
-<a href=#756 id=756 data-nosnippet>756</a>            src_channel: cnx.src_channel.clone(),
-<a href=#757 id=757 data-nosnippet>757</a>            dst: cnx.dst.clone(),
-<a href=#758 id=758 data-nosnippet>758</a>            dst_channel: cnx.dst_channel.clone(),
-<a href=#759 id=759 data-nosnippet>759</a>            msg: cnx.msg.clone(),
-<a href=#760 id=760 data-nosnippet>760</a>        };
-<a href=#761 id=761 data-nosnippet>761</a>        acc.entry(key).or_default();
-<a href=#762 id=762 data-nosnippet>762</a>    }
-<a href=#763 id=763 data-nosnippet>763</a>    acc
-<a href=#764 id=764 data-nosnippet>764</a>}
-<a href=#765 id=765 data-nosnippet>765</a>
-<a href=#766 id=766 data-nosnippet>766</a><span class="kw">fn </span>compute_end_to_end_latency(
-<a href=#767 id=767 data-nosnippet>767</a>    msgs: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span><span class="kw">dyn </span>cu29::prelude::ErasedCuStampedData],
-<a href=#768 id=768 data-nosnippet>768</a>) -&gt; <span class="prelude-ty">Option</span>&lt;CuDuration&gt; {
-<a href=#769 id=769 data-nosnippet>769</a>    <span class="kw">let </span>start = msgs
-<a href=#770 id=770 data-nosnippet>770</a>        .first()
-<a href=#771 id=771 data-nosnippet>771</a>        .and_then(|msg| extract_start_time_ns(msg.metadata()))<span class="question-mark">?</span>;
-<a href=#772 id=772 data-nosnippet>772</a>    <span class="kw">let </span>end = msgs
-<a href=#773 id=773 data-nosnippet>773</a>        .last()
-<a href=#774 id=774 data-nosnippet>774</a>        .and_then(|msg| extract_end_time_ns(msg.metadata()))<span class="question-mark">?</span>;
-<a href=#775 id=775 data-nosnippet>775</a>    end.checked_sub(start).map(CuDuration::from_nanos)
-<a href=#776 id=776 data-nosnippet>776</a>}
-<a href=#777 id=777 data-nosnippet>777</a>
-<a href=#778 id=778 data-nosnippet>778</a><span class="kw">fn </span>extract_start_time_ns(meta: <span class="kw-2">&amp;</span><span class="kw">dyn </span>CuMsgMetadataTrait) -&gt; <span class="prelude-ty">Option</span>&lt;u64&gt; {
-<a href=#779 id=779 data-nosnippet>779</a>    option_time_ns(meta.process_time().start)
-<a href=#780 id=780 data-nosnippet>780</a>}
-<a href=#781 id=781 data-nosnippet>781</a>
-<a href=#782 id=782 data-nosnippet>782</a><span class="kw">fn </span>extract_end_time_ns(meta: <span class="kw-2">&amp;</span><span class="kw">dyn </span>CuMsgMetadataTrait) -&gt; <span class="prelude-ty">Option</span>&lt;u64&gt; {
-<a href=#783 id=783 data-nosnippet>783</a>    option_time_ns(meta.process_time().end)
-<a href=#784 id=784 data-nosnippet>784</a>}
-<a href=#785 id=785 data-nosnippet>785</a>
-<a href=#786 id=786 data-nosnippet>786</a><span class="kw">fn </span>option_time_ns(value: OptionCuTime) -&gt; <span class="prelude-ty">Option</span>&lt;u64&gt; {
-<a href=#787 id=787 data-nosnippet>787</a>    <span class="prelude-ty">Option</span>::&lt;cu29::clock::CuTime&gt;::from(value).map(|t| t.as_nanos())
-<a href=#788 id=788 data-nosnippet>788</a>}
-<a href=#789 id=789 data-nosnippet>789</a>
-<a href=#790 id=790 data-nosnippet>790</a><span class="kw">fn </span>duration_stats_from(stats: <span class="kw-2">&amp;</span>CuDurationStatistics) -&gt; DurationStats {
-<a href=#791 id=791 data-nosnippet>791</a>    <span class="kw">if </span>stats.is_empty() {
-<a href=#792 id=792 data-nosnippet>792</a>        <span class="kw">return </span>DurationStats::default();
-<a href=#793 id=793 data-nosnippet>793</a>    }
-<a href=#794 id=794 data-nosnippet>794</a>    DurationStats {
-<a href=#795 id=795 data-nosnippet>795</a>        min_ns: <span class="prelude-val">Some</span>(stats.min().as_nanos()),
-<a href=#796 id=796 data-nosnippet>796</a>        max_ns: <span class="prelude-val">Some</span>(stats.max().as_nanos()),
-<a href=#797 id=797 data-nosnippet>797</a>        mean_ns: <span class="prelude-val">Some</span>(stats.mean().as_nanos() <span class="kw">as </span>f64),
-<a href=#798 id=798 data-nosnippet>798</a>        stddev_ns: <span class="prelude-val">Some</span>(stats.stddev().as_nanos() <span class="kw">as </span>f64),
-<a href=#799 id=799 data-nosnippet>799</a>        p50_ns: <span class="prelude-val">None</span>,
-<a href=#800 id=800 data-nosnippet>800</a>        p95_ns: <span class="prelude-val">None</span>,
-<a href=#801 id=801 data-nosnippet>801</a>    }
-<a href=#802 id=802 data-nosnippet>802</a>}
-<a href=#803 id=803 data-nosnippet>803</a>
-<a href=#804 id=804 data-nosnippet>804</a><span class="kw">fn </span>jitter_stats_from(stats: <span class="kw-2">&amp;</span>CuDurationStatistics) -&gt; DurationStats {
-<a href=#805 id=805 data-nosnippet>805</a>    <span class="kw">if </span>stats.len() &lt; <span class="number">2 </span>{
-<a href=#806 id=806 data-nosnippet>806</a>        <span class="kw">return </span>DurationStats::default();
-<a href=#807 id=807 data-nosnippet>807</a>    }
-<a href=#808 id=808 data-nosnippet>808</a>    DurationStats {
-<a href=#809 id=809 data-nosnippet>809</a>        min_ns: <span class="prelude-val">Some</span>(stats.jitter_min().as_nanos()),
-<a href=#810 id=810 data-nosnippet>810</a>        max_ns: <span class="prelude-val">Some</span>(stats.jitter_max().as_nanos()),
-<a href=#811 id=811 data-nosnippet>811</a>        mean_ns: <span class="prelude-val">Some</span>(stats.jitter_mean().as_nanos() <span class="kw">as </span>f64),
-<a href=#812 id=812 data-nosnippet>812</a>        stddev_ns: <span class="prelude-val">Some</span>(stats.jitter_stddev().as_nanos() <span class="kw">as </span>f64),
-<a href=#813 id=813 data-nosnippet>813</a>        p50_ns: <span class="prelude-val">None</span>,
-<a href=#814 id=814 data-nosnippet>814</a>        p95_ns: <span class="prelude-val">None</span>,
-<a href=#815 id=815 data-nosnippet>815</a>    }
-<a href=#816 id=816 data-nosnippet>816</a>}
-<a href=#817 id=817 data-nosnippet>817</a>
-<a href=#818 id=818 data-nosnippet>818</a><span class="kw">fn </span>build_graph_signature(graph: <span class="kw-2">&amp;</span>CuGraph, mission: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;) -&gt; String {
-<a href=#819 id=819 data-nosnippet>819</a>    <span class="kw">let </span><span class="kw-2">mut </span>parts = Vec::new();
-<a href=#820 id=820 data-nosnippet>820</a>    parts.push(<span class="macro">format!</span>(<span class="string">"mission={}"</span>, mission.unwrap_or(<span class="string">"default"</span>)));
-<a href=#821 id=821 data-nosnippet>821</a>
-<a href=#822 id=822 data-nosnippet>822</a>    <span class="kw">let </span><span class="kw-2">mut </span>nodes: Vec&lt;<span class="kw">_</span>&gt; = graph.get_all_nodes();
-<a href=#823 id=823 data-nosnippet>823</a>    nodes.sort_by_key(|a| a.<span class="number">1</span>.get_id());
-<a href=#824 id=824 data-nosnippet>824</a>    <span class="kw">for </span>(<span class="kw">_</span>, node) <span class="kw">in </span>nodes {
-<a href=#825 id=825 data-nosnippet>825</a>        parts.push(<span class="macro">format!</span>(
-<a href=#826 id=826 data-nosnippet>826</a>            <span class="string">"node|{}|{}|{}"</span>,
-<a href=#827 id=827 data-nosnippet>827</a>            node.get_id(),
-<a href=#828 id=828 data-nosnippet>828</a>            node.get_type(),
-<a href=#829 id=829 data-nosnippet>829</a>            flavor_label(node.get_flavor())
-<a href=#830 id=830 data-nosnippet>830</a>        ));
-<a href=#831 id=831 data-nosnippet>831</a>    }
-<a href=#832 id=832 data-nosnippet>832</a>
-<a href=#833 id=833 data-nosnippet>833</a>    <span class="kw">let </span><span class="kw-2">mut </span>edges: Vec&lt;String&gt; = graph
-<a href=#834 id=834 data-nosnippet>834</a>        .edges()
-<a href=#835 id=835 data-nosnippet>835</a>        .map(|cnx| {
-<a href=#836 id=836 data-nosnippet>836</a>            <span class="macro">format!</span>(
-<a href=#837 id=837 data-nosnippet>837</a>                <span class="string">"edge|{}|{}|{}"</span>,
-<a href=#838 id=838 data-nosnippet>838</a>                format_endpoint(cnx.src.as_str(), cnx.src_channel.as_deref()),
-<a href=#839 id=839 data-nosnippet>839</a>                format_endpoint(cnx.dst.as_str(), cnx.dst_channel.as_deref()),
-<a href=#840 id=840 data-nosnippet>840</a>                cnx.msg
-<a href=#841 id=841 data-nosnippet>841</a>            )
-<a href=#842 id=842 data-nosnippet>842</a>        })
-<a href=#843 id=843 data-nosnippet>843</a>        .collect();
-<a href=#844 id=844 data-nosnippet>844</a>    edges.sort();
-<a href=#845 id=845 data-nosnippet>845</a>    parts.extend(edges);
-<a href=#846 id=846 data-nosnippet>846</a>
-<a href=#847 id=847 data-nosnippet>847</a>    <span class="kw">let </span>joined = parts.join(<span class="string">"\n"</span>);
-<a href=#848 id=848 data-nosnippet>848</a>    <span class="macro">format!</span>(<span class="string">"fnv1a64:{:016x}"</span>, fnv1a64(joined.as_bytes()))
-<a href=#849 id=849 data-nosnippet>849</a>}
-<a href=#850 id=850 data-nosnippet>850</a>
-<a href=#851 id=851 data-nosnippet>851</a><span class="kw">fn </span>flavor_label(flavor: Flavor) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str {
-<a href=#852 id=852 data-nosnippet>852</a>    <span class="kw">match </span>flavor {
-<a href=#853 id=853 data-nosnippet>853</a>        Flavor::Task =&gt; <span class="string">"task"</span>,
-<a href=#854 id=854 data-nosnippet>854</a>        Flavor::Bridge =&gt; <span class="string">"bridge"</span>,
-<a href=#855 id=855 data-nosnippet>855</a>    }
-<a href=#856 id=856 data-nosnippet>856</a>}
-<a href=#857 id=857 data-nosnippet>857</a>
-<a href=#858 id=858 data-nosnippet>858</a><span class="kw">fn </span>format_endpoint(node: <span class="kw-2">&amp;</span>str, channel: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;) -&gt; String {
-<a href=#859 id=859 data-nosnippet>859</a>    <span class="kw">match </span>channel {
-<a href=#860 id=860 data-nosnippet>860</a>        <span class="prelude-val">Some</span>(ch) =&gt; <span class="macro">format!</span>(<span class="string">"{node}/{ch}"</span>),
-<a href=#861 id=861 data-nosnippet>861</a>        <span class="prelude-val">None </span>=&gt; node.to_string(),
-<a href=#862 id=862 data-nosnippet>862</a>    }
-<a href=#863 id=863 data-nosnippet>863</a>}
-<a href=#864 id=864 data-nosnippet>864</a>
-<a href=#865 id=865 data-nosnippet>865</a><span class="kw">fn </span>fnv1a64(data: <span class="kw-2">&amp;</span>[u8]) -&gt; u64 {
-<a href=#866 id=866 data-nosnippet>866</a>    <span class="kw">const </span>OFFSET_BASIS: u64 = <span class="number">0xcbf29ce484222325</span>;
-<a href=#867 id=867 data-nosnippet>867</a>    <span class="kw">const </span>PRIME: u64 = <span class="number">0x100000001b3</span>;
-<a href=#868 id=868 data-nosnippet>868</a>    <span class="kw">let </span><span class="kw-2">mut </span>hash = OFFSET_BASIS;
-<a href=#869 id=869 data-nosnippet>869</a>    <span class="kw">for </span>byte <span class="kw">in </span>data {
-<a href=#870 id=870 data-nosnippet>870</a>        hash ^= u64::from(<span class="kw-2">*</span>byte);
-<a href=#871 id=871 data-nosnippet>871</a>        hash = hash.wrapping_mul(PRIME);
-<a href=#872 id=872 data-nosnippet>872</a>    }
-<a href=#873 id=873 data-nosnippet>873</a>    hash
-<a href=#874 id=874 data-nosnippet>874</a>}
-<a href=#875 id=875 data-nosnippet>875</a>
-<a href=#876 id=876 data-nosnippet>876</a><span class="attr">#[cfg(test)]
-<a href=#877 id=877 data-nosnippet>877</a></span><span class="kw">mod </span>tests {
-<a href=#878 id=878 data-nosnippet>878</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#879 id=879 data-nosnippet>879</a>
-<a href=#880 id=880 data-nosnippet>880</a>    <span class="attr">#[test]
-<a href=#881 id=881 data-nosnippet>881</a>    </span><span class="kw">fn </span>plan_output_slots_skip_anytime_refine_duplicates() {
-<a href=#882 id=882 data-nosnippet>882</a>        <span class="comment">// A foreground anytime task (max_refines: 2) expands into one base step
-<a href=#883 id=883 data-nosnippet>883</a>        // plus refine steps that reuse the base's culist slot.
-<a href=#884 id=884 data-nosnippet>884</a>        </span><span class="kw">let </span>config = CuConfig::deserialize_ron(
-<a href=#885 id=885 data-nosnippet>885</a>            <span class="string">r#"(
-<a href=#886 id=886 data-nosnippet>886</a>                tasks: [
-<a href=#887 id=887 data-nosnippet>887</a>                    (id: "src", type: "demo::Src"),
-<a href=#888 id=888 data-nosnippet>888</a>                    (id: "any", type: "demo::Any", anytime: (max_refines: 2)),
-<a href=#889 id=889 data-nosnippet>889</a>                    (id: "sink", type: "demo::Sink"),
-<a href=#890 id=890 data-nosnippet>890</a>                ],
-<a href=#891 id=891 data-nosnippet>891</a>                cnx: [
-<a href=#892 id=892 data-nosnippet>892</a>                    (src: "src", dst: "any", msg: "u32"),
-<a href=#893 id=893 data-nosnippet>893</a>                    (src: "any", dst: "sink", msg: "u32"),
-<a href=#894 id=894 data-nosnippet>894</a>                ],
-<a href=#895 id=895 data-nosnippet>895</a>            )"#</span>,
-<a href=#896 id=896 data-nosnippet>896</a>        )
-<a href=#897 id=897 data-nosnippet>897</a>        .expect(<span class="string">"valid anytime config"</span>);
-<a href=#898 id=898 data-nosnippet>898</a>        <span class="kw">let </span>graph = config.get_graph(<span class="prelude-val">None</span>).unwrap();
-<a href=#899 id=899 data-nosnippet>899</a>
-<a href=#900 id=900 data-nosnippet>900</a>        <span class="kw">let </span>plan = assemble_runtime_plan(<span class="kw-2">&amp;</span>config, graph).unwrap();
-<a href=#901 id=901 data-nosnippet>901</a>        <span class="comment">// The regression can only trigger if refine steps are actually present.
-<a href=#902 id=902 data-nosnippet>902</a>        </span><span class="macro">assert!</span>(
-<a href=#903 id=903 data-nosnippet>903</a>            plan.execution.steps.iter().any(|unit| <span class="macro">matches!</span>(
-<a href=#904 id=904 data-nosnippet>904</a>                unit,
-<a href=#905 id=905 data-nosnippet>905</a>                CuExecutionUnit::Step(step) <span class="kw">if </span>step.phase == CuStepPhase::AnytimeRefine
-<a href=#906 id=906 data-nosnippet>906</a>            )),
-<a href=#907 id=907 data-nosnippet>907</a>            <span class="string">"config must exercise anytime refine steps"
-<a href=#908 id=908 data-nosnippet>908</a>        </span>);
-<a href=#909 id=909 data-nosnippet>909</a>        <span class="comment">// One slot per emitted culist slot: sum of msg types over non-refine
-<a href=#910 id=910 data-nosnippet>910</a>        // steps, and each culist index appears exactly once.
-<a href=#911 id=911 data-nosnippet>911</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>expected_indices = Vec::new();
-<a href=#912 id=912 data-nosnippet>912</a>        <span class="kw">let </span><span class="kw-2">mut </span>expected_slots = <span class="number">0usize</span>;
-<a href=#913 id=913 data-nosnippet>913</a>        <span class="kw">for </span>unit <span class="kw">in </span><span class="kw-2">&amp;</span>plan.execution.steps {
-<a href=#914 id=914 data-nosnippet>914</a>            <span class="kw">if let </span>CuExecutionUnit::Step(step) = unit
-<a href=#915 id=915 data-nosnippet>915</a>                &amp;&amp; step.phase != CuStepPhase::AnytimeRefine
-<a href=#916 id=916 data-nosnippet>916</a>                &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(pack) = <span class="kw-2">&amp;</span>step.output_msg_pack
-<a href=#917 id=917 data-nosnippet>917</a>            {
-<a href=#918 id=918 data-nosnippet>918</a>                expected_indices.push(pack.culist_index);
-<a href=#919 id=919 data-nosnippet>919</a>                expected_slots += pack.msg_types.len();
-<a href=#920 id=920 data-nosnippet>920</a>            }
-<a href=#921 id=921 data-nosnippet>921</a>        }
-<a href=#922 id=922 data-nosnippet>922</a>        <span class="kw">let </span><span class="kw-2">mut </span>deduped = expected_indices.clone();
-<a href=#923 id=923 data-nosnippet>923</a>        deduped.sort_unstable();
-<a href=#924 id=924 data-nosnippet>924</a>        deduped.dedup();
-<a href=#925 id=925 data-nosnippet>925</a>        <span class="macro">assert_eq!</span>(deduped.len(), expected_indices.len(), <span class="string">"culist indices dup"</span>);
-<a href=#926 id=926 data-nosnippet>926</a>
-<a href=#927 id=927 data-nosnippet>927</a>        <span class="kw">let </span>slots = build_output_slots_from_plan(<span class="kw-2">&amp;</span>config, graph, <span class="prelude-val">None</span>).unwrap();
-<a href=#928 id=928 data-nosnippet>928</a>        <span class="macro">assert_eq!</span>(slots.len(), expected_slots);
-<a href=#929 id=929 data-nosnippet>929</a>    }
-<a href=#930 id=930 data-nosnippet>930</a>
-<a href=#931 id=931 data-nosnippet>931</a>    <span class="kw">fn </span>edge_key() -&gt; EdgeKey {
-<a href=#932 id=932 data-nosnippet>932</a>        EdgeKey {
-<a href=#933 id=933 data-nosnippet>933</a>            src: <span class="string">"src"</span>.to_string(),
-<a href=#934 id=934 data-nosnippet>934</a>            src_channel: <span class="prelude-val">None</span>,
-<a href=#935 id=935 data-nosnippet>935</a>            dst: <span class="string">"dst"</span>.to_string(),
-<a href=#936 id=936 data-nosnippet>936</a>            dst_channel: <span class="prelude-val">None</span>,
-<a href=#937 id=937 data-nosnippet>937</a>            msg: <span class="string">"Msg"</span>.to_string(),
-<a href=#938 id=938 data-nosnippet>938</a>        }
-<a href=#939 id=939 data-nosnippet>939</a>    }
-<a href=#940 id=940 data-nosnippet>940</a>
-<a href=#941 id=941 data-nosnippet>941</a>    <span class="attr">#[test]
-<a href=#942 id=942 data-nosnippet>942</a>    </span><span class="kw">fn </span>edge_stats_average_and_rate() {
-<a href=#943 id=943 data-nosnippet>943</a>        <span class="kw">let </span><span class="kw-2">mut </span>acc = EdgeAccumulator::default();
-<a href=#944 id=944 data-nosnippet>944</a>        acc.record_sample(<span class="prelude-val">Some</span>(<span class="number">100</span>), <span class="prelude-val">Some</span>(<span class="number">1_000_000_000</span>));
-<a href=#945 id=945 data-nosnippet>945</a>        acc.record_sample(<span class="prelude-val">Some</span>(<span class="number">300</span>), <span class="prelude-val">Some</span>(<span class="number">2_000_000_000</span>));
-<a href=#946 id=946 data-nosnippet>946</a>        <span class="kw">let </span>stats = acc.finalize(edge_key());
-<a href=#947 id=947 data-nosnippet>947</a>
-<a href=#948 id=948 data-nosnippet>948</a>        <span class="macro">assert_eq!</span>(stats.samples, <span class="number">2</span>);
-<a href=#949 id=949 data-nosnippet>949</a>        <span class="macro">assert_eq!</span>(stats.none_samples, <span class="number">0</span>);
-<a href=#950 id=950 data-nosnippet>950</a>        <span class="macro">assert_eq!</span>(stats.total_raw_bytes, <span class="number">400</span>);
-<a href=#951 id=951 data-nosnippet>951</a>        <span class="macro">assert!</span>((stats.avg_raw_bytes.unwrap() - <span class="number">200.0</span>).abs() &lt; <span class="number">1e-6</span>);
-<a href=#952 id=952 data-nosnippet>952</a>        <span class="macro">assert!</span>((stats.rate_hz.unwrap() - <span class="number">1.0</span>).abs() &lt; <span class="number">1e-6</span>);
-<a href=#953 id=953 data-nosnippet>953</a>        <span class="macro">assert!</span>((stats.throughput_bytes_per_sec.unwrap() - <span class="number">400.0</span>).abs() &lt; <span class="number">1e-6</span>);
-<a href=#954 id=954 data-nosnippet>954</a>    }
-<a href=#955 id=955 data-nosnippet>955</a>
-<a href=#956 id=956 data-nosnippet>956</a>    <span class="attr">#[test]
-<a href=#957 id=957 data-nosnippet>957</a>    </span><span class="kw">fn </span>edge_stats_handles_missing_times() {
-<a href=#958 id=958 data-nosnippet>958</a>        <span class="kw">let </span><span class="kw-2">mut </span>acc = EdgeAccumulator::default();
-<a href=#959 id=959 data-nosnippet>959</a>        acc.record_sample(<span class="prelude-val">Some</span>(<span class="number">64</span>), <span class="prelude-val">None</span>);
-<a href=#960 id=960 data-nosnippet>960</a>        <span class="kw">let </span>stats = acc.finalize(edge_key());
-<a href=#961 id=961 data-nosnippet>961</a>        <span class="macro">assert_eq!</span>(stats.samples, <span class="number">1</span>);
-<a href=#962 id=962 data-nosnippet>962</a>        <span class="macro">assert_eq!</span>(stats.valid_time_samples, <span class="number">0</span>);
-<a href=#963 id=963 data-nosnippet>963</a>        <span class="macro">assert!</span>(stats.rate_hz.is_none());
-<a href=#964 id=964 data-nosnippet>964</a>        <span class="macro">assert!</span>(stats.throughput_bytes_per_sec.is_none());
-<a href=#965 id=965 data-nosnippet>965</a>    }
-<a href=#966 id=966 data-nosnippet>966</a>
-<a href=#967 id=967 data-nosnippet>967</a>    <span class="attr">#[test]
-<a href=#968 id=968 data-nosnippet>968</a>    </span><span class="kw">fn </span>perf_stats_skip_missing_latency() {
-<a href=#969 id=969 data-nosnippet>969</a>        <span class="kw">let </span><span class="kw-2">mut </span>perf = PerfAccumulator::new();
-<a href=#970 id=970 data-nosnippet>970</a>        perf.record_sample(<span class="prelude-val">Some</span>(CuDuration::from_nanos(<span class="number">1_000</span>)));
-<a href=#971 id=971 data-nosnippet>971</a>        perf.record_sample(<span class="prelude-val">None</span>);
-<a href=#972 id=972 data-nosnippet>972</a>        <span class="kw">let </span>stats = perf.finalize();
-<a href=#973 id=973 data-nosnippet>973</a>
-<a href=#974 id=974 data-nosnippet>974</a>        <span class="macro">assert_eq!</span>(stats.samples, <span class="number">2</span>);
-<a href=#975 id=975 data-nosnippet>975</a>        <span class="macro">assert_eq!</span>(stats.valid_time_samples, <span class="number">1</span>);
-<a href=#976 id=976 data-nosnippet>976</a>        <span class="macro">assert_eq!</span>(stats.end_to_end.min_ns, <span class="prelude-val">Some</span>(<span class="number">1_000</span>));
-<a href=#977 id=977 data-nosnippet>977</a>        <span class="macro">assert_eq!</span>(stats.end_to_end.max_ns, <span class="prelude-val">Some</span>(<span class="number">1_000</span>));
-<a href=#978 id=978 data-nosnippet>978</a>        <span class="macro">assert_eq!</span>(stats.jitter.min_ns, <span class="prelude-val">None</span>);
-<a href=#979 id=979 data-nosnippet>979</a>    }
-<a href=#980 id=980 data-nosnippet>980</a>
-<a href=#981 id=981 data-nosnippet>981</a>    <span class="attr">#[test]
-<a href=#982 id=982 data-nosnippet>982</a>    </span><span class="kw">fn </span>timing_accumulator_reports_bounded_quantiles() {
-<a href=#983 id=983 data-nosnippet>983</a>        <span class="kw">let </span><span class="kw-2">mut </span>timings = TimingAccumulator::default();
-<a href=#984 id=984 data-nosnippet>984</a>        <span class="kw">for </span>value <span class="kw">in </span><span class="number">1</span>..=<span class="number">10_000 </span>{
-<a href=#985 id=985 data-nosnippet>985</a>            timings.record(value);
-<a href=#986 id=986 data-nosnippet>986</a>        }
-<a href=#987 id=987 data-nosnippet>987</a>        <span class="kw">let </span>stats = timings.stats();
-<a href=#988 id=988 data-nosnippet>988</a>        <span class="macro">assert_eq!</span>(stats.min_ns, <span class="prelude-val">Some</span>(<span class="number">1</span>));
-<a href=#989 id=989 data-nosnippet>989</a>        <span class="macro">assert_eq!</span>(stats.max_ns, <span class="prelude-val">Some</span>(<span class="number">10_000</span>));
-<a href=#990 id=990 data-nosnippet>990</a>        <span class="macro">assert!</span>(stats.p50_ns.unwrap().abs_diff(<span class="number">5_000</span>) &lt; <span class="number">250</span>);
-<a href=#991 id=991 data-nosnippet>991</a>        <span class="macro">assert!</span>(stats.p95_ns.unwrap().abs_diff(<span class="number">9_500</span>) &lt; <span class="number">250</span>);
-<a href=#992 id=992 data-nosnippet>992</a>        <span class="macro">assert!</span>(timings.quantiles.samples.len() &lt;= MAX_QUANTILE_SAMPLES);
-<a href=#993 id=993 data-nosnippet>993</a>    }
-<a href=#994 id=994 data-nosnippet>994</a>
-<a href=#995 id=995 data-nosnippet>995</a>    <span class="attr">#[test]
-<a href=#996 id=996 data-nosnippet>996</a>    </span><span class="kw">fn </span>resource_overlap_requires_time_and_declared_target_overlap() {
-<a href=#997 id=997 data-nosnippet>997</a>        <span class="kw">let </span>trace = ExecutionTrace {
-<a href=#998 id=998 data-nosnippet>998</a>            kind: String::new(),
-<a href=#999 id=999 data-nosnippet>999</a>            culist_id: <span class="number">1</span>,
-<a href=#1000 id=1000 data-nosnippet>1000</a>            duration_ns: <span class="number">30</span>,
-<a href=#1001 id=1001 data-nosnippet>1001</a>            wall_span_ns: <span class="number">30</span>,
-<a href=#1002 id=1002 data-nosnippet>1002</a>            excluded_intervals: <span class="number">0</span>,
-<a href=#1003 id=1003 data-nosnippet>1003</a>            residual_before_ns: <span class="prelude-val">None</span>,
-<a href=#1004 id=1004 data-nosnippet>1004</a>            intervals: <span class="macro">vec!</span>[
-<a href=#1005 id=1005 data-nosnippet>1005</a>                ExecutionInterval {
-<a href=#1006 id=1006 data-nosnippet>1006</a>                    origin: <span class="string">"left"</span>.to_string(),
-<a href=#1007 id=1007 data-nosnippet>1007</a>                    start_ns: <span class="number">10</span>,
-<a href=#1008 id=1008 data-nosnippet>1008</a>                    end_ns: <span class="number">30</span>,
-<a href=#1009 id=1009 data-nosnippet>1009</a>                },
-<a href=#1010 id=1010 data-nosnippet>1010</a>                ExecutionInterval {
-<a href=#1011 id=1011 data-nosnippet>1011</a>                    origin: <span class="string">"right"</span>.to_string(),
-<a href=#1012 id=1012 data-nosnippet>1012</a>                    start_ns: <span class="number">20</span>,
-<a href=#1013 id=1013 data-nosnippet>1013</a>                    end_ns: <span class="number">40</span>,
-<a href=#1014 id=1014 data-nosnippet>1014</a>                },
-<a href=#1015 id=1015 data-nosnippet>1015</a>            ],
-<a href=#1016 id=1016 data-nosnippet>1016</a>        };
-<a href=#1017 id=1017 data-nosnippet>1017</a>        <span class="kw">let </span>bindings = HashMap::from([
-<a href=#1018 id=1018 data-nosnippet>1018</a>            (<span class="string">"left"</span>.to_string(), <span class="macro">vec!</span>[<span class="string">"gpu0"</span>.to_string()]),
-<a href=#1019 id=1019 data-nosnippet>1019</a>            (<span class="string">"right"</span>.to_string(), <span class="macro">vec!</span>[<span class="string">"gpu0"</span>.to_string()]),
-<a href=#1020 id=1020 data-nosnippet>1020</a>        ]);
-<a href=#1021 id=1021 data-nosnippet>1021</a>        <span class="kw">let </span><span class="kw-2">mut </span>active = Vec::new();
-<a href=#1022 id=1022 data-nosnippet>1022</a>        <span class="kw">let </span><span class="kw-2">mut </span>counts = BTreeMap::new();
-<a href=#1023 id=1023 data-nosnippet>1023</a>        record_resource_overlaps(<span class="kw-2">&amp;</span>trace, <span class="kw-2">&amp;</span>bindings, <span class="kw-2">&amp;mut </span>active, <span class="kw-2">&amp;mut </span>counts);
-<a href=#1024 id=1024 data-nosnippet>1024</a>        <span class="macro">assert_eq!</span>(
-<a href=#1025 id=1025 data-nosnippet>1025</a>            counts.get(<span class="kw-2">&amp;</span>(<span class="string">"gpu0"</span>.to_string(), <span class="string">"left"</span>.to_string(), <span class="string">"right"</span>.to_string())),
-<a href=#1026 id=1026 data-nosnippet>1026</a>            <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span><span class="number">1</span>)
-<a href=#1027 id=1027 data-nosnippet>1027</a>        );
-<a href=#1028 id=1028 data-nosnippet>1028</a>    }
-<a href=#1029 id=1029 data-nosnippet>1029</a>
-<a href=#1030 id=1030 data-nosnippet>1030</a>    <span class="attr">#[test]
-<a href=#1031 id=1031 data-nosnippet>1031</a>    </span><span class="kw">fn </span>current_execution_cluster_excludes_carried_forward_slots() {
-<a href=#1032 id=1032 data-nosnippet>1032</a>        <span class="kw">let </span>intervals = <span class="macro">vec!</span>[
-<a href=#1033 id=1033 data-nosnippet>1033</a>            ExecutionInterval {
-<a href=#1034 id=1034 data-nosnippet>1034</a>                origin: <span class="string">"stale_bridge"</span>.to_string(),
-<a href=#1035 id=1035 data-nosnippet>1035</a>                start_ns: <span class="number">100</span>,
-<a href=#1036 id=1036 data-nosnippet>1036</a>                end_ns: <span class="number">200</span>,
-<a href=#1037 id=1037 data-nosnippet>1037</a>            },
-<a href=#1038 id=1038 data-nosnippet>1038</a>            ExecutionInterval {
-<a href=#1039 id=1039 data-nosnippet>1039</a>                origin: <span class="string">"source"</span>.to_string(),
-<a href=#1040 id=1040 data-nosnippet>1040</a>                start_ns: <span class="number">10_000_000</span>,
-<a href=#1041 id=1041 data-nosnippet>1041</a>                end_ns: <span class="number">10_000_500</span>,
-<a href=#1042 id=1042 data-nosnippet>1042</a>            },
-<a href=#1043 id=1043 data-nosnippet>1043</a>            ExecutionInterval {
-<a href=#1044 id=1044 data-nosnippet>1044</a>                origin: <span class="string">"sink"</span>.to_string(),
-<a href=#1045 id=1045 data-nosnippet>1045</a>                start_ns: <span class="number">10_000_600</span>,
-<a href=#1046 id=1046 data-nosnippet>1046</a>                end_ns: <span class="number">10_001_000</span>,
-<a href=#1047 id=1047 data-nosnippet>1047</a>            },
-<a href=#1048 id=1048 data-nosnippet>1048</a>        ];
-<a href=#1049 id=1049 data-nosnippet>1049</a>        <span class="kw">let </span>selected = select_current_execution_cluster(intervals);
-<a href=#1050 id=1050 data-nosnippet>1050</a>        <span class="macro">assert_eq!</span>(selected.len(), <span class="number">2</span>);
-<a href=#1051 id=1051 data-nosnippet>1051</a>        <span class="macro">assert_eq!</span>(selected[<span class="number">0</span>].origin, <span class="string">"source"</span>);
-<a href=#1052 id=1052 data-nosnippet>1052</a>        <span class="macro">assert_eq!</span>(selected[<span class="number">1</span>].origin, <span class="string">"sink"</span>);
-<a href=#1053 id=1053 data-nosnippet>1053</a>    }
-<a href=#1054 id=1054 data-nosnippet>1054</a>}
+<a href=#650 id=650 data-nosnippet>650</a>) -&gt; CuResult&lt;Vec&lt;OutputSlot&gt;&gt; {
+<a href=#651 id=651 data-nosnippet>651</a>    <span class="kw">let </span>specs = P::get_output_specs();
+<a href=#652 id=652 data-nosnippet>652</a>    <span class="kw">if </span>specs.is_empty() {
+<a href=#653 id=653 data-nosnippet>653</a>        <span class="kw">return </span>build_output_slots_from_plan(config, graph);
+<a href=#654 id=654 data-nosnippet>654</a>    }
+<a href=#655 id=655 data-nosnippet>655</a>    <span class="prelude-val">Ok</span>(specs
+<a href=#656 id=656 data-nosnippet>656</a>        .iter()
+<a href=#657 id=657 data-nosnippet>657</a>        .map(|spec| OutputSlot {
+<a href=#658 id=658 data-nosnippet>658</a>            edges: graph
+<a href=#659 id=659 data-nosnippet>659</a>                .edges()
+<a href=#660 id=660 data-nosnippet>660</a>                .filter(|edge| edge.msg == spec.msg_type &amp;&amp; edge_matches_origin(edge, spec.task_id))
+<a href=#661 id=661 data-nosnippet>661</a>                .map(edge_key_from_connection)
+<a href=#662 id=662 data-nosnippet>662</a>                .collect(),
+<a href=#663 id=663 data-nosnippet>663</a>        })
+<a href=#664 id=664 data-nosnippet>664</a>        .collect())
+<a href=#665 id=665 data-nosnippet>665</a>}
+<a href=#666 id=666 data-nosnippet>666</a>
+<a href=#667 id=667 data-nosnippet>667</a><span class="kw">fn </span>edge_matches_origin(edge: <span class="kw-2">&amp;</span>cu29::config::Cnx, origin: <span class="kw-2">&amp;</span>str) -&gt; bool {
+<a href=#668 id=668 data-nosnippet>668</a>    <span class="kw">if </span>edge.src == origin {
+<a href=#669 id=669 data-nosnippet>669</a>        <span class="kw">return </span><span class="bool-val">true</span>;
+<a href=#670 id=670 data-nosnippet>670</a>    }
+<a href=#671 id=671 data-nosnippet>671</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(rest) = origin.strip_prefix(<span class="string">"bridge::"</span>) <span class="kw">else </span>{
+<a href=#672 id=672 data-nosnippet>672</a>        <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#673 id=673 data-nosnippet>673</a>    };
+<a href=#674 id=674 data-nosnippet>674</a>    <span class="kw">let </span><span class="kw-2">mut </span>parts = rest.split(<span class="string">"::"</span>);
+<a href=#675 id=675 data-nosnippet>675</a>    <span class="kw">let </span>(<span class="prelude-val">Some</span>(bridge), <span class="prelude-val">Some</span>(direction), <span class="prelude-val">Some</span>(channel), <span class="prelude-val">None</span>) =
+<a href=#676 id=676 data-nosnippet>676</a>        (parts.next(), parts.next(), parts.next(), parts.next())
+<a href=#677 id=677 data-nosnippet>677</a>    <span class="kw">else </span>{
+<a href=#678 id=678 data-nosnippet>678</a>        <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#679 id=679 data-nosnippet>679</a>    };
+<a href=#680 id=680 data-nosnippet>680</a>    direction == <span class="string">"rx" </span>&amp;&amp; edge.src == bridge &amp;&amp; edge.src_channel.as_deref() == <span class="prelude-val">Some</span>(channel)
+<a href=#681 id=681 data-nosnippet>681</a>}
+<a href=#682 id=682 data-nosnippet>682</a>
+<a href=#683 id=683 data-nosnippet>683</a><span class="kw">fn </span>edge_key_from_connection(cnx: <span class="kw-2">&amp;</span>cu29::config::Cnx) -&gt; EdgeKey {
+<a href=#684 id=684 data-nosnippet>684</a>    EdgeKey {
+<a href=#685 id=685 data-nosnippet>685</a>        src: cnx.src.clone(),
+<a href=#686 id=686 data-nosnippet>686</a>        src_channel: cnx.src_channel.clone(),
+<a href=#687 id=687 data-nosnippet>687</a>        dst: cnx.dst.clone(),
+<a href=#688 id=688 data-nosnippet>688</a>        dst_channel: cnx.dst_channel.clone(),
+<a href=#689 id=689 data-nosnippet>689</a>        msg: cnx.msg.clone(),
+<a href=#690 id=690 data-nosnippet>690</a>    }
+<a href=#691 id=691 data-nosnippet>691</a>}
+<a href=#692 id=692 data-nosnippet>692</a>
+<a href=#693 id=693 data-nosnippet>693</a><span class="doccomment">/// Recover the culist slot layout from the config alone, for logs whose payload
+<a href=#694 id=694 data-nosnippet>694</a>/// type carries no output specs. Each slot lists the graph edges feeding it.
+<a href=#695 id=695 data-nosnippet>695</a></span><span class="kw">fn </span>build_output_slots_from_plan(config: <span class="kw-2">&amp;</span>CuConfig, graph: <span class="kw-2">&amp;</span>CuGraph) -&gt; CuResult&lt;Vec&lt;OutputSlot&gt;&gt; {
+<a href=#696 id=696 data-nosnippet>696</a>    <span class="comment">// Share the generated-runtime construction path (bridge stages, slot
+<a href=#697 id=697 data-nosnippet>697</a>    // indices) so this cannot drift from the compiled plan.
+<a href=#698 id=698 data-nosnippet>698</a>    </span><span class="kw">let </span>plan = assemble_runtime_plan(config, graph)<span class="question-mark">?</span>;
+<a href=#699 id=699 data-nosnippet>699</a>
+<a href=#700 id=700 data-nosnippet>700</a>    <span class="kw">let </span><span class="kw-2">mut </span>packs: Vec&lt;(u32, String, Vec&lt;String&gt;)&gt; = Vec::new();
+<a href=#701 id=701 data-nosnippet>701</a>    <span class="kw">for </span>unit <span class="kw">in </span><span class="kw-2">&amp;</span>plan.execution.steps {
+<a href=#702 id=702 data-nosnippet>702</a>        <span class="kw">let </span>CuExecutionUnit::Step(step) = unit <span class="kw">else </span>{
+<a href=#703 id=703 data-nosnippet>703</a>            <span class="kw">continue</span>;
+<a href=#704 id=704 data-nosnippet>704</a>        };
+<a href=#705 id=705 data-nosnippet>705</a>        <span class="comment">// Anytime refine steps reuse their base step's culist slot; counting
+<a href=#706 id=706 data-nosnippet>706</a>        // them would emit duplicate slots and misalign every later slot.
+<a href=#707 id=707 data-nosnippet>707</a>        </span><span class="kw">if </span>step.phase == CuStepPhase::AnytimeRefine {
+<a href=#708 id=708 data-nosnippet>708</a>            <span class="kw">continue</span>;
+<a href=#709 id=709 data-nosnippet>709</a>        }
+<a href=#710 id=710 data-nosnippet>710</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(output_pack) = <span class="kw-2">&amp;</span>step.output_msg_pack <span class="kw">else </span>{
+<a href=#711 id=711 data-nosnippet>711</a>            <span class="kw">continue</span>;
+<a href=#712 id=712 data-nosnippet>712</a>        };
+<a href=#713 id=713 data-nosnippet>713</a>        <span class="kw">let </span>entity = <span class="kw-2">&amp;</span>plan.entities[step.node_id <span class="kw">as </span>usize];
+<a href=#714 id=714 data-nosnippet>714</a>        <span class="kw">let </span>origin = <span class="kw">match </span>entity.kind {
+<a href=#715 id=715 data-nosnippet>715</a>            PlanEntityKind::Task { .. } =&gt; entity.label.clone(),
+<a href=#716 id=716 data-nosnippet>716</a>            PlanEntityKind::BridgeRx { .. } | PlanEntityKind::BridgeTx { .. } =&gt; {
+<a href=#717 id=717 data-nosnippet>717</a>                <span class="macro">format!</span>(<span class="string">"bridge::{}"</span>, entity.label)
+<a href=#718 id=718 data-nosnippet>718</a>            }
+<a href=#719 id=719 data-nosnippet>719</a>        };
+<a href=#720 id=720 data-nosnippet>720</a>        packs.push((
+<a href=#721 id=721 data-nosnippet>721</a>            output_pack.culist_index,
+<a href=#722 id=722 data-nosnippet>722</a>            origin,
+<a href=#723 id=723 data-nosnippet>723</a>            output_pack.msg_types.clone(),
+<a href=#724 id=724 data-nosnippet>724</a>        ));
+<a href=#725 id=725 data-nosnippet>725</a>    }
+<a href=#726 id=726 data-nosnippet>726</a>
+<a href=#727 id=727 data-nosnippet>727</a>    packs.sort_by_key(|(culist_index, <span class="kw">_</span>, <span class="kw">_</span>)| <span class="kw-2">*</span>culist_index);
+<a href=#728 id=728 data-nosnippet>728</a>    <span class="prelude-val">Ok</span>(packs
+<a href=#729 id=729 data-nosnippet>729</a>        .into_iter()
+<a href=#730 id=730 data-nosnippet>730</a>        .flat_map(|(<span class="kw">_</span>, origin, msg_types)| {
+<a href=#731 id=731 data-nosnippet>731</a>            msg_types.into_iter().map(<span class="kw">move </span>|msg| OutputSlot {
+<a href=#732 id=732 data-nosnippet>732</a>                edges: graph
+<a href=#733 id=733 data-nosnippet>733</a>                    .edges()
+<a href=#734 id=734 data-nosnippet>734</a>                    .filter(|edge| edge.msg == msg &amp;&amp; edge_matches_origin(edge, <span class="kw-2">&amp;</span>origin))
+<a href=#735 id=735 data-nosnippet>735</a>                    .map(edge_key_from_connection)
+<a href=#736 id=736 data-nosnippet>736</a>                    .collect(),
+<a href=#737 id=737 data-nosnippet>737</a>            })
+<a href=#738 id=738 data-nosnippet>738</a>        })
+<a href=#739 id=739 data-nosnippet>739</a>        .collect())
+<a href=#740 id=740 data-nosnippet>740</a>}
+<a href=#741 id=741 data-nosnippet>741</a>
+<a href=#742 id=742 data-nosnippet>742</a><span class="kw">fn </span>build_edge_accumulators(graph: <span class="kw-2">&amp;</span>CuGraph) -&gt; HashMap&lt;EdgeKey, EdgeAccumulator&gt; {
+<a href=#743 id=743 data-nosnippet>743</a>    <span class="kw">let </span><span class="kw-2">mut </span>acc = HashMap::new();
+<a href=#744 id=744 data-nosnippet>744</a>    <span class="kw">for </span>cnx <span class="kw">in </span>graph.edges() {
+<a href=#745 id=745 data-nosnippet>745</a>        <span class="kw">let </span>key = EdgeKey {
+<a href=#746 id=746 data-nosnippet>746</a>            src: cnx.src.clone(),
+<a href=#747 id=747 data-nosnippet>747</a>            src_channel: cnx.src_channel.clone(),
+<a href=#748 id=748 data-nosnippet>748</a>            dst: cnx.dst.clone(),
+<a href=#749 id=749 data-nosnippet>749</a>            dst_channel: cnx.dst_channel.clone(),
+<a href=#750 id=750 data-nosnippet>750</a>            msg: cnx.msg.clone(),
+<a href=#751 id=751 data-nosnippet>751</a>        };
+<a href=#752 id=752 data-nosnippet>752</a>        acc.entry(key).or_default();
+<a href=#753 id=753 data-nosnippet>753</a>    }
+<a href=#754 id=754 data-nosnippet>754</a>    acc
+<a href=#755 id=755 data-nosnippet>755</a>}
+<a href=#756 id=756 data-nosnippet>756</a>
+<a href=#757 id=757 data-nosnippet>757</a><span class="kw">fn </span>compute_end_to_end_latency(
+<a href=#758 id=758 data-nosnippet>758</a>    msgs: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span><span class="kw">dyn </span>cu29::prelude::ErasedCuStampedData],
+<a href=#759 id=759 data-nosnippet>759</a>) -&gt; <span class="prelude-ty">Option</span>&lt;CuDuration&gt; {
+<a href=#760 id=760 data-nosnippet>760</a>    <span class="kw">let </span>start = msgs
+<a href=#761 id=761 data-nosnippet>761</a>        .first()
+<a href=#762 id=762 data-nosnippet>762</a>        .and_then(|msg| extract_start_time_ns(msg.metadata()))<span class="question-mark">?</span>;
+<a href=#763 id=763 data-nosnippet>763</a>    <span class="kw">let </span>end = msgs
+<a href=#764 id=764 data-nosnippet>764</a>        .last()
+<a href=#765 id=765 data-nosnippet>765</a>        .and_then(|msg| extract_end_time_ns(msg.metadata()))<span class="question-mark">?</span>;
+<a href=#766 id=766 data-nosnippet>766</a>    end.checked_sub(start).map(CuDuration::from_nanos)
+<a href=#767 id=767 data-nosnippet>767</a>}
+<a href=#768 id=768 data-nosnippet>768</a>
+<a href=#769 id=769 data-nosnippet>769</a><span class="kw">fn </span>extract_start_time_ns(meta: <span class="kw-2">&amp;</span><span class="kw">dyn </span>CuMsgMetadataTrait) -&gt; <span class="prelude-ty">Option</span>&lt;u64&gt; {
+<a href=#770 id=770 data-nosnippet>770</a>    option_time_ns(meta.process_time().start)
+<a href=#771 id=771 data-nosnippet>771</a>}
+<a href=#772 id=772 data-nosnippet>772</a>
+<a href=#773 id=773 data-nosnippet>773</a><span class="kw">fn </span>extract_end_time_ns(meta: <span class="kw-2">&amp;</span><span class="kw">dyn </span>CuMsgMetadataTrait) -&gt; <span class="prelude-ty">Option</span>&lt;u64&gt; {
+<a href=#774 id=774 data-nosnippet>774</a>    option_time_ns(meta.process_time().end)
+<a href=#775 id=775 data-nosnippet>775</a>}
+<a href=#776 id=776 data-nosnippet>776</a>
+<a href=#777 id=777 data-nosnippet>777</a><span class="kw">fn </span>option_time_ns(value: OptionCuTime) -&gt; <span class="prelude-ty">Option</span>&lt;u64&gt; {
+<a href=#778 id=778 data-nosnippet>778</a>    <span class="prelude-ty">Option</span>::&lt;cu29::clock::CuTime&gt;::from(value).map(|t| t.as_nanos())
+<a href=#779 id=779 data-nosnippet>779</a>}
+<a href=#780 id=780 data-nosnippet>780</a>
+<a href=#781 id=781 data-nosnippet>781</a><span class="kw">fn </span>duration_stats_from(stats: <span class="kw-2">&amp;</span>CuDurationStatistics) -&gt; DurationStats {
+<a href=#782 id=782 data-nosnippet>782</a>    <span class="kw">if </span>stats.is_empty() {
+<a href=#783 id=783 data-nosnippet>783</a>        <span class="kw">return </span>DurationStats::default();
+<a href=#784 id=784 data-nosnippet>784</a>    }
+<a href=#785 id=785 data-nosnippet>785</a>    DurationStats {
+<a href=#786 id=786 data-nosnippet>786</a>        min_ns: <span class="prelude-val">Some</span>(stats.min().as_nanos()),
+<a href=#787 id=787 data-nosnippet>787</a>        max_ns: <span class="prelude-val">Some</span>(stats.max().as_nanos()),
+<a href=#788 id=788 data-nosnippet>788</a>        mean_ns: <span class="prelude-val">Some</span>(stats.mean().as_nanos() <span class="kw">as </span>f64),
+<a href=#789 id=789 data-nosnippet>789</a>        stddev_ns: <span class="prelude-val">Some</span>(stats.stddev().as_nanos() <span class="kw">as </span>f64),
+<a href=#790 id=790 data-nosnippet>790</a>        p50_ns: <span class="prelude-val">None</span>,
+<a href=#791 id=791 data-nosnippet>791</a>        p95_ns: <span class="prelude-val">None</span>,
+<a href=#792 id=792 data-nosnippet>792</a>    }
+<a href=#793 id=793 data-nosnippet>793</a>}
+<a href=#794 id=794 data-nosnippet>794</a>
+<a href=#795 id=795 data-nosnippet>795</a><span class="kw">fn </span>jitter_stats_from(stats: <span class="kw-2">&amp;</span>CuDurationStatistics) -&gt; DurationStats {
+<a href=#796 id=796 data-nosnippet>796</a>    <span class="kw">if </span>stats.len() &lt; <span class="number">2 </span>{
+<a href=#797 id=797 data-nosnippet>797</a>        <span class="kw">return </span>DurationStats::default();
+<a href=#798 id=798 data-nosnippet>798</a>    }
+<a href=#799 id=799 data-nosnippet>799</a>    DurationStats {
+<a href=#800 id=800 data-nosnippet>800</a>        min_ns: <span class="prelude-val">Some</span>(stats.jitter_min().as_nanos()),
+<a href=#801 id=801 data-nosnippet>801</a>        max_ns: <span class="prelude-val">Some</span>(stats.jitter_max().as_nanos()),
+<a href=#802 id=802 data-nosnippet>802</a>        mean_ns: <span class="prelude-val">Some</span>(stats.jitter_mean().as_nanos() <span class="kw">as </span>f64),
+<a href=#803 id=803 data-nosnippet>803</a>        stddev_ns: <span class="prelude-val">Some</span>(stats.jitter_stddev().as_nanos() <span class="kw">as </span>f64),
+<a href=#804 id=804 data-nosnippet>804</a>        p50_ns: <span class="prelude-val">None</span>,
+<a href=#805 id=805 data-nosnippet>805</a>        p95_ns: <span class="prelude-val">None</span>,
+<a href=#806 id=806 data-nosnippet>806</a>    }
+<a href=#807 id=807 data-nosnippet>807</a>}
+<a href=#808 id=808 data-nosnippet>808</a>
+<a href=#809 id=809 data-nosnippet>809</a><span class="kw">fn </span>build_graph_signature(graph: <span class="kw-2">&amp;</span>CuGraph, mission: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;) -&gt; String {
+<a href=#810 id=810 data-nosnippet>810</a>    <span class="kw">let </span><span class="kw-2">mut </span>parts = Vec::new();
+<a href=#811 id=811 data-nosnippet>811</a>    parts.push(<span class="macro">format!</span>(<span class="string">"mission={}"</span>, mission.unwrap_or(<span class="string">"default"</span>)));
+<a href=#812 id=812 data-nosnippet>812</a>
+<a href=#813 id=813 data-nosnippet>813</a>    <span class="kw">let </span><span class="kw-2">mut </span>nodes: Vec&lt;<span class="kw">_</span>&gt; = graph.get_all_nodes();
+<a href=#814 id=814 data-nosnippet>814</a>    nodes.sort_by_key(|a| a.<span class="number">1</span>.get_id());
+<a href=#815 id=815 data-nosnippet>815</a>    <span class="kw">for </span>(<span class="kw">_</span>, node) <span class="kw">in </span>nodes {
+<a href=#816 id=816 data-nosnippet>816</a>        parts.push(<span class="macro">format!</span>(
+<a href=#817 id=817 data-nosnippet>817</a>            <span class="string">"node|{}|{}|{}"</span>,
+<a href=#818 id=818 data-nosnippet>818</a>            node.get_id(),
+<a href=#819 id=819 data-nosnippet>819</a>            node.get_type(),
+<a href=#820 id=820 data-nosnippet>820</a>            flavor_label(node.get_flavor())
+<a href=#821 id=821 data-nosnippet>821</a>        ));
+<a href=#822 id=822 data-nosnippet>822</a>    }
+<a href=#823 id=823 data-nosnippet>823</a>
+<a href=#824 id=824 data-nosnippet>824</a>    <span class="kw">let </span><span class="kw-2">mut </span>edges: Vec&lt;String&gt; = graph
+<a href=#825 id=825 data-nosnippet>825</a>        .edges()
+<a href=#826 id=826 data-nosnippet>826</a>        .map(|cnx| {
+<a href=#827 id=827 data-nosnippet>827</a>            <span class="macro">format!</span>(
+<a href=#828 id=828 data-nosnippet>828</a>                <span class="string">"edge|{}|{}|{}"</span>,
+<a href=#829 id=829 data-nosnippet>829</a>                format_endpoint(cnx.src.as_str(), cnx.src_channel.as_deref()),
+<a href=#830 id=830 data-nosnippet>830</a>                format_endpoint(cnx.dst.as_str(), cnx.dst_channel.as_deref()),
+<a href=#831 id=831 data-nosnippet>831</a>                cnx.msg
+<a href=#832 id=832 data-nosnippet>832</a>            )
+<a href=#833 id=833 data-nosnippet>833</a>        })
+<a href=#834 id=834 data-nosnippet>834</a>        .collect();
+<a href=#835 id=835 data-nosnippet>835</a>    edges.sort();
+<a href=#836 id=836 data-nosnippet>836</a>    parts.extend(edges);
+<a href=#837 id=837 data-nosnippet>837</a>
+<a href=#838 id=838 data-nosnippet>838</a>    <span class="kw">let </span>joined = parts.join(<span class="string">"\n"</span>);
+<a href=#839 id=839 data-nosnippet>839</a>    <span class="macro">format!</span>(<span class="string">"fnv1a64:{:016x}"</span>, fnv1a64(joined.as_bytes()))
+<a href=#840 id=840 data-nosnippet>840</a>}
+<a href=#841 id=841 data-nosnippet>841</a>
+<a href=#842 id=842 data-nosnippet>842</a><span class="kw">fn </span>flavor_label(flavor: Flavor) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str {
+<a href=#843 id=843 data-nosnippet>843</a>    <span class="kw">match </span>flavor {
+<a href=#844 id=844 data-nosnippet>844</a>        Flavor::Task =&gt; <span class="string">"task"</span>,
+<a href=#845 id=845 data-nosnippet>845</a>        Flavor::Bridge =&gt; <span class="string">"bridge"</span>,
+<a href=#846 id=846 data-nosnippet>846</a>    }
+<a href=#847 id=847 data-nosnippet>847</a>}
+<a href=#848 id=848 data-nosnippet>848</a>
+<a href=#849 id=849 data-nosnippet>849</a><span class="kw">fn </span>format_endpoint(node: <span class="kw-2">&amp;</span>str, channel: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;) -&gt; String {
+<a href=#850 id=850 data-nosnippet>850</a>    <span class="kw">match </span>channel {
+<a href=#851 id=851 data-nosnippet>851</a>        <span class="prelude-val">Some</span>(ch) =&gt; <span class="macro">format!</span>(<span class="string">"{node}/{ch}"</span>),
+<a href=#852 id=852 data-nosnippet>852</a>        <span class="prelude-val">None </span>=&gt; node.to_string(),
+<a href=#853 id=853 data-nosnippet>853</a>    }
+<a href=#854 id=854 data-nosnippet>854</a>}
+<a href=#855 id=855 data-nosnippet>855</a>
+<a href=#856 id=856 data-nosnippet>856</a><span class="kw">fn </span>fnv1a64(data: <span class="kw-2">&amp;</span>[u8]) -&gt; u64 {
+<a href=#857 id=857 data-nosnippet>857</a>    <span class="kw">const </span>OFFSET_BASIS: u64 = <span class="number">0xcbf29ce484222325</span>;
+<a href=#858 id=858 data-nosnippet>858</a>    <span class="kw">const </span>PRIME: u64 = <span class="number">0x100000001b3</span>;
+<a href=#859 id=859 data-nosnippet>859</a>    <span class="kw">let </span><span class="kw-2">mut </span>hash = OFFSET_BASIS;
+<a href=#860 id=860 data-nosnippet>860</a>    <span class="kw">for </span>byte <span class="kw">in </span>data {
+<a href=#861 id=861 data-nosnippet>861</a>        hash ^= u64::from(<span class="kw-2">*</span>byte);
+<a href=#862 id=862 data-nosnippet>862</a>        hash = hash.wrapping_mul(PRIME);
+<a href=#863 id=863 data-nosnippet>863</a>    }
+<a href=#864 id=864 data-nosnippet>864</a>    hash
+<a href=#865 id=865 data-nosnippet>865</a>}
+<a href=#866 id=866 data-nosnippet>866</a>
+<a href=#867 id=867 data-nosnippet>867</a><span class="attr">#[cfg(test)]
+<a href=#868 id=868 data-nosnippet>868</a></span><span class="kw">mod </span>tests {
+<a href=#869 id=869 data-nosnippet>869</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#870 id=870 data-nosnippet>870</a>
+<a href=#871 id=871 data-nosnippet>871</a>    <span class="attr">#[test]
+<a href=#872 id=872 data-nosnippet>872</a>    </span><span class="kw">fn </span>plan_output_slots_skip_anytime_refine_duplicates() {
+<a href=#873 id=873 data-nosnippet>873</a>        <span class="comment">// A foreground anytime task (max_refines: 2) expands into one base step
+<a href=#874 id=874 data-nosnippet>874</a>        // plus refine steps that reuse the base's culist slot.
+<a href=#875 id=875 data-nosnippet>875</a>        </span><span class="kw">let </span>config = CuConfig::deserialize_ron(
+<a href=#876 id=876 data-nosnippet>876</a>            <span class="string">r#"(
+<a href=#877 id=877 data-nosnippet>877</a>                tasks: [
+<a href=#878 id=878 data-nosnippet>878</a>                    (id: "src", type: "demo::Src"),
+<a href=#879 id=879 data-nosnippet>879</a>                    (id: "any", type: "demo::Any", anytime: (max_refines: 2)),
+<a href=#880 id=880 data-nosnippet>880</a>                    (id: "sink", type: "demo::Sink"),
+<a href=#881 id=881 data-nosnippet>881</a>                ],
+<a href=#882 id=882 data-nosnippet>882</a>                cnx: [
+<a href=#883 id=883 data-nosnippet>883</a>                    (src: "src", dst: "any", msg: "u32"),
+<a href=#884 id=884 data-nosnippet>884</a>                    (src: "any", dst: "sink", msg: "u32"),
+<a href=#885 id=885 data-nosnippet>885</a>                ],
+<a href=#886 id=886 data-nosnippet>886</a>            )"#</span>,
+<a href=#887 id=887 data-nosnippet>887</a>        )
+<a href=#888 id=888 data-nosnippet>888</a>        .expect(<span class="string">"valid anytime config"</span>);
+<a href=#889 id=889 data-nosnippet>889</a>        <span class="kw">let </span>graph = config.get_graph(<span class="prelude-val">None</span>).unwrap();
+<a href=#890 id=890 data-nosnippet>890</a>
+<a href=#891 id=891 data-nosnippet>891</a>        <span class="kw">let </span>plan = assemble_runtime_plan(<span class="kw-2">&amp;</span>config, graph).unwrap();
+<a href=#892 id=892 data-nosnippet>892</a>        <span class="comment">// The regression can only trigger if refine steps are actually present.
+<a href=#893 id=893 data-nosnippet>893</a>        </span><span class="macro">assert!</span>(
+<a href=#894 id=894 data-nosnippet>894</a>            plan.execution.steps.iter().any(|unit| <span class="macro">matches!</span>(
+<a href=#895 id=895 data-nosnippet>895</a>                unit,
+<a href=#896 id=896 data-nosnippet>896</a>                CuExecutionUnit::Step(step) <span class="kw">if </span>step.phase == CuStepPhase::AnytimeRefine
+<a href=#897 id=897 data-nosnippet>897</a>            )),
+<a href=#898 id=898 data-nosnippet>898</a>            <span class="string">"config must exercise anytime refine steps"
+<a href=#899 id=899 data-nosnippet>899</a>        </span>);
+<a href=#900 id=900 data-nosnippet>900</a>        <span class="comment">// One slot per emitted culist slot: sum of msg types over non-refine
+<a href=#901 id=901 data-nosnippet>901</a>        // steps, and each culist index appears exactly once.
+<a href=#902 id=902 data-nosnippet>902</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>expected_indices = Vec::new();
+<a href=#903 id=903 data-nosnippet>903</a>        <span class="kw">let </span><span class="kw-2">mut </span>expected_slots = <span class="number">0usize</span>;
+<a href=#904 id=904 data-nosnippet>904</a>        <span class="kw">for </span>unit <span class="kw">in </span><span class="kw-2">&amp;</span>plan.execution.steps {
+<a href=#905 id=905 data-nosnippet>905</a>            <span class="kw">if let </span>CuExecutionUnit::Step(step) = unit
+<a href=#906 id=906 data-nosnippet>906</a>                &amp;&amp; step.phase != CuStepPhase::AnytimeRefine
+<a href=#907 id=907 data-nosnippet>907</a>                &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(pack) = <span class="kw-2">&amp;</span>step.output_msg_pack
+<a href=#908 id=908 data-nosnippet>908</a>            {
+<a href=#909 id=909 data-nosnippet>909</a>                expected_indices.push(pack.culist_index);
+<a href=#910 id=910 data-nosnippet>910</a>                expected_slots += pack.msg_types.len();
+<a href=#911 id=911 data-nosnippet>911</a>            }
+<a href=#912 id=912 data-nosnippet>912</a>        }
+<a href=#913 id=913 data-nosnippet>913</a>        <span class="kw">let </span><span class="kw-2">mut </span>deduped = expected_indices.clone();
+<a href=#914 id=914 data-nosnippet>914</a>        deduped.sort_unstable();
+<a href=#915 id=915 data-nosnippet>915</a>        deduped.dedup();
+<a href=#916 id=916 data-nosnippet>916</a>        <span class="macro">assert_eq!</span>(deduped.len(), expected_indices.len(), <span class="string">"culist indices dup"</span>);
+<a href=#917 id=917 data-nosnippet>917</a>
+<a href=#918 id=918 data-nosnippet>918</a>        <span class="kw">let </span>slots = build_output_slots_from_plan(<span class="kw-2">&amp;</span>config, graph).unwrap();
+<a href=#919 id=919 data-nosnippet>919</a>        <span class="macro">assert_eq!</span>(slots.len(), expected_slots);
+<a href=#920 id=920 data-nosnippet>920</a>    }
+<a href=#921 id=921 data-nosnippet>921</a>
+<a href=#922 id=922 data-nosnippet>922</a>    <span class="kw">fn </span>edge_key() -&gt; EdgeKey {
+<a href=#923 id=923 data-nosnippet>923</a>        EdgeKey {
+<a href=#924 id=924 data-nosnippet>924</a>            src: <span class="string">"src"</span>.to_string(),
+<a href=#925 id=925 data-nosnippet>925</a>            src_channel: <span class="prelude-val">None</span>,
+<a href=#926 id=926 data-nosnippet>926</a>            dst: <span class="string">"dst"</span>.to_string(),
+<a href=#927 id=927 data-nosnippet>927</a>            dst_channel: <span class="prelude-val">None</span>,
+<a href=#928 id=928 data-nosnippet>928</a>            msg: <span class="string">"Msg"</span>.to_string(),
+<a href=#929 id=929 data-nosnippet>929</a>        }
+<a href=#930 id=930 data-nosnippet>930</a>    }
+<a href=#931 id=931 data-nosnippet>931</a>
+<a href=#932 id=932 data-nosnippet>932</a>    <span class="attr">#[test]
+<a href=#933 id=933 data-nosnippet>933</a>    </span><span class="kw">fn </span>edge_stats_average_and_rate() {
+<a href=#934 id=934 data-nosnippet>934</a>        <span class="kw">let </span><span class="kw-2">mut </span>acc = EdgeAccumulator::default();
+<a href=#935 id=935 data-nosnippet>935</a>        acc.record_sample(<span class="prelude-val">Some</span>(<span class="number">100</span>), <span class="prelude-val">Some</span>(<span class="number">1_000_000_000</span>));
+<a href=#936 id=936 data-nosnippet>936</a>        acc.record_sample(<span class="prelude-val">Some</span>(<span class="number">300</span>), <span class="prelude-val">Some</span>(<span class="number">2_000_000_000</span>));
+<a href=#937 id=937 data-nosnippet>937</a>        <span class="kw">let </span>stats = acc.finalize(edge_key());
+<a href=#938 id=938 data-nosnippet>938</a>
+<a href=#939 id=939 data-nosnippet>939</a>        <span class="macro">assert_eq!</span>(stats.samples, <span class="number">2</span>);
+<a href=#940 id=940 data-nosnippet>940</a>        <span class="macro">assert_eq!</span>(stats.none_samples, <span class="number">0</span>);
+<a href=#941 id=941 data-nosnippet>941</a>        <span class="macro">assert_eq!</span>(stats.total_raw_bytes, <span class="number">400</span>);
+<a href=#942 id=942 data-nosnippet>942</a>        <span class="macro">assert!</span>((stats.avg_raw_bytes.unwrap() - <span class="number">200.0</span>).abs() &lt; <span class="number">1e-6</span>);
+<a href=#943 id=943 data-nosnippet>943</a>        <span class="macro">assert!</span>((stats.rate_hz.unwrap() - <span class="number">1.0</span>).abs() &lt; <span class="number">1e-6</span>);
+<a href=#944 id=944 data-nosnippet>944</a>        <span class="macro">assert!</span>((stats.throughput_bytes_per_sec.unwrap() - <span class="number">400.0</span>).abs() &lt; <span class="number">1e-6</span>);
+<a href=#945 id=945 data-nosnippet>945</a>    }
+<a href=#946 id=946 data-nosnippet>946</a>
+<a href=#947 id=947 data-nosnippet>947</a>    <span class="attr">#[test]
+<a href=#948 id=948 data-nosnippet>948</a>    </span><span class="kw">fn </span>edge_stats_handles_missing_times() {
+<a href=#949 id=949 data-nosnippet>949</a>        <span class="kw">let </span><span class="kw-2">mut </span>acc = EdgeAccumulator::default();
+<a href=#950 id=950 data-nosnippet>950</a>        acc.record_sample(<span class="prelude-val">Some</span>(<span class="number">64</span>), <span class="prelude-val">None</span>);
+<a href=#951 id=951 data-nosnippet>951</a>        <span class="kw">let </span>stats = acc.finalize(edge_key());
+<a href=#952 id=952 data-nosnippet>952</a>        <span class="macro">assert_eq!</span>(stats.samples, <span class="number">1</span>);
+<a href=#953 id=953 data-nosnippet>953</a>        <span class="macro">assert_eq!</span>(stats.valid_time_samples, <span class="number">0</span>);
+<a href=#954 id=954 data-nosnippet>954</a>        <span class="macro">assert!</span>(stats.rate_hz.is_none());
+<a href=#955 id=955 data-nosnippet>955</a>        <span class="macro">assert!</span>(stats.throughput_bytes_per_sec.is_none());
+<a href=#956 id=956 data-nosnippet>956</a>    }
+<a href=#957 id=957 data-nosnippet>957</a>
+<a href=#958 id=958 data-nosnippet>958</a>    <span class="attr">#[test]
+<a href=#959 id=959 data-nosnippet>959</a>    </span><span class="kw">fn </span>perf_stats_skip_missing_latency() {
+<a href=#960 id=960 data-nosnippet>960</a>        <span class="kw">let </span><span class="kw-2">mut </span>perf = PerfAccumulator::new();
+<a href=#961 id=961 data-nosnippet>961</a>        perf.record_sample(<span class="prelude-val">Some</span>(CuDuration::from_nanos(<span class="number">1_000</span>)));
+<a href=#962 id=962 data-nosnippet>962</a>        perf.record_sample(<span class="prelude-val">None</span>);
+<a href=#963 id=963 data-nosnippet>963</a>        <span class="kw">let </span>stats = perf.finalize();
+<a href=#964 id=964 data-nosnippet>964</a>
+<a href=#965 id=965 data-nosnippet>965</a>        <span class="macro">assert_eq!</span>(stats.samples, <span class="number">2</span>);
+<a href=#966 id=966 data-nosnippet>966</a>        <span class="macro">assert_eq!</span>(stats.valid_time_samples, <span class="number">1</span>);
+<a href=#967 id=967 data-nosnippet>967</a>        <span class="macro">assert_eq!</span>(stats.end_to_end.min_ns, <span class="prelude-val">Some</span>(<span class="number">1_000</span>));
+<a href=#968 id=968 data-nosnippet>968</a>        <span class="macro">assert_eq!</span>(stats.end_to_end.max_ns, <span class="prelude-val">Some</span>(<span class="number">1_000</span>));
+<a href=#969 id=969 data-nosnippet>969</a>        <span class="macro">assert_eq!</span>(stats.jitter.min_ns, <span class="prelude-val">None</span>);
+<a href=#970 id=970 data-nosnippet>970</a>    }
+<a href=#971 id=971 data-nosnippet>971</a>
+<a href=#972 id=972 data-nosnippet>972</a>    <span class="attr">#[test]
+<a href=#973 id=973 data-nosnippet>973</a>    </span><span class="kw">fn </span>timing_accumulator_reports_bounded_quantiles() {
+<a href=#974 id=974 data-nosnippet>974</a>        <span class="kw">let </span><span class="kw-2">mut </span>timings = TimingAccumulator::default();
+<a href=#975 id=975 data-nosnippet>975</a>        <span class="kw">for </span>value <span class="kw">in </span><span class="number">1</span>..=<span class="number">10_000 </span>{
+<a href=#976 id=976 data-nosnippet>976</a>            timings.record(value);
+<a href=#977 id=977 data-nosnippet>977</a>        }
+<a href=#978 id=978 data-nosnippet>978</a>        <span class="kw">let </span>stats = timings.stats();
+<a href=#979 id=979 data-nosnippet>979</a>        <span class="macro">assert_eq!</span>(stats.min_ns, <span class="prelude-val">Some</span>(<span class="number">1</span>));
+<a href=#980 id=980 data-nosnippet>980</a>        <span class="macro">assert_eq!</span>(stats.max_ns, <span class="prelude-val">Some</span>(<span class="number">10_000</span>));
+<a href=#981 id=981 data-nosnippet>981</a>        <span class="macro">assert!</span>(stats.p50_ns.unwrap().abs_diff(<span class="number">5_000</span>) &lt; <span class="number">250</span>);
+<a href=#982 id=982 data-nosnippet>982</a>        <span class="macro">assert!</span>(stats.p95_ns.unwrap().abs_diff(<span class="number">9_500</span>) &lt; <span class="number">250</span>);
+<a href=#983 id=983 data-nosnippet>983</a>        <span class="macro">assert!</span>(timings.quantiles.samples.len() &lt;= MAX_QUANTILE_SAMPLES);
+<a href=#984 id=984 data-nosnippet>984</a>    }
+<a href=#985 id=985 data-nosnippet>985</a>
+<a href=#986 id=986 data-nosnippet>986</a>    <span class="attr">#[test]
+<a href=#987 id=987 data-nosnippet>987</a>    </span><span class="kw">fn </span>resource_overlap_requires_time_and_declared_target_overlap() {
+<a href=#988 id=988 data-nosnippet>988</a>        <span class="kw">let </span>trace = ExecutionTrace {
+<a href=#989 id=989 data-nosnippet>989</a>            kind: String::new(),
+<a href=#990 id=990 data-nosnippet>990</a>            culist_id: <span class="number">1</span>,
+<a href=#991 id=991 data-nosnippet>991</a>            duration_ns: <span class="number">30</span>,
+<a href=#992 id=992 data-nosnippet>992</a>            wall_span_ns: <span class="number">30</span>,
+<a href=#993 id=993 data-nosnippet>993</a>            excluded_intervals: <span class="number">0</span>,
+<a href=#994 id=994 data-nosnippet>994</a>            residual_before_ns: <span class="prelude-val">None</span>,
+<a href=#995 id=995 data-nosnippet>995</a>            intervals: <span class="macro">vec!</span>[
+<a href=#996 id=996 data-nosnippet>996</a>                ExecutionInterval {
+<a href=#997 id=997 data-nosnippet>997</a>                    origin: <span class="string">"left"</span>.to_string(),
+<a href=#998 id=998 data-nosnippet>998</a>                    start_ns: <span class="number">10</span>,
+<a href=#999 id=999 data-nosnippet>999</a>                    end_ns: <span class="number">30</span>,
+<a href=#1000 id=1000 data-nosnippet>1000</a>                },
+<a href=#1001 id=1001 data-nosnippet>1001</a>                ExecutionInterval {
+<a href=#1002 id=1002 data-nosnippet>1002</a>                    origin: <span class="string">"right"</span>.to_string(),
+<a href=#1003 id=1003 data-nosnippet>1003</a>                    start_ns: <span class="number">20</span>,
+<a href=#1004 id=1004 data-nosnippet>1004</a>                    end_ns: <span class="number">40</span>,
+<a href=#1005 id=1005 data-nosnippet>1005</a>                },
+<a href=#1006 id=1006 data-nosnippet>1006</a>            ],
+<a href=#1007 id=1007 data-nosnippet>1007</a>        };
+<a href=#1008 id=1008 data-nosnippet>1008</a>        <span class="kw">let </span>bindings = HashMap::from([
+<a href=#1009 id=1009 data-nosnippet>1009</a>            (<span class="string">"left"</span>.to_string(), <span class="macro">vec!</span>[<span class="string">"gpu0"</span>.to_string()]),
+<a href=#1010 id=1010 data-nosnippet>1010</a>            (<span class="string">"right"</span>.to_string(), <span class="macro">vec!</span>[<span class="string">"gpu0"</span>.to_string()]),
+<a href=#1011 id=1011 data-nosnippet>1011</a>        ]);
+<a href=#1012 id=1012 data-nosnippet>1012</a>        <span class="kw">let </span><span class="kw-2">mut </span>active = Vec::new();
+<a href=#1013 id=1013 data-nosnippet>1013</a>        <span class="kw">let </span><span class="kw-2">mut </span>counts = BTreeMap::new();
+<a href=#1014 id=1014 data-nosnippet>1014</a>        record_resource_overlaps(<span class="kw-2">&amp;</span>trace, <span class="kw-2">&amp;</span>bindings, <span class="kw-2">&amp;mut </span>active, <span class="kw-2">&amp;mut </span>counts);
+<a href=#1015 id=1015 data-nosnippet>1015</a>        <span class="macro">assert_eq!</span>(
+<a href=#1016 id=1016 data-nosnippet>1016</a>            counts.get(<span class="kw-2">&amp;</span>(<span class="string">"gpu0"</span>.to_string(), <span class="string">"left"</span>.to_string(), <span class="string">"right"</span>.to_string())),
+<a href=#1017 id=1017 data-nosnippet>1017</a>            <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span><span class="number">1</span>)
+<a href=#1018 id=1018 data-nosnippet>1018</a>        );
+<a href=#1019 id=1019 data-nosnippet>1019</a>    }
+<a href=#1020 id=1020 data-nosnippet>1020</a>
+<a href=#1021 id=1021 data-nosnippet>1021</a>    <span class="attr">#[test]
+<a href=#1022 id=1022 data-nosnippet>1022</a>    </span><span class="kw">fn </span>current_execution_cluster_excludes_carried_forward_slots() {
+<a href=#1023 id=1023 data-nosnippet>1023</a>        <span class="kw">let </span>intervals = <span class="macro">vec!</span>[
+<a href=#1024 id=1024 data-nosnippet>1024</a>            ExecutionInterval {
+<a href=#1025 id=1025 data-nosnippet>1025</a>                origin: <span class="string">"stale_bridge"</span>.to_string(),
+<a href=#1026 id=1026 data-nosnippet>1026</a>                start_ns: <span class="number">100</span>,
+<a href=#1027 id=1027 data-nosnippet>1027</a>                end_ns: <span class="number">200</span>,
+<a href=#1028 id=1028 data-nosnippet>1028</a>            },
+<a href=#1029 id=1029 data-nosnippet>1029</a>            ExecutionInterval {
+<a href=#1030 id=1030 data-nosnippet>1030</a>                origin: <span class="string">"source"</span>.to_string(),
+<a href=#1031 id=1031 data-nosnippet>1031</a>                start_ns: <span class="number">10_000_000</span>,
+<a href=#1032 id=1032 data-nosnippet>1032</a>                end_ns: <span class="number">10_000_500</span>,
+<a href=#1033 id=1033 data-nosnippet>1033</a>            },
+<a href=#1034 id=1034 data-nosnippet>1034</a>            ExecutionInterval {
+<a href=#1035 id=1035 data-nosnippet>1035</a>                origin: <span class="string">"sink"</span>.to_string(),
+<a href=#1036 id=1036 data-nosnippet>1036</a>                start_ns: <span class="number">10_000_600</span>,
+<a href=#1037 id=1037 data-nosnippet>1037</a>                end_ns: <span class="number">10_001_000</span>,
+<a href=#1038 id=1038 data-nosnippet>1038</a>            },
+<a href=#1039 id=1039 data-nosnippet>1039</a>        ];
+<a href=#1040 id=1040 data-nosnippet>1040</a>        <span class="kw">let </span>selected = select_current_execution_cluster(intervals);
+<a href=#1041 id=1041 data-nosnippet>1041</a>        <span class="macro">assert_eq!</span>(selected.len(), <span class="number">2</span>);
+<a href=#1042 id=1042 data-nosnippet>1042</a>        <span class="macro">assert_eq!</span>(selected[<span class="number">0</span>].origin, <span class="string">"source"</span>);
+<a href=#1043 id=1043 data-nosnippet>1043</a>        <span class="macro">assert_eq!</span>(selected[<span class="number">1</span>].origin, <span class="string">"sink"</span>);
+<a href=#1044 id=1044 data-nosnippet>1044</a>    }
+<a href=#1045 id=1045 data-nosnippet>1045</a>}
 </code></pre></div></section></main></body></html>

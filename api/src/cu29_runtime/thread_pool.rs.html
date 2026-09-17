@@ -101,7 +101,7 @@
 <a href=#101 id=101 data-nosnippet>101</a>/// as worker `index` (Spread: pinned to `affinity[index % affinity.len()]`).
 <a href=#102 id=102 data-nosnippet>102</a>///
 <a href=#103 id=103 data-nosnippet>103</a>/// This is for worker threads that are not part of a rayon pool — notably the
-<a href=#104 id=104 data-nosnippet>104</a>/// `parallel-rt` stage workers, which are plain `std::thread::scope` threads.
+<a href=#104 id=104 data-nosnippet>104</a>/// Pipeline lane workers, which are plain `std::thread::scope` threads.
 <a href=#105 id=105 data-nosnippet>105</a>/// Behavior mirrors [`build_pool`]: [`OnError::Warn`](crate::config::OnError::Warn)
 <a href=#106 id=106 data-nosnippet>106</a>/// logs and returns `Ok`, [`OnError::Strict`](crate::config::OnError::Strict)
 <a href=#107 id=107 data-nosnippet>107</a>/// returns `Err`. When the `rt-scheduling` feature is off the request is ignored
