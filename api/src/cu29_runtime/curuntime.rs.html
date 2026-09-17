@@ -2304,7 +2304,7 @@
 <a href=#2304 id=2304 data-nosnippet>2304</a>    <span class="kw">fn </span>from(value: TaskKind) -&gt; <span class="self">Self </span>{
 <a href=#2305 id=2305 data-nosnippet>2305</a>        <span class="kw">match </span>value {
 <a href=#2306 id=2306 data-nosnippet>2306</a>            TaskKind::Source =&gt; CuTaskType::Source,
-<a href=#2307 id=2307 data-nosnippet>2307</a>            TaskKind::Regular =&gt; CuTaskType::Regular,
+<a href=#2307 id=2307 data-nosnippet>2307</a>            TaskKind::Regular | TaskKind::Stateless =&gt; CuTaskType::Regular,
 <a href=#2308 id=2308 data-nosnippet>2308</a>            TaskKind::Sink =&gt; CuTaskType::Sink,
 <a href=#2309 id=2309 data-nosnippet>2309</a>        }
 <a href=#2310 id=2310 data-nosnippet>2310</a>    }
