@@ -7,9 +7,9 @@ use cu29::prelude::*;
 use minifb::{Key, Scale, ScaleMode, Window, WindowOptions};
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::{
-    _CMP_GT_OQ, _mm512_add_ps, _mm512_cmp_ps_mask, _mm512_fmadd_ps, _mm512_loadu_ps,
-    _mm512_mask_blend_ps, _mm512_mul_ps, _mm512_set_ps, _mm512_set1_ps, _mm512_storeu_ps,
-    _mm512_sub_ps,
+    _CMP_GT_OQ, _mm256_add_ps, _mm256_andnot_ps, _mm256_blendv_ps, _mm256_castsi256_ps,
+    _mm256_cmp_ps, _mm256_fmadd_ps, _mm256_loadu_ps, _mm256_movemask_ps, _mm256_mul_ps,
+    _mm256_or_ps, _mm256_set_epi32, _mm256_set_ps, _mm256_set1_ps, _mm256_storeu_ps, _mm256_sub_ps,
 };
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{SyncSender, sync_channel};
@@ -316,8 +316,8 @@ fn record_escape_mask(escape_iter: &mut [u16], mask: u16, iter: u16) {
 }
 
 #[cfg(target_arch = "x86_64")]
-#[target_feature(enable = "avx512f,fma")]
-unsafe fn iterate_band_avx512(
+#[target_feature(enable = "avx2,fma")]
+unsafe fn iterate_band_avx2(
     plane: StripePlane,
     z_re: &mut [f32],
     z_im: &mut [f32],
@@ -325,31 +325,23 @@ unsafe fn iterate_band_avx512(
     start_iter: u16,
     target_iters: u16,
 ) {
-    const LANES: usize = 16;
+    const LANES: usize = 8;
 
-    let four = _mm512_set1_ps(4.0);
-    let shadow_rr = _mm512_set1_ps(0.754_877_7);
-    let shadow_ri = _mm512_set1_ps(0.569_840_3);
-    let shadow_ir = _mm512_set1_ps(0.137_631_3);
-    let shadow_ii = _mm512_set1_ps(0.819_172_5);
+    let four = _mm256_set1_ps(4.0);
+    let shadow_rr = _mm256_set1_ps(0.754_877_7);
+    let shadow_ri = _mm256_set1_ps(0.569_840_3);
+    let shadow_ir = _mm256_set1_ps(0.137_631_3);
+    let shadow_ii = _mm256_set1_ps(0.819_172_5);
 
     for local_row in 0..plane.row_count {
         let row_base = local_row * plane.width;
         let row_im = plane.row_imag(local_row as u32);
-        let row_im_vec = _mm512_set1_ps(row_im);
+        let row_im_vec = _mm256_set1_ps(row_im);
 
         let mut x = 0;
         while x + LANES <= plane.width {
             let index = row_base + x;
-            let c_re = _mm512_set_ps(
-                plane.pixel_real(x + 15),
-                plane.pixel_real(x + 14),
-                plane.pixel_real(x + 13),
-                plane.pixel_real(x + 12),
-                plane.pixel_real(x + 11),
-                plane.pixel_real(x + 10),
-                plane.pixel_real(x + 9),
-                plane.pixel_real(x + 8),
+            let c_re = _mm256_set_ps(
                 plane.pixel_real(x + 7),
                 plane.pixel_real(x + 6),
                 plane.pixel_real(x + 5),
@@ -360,40 +352,56 @@ unsafe fn iterate_band_avx512(
                 plane.pixel_real(x),
             );
 
-            let mut zr = unsafe { _mm512_loadu_ps(z_re.as_ptr().add(index)) };
-            let mut zi = unsafe { _mm512_loadu_ps(z_im.as_ptr().add(index)) };
-            let mut escaped_mask = escape_mask_from_slice(&escape_iter[index..index + LANES]);
+            let mut zr = unsafe { _mm256_loadu_ps(z_re.as_ptr().add(index)) };
+            let mut zi = unsafe { _mm256_loadu_ps(z_im.as_ptr().add(index)) };
+            let escaped_bits = escape_mask_from_slice(&escape_iter[index..index + LANES]);
+            let mut escaped = _mm256_castsi256_ps(_mm256_set_epi32(
+                if escaped_bits & (1 << 7) != 0 { -1 } else { 0 },
+                if escaped_bits & (1 << 6) != 0 { -1 } else { 0 },
+                if escaped_bits & (1 << 5) != 0 { -1 } else { 0 },
+                if escaped_bits & (1 << 4) != 0 { -1 } else { 0 },
+                if escaped_bits & (1 << 3) != 0 { -1 } else { 0 },
+                if escaped_bits & (1 << 2) != 0 { -1 } else { 0 },
+                if escaped_bits & (1 << 1) != 0 { -1 } else { 0 },
+                if escaped_bits & 1 != 0 { -1 } else { 0 },
+            ));
 
             for iter in start_iter..target_iters {
-                let zr2 = _mm512_mul_ps(zr, zr);
-                let zi2 = _mm512_mul_ps(zi, zi);
-                let mag2 = _mm512_add_ps(zr2, zi2);
-                let newly_escaped = (!escaped_mask) & _mm512_cmp_ps_mask(mag2, four, _CMP_GT_OQ);
-                if newly_escaped != 0 {
-                    record_escape_mask(&mut escape_iter[index..index + LANES], newly_escaped, iter);
+                let zr2 = _mm256_mul_ps(zr, zr);
+                let zi2 = _mm256_mul_ps(zi, zi);
+                let mag2 = _mm256_add_ps(zr2, zi2);
+                let outside = _mm256_cmp_ps::<_CMP_GT_OQ>(mag2, four);
+                let newly_escaped = _mm256_andnot_ps(escaped, outside);
+                let newly_escaped_bits = _mm256_movemask_ps(newly_escaped) as u16;
+                if newly_escaped_bits != 0 {
+                    record_escape_mask(
+                        &mut escape_iter[index..index + LANES],
+                        newly_escaped_bits,
+                        iter,
+                    );
                 }
 
-                let zrzi = _mm512_mul_ps(zr, zi);
-                let next_re_active = _mm512_add_ps(_mm512_sub_ps(zr2, zi2), c_re);
-                let next_im_active = _mm512_add_ps(_mm512_add_ps(zrzi, zrzi), row_im_vec);
+                let zrzi = _mm256_mul_ps(zr, zi);
+                let next_re_active = _mm256_add_ps(_mm256_sub_ps(zr2, zi2), c_re);
+                let next_im_active = _mm256_add_ps(_mm256_add_ps(zrzi, zrzi), row_im_vec);
 
-                let next_re_shadow = _mm512_sub_ps(
-                    _mm512_fmadd_ps(zr, shadow_rr, c_re),
-                    _mm512_mul_ps(zi, shadow_ri),
+                let next_re_shadow = _mm256_sub_ps(
+                    _mm256_fmadd_ps(zr, shadow_rr, c_re),
+                    _mm256_mul_ps(zi, shadow_ri),
                 );
-                let next_im_shadow = _mm512_add_ps(
-                    _mm512_fmadd_ps(zi, shadow_ii, row_im_vec),
-                    _mm512_mul_ps(zr, shadow_ir),
+                let next_im_shadow = _mm256_add_ps(
+                    _mm256_fmadd_ps(zi, shadow_ii, row_im_vec),
+                    _mm256_mul_ps(zr, shadow_ir),
                 );
 
-                escaped_mask |= newly_escaped;
-                zr = _mm512_mask_blend_ps(escaped_mask, next_re_active, next_re_shadow);
-                zi = _mm512_mask_blend_ps(escaped_mask, next_im_active, next_im_shadow);
+                escaped = _mm256_or_ps(escaped, newly_escaped);
+                zr = _mm256_blendv_ps(next_re_active, next_re_shadow, escaped);
+                zi = _mm256_blendv_ps(next_im_active, next_im_shadow, escaped);
             }
 
             unsafe {
-                _mm512_storeu_ps(z_re.as_mut_ptr().add(index), zr);
-                _mm512_storeu_ps(z_im.as_mut_ptr().add(index), zi);
+                _mm256_storeu_ps(z_re.as_mut_ptr().add(index), zr);
+                _mm256_storeu_ps(z_im.as_mut_ptr().add(index), zi);
             }
             x += LANES;
         }
@@ -418,11 +426,10 @@ fn iterate_band(
 ) {
     #[cfg(target_arch = "x86_64")]
     {
-        if std::arch::is_x86_feature_detected!("avx512f")
-            && std::arch::is_x86_feature_detected!("fma")
+        if std::arch::is_x86_feature_detected!("avx2") && std::arch::is_x86_feature_detected!("fma")
         {
             unsafe {
-                iterate_band_avx512(plane, z_re, z_im, escape_iter, start_iter, target_iters);
+                iterate_band_avx2(plane, z_re, z_im, escape_iter, start_iter, target_iters);
             }
             return;
         }
@@ -648,31 +655,20 @@ impl CuSrcTask for MandelbrotStripeSource {
     }
 }
 
-/// One stateful Mandelbrot iteration band.
+/// One stateless Mandelbrot iteration band.
 ///
-/// Each task is intentionally mutable and checks that stripes arrive in strict
-/// frame-major order, which makes any scheduler-induced state corruption fail
-/// immediately instead of silently producing a pretty but invalid image.
+/// Different CopperLists can execute the same stage concurrently because all
+/// mutable iteration state is owned by the handle-backed stripe payload.
 #[derive(Reflect)]
 #[reflect(from_reflect = false)]
 pub struct MandelbrotIterBand {
     #[reflect(ignore)]
     band: IterBandConfig,
-    expected_linear_index: u64,
 }
 
-impl Freezable for MandelbrotIterBand {
-    fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        Encode::encode(&self.expected_linear_index, encoder)
-    }
+impl Freezable for MandelbrotIterBand {}
 
-    fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
-        self.expected_linear_index = Decode::decode(decoder)?;
-        Ok(())
-    }
-}
-
-impl CuTask for MandelbrotIterBand {
+impl CuStatelessTask for MandelbrotIterBand {
     type Resources<'r> = ();
     type Input<'m> = input_msg!(MandelbrotStripe);
     type Output<'m> = output_msg!(MandelbrotStripe);
@@ -688,12 +684,11 @@ impl CuTask for MandelbrotIterBand {
                 band_iters: required_param::<u64>(config, "band_iters")? as u16,
                 finalize: optional_param::<bool>(config, "finalize", false)?,
             },
-            expected_linear_index: 0,
         })
     }
 
     fn process(
-        &mut self,
+        &self,
         _ctx: &CuContext,
         input: &Self::Input<'_>,
         output: &mut Self::Output<'_>,
@@ -702,14 +697,6 @@ impl CuTask for MandelbrotIterBand {
             output.clear_payload();
             return Ok(());
         };
-
-        let linear_index = payload.linear_index();
-        if linear_index != self.expected_linear_index {
-            return Err(CuError::from(format!(
-                "stage {} observed out-of-order stripe: expected {}, got {}",
-                self.band.stage_id, self.expected_linear_index, linear_index
-            )));
-        }
 
         let mut next = payload.clone();
         let target_iters = next
@@ -751,7 +738,6 @@ impl CuTask for MandelbrotIterBand {
         output.tov = input.tov;
         output.set_payload(next);
         output.metadata.set_status(next_status);
-        self.expected_linear_index += 1;
         Ok(())
     }
 }
@@ -1188,5 +1174,67 @@ impl CuSinkTask for LoggedFrameDrain {
 
     fn process(&mut self, _ctx: &CuContext, _input: &Self::Input<'_>) -> CuResult<()> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn avx2_matches_scalar_escape_iterations() {
+        if !std::arch::is_x86_feature_detected!("avx2")
+            || !std::arch::is_x86_feature_detected!("fma")
+        {
+            return;
+        }
+
+        let plane = StripePlane {
+            width: 19,
+            row_count: 3,
+            width_u32: 19,
+            height_u32: 7,
+            start_row: 2,
+            center_x: -0.743_643_9,
+            center_y: 0.131_825_91,
+            span_x: 2.8,
+        };
+        let len = plane.width * plane.row_count;
+        let mut scalar_z_re = vec![0.0; len];
+        let mut scalar_z_im = vec![0.0; len];
+        let mut scalar_escape = vec![0; len];
+        let mut avx2_z_re = scalar_z_re.clone();
+        let mut avx2_z_im = scalar_z_im.clone();
+        let mut avx2_escape = scalar_escape.clone();
+
+        for (start_iter, target_iters) in [(0, 16), (16, 32)] {
+            iterate_band_scalar(
+                plane,
+                &mut scalar_z_re,
+                &mut scalar_z_im,
+                &mut scalar_escape,
+                start_iter,
+                target_iters,
+            );
+            unsafe {
+                iterate_band_avx2(
+                    plane,
+                    &mut avx2_z_re,
+                    &mut avx2_z_im,
+                    &mut avx2_escape,
+                    start_iter,
+                    target_iters,
+                );
+            }
+        }
+
+        assert_eq!(avx2_escape, scalar_escape);
+        for (avx2, scalar) in avx2_z_re.iter().zip(&scalar_z_re) {
+            assert!((avx2 - scalar).abs() <= 1.0e-5);
+        }
+        for (avx2, scalar) in avx2_z_im.iter().zip(&scalar_z_im) {
+            assert!((avx2 - scalar).abs() <= 1.0e-5);
+        }
     }
 }
