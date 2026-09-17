@@ -50,6 +50,7 @@
 //! - `cu29_runtime::app::CuApp`: the main trait the copper runtime will expose to run your application. (when run() etc .. is coming from)
 //! - `cu29_runtime::config::CuConfig`: the configuration of your runtime
 //! - `cu29_runtime::cutask::CuTask`: the core trait and helpers to implement your own tasks.
+//! - `cu29_runtime::cutask::CuStatelessTask`: an immutable transform task that may process CopperLists concurrently.
 //! - `cu29_runtime::cubridge::CuBridge`: the trait to implement bridges to hardware or other software.
 //! - `cu29_runtime::curuntime::CuRuntime`: the runtime that manages task execution.
 //! - `cu29_runtime::simulation`: This will explain how to hook up your tasks to a simulation environment.

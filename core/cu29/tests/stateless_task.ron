@@ -1,0 +1,32 @@
+(
+    logging: (
+        enable_task_logging: false,
+        enable_keyframe_logging: false,
+    ),
+    runtime: (
+        thread_pools: [
+            (id: "rt", threads: 1),
+        ],
+    ),
+    tasks: [
+        (id: "src", type: "Source"),
+        (
+            id: "double",
+            type: "Double",
+            kind: stateless_task,
+        ),
+        (id: "sink", type: "Sink"),
+    ],
+    cnx: [
+        (
+            src: "src",
+            dst: "double",
+            msg: "u32",
+        ),
+        (
+            src: "double",
+            dst: "sink",
+            msg: "u32",
+        ),
+    ],
+)

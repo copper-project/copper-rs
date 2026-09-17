@@ -1608,7 +1608,7 @@ pub fn build_monitor_topology(config: &CuConfig, mission: &str) -> CuResult<Moni
             Flavor::Bridge => ComponentType::Bridge,
             Flavor::Task => match resolve_task_kind_for_id(graph, node_idx)? {
                 TaskKind::Source => ComponentType::Source,
-                TaskKind::Regular => ComponentType::Task,
+                TaskKind::Regular | TaskKind::Stateless => ComponentType::Task,
                 TaskKind::Sink => ComponentType::Sink,
             },
         };
