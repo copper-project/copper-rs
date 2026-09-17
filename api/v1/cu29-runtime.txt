@@ -204,6 +204,10 @@ pub cu29_runtime::config::LogStreamRlcField::Gf256
 pub enum cu29_runtime::config::OnError
 pub cu29_runtime::config::OnError::Strict
 pub cu29_runtime::config::OnError::Warn
+pub enum cu29_runtime::config::PlannerKind
+pub cu29_runtime::config::PlannerKind::Pipeline
+pub cu29_runtime::config::PlannerKind::Serial
+pub cu29_runtime::config::PlannerKind::TaskOrder
 pub enum cu29_runtime::config::SchedulingPolicy
 pub cu29_runtime::config::SchedulingPolicy::Fair
 pub cu29_runtime::config::SchedulingPolicy::Fifo
@@ -292,6 +296,7 @@ pub fn cu29_runtime::config::CuConfig::validate_logging_config(&self) -> cu29_tr
 pub fn cu29_runtime::config::CuConfig::validate_runtime_config(&self) -> cu29_traits::CuResult<()>
 impl cu29_runtime::config::CuConfig
 pub fn cu29_runtime::config::CuConfig::planner_config(&self) -> core::option::Option<&cu29_runtime::config::PlannerConfig>
+pub fn cu29_runtime::config::CuConfig::planner_kind(&self) -> cu29_runtime::config::PlannerKind
 pub fn cu29_runtime::config::CuConfig::validate_log_streaming_config(&self) -> cu29_traits::CuResult<()>
 impl core::default::Default for cu29_runtime::config::CuConfig
 pub fn cu29_runtime::config::CuConfig::default() -> Self
@@ -477,7 +482,8 @@ pub cu29_runtime::config::NodeStreaming::replay: cu29_runtime::config::StreamRep
 pub struct cu29_runtime::config::PlannerConfig
 impl cu29_runtime::config::PlannerConfig
 pub fn cu29_runtime::config::PlannerConfig::get_config(&self) -> core::option::Option<&cu29_runtime::config::ComponentConfig>
-pub fn cu29_runtime::config::PlannerConfig::get_type(&self) -> &str
+pub fn cu29_runtime::config::PlannerConfig::kind(&self) -> cu29_runtime::config::PlannerKind
+pub fn cu29_runtime::config::PlannerConfig::max_in_flight(&self, copperlist_count: usize) -> cu29_traits::CuResult<usize>
 pub struct cu29_runtime::config::ResourceBundleConfig
 pub cu29_runtime::config::ResourceBundleConfig::config: core::option::Option<cu29_runtime::config::ComponentConfig>
 pub cu29_runtime::config::ResourceBundleConfig::id: alloc::string::String
@@ -1816,25 +1822,6 @@ pub fn cu29_runtime::payload::CuArrayVec<T, N>::short_type_path() -> &'static st
 pub fn cu29_runtime::payload::CuArrayVec<T, N>::type_ident() -> core::option::Option<&'static str>
 pub fn cu29_runtime::payload::CuArrayVec<T, N>::type_path() -> &'static str
 pub mod cu29_runtime::planner
-pub struct cu29_runtime::planner::Linearity
-impl cu29_runtime::planner::CuPlanner for cu29_runtime::planner::Linearity
-pub fn cu29_runtime::planner::Linearity::new(_config: core::option::Option<&cu29_runtime::config::ComponentConfig>) -> cu29_traits::CuResult<Self>
-pub fn cu29_runtime::planner::Linearity::plan(&self, graph: &cu29_runtime::config::CuGraph) -> cu29_traits::CuResult<cu29_runtime::planner::StepOrder>
-pub struct cu29_runtime::planner::Pinned
-impl cu29_runtime::planner::CuPlanner for cu29_runtime::planner::Pinned
-pub fn cu29_runtime::planner::Pinned::new(config: core::option::Option<&cu29_runtime::config::ComponentConfig>) -> cu29_traits::CuResult<Self>
-pub fn cu29_runtime::planner::Pinned::plan(&self, graph: &cu29_runtime::config::CuGraph) -> cu29_traits::CuResult<cu29_runtime::planner::StepOrder>
-pub struct cu29_runtime::planner::StepOrder(pub alloc::vec::Vec<cu29_runtime::config::NodeId>)
-pub trait cu29_runtime::planner::CuPlanner
-pub fn cu29_runtime::planner::CuPlanner::new(config: core::option::Option<&cu29_runtime::config::ComponentConfig>) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
-pub fn cu29_runtime::planner::CuPlanner::plan(&self, graph: &cu29_runtime::config::CuGraph) -> cu29_traits::CuResult<cu29_runtime::planner::StepOrder>
-impl cu29_runtime::planner::CuPlanner for cu29_runtime::planner::Linearity
-pub fn cu29_runtime::planner::Linearity::new(_config: core::option::Option<&cu29_runtime::config::ComponentConfig>) -> cu29_traits::CuResult<Self>
-pub fn cu29_runtime::planner::Linearity::plan(&self, graph: &cu29_runtime::config::CuGraph) -> cu29_traits::CuResult<cu29_runtime::planner::StepOrder>
-impl cu29_runtime::planner::CuPlanner for cu29_runtime::planner::Pinned
-pub fn cu29_runtime::planner::Pinned::new(config: core::option::Option<&cu29_runtime::config::ComponentConfig>) -> cu29_traits::CuResult<Self>
-pub fn cu29_runtime::planner::Pinned::plan(&self, graph: &cu29_runtime::config::CuGraph) -> cu29_traits::CuResult<cu29_runtime::planner::StepOrder>
-pub fn cu29_runtime::planner::emit_plan<P: cu29_runtime::planner::CuPlanner>(config_path: &str) -> cu29_traits::CuResult<()>
 pub mod cu29_runtime::pool
 pub enum cu29_runtime::pool::CuHandleInner<T: core::fmt::Debug + core::marker::Send + core::marker::Sync>
 pub cu29_runtime::pool::CuHandleInner::Detached(alloc::boxed::Box<T>)

@@ -101,7 +101,7 @@ fn apply_scheduling(_pool: &ThreadPool, spec: &ThreadPoolConfig) -> CuResult<()>
 /// as worker `index` (Spread: pinned to `affinity[index % affinity.len()]`).
 ///
 /// This is for worker threads that are not part of a rayon pool — notably the
-/// `parallel-rt` stage workers, which are plain `std::thread::scope` threads.
+/// Pipeline lane workers, which are plain `std::thread::scope` threads.
 /// Behavior mirrors [`build_pool`]: [`OnError::Warn`](crate::config::OnError::Warn)
 /// logs and returns `Ok`, [`OnError::Strict`](crate::config::OnError::Strict)
 /// returns `Err`. When the `rt-scheduling` feature is off the request is ignored

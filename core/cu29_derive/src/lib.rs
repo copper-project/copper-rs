@@ -21,18 +21,15 @@ use cu29_runtime::config::CuConfig;
 use cu29_runtime::config::DEFAULT_MISSION_ID;
 use cu29_runtime::config::{
     AnytimeConfig, BridgeChannelConfigRepresentation, ConfigGraphs, ConstantConfig, ConstantNumber,
-    ConstantStorage, CuGraph, Flavor, HandleContent, Node, NodeId, RT_POOL, ResourceBundleConfig,
-    TaskKind, read_configuration_with_features, read_configuration_with_resolved_ron_and_features,
+    ConstantStorage, CuGraph, Flavor, HandleContent, Node, NodeId, PlannerKind, RT_POOL,
+    ResourceBundleConfig, TaskKind, read_configuration_with_features,
+    read_configuration_with_resolved_ron_and_features,
 };
 use cu29_runtime::curuntime::{
     CuExecutionLoop, CuExecutionStep, CuExecutionUnit, CuStepPhase, CuTaskType,
     find_task_type_for_id,
 };
-use cu29_runtime::planner::{
-    BUILTIN_PLANNERS, DEFAULT_COPPERLIST_COUNT, PLAN_ARTIFACT_FILE, PlanEntityKind,
-    assemble_runtime_plan, assemble_runtime_plan_from_step_keys, config_digest, is_builtin_planner,
-    read_plan_artifact,
-};
+use cu29_runtime::planner::{DEFAULT_COPPERLIST_COUNT, PlanEntityKind, assemble_runtime_plan};
 use cu29_traits::{CuError, CuResult};
 use proc_macro2::{Ident, Span};
 
@@ -897,14 +894,10 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
     }
     #[cfg(feature = "macro_debug")]
     eprintln!("[gen culist support with {config:?}]");
-    let mut cuconfig = match read_config(&config) {
+    let cuconfig = match read_config(&config) {
         Ok(cuconfig) => cuconfig,
         Err(e) => return return_error(e.to_string()),
     };
-    if let Err(e) = apply_external_plan(&mut cuconfig) {
-        return return_error(e.to_string());
-    }
-    let cuconfig = cuconfig;
 
     let extra_imports = if !std {
         quote! {
@@ -1950,11 +1943,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let subsystem_id = resolved_runtime_config.subsystem_id.clone();
     let config_features = resolved_runtime_config.active_features.clone();
     let copper_config_content = resolved_runtime_config.bundled_local_config_content.clone();
-    let mut copper_config = resolved_runtime_config.local_config;
-    if let Err(e) = apply_external_plan(&mut copper_config) {
-        return return_error(e.to_string());
-    }
-    let copper_config = copper_config;
+    let copper_config = resolved_runtime_config.local_config;
     if copper_config.log_streaming.is_some() && !logstream_enabled {
         return return_error(
             "copperconfig.ron declares log_streaming but the cu29 'logstream' feature is disabled"
@@ -1966,32 +1955,26 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             "log_streaming resource bindings cannot be used with ignore_resources".to_string(),
         );
     }
-    // Re-apply the baked step orders at startup so the effective config the
-    // app logs stays self-describing, whatever RON file it was started with.
-    let planner_resolved_stamp = match copper_config.planner_config().and_then(|selection| {
-        selection
-            .resolved_orders()
-            .map(|orders| (selection.get_type().to_string(), orders))
-    }) {
-        Some((planner_type, orders)) => {
-            let entries = orders.iter().map(|(mission, keys)| {
-                quote! { (#mission.to_string(), vec![#(#keys.to_string()),*]) }
-            });
-            quote! {
-                let config = {
-                    let mut config = config;
-                    config.set_planner_resolved_orders(#planner_type, [#(#entries),*]);
-                    config
-                };
-            }
-        }
-        None => quote! {},
-    };
     let copperlist_count = copper_config
         .logging
         .as_ref()
         .and_then(|logging| logging.copperlist_count)
         .unwrap_or(DEFAULT_COPPERLIST_COUNT);
+    let pipeline_selected = copper_config.planner_kind() == PlannerKind::Pipeline;
+    if pipeline_selected && !(std && parallel_rt_enabled) {
+        return return_error(
+            "runtime planner kind Pipeline requires the cu29 'parallel-rt' feature".to_string(),
+        );
+    }
+    let pipeline_max_in_flight = match copper_config.planner_config() {
+        Some(planner) => match planner.max_in_flight(copperlist_count) {
+            Ok(limit) => limit,
+            Err(error) => return return_error(error.to_string()),
+        },
+        None => 1,
+    };
+    let pipeline_max_in_flight_tokens =
+        proc_macro2::Literal::usize_unsuffixed(pipeline_max_in_flight);
     let local_keyframe_logging_enabled = copper_config
         .logging
         .as_ref()
@@ -2352,21 +2335,28 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             })
             .collect();
         let ids = build_monitored_ids(&task_ids, &mut culist_bridge_specs);
-        let parallel_rt_stage_entries = match build_parallel_rt_stage_entries(
-            &culist_plan,
-            &culist_exec_entities,
-            &task_specs,
-            &culist_bridge_specs,
-        ) {
-            Ok(entries) => entries,
-            Err(e) => return return_error(e.to_string()),
+        let parallel_rt_stage_entries = if pipeline_selected {
+            match build_parallel_rt_stage_entries(
+                &culist_plan,
+                &culist_exec_entities,
+                &task_specs,
+                &culist_bridge_specs,
+            ) {
+                Ok(entries) => entries,
+                Err(e) => return return_error(e.to_string()),
+            }
+        } else {
+            Vec::new()
         };
-        let parallel_rt_metadata_defs = if std && parallel_rt_enabled {
+        let parallel_rt_metadata_defs = if std {
             Some(quote! {
                 pub const PARALLEL_RT_STAGES: &'static [cu29::parallel_rt::ParallelRtStageMetadata] =
                     &[#( #parallel_rt_stage_entries ),*];
                 pub const PARALLEL_RT_METADATA: cu29::parallel_rt::ParallelRtMetadata =
-                    cu29::parallel_rt::ParallelRtMetadata::new(PARALLEL_RT_STAGES);
+                    cu29::parallel_rt::ParallelRtMetadata::new(
+                        PARALLEL_RT_STAGES,
+                        #pipeline_max_in_flight_tokens,
+                    );
             })
         } else {
             None
@@ -3609,7 +3599,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         preprocess_calls.extend(task_preprocess_calls);
         let mut postprocess_calls = task_postprocess_calls;
         postprocess_calls.extend(bridge_postprocess_calls);
-        let parallel_rt_run_supported = std && parallel_rt_enabled && !sim_mode;
+        let parallel_rt_run_supported =
+            std && parallel_rt_enabled && pipeline_selected && !sim_mode;
 
         let output_pack_sizes = collect_output_pack_sizes(&culist_plan);
         let runtime_plan_code_and_logging: Vec<(
@@ -3753,7 +3744,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         };
         // A sim runtime does not execute parallel-rt, but it must decode the component
         // frames in the execution-wave order used by the matching recording runtime.
-        let restore_parallel_placements = (std && parallel_rt_enabled)
+        let restore_parallel_placements = (std && parallel_rt_enabled && pipeline_selected)
             .then(|| build_parallel_lifecycle_placements(&culist_plan, &culist_exec_entities));
         let mut keyframe_restore_order = Vec::<ParallelLifecycleKey>::new();
         if let Some(placements) = restore_parallel_placements.as_ref() {
@@ -3861,13 +3852,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         {
                             ExecutionEntityKind::Task { task_index } => {
                                 let task_index_ts = int2sliceindex(*task_index as u32);
-                                // The simple first parallel-rt placement for an
-                                // anytime node: ONE stage running base and every
+                                // Pipeline keeps an anytime base and every
                                 // refine quantum contiguously, so the whole job
-                                // stays on the same worker thread (the quanta
-                                // touch the same task state and output slot —
-                                // memory locality). Refine steps therefore emit
-                                // no stage of their own.
+                                // stays on the same lane. Refine steps therefore
+                                // emit no lane of their own.
                                 if step.phase == CuStepPhase::AnytimeRefine {
                                     return None;
                                 }
@@ -4195,20 +4183,30 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         }
                     })
                     .collect();
+            let parallel_lane_sender_idents: Vec<Ident> = (0..parallel_process_step_idents.len())
+                .map(|index| format_ident!("__cu_pipeline_lane_tx_{index}"))
+                .collect();
+            let parallel_lane_receiver_idents: Vec<Ident> = (0..parallel_process_step_idents.len())
+                .map(|index| format_ident!("__cu_pipeline_lane_rx_{index}"))
+                .collect();
             let parallel_stage_worker_spawns: Vec<proc_macro2::TokenStream> =
                 parallel_process_step_idents
                     .iter()
                     .enumerate()
                     .map(|(stage_index, step_ident)| {
                         let stage_index_lit = syn::Index::from(stage_index);
-                        let receiver_ident =
-                            format_ident!("__cu_parallel_stage_rx_{stage_index}");
+                        let receiver_ident = &parallel_lane_receiver_idents[stage_index];
+                        let next_sender = parallel_lane_sender_idents
+                            .get(stage_index + 1)
+                            .map_or_else(|| quote! { None }, |sender| quote! { Some(#sender) });
                         quote! {
                             {
-                                let mut #receiver_ident = stage_receivers
-                                    .next()
-                                    .expect("parallel stage receiver missing");
-                                let mut next_stage_tx = stage_senders.next();
+                                let mut #receiver_ident = #receiver_ident;
+                                let mut next_stage_tx: Option<
+                                    cu29::parallel_queue::StageSender<
+                                        #mission_mod::ParallelWorkerJob,
+                                    >,
+                                > = #next_sender;
                                 let done_tx = done_tx.clone();
                                 let shutdown = std::sync::Arc::clone(&shutdown);
                                 let clock = clock.clone();
@@ -4381,6 +4379,35 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         };
         let parallel_process_stage_count_tokens =
             proc_macro2::Literal::usize_unsuffixed(parallel_process_step_idents.len());
+        let parallel_lane_sender_idents: Vec<Ident> = (0..parallel_process_step_idents.len())
+            .map(|index| format_ident!("__cu_pipeline_lane_tx_{index}"))
+            .collect();
+        let parallel_lane_receiver_idents: Vec<Ident> = (0..parallel_process_step_idents.len())
+            .map(|index| format_ident!("__cu_pipeline_lane_rx_{index}"))
+            .collect();
+        let parallel_lane_queue_declarations: Vec<proc_macro2::TokenStream> =
+            parallel_lane_sender_idents
+                .iter()
+                .zip(parallel_lane_receiver_idents.iter())
+                .map(|(sender, receiver)| {
+                    quote! {
+                        let (#sender, #receiver) =
+                            cu29::parallel_queue::lane_queue::<#mission_mod::ParallelWorkerJob>(
+                                queue_capacity,
+                            );
+                    }
+                })
+                .collect();
+        let parallel_entry_lane_sender = parallel_lane_sender_idents.first().map_or_else(
+            || {
+                quote! {
+                    return Err(CuError::from(
+                        "Pipeline runtime requires at least one generated process lane",
+                    ));
+                }
+            },
+            |sender| quote! { let mut entry_stage_tx = #sender; },
+        );
         let parallel_task_ptrs_type = if runtime_task_types.is_empty() {
             quote! { () }
         } else {
@@ -4619,6 +4646,32 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 )));
             }
         };
+        let planner_kind_tokens = match copper_config.planner_kind() {
+            PlannerKind::Serial => quote! { cu29::config::PlannerKind::Serial },
+            PlannerKind::TaskOrder => quote! { cu29::config::PlannerKind::TaskOrder },
+            PlannerKind::Pipeline => quote! { cu29::config::PlannerKind::Pipeline },
+        };
+        let planner_config_check = quote! {
+            let configured_planner_kind = config.planner_kind();
+            if configured_planner_kind != #planner_kind_tokens {
+                return Err(CuError::from(format!(
+                    "Configured planner kind ({configured_planner_kind:?}) does not match the runtime compiled into this binary ({:?})",
+                    #planner_kind_tokens,
+                )));
+            }
+            if configured_planner_kind == cu29::config::PlannerKind::Pipeline {
+                let configured_max_in_flight = config
+                    .planner_config()
+                    .expect("Pipeline planner configuration disappeared")
+                    .max_in_flight(configured_copperlist_count)?;
+                if configured_max_in_flight != #pipeline_max_in_flight_tokens {
+                    return Err(CuError::from(format!(
+                        "Configured Pipeline max_in_flight ({configured_max_in_flight}) does not match the runtime compiled into this binary ({})",
+                        #pipeline_max_in_flight_tokens,
+                    )));
+                }
+            }
+        };
         let keyframe_logging_check = quote! {
             let configured_keyframe_logging = config
                 .logging
@@ -4786,7 +4839,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 ) -> CuResult<Self>
             }
         };
-        let parallel_rt_metadata_arg = if std && parallel_rt_enabled {
+        let parallel_rt_metadata_arg = if std {
             Some(quote! {
                 &#mission_mod::PARALLEL_RT_METADATA,
             })
@@ -4958,33 +5011,20 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     let start_clid = cl_manager.next_cl_id();
                     parallel_rt.reset_cursors(start_clid);
 
-                    let stage_count = #parallel_process_stage_count_tokens;
-                    debug_assert_eq!(parallel_rt.metadata().process_stage_count(), stage_count);
-                    if stage_count == 0 {
+                    let lane_count = #parallel_process_stage_count_tokens;
+                    debug_assert_eq!(parallel_rt.metadata().process_stage_count(), lane_count);
+                    if lane_count == 0 {
                         return Err(CuError::from(
-                            "Parallel runtime requires at least one generated process stage",
+                            "Pipeline runtime requires at least one generated process lane",
                         ));
                     }
 
                     let queue_capacity = parallel_rt.in_flight_limit().max(1);
-                    let mut stage_senders = Vec::with_capacity(stage_count);
-                    let mut stage_receivers = Vec::with_capacity(stage_count);
-                    for _stage_index in 0..stage_count {
-                        let (stage_tx, stage_rx) =
-                            cu29::parallel_queue::stage_queue::<#mission_mod::ParallelWorkerJob>(
-                                queue_capacity,
-                            );
-                        stage_senders.push(stage_tx);
-                        stage_receivers.push(stage_rx);
-                    }
+                    #(#parallel_lane_queue_declarations)*
                     let (done_tx, done_rx) =
                         std::sync::mpsc::channel::<#mission_mod::ParallelWorkerResult>();
                     let shutdown = std::sync::Arc::new(AtomicBool::new(false));
-                    let mut stage_senders = stage_senders.into_iter();
-                    let mut entry_stage_tx = stage_senders
-                        .next()
-                        .expect("parallel stage pipeline has no entry queue");
-                    let mut stage_receivers = stage_receivers.into_iter();
+                    #parallel_entry_lane_sender
                     // Optional "rt" thread pool spec: its CPU affinity / scheduling
                     // policy is applied to each stage worker at startup.
                     let rt_pool = std::sync::Arc::new(
@@ -5531,6 +5571,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 if #sim_mode { config.log_streaming = None; }
                 #constant_override_warning
                 #copperlist_count_check
+                #planner_config_check
                 #keyframe_logging_check
                 #logstream_topology_check
                 #[cfg(target_os = "none")]
@@ -5928,7 +5969,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     UnifiedLogType::RuntimeLifecycle,
                     1024 * 64, // 64 KiB
                 )?;
-                #planner_resolved_stamp
                 let effective_config_ron = config
                     .serialize_ron()
                     .unwrap_or_else(|_| "<failed to serialize config>".to_string());
@@ -7214,60 +7254,6 @@ fn read_config(config_file: &str) -> CuResult<CuConfig> {
     let active_features = active_config_features();
     let active_feature_refs: Vec<_> = active_features.iter().map(String::as_str).collect();
     read_configuration_with_features(filename.as_str(), &active_feature_refs)
-}
-
-/// Bake an out-of-tree planner's build-time resolved step orders into the config.
-///
-/// Ship-with-copper planners are instantiated directly by the shared planner;
-/// any other `runtime.planner` type must have been resolved by
-/// `cu29::planner::emit_plan` in the caller's build.rs, whose artifact this
-/// reads from `OUT_DIR`.
-fn apply_external_plan(config: &mut CuConfig) -> CuResult<()> {
-    let (planner_type, already_resolved) = match config.planner_config() {
-        None => return Ok(()),
-        Some(selection) => (
-            selection.get_type().to_string(),
-            selection.resolved_orders().is_some(),
-        ),
-    };
-    if is_builtin_planner(&planner_type) || already_resolved {
-        return Ok(());
-    }
-    let build_rs_hint = format!(
-        "add to this crate's build.rs: cu29::planner::emit_plan::<{planner_type}>(\"<config>.ron\").unwrap()"
-    );
-    let shipped = BUILTIN_PLANNERS.join(", ");
-    let out_dir = std::env::var("OUT_DIR").map_err(|_| {
-        CuError::from(format!(
-            "Planner '{planner_type}' is not shipped with copper (shipped: {shipped}) and no plan artifact is available (no build script?); {build_rs_hint}"
-        ))
-    })?;
-    let path = std::path::Path::new(&out_dir).join(PLAN_ARTIFACT_FILE);
-    let artifact = read_plan_artifact(&path).map_err(|e| {
-        CuError::from(format!(
-            "Planner '{planner_type}' is not shipped with copper (shipped: {shipped}) and reading its plan artifact failed ({e}); {build_rs_hint}"
-        ))
-    })?;
-    let artifact_name = artifact
-        .planner_type
-        .rsplit("::")
-        .next()
-        .unwrap_or(&artifact.planner_type);
-    let config_name = planner_type.rsplit("::").next().unwrap_or(&planner_type);
-    if artifact_name != config_name {
-        return Err(CuError::from(format!(
-            "The plan artifact was emitted by '{}' but the config selects '{planner_type}'.",
-            artifact.planner_type
-        )));
-    }
-    let expected = config_digest(config)?;
-    if artifact.config_digest != expected {
-        return Err(CuError::from(format!(
-            "The plan artifact for planner '{planner_type}' is stale; re-run the build script (touch build.rs or the config file)."
-        )));
-    }
-    config.set_planner_resolved_orders(&planner_type, artifact.orders);
-    Ok(())
 }
 
 fn inferred_single_output_payload_type(
@@ -9615,17 +9601,14 @@ fn build_bridge_resource_mappings(
 fn build_execution_plan(
     config: &CuConfig,
     graph: &CuGraph,
-    mission: &str,
+    _mission: &str,
     bridge_specs: &mut [BridgeSpec],
 ) -> CuResult<(
     CuExecutionLoop,
     Vec<ExecutionEntity>,
     HashMap<NodeId, NodeId>,
 )> {
-    let assembled = match config.planner_resolved_order(mission) {
-        Some(step_keys) => assemble_runtime_plan_from_step_keys(config, graph, step_keys)?,
-        None => assemble_runtime_plan(config, graph)?,
-    };
+    let assembled = assemble_runtime_plan(config, graph)?;
     let mut exec_entities = Vec::with_capacity(assembled.entities.len());
     for (plan_node_id, entity) in assembled.entities.iter().enumerate() {
         let kind = match entity.kind {

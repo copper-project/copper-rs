@@ -1,12 +1,12 @@
 use clap::Parser;
 use cu29_runtime::config::{
-    CuConfig, CuGraph, OnError, RT_POOL, SchedulingPolicy, ThreadPoolConfig,
+    CuConfig, CuGraph, OnError, PlannerKind, RT_POOL, SchedulingPolicy, ThreadPoolConfig,
     read_configuration_with_features, read_multi_configuration_with_features,
 };
 use cu29_runtime::curuntime::{CuExecutionStep, CuExecutionUnit, CuStepPhase, CuTaskType};
 use cu29_runtime::planner::{
     AssembledPlan, DEFAULT_COPPERLIST_COUNT, PlanEntity, PlanEntityKind, assemble_runtime_plan,
-    assemble_runtime_plan_from_step_keys, mission_graphs, step_key,
+    mission_graphs, step_key,
 };
 use cu29_traits::{CuError, CuResult};
 use serde::Deserialize;
@@ -161,11 +161,7 @@ fn render_document(
     let mut rendered = Vec::new();
     let mut total_height = MARGIN;
     for (mission, graph) in sections {
-        let plan = match config.planner_resolved_order(mission) {
-            Some(step_keys) => assemble_runtime_plan_from_step_keys(config, graph, step_keys),
-            None => assemble_runtime_plan(config, graph),
-        }
-        .map_err(|error| {
+        let plan = assemble_runtime_plan(config, graph).map_err(|error| {
             CuError::from(format!(
                 "Could not compute scheduling plan for mission '{mission}': {error}"
             ))
@@ -427,11 +423,20 @@ fn render_mission(
         .map(|pack| pack.culist_index as usize + 1)
         .max()
         .unwrap_or(0);
-    let in_flight_limit = config
+    let copperlist_count = config
         .logging
         .as_ref()
         .and_then(|logging| logging.copperlist_count)
         .unwrap_or(DEFAULT_COPPERLIST_COUNT);
+    let pipeline_selected = config.planner_kind() == PlannerKind::Pipeline;
+    let in_flight_limit = if pipeline_selected {
+        config
+            .planner_config()
+            .expect("Pipeline selection must have planner config")
+            .max_in_flight(copperlist_count)?
+    } else {
+        1
+    };
     let refine_totals = refine_totals(&steps);
 
     let runtime = config.runtime.as_ref();
@@ -452,9 +457,9 @@ fn render_mission(
     .unwrap();
     writeln!(
         svg,
-        r#"<text class="meta" x="0" y="43">{} serial steps · {} parallel stages · {} message slots per CopperList · {} CopperLists max in flight · rate target: {}</text>"#,
+        r#"<text class="meta" x="0" y="43">{} serial steps · {} pipeline lanes · {} message slots per CopperList · {} CopperLists max in flight · rate target: {}</text>"#,
         steps.len(),
-        stages.len(),
+        if pipeline_selected { stages.len() } else { 0 },
         message_slots,
         in_flight_limit,
         xml(&rate)
@@ -486,23 +491,26 @@ fn render_mission(
     y += 17.0;
     let serial = render_serial(config, mission, &steps, &plan.entities, &refine_totals, y);
     svg.push_str(&serial.svg);
-    y += serial.height + 26.0;
-    writeln!(
-        svg,
-        r#"<text class="subtitle" x="0" y="{y}">Parallel projection · generated stage workers + background pools</text>"#
-    )
-    .unwrap();
-    y += 17.0;
-    let parallel = render_parallel(
-        config,
-        &stages,
-        &plan.entities,
-        &refine_totals,
-        in_flight_limit,
-        y,
-    );
-    svg.push_str(&parallel.svg);
-    y += parallel.height;
+    y += serial.height;
+    if pipeline_selected {
+        y += 26.0;
+        writeln!(
+            svg,
+            r#"<text class="subtitle" x="0" y="{y}">Pipeline lanes · generated stage workers + background pools</text>"#
+        )
+        .unwrap();
+        y += 17.0;
+        let pipeline = render_parallel(
+            config,
+            &stages,
+            &plan.entities,
+            &refine_totals,
+            in_flight_limit,
+            y,
+        );
+        svg.push_str(&pipeline.svg);
+        y += pipeline.height;
+    }
 
     if let Some(observed) = observed {
         y += 28.0;
@@ -1839,6 +1847,7 @@ mod tests {
             r#"(
                 runtime: (
                     rate_target_hz: 100,
+                    planner: (kind: Pipeline),
                     thread_pools: [
                         (id: "rt", threads: 2, affinity: [2, 4], policy: Fifo(priority: 80), on_error: Strict),
                     ],
@@ -1860,7 +1869,7 @@ mod tests {
         let second = render_document(&config, &sections, None).unwrap();
         assert_eq!(first, second);
         assert!(first.contains("Serial projection"));
-        assert!(first.contains("Parallel projection"));
+        assert!(first.contains("Pipeline lanes"));
         assert!(first.contains("CPU 2"));
         assert!(first.contains("CPU 4"));
         assert!(first.contains("bus→board.spi"));
@@ -1872,6 +1881,7 @@ mod tests {
     fn anytime_is_woven_in_serial_and_collapsed_in_parallel() {
         let config = config(
             r#"(
+                runtime: (planner: (kind: Pipeline)),
                 tasks: [
                     (id: "src", type: "demo::Src", kind: source),
                     (id: "any", type: "demo::Any", kind: task, anytime: (max_refines: 3)),
@@ -1930,6 +1940,7 @@ mod tests {
         let config = config(
             r#"(
                 runtime: (
+                    planner: (kind: Pipeline),
                     thread_pools: [
                         (id: "vision", threads: 1, policy: Nice(10), on_error: Warn),
                     ],
@@ -1968,6 +1979,7 @@ mod tests {
         let config = config(
             r#"(
                 runtime: (
+                    planner: (kind: Pipeline),
                     thread_pools: [
                         (id: "vision", threads: 1, affinity: [3], policy: Fair, on_error: Warn),
                     ],
@@ -1999,6 +2011,7 @@ mod tests {
         let config = config(
             r#"(
                 logging: (copperlist_count: 6),
+                runtime: (planner: (kind: Pipeline)),
                 tasks: [
                     (id: "s0", type: "demo::S0", kind: source),
                     (id: "s1", type: "demo::S1", kind: source),
@@ -2028,6 +2041,7 @@ mod tests {
         let config = config(
             r#"(
                 logging: (copperlist_count: 32),
+                runtime: (planner: (kind: Pipeline)),
                 tasks: [
                     (id: "s0", type: "demo::S0", kind: source),
                     (id: "s1", type: "demo::S1", kind: source),
@@ -2058,6 +2072,7 @@ mod tests {
     fn staggered_wavefront_highlights_declared_resource_contention() {
         let config = config(
             r#"(
+                runtime: (planner: (kind: Pipeline)),
                 resources: [(id: "gpu0", provider: "demo::Gpu")],
                 tasks: [
                     (id: "src", type: "demo::Src", kind: source),
