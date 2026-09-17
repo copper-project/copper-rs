@@ -48,7 +48,7 @@
       - Migrate existing parallel-rt examples to conditional Pipeline
         configuration and prove their output matches the old executor.
 
-  2. [ ] feat(runtime): add stateless transform tasks
+  2. [x] feat(runtime): add stateless transform tasks
       - Add CuStatelessTask and kind: stateless_task.
       - Use immutable per-CopperList callbacks with exclusive mutable
         lifecycle calls and require Send + Sync.
