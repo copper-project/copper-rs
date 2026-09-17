@@ -613,6 +613,80 @@ pub trait CuTask: Freezable + Reflect {
     }
 }
 
+/// A transform task whose per-CopperList callbacks do not mutate the task instance.
+///
+/// Stateless tasks have the same input/output shape as [`CuTask`], but
+/// `preprocess`, `process`, and `postprocess` receive `&self`. This makes the
+/// task safe for runtimes to invoke for different CopperLists concurrently.
+/// Construction, `start`, `stop`, and [`Freezable::thaw`] remain exclusive
+/// lifecycle operations.
+///
+/// Implementations must be [`Send`] and [`Sync`]. Any shared state reachable
+/// through `self` must preserve deterministic behavior when callbacks overlap.
+pub trait CuStatelessTask: Freezable + Reflect + Send + Sync {
+    type Input<'m>: CuMsgPack;
+    type Output<'m>: CuMsgPayload;
+    /// Resources required by the task.
+    type Resources<'r>;
+
+    /// Registers the reflected type used as this task's debug-state contract.
+    fn register_debug_state_types(registry: &mut TypeRegistry)
+    where
+        Self: GetTypeRegistration + Sized,
+    {
+        registry.register::<Self>();
+    }
+
+    /// Returns the reflected type path used as this task's debug-state schema.
+    fn debug_state_type_path() -> &'static str
+    where
+        Self: TypePath + Sized,
+    {
+        Self::type_path()
+    }
+
+    /// Borrows this task's current debug-state view.
+    fn with_debug_state<R>(&self, f: impl FnOnce(&dyn Reflect) -> R) -> R
+    where
+        Self: Sized,
+    {
+        f(self)
+    }
+
+    /// Creates the task and binds its resources.
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    where
+        Self: Sized;
+
+    /// Starts the task before its first per-CopperList callback.
+    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
+        Ok(())
+    }
+
+    /// Performs best-effort preparation for one CopperList.
+    fn preprocess(&self, _ctx: &CuContext) -> CuResult<()> {
+        Ok(())
+    }
+
+    /// Produces one output from the current CopperList inputs.
+    fn process<'i, 'o>(
+        &self,
+        _ctx: &CuContext,
+        input: &Self::Input<'i>,
+        output: &mut Self::Output<'o>,
+    ) -> CuResult<()>;
+
+    /// Performs best-effort follow-up work for one CopperList.
+    fn postprocess(&self, _ctx: &CuContext) -> CuResult<()> {
+        Ok(())
+    }
+
+    /// Stops the task after all per-CopperList callbacks have completed.
+    fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
+        Ok(())
+    }
+}
+
 /// A Sink Task is a task that only consumes messages. For example drivers for actuators are Sink Tasks.
 pub trait CuSinkTask: Freezable + Reflect {
     type Input<'m>: CuMsgPack;

@@ -9,7 +9,7 @@
 
 use crate::config::{
     BridgeChannelConfigRepresentation, ComponentConfig, ConfigGraphs, CuConfig, CuDirection,
-    CuGraph, Flavor, Node, NodeId,
+    CuGraph, Flavor, Node, NodeId, TaskKind,
 };
 use crate::curuntime::{
     CuExecutionLoop, CuExecutionStep, CuExecutionUnit, CuInputMsg, CuOutputPack, CuStepPhase,
@@ -640,6 +640,11 @@ fn channel_is_used(
 
 fn inferred_output_name(node: &Node, task_type: CuTaskType) -> String {
     let rust_type = node.get_type();
+    if node.get_declared_task_kind() == Some(TaskKind::Stateless) {
+        return format!(
+            "<<{rust_type} as cu29::cutask::CuStatelessTask>::Output<'static> as cu29::cutask::CuSingleOutputMsg>::Payload"
+        );
+    }
     if node.anytime().is_some() {
         return format!(
             "<<{rust_type} as cu29::cutask_anytime::CuAnytimeTask>::Output<'static> as cu29::cutask::CuSingleOutputMsg>::Payload"
@@ -1219,6 +1224,27 @@ mod tests {
         assert_eq!(output.culist_index, 0);
         assert!(output.msg_types[0].contains("CuSingleOutputMsg"));
         assert!(output.msg_types[0].contains("CuSrcTask"));
+    }
+
+    #[test]
+    fn synthesizes_declared_stateless_output() {
+        let config = config(
+            r#"(
+                tasks: [
+                    (id: "src", type: "demo::Source"),
+                    (id: "generated", type: "demo::Generated", kind: stateless_task),
+                ],
+                cnx: [(src: "src", dst: "generated", msg: "u32")],
+            )"#,
+        );
+        let graph = config.get_graph(None).unwrap();
+        let plan = assemble_runtime_plan(&config, graph).unwrap();
+        let CuExecutionUnit::Step(step) = &plan.execution.steps[1] else {
+            panic!("expected generated stateless step")
+        };
+        let output = step.output_msg_pack.as_ref().unwrap();
+        assert!(output.msg_types[0].contains("CuSingleOutputMsg"));
+        assert!(output.msg_types[0].contains("CuStatelessTask"));
     }
 
     // ---- Pinned resolution and ordering ----

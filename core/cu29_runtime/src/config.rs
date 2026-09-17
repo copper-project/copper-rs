@@ -948,6 +948,10 @@ pub enum TaskKind {
     Source,
     #[serde(rename = "task", alias = "regular", alias = "cutask")]
     Regular,
+    /// A transform implementing `CuStatelessTask`. It has the regular graph
+    /// shape but immutable per-CopperList callbacks.
+    #[serde(rename = "stateless_task", alias = "stateless")]
+    Stateless,
     #[serde(rename = "sink", alias = "snk")]
     Sink,
 }
@@ -958,6 +962,7 @@ impl TaskKind {
         match self {
             TaskKind::Source => "source",
             TaskKind::Regular => "task",
+            TaskKind::Stateless => "stateless_task",
             TaskKind::Sink => "sink",
         }
     }
@@ -2212,8 +2217,9 @@ fn validate_task_kind(
         TaskKind::Source if has_inputs => Err(CuError::from(format!(
             "Task '{node_id}' is declared as kind 'source' but has incoming connections. Sources map to CuSrcTask and cannot consume inputs. Use kind: task instead."
         ))),
-        TaskKind::Regular if !has_inputs => Err(CuError::from(format!(
-            "Task '{node_id}' is declared as kind 'task' but has no incoming connections. Regular tasks map to CuTask and need at least one input connection. Use kind: source if it is input-free."
+        TaskKind::Regular | TaskKind::Stateless if !has_inputs => Err(CuError::from(format!(
+            "Task '{node_id}' is declared as kind '{}' but has no incoming connections. Transform tasks need at least one input connection. Use kind: source if it is input-free.",
+            kind.as_str()
         ))),
         TaskKind::Sink if has_outputs => Err(CuError::from(format!(
             "Task '{node_id}' is declared as kind 'sink' but has outgoing or NC outputs. Sinks map to CuSinkTask and cannot produce outputs. Use kind: task instead."
@@ -4006,6 +4012,18 @@ impl CuConfig {
         Ok(())
     }
 
+    fn validate_stateless_configs(&self) -> CuResult<()> {
+        match &self.graphs {
+            Simple(graph) => validate_stateless_graph(graph),
+            Missions(graphs) => {
+                for graph in graphs.values() {
+                    validate_stateless_graph(graph)?;
+                }
+                Ok(())
+            }
+        }
+    }
+
     /// Validates every `anytime:` policy in the resolved graphs.
     ///
     /// Runs at configuration-resolution time, the first point where both the
@@ -4112,6 +4130,29 @@ fn validate_anytime_graph(graph: &CuGraph, rate_target_hz: Option<u64>) -> CuRes
         if window_ms >= period_ms {
             return Err(CuError::from(format!(
                 "Task '{}': the worst-case anytime window ({window_ms} ms) does not fit within the {rate_target_hz} Hz loop period ({period_ms} ms) with headroom for the rest of the copperlist. Tighten the time bound, lower runtime.rate_target_hz, or run the task with background: true.",
+                node.id
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn validate_stateless_graph(graph: &CuGraph) -> CuResult<()> {
+    for (node_id, node) in graph.get_all_nodes() {
+        if node.get_declared_task_kind() != Some(TaskKind::Stateless) {
+            continue;
+        }
+
+        resolve_task_kind_for_id(graph, node_id)?;
+        if node.is_background() {
+            return Err(CuError::from(format!(
+                "Task '{}' is declared as kind 'stateless_task' and cannot be backgrounded.",
+                node.id
+            )));
+        }
+        if node.is_anytime() {
+            return Err(CuError::from(format!(
+                "Task '{}' is declared as kind 'stateless_task' and cannot use an anytime policy.",
                 node.id
             )));
         }
@@ -4234,6 +4275,7 @@ impl CuConfig {
                     TaskKind::Source => "#ddefc7",
                     TaskKind::Sink => "#cce0ff",
                     TaskKind::Regular => "#f2f2f2",
+                    TaskKind::Stateless => "#cba6f7",
                 },
             };
 
@@ -5464,6 +5506,7 @@ fn config_representation_to_config(representation: CuConfigRepresentation) -> Cu
 
     cuconfig.validate_logging_config()?;
     cuconfig.validate_runtime_config()?;
+    cuconfig.validate_stateless_configs()?;
     cuconfig.validate_anytime_configs()?;
     cuconfig.validate_constants()?;
     cuconfig.validate_log_streaming_config()?;
@@ -6922,11 +6965,13 @@ mod tests {
             tasks: [
                 (id: "src", type: "a", kind: source),
                 (id: "regular", type: "b", kind: regular),
-                (id: "sink", type: "c", kind: sink),
+                (id: "stateless", type: "c", kind: stateless_task),
+                (id: "sink", type: "d", kind: sink),
             ],
             cnx: [
                 (src: "src", dst: "regular", msg: "msg::A"),
-                (src: "regular", dst: "sink", msg: "msg::B"),
+                (src: "regular", dst: "stateless", msg: "msg::B"),
+                (src: "stateless", dst: "sink", msg: "msg::C"),
             ]
         )"#;
 
@@ -6949,6 +6994,13 @@ mod tests {
         );
         assert_eq!(
             graph
+                .get_node(graph.get_node_id_by_name("stateless").unwrap())
+                .unwrap()
+                .get_declared_task_kind(),
+            Some(TaskKind::Stateless)
+        );
+        assert_eq!(
+            graph
                 .get_node(graph.get_node_id_by_name("sink").unwrap())
                 .unwrap()
                 .get_declared_task_kind(),
@@ -6958,7 +7010,35 @@ mod tests {
         let serialized = config.serialize_ron().unwrap();
         assert!(serialized.contains("kind: source"));
         assert!(serialized.contains("kind: task"));
+        assert!(serialized.contains("kind: stateless_task"));
         assert!(serialized.contains("kind: sink"));
+    }
+
+    #[test]
+    fn test_stateless_task_rejects_background_and_anytime_modes() {
+        for (attribute, expected) in [
+            ("background: true", "cannot be backgrounded"),
+            ("anytime: (max_refines: 1)", "cannot use an anytime policy"),
+        ] {
+            let txt = format!(
+                r#"(
+                    tasks: [
+                        (id: "src", type: "a"),
+                        (id: "transform", type: "b", kind: stateless_task, {attribute}),
+                        (id: "sink", type: "c"),
+                    ],
+                    cnx: [
+                        (src: "src", dst: "transform", msg: "msg::A"),
+                        (src: "transform", dst: "sink", msg: "msg::B"),
+                    ],
+                )"#
+            );
+            let err = read_configuration_str(txt, None).expect_err("config should fail");
+            assert!(
+                err.to_string().contains(expected),
+                "unexpected error for {attribute}: {err}"
+            );
+        }
     }
 
     #[test]

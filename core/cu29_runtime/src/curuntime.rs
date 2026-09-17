@@ -2304,7 +2304,7 @@ impl From<TaskKind> for CuTaskType {
     fn from(value: TaskKind) -> Self {
         match value {
             TaskKind::Source => CuTaskType::Source,
-            TaskKind::Regular => CuTaskType::Regular,
+            TaskKind::Regular | TaskKind::Stateless => CuTaskType::Regular,
             TaskKind::Sink => CuTaskType::Sink,
         }
     }

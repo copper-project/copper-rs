@@ -18,5 +18,6 @@ error[E0599]: the method `start` exists for struct `CuAppLifecycle<MmapSectionSt
           candidate #3: `cu29::prelude::CuMonitor`
           candidate #4: `cu29::prelude::CuSinkTask`
           candidate #5: `cu29::prelude::CuSrcTask`
-          candidate #6: `cu29::prelude::CuTask`
-          candidate #7: `fixedbitset::range::IndexRange`
+          candidate #6: `cu29::prelude::CuStatelessTask`
+          candidate #7: `cu29::prelude::CuTask`
+          candidate #8: `fixedbitset::range::IndexRange`

@@ -61,6 +61,7 @@ const BRIDGE_HEADER_BG: &str = "#f7d7e4";
 const SOURCE_HEADER_BG: &str = "#ddefc7";
 const SINK_HEADER_BG: &str = "#cce0ff";
 const TASK_HEADER_BG: &str = "#fde7c2";
+const STATELESS_TASK_HEADER_BG: &str = "#cba6f7";
 const ANYTIME_BORDER_COLOR: &str = "#7c3aed";
 const ANYTIME_BORDER_DASH: &str = "4,3";
 const RESOURCE_TITLE_BG: &str = "#eef1f6";
@@ -153,9 +154,10 @@ const LEGEND_BOTTOM_PADDING: f64 = 6.0;
 const LEGEND_LOGO_SIZE: f64 = 16.0;
 const LEGEND_TEXT_WIDTH_FACTOR: f64 = 0.52;
 const COPPER_GITHUB_URL: &str = "https://github.com/copper-project/copper-rs";
-const LEGEND_ITEMS: [LegendItem; 5] = [
+const LEGEND_ITEMS: [LegendItem; 6] = [
     LegendItem::new("Source", SOURCE_HEADER_BG),
     LegendItem::new("Task", TASK_HEADER_BG),
+    LegendItem::new("Stateless task", STATELESS_TASK_HEADER_BG),
     LegendItem::anytime(),
     LegendItem::new("Sink", SINK_HEADER_BG),
     LegendItem::new("Bridge", BRIDGE_HEADER_BG),
@@ -604,6 +606,7 @@ fn build_section_layout(
                     config::TaskKind::Source => SOURCE_HEADER_BG,
                     config::TaskKind::Sink => SINK_HEADER_BG,
                     config::TaskKind::Regular => TASK_HEADER_BG,
+                    config::TaskKind::Stateless => STATELESS_TASK_HEADER_BG,
                 }
             }
         };
@@ -4884,6 +4887,29 @@ mod tests {
         assert!(tooltip.contains("Message size (avg): n/a"));
         assert!(tooltip.contains("Rate: n/a"));
         assert!(tooltip.contains("None: n/a"));
+    }
+
+    #[test]
+    fn stateless_tasks_have_a_distinct_color_and_legend_entry() {
+        let config = config::CuConfig::deserialize_ron(
+            r#"(
+                tasks: [
+                    (id: "src", type: "Source"),
+                    (id: "map", type: "Map", kind: stateless_task),
+                    (id: "sink", type: "Sink"),
+                ],
+                cnx: [
+                    (src: "src", dst: "map", msg: "u32"),
+                    (src: "map", dst: "sink", msg: "u32"),
+                ],
+            )"#,
+        )
+        .expect("stateless config should parse");
+
+        let svg = String::from_utf8(render_config_svg(&config, None, None).expect("render"))
+            .expect("UTF-8 SVG");
+        assert!(svg.contains("Stateless task"));
+        assert!(svg.matches(STATELESS_TASK_HEADER_BG).count() >= 2);
     }
 
     #[test]
