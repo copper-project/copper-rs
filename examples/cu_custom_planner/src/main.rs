@@ -74,8 +74,8 @@ fn main() {
     running.stop().expect("Failed to stop application.");
 
     let ran = RAN.lock().unwrap().clone();
-    // The out-of-tree Alphabetical planner runs a_left before b_right; the
-    // default Linearity order would start with b_right (listed first).
+    // The offline-generated TaskOrder runs a_left before b_right; the default
+    // serial graph order would start with b_right (listed first).
     assert_eq!(ran, ["a_left", "b_right"]);
-    debug!("Executed in the out-of-tree planner's order.");
+    debug!("Executed in the offline planner's TaskOrder.");
 }

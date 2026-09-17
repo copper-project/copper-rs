@@ -1,6 +1,6 @@
 [package]
 name = "custom-planner"
-description = "Example out-of-tree execution planner for cu-custom-planner."
+description = "Example offline TaskOrder generator for cu-custom-planner."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

@@ -1,0 +1,13 @@
+(
+    runtime: (
+        planner: (
+            kind: TaskOrder,
+            config: {
+                "order": [
+                    "a_left",
+                    "b_right",
+                ],
+            },
+        ),
+    ),
+)

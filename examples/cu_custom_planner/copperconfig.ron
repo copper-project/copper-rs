@@ -1,4 +1,7 @@
 (
+    includes: [
+        (path: "task_order.ron"),
+    ],
     tasks: [
         (
             id: "b_right",
@@ -28,9 +31,4 @@
             msg: "i32",
         ),
     ],
-    runtime: (
-        planner: (
-            type: "custom_planner::Alphabetical",
-        ),
-    ),
 )
