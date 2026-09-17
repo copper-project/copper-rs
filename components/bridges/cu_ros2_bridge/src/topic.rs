@@ -1,12 +1,14 @@
 use cu29::CuResult;
 use zenoh::key_expr::KeyExpr;
 
+use crate::qos::Qos;
 use crate::{format_keyexpr, node::Node};
 
 pub struct Topic<'a> {
     name: &'a str,
     type_name: String,
     type_hash: String,
+    qos: Qos,
 }
 
 impl<'a> Topic<'a> {
@@ -15,6 +17,7 @@ impl<'a> Topic<'a> {
             name,
             type_name: dds_type_name(namespace, type_name),
             type_hash: type_hash.into(),
+            qos: Qos::sensor_data(),
         }
     }
 
@@ -30,9 +33,8 @@ impl<'a> Topic<'a> {
         self.type_hash.as_ref()
     }
 
-    pub fn qos(&self) -> &str {
-        // TODO implement QoS
-        "::,:,:,:,,"
+    pub fn qos(&self) -> String {
+        self.qos.to_keyexpr()
     }
 
     pub fn pubsub_keyexpr(&self, node: &Node) -> CuResult<KeyExpr<'static>> {
