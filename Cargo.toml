@@ -207,6 +207,8 @@ cu-ahrs = { path = "components/tasks/cu_ahrs" }
 cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads" }
 cu-transform = { path = "components/libs/cu_transform" }
 cu29 = { path = "core/cu29" }
+cu-vitfly = { path = "../cu-vitfly" }
+cu-zed = { path = "../zed/components/sources/cu_zed" }
 soft_ratatui = { path = "vendor/soft_ratatui" }
 
 [workspace.package]
