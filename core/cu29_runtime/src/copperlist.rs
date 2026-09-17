@@ -167,6 +167,10 @@ pub type AscIterMut<'a, T> = Chain<SliceIterMut<'a, T>, SliceIterMut<'a, T>>;
 ///
 /// Existing implementations use `Default` for startup initialization.
 pub trait CuListZeroedInit: CopperListTuple {
+    /// Whether generated execution uses move-only arena slots.
+    #[doc(hidden)]
+    const DISTRIBUTED: bool = false;
+
     /// Resets per-cycle metadata on an already initialized dataset.
     fn init_zeroed(&mut self);
 

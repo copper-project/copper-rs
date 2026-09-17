@@ -51,10 +51,9 @@ mod payload_clearing {
 
     #[cfg(any(feature = "async-cl-io", feature = "parallel-rt"))]
     #[test]
-    fn test_clear_fresh_boxed_tuple_vector_payload() {
+    fn test_clear_fresh_arena_tuple_vector_payload() {
         #[cfg(feature = "parallel-rt")]
-        for mut list in cu29::curuntime::allocate_boxed_copperlists::<cumsgs::CuStampedDataSet, 3>()
-        {
+        for mut list in cu29::arena::allocate_slots::<cumsgs::CuStampedDataSet>(3) {
             assert!(list.msgs.0.0.payload().is_none());
             list.msgs.0.0.clear_payload();
         }

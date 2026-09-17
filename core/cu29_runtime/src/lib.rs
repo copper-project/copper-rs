@@ -13,6 +13,9 @@ pub use paste::paste as __cu29_paste;
 pub mod app;
 #[cfg(feature = "std")]
 mod app_sim;
+#[cfg(feature = "std")]
+#[doc(hidden)]
+pub mod arena;
 pub mod config;
 pub mod context;
 pub mod continuity;
