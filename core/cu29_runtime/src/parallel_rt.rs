@@ -8,16 +8,11 @@
 //! cursor.
 
 use crate::config::NodeId;
-use crate::copperlist::{CopperList, CuListZeroedInit};
 pub use crate::curuntime::{ProcessStepOutcome, ProcessStepResult};
 use crate::monitoring::ComponentId;
-use alloc::boxed::Box;
-use alloc::vec::Vec;
 use core::fmt::{Debug, Formatter, Result as FmtResult};
 use core::ops::{Deref, DerefMut};
 use core::sync::atomic::{AtomicU64, Ordering};
-use cu29_clock::CuTime;
-use cu29_traits::CopperListTuple;
 
 /// Scheduler-facing category for one process-stage checkpoint.
 ///
@@ -157,51 +152,6 @@ impl CausalityCheckpoint {
     #[inline]
     pub fn authorize_next(&self, next_clid: u64) {
         self.next_clid.store(next_clid, Ordering::Release);
-    }
-}
-
-/// Per-CopperList scratch state carried while a list is in flight.
-///
-/// The current parallel executor still serializes keyframe capture at commit
-/// time, but the ownership model is explicit so future work can move keyframe
-/// accumulation fully into the in-flight ticket.
-#[derive(Debug, Clone, Default)]
-pub struct ParallelKeyFrameScratch {
-    pub culistid: u64,
-    pub timestamp: CuTime,
-    pub serialized_tasks: Vec<u8>,
-}
-
-/// Ownership container for one in-flight CopperList.
-///
-/// Field meanings:
-/// - `clid`: globally ordered CopperList id.
-/// - `culist`: the boxed CopperList buffer currently being filled or committed.
-/// - `keyframe`: optional per-CL snapshot scratch space.
-/// - `raw_payload_bytes`: payload bytes observed before serialization.
-/// - `handle_bytes`: handle-backed payload accounting for monitor/log I/O stats.
-#[derive(Debug)]
-pub struct IterationTicket<P: CopperListTuple> {
-    pub clid: u64,
-    pub culist: Box<CopperList<P>>,
-    pub keyframe: Option<Box<ParallelKeyFrameScratch>>,
-    pub raw_payload_bytes: u64,
-    pub handle_bytes: u64,
-}
-
-impl<P> IterationTicket<P>
-where
-    P: CopperListTuple + CuListZeroedInit,
-{
-    pub fn new(clid: u64, mut culist: Box<CopperList<P>>) -> Self {
-        culist.reset_for_runtime_use(clid);
-        Self {
-            clid,
-            culist,
-            keyframe: None,
-            raw_payload_bytes: 0,
-            handle_bytes: 0,
-        }
     }
 }
 

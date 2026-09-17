@@ -1138,11 +1138,7 @@ mod tests {
     use super::*;
 
     fn keyframe(culistid: u64) -> KeyFrame {
-        KeyFrame {
-            culistid,
-            timestamp: CuTime::from_nanos(culistid),
-            serialized_tasks: Vec::new(),
-        }
+        KeyFrame::from_serialized(culistid, CuTime::from_nanos(culistid), Vec::new())
     }
 
     #[test]

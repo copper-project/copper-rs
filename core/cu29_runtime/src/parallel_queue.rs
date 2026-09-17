@@ -12,6 +12,7 @@ use rtrb::{Consumer, PopError, Producer, PushError, RingBuffer};
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::thread::{self, Thread};
+use std::time::{Duration, Instant};
 
 #[derive(Debug)]
 pub struct StageSendError<T>(pub T);
@@ -175,6 +176,45 @@ impl<T> StageSender<T> {
 }
 
 impl<T> StageReceiver<T> {
+    #[doc(hidden)]
+    #[inline]
+    pub fn try_recv(&mut self) -> Result<Option<T>, StageRecvError> {
+        self.shared.register_receiver();
+        match self.inner.pop() {
+            Ok(value) => {
+                self.shared.wake_sender();
+                Ok(Some(value))
+            }
+            Err(PopError::Empty) if !self.shared.sender_alive.load(Ordering::Acquire) => {
+                Err(StageRecvError)
+            }
+            Err(PopError::Empty) => Ok(None),
+        }
+    }
+
+    #[doc(hidden)]
+    #[inline]
+    pub fn recv_timeout(&mut self, timeout: Duration) -> Result<Option<T>, StageRecvError> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            if let Some(value) = self.try_recv()? {
+                return Ok(Some(value));
+            }
+
+            let now = Instant::now();
+            if now >= deadline {
+                return Ok(None);
+            }
+            self.shared.receiver_waiting.store(true, Ordering::Release);
+            if let Some(value) = self.try_recv()? {
+                self.shared.receiver_waiting.store(false, Ordering::Release);
+                return Ok(Some(value));
+            }
+            thread::park_timeout(deadline.saturating_duration_since(now));
+            self.shared.receiver_waiting.store(false, Ordering::Release);
+        }
+    }
+
     #[inline]
     pub fn recv(&mut self) -> Result<T, StageRecvError> {
         self.shared.register_receiver();

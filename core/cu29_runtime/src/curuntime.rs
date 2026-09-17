@@ -3,6 +3,8 @@
 //!
 
 use crate::app::Subsystem;
+#[cfg(feature = "std")]
+use crate::arena::{CuSlotLease, allocate_slots};
 use crate::config::{ComponentConfig, DEFAULT_KEYFRAME_INTERVAL, Node, TaskKind};
 use crate::config::{
     CuConfig, CuGraph, MAX_RATE_TARGET_HZ, NodeId, RuntimeConfig, resolve_task_kind_for_id,
@@ -489,7 +491,15 @@ impl OutputRequirements {
 /// Manages the lifecycle and completed-list sink on the synchronous path.
 #[doc(hidden)]
 pub struct SyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usize> {
-    inner: CuListsManager<P, NBCL>,
+    inner: Option<CuListsManager<P, NBCL>>,
+    #[cfg(feature = "std")]
+    free_pool: Vec<CuSlotLease<P>>,
+    #[cfg(feature = "std")]
+    keyframe_sink: Option<Box<CompletedKeyFrameSink>>,
+    #[cfg(feature = "std")]
+    next_distributed_id: u64,
+    #[cfg(feature = "std")]
+    pub last_keyframe_bytes: u64,
     sink: Option<Box<CompletedCopperListSink<P>>>,
     /// Remote-debug snapshot of the most recently completed CopperList.
     #[cfg(feature = "remote-debug")]
@@ -505,8 +515,32 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
     where
         P: CuListZeroedInit,
     {
+        Self::new_with_keyframes(sink, None)
+    }
+
+    pub fn new_with_keyframes(
+        sink: Option<Box<CompletedCopperListSink<P>>>,
+        keyframe_sink: Option<Box<CompletedKeyFrameSink>>,
+    ) -> CuResult<Self>
+    where
+        P: CuListZeroedInit,
+    {
+        #[cfg(not(feature = "std"))]
+        let _ = keyframe_sink;
         Ok(Self {
-            inner: CuListsManager::new(),
+            inner: (!P::DISTRIBUTED).then(CuListsManager::new),
+            #[cfg(feature = "std")]
+            free_pool: if P::DISTRIBUTED {
+                allocate_slots::<P>(NBCL)
+            } else {
+                Vec::new()
+            },
+            #[cfg(feature = "std")]
+            keyframe_sink,
+            #[cfg(feature = "std")]
+            next_distributed_id: 0,
+            #[cfg(feature = "std")]
+            last_keyframe_bytes: 0,
             sink,
             #[cfg(feature = "remote-debug")]
             last_completed_encoded: None,
@@ -516,27 +550,47 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
     }
 
     pub fn next_cl_id(&self) -> u64 {
-        self.inner.next_cl_id()
+        #[cfg(feature = "std")]
+        {
+            self.inner
+                .as_ref()
+                .map_or(self.next_distributed_id, CuListsManager::next_cl_id)
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            self.inner.as_ref().expect("serial storage").next_cl_id()
+        }
+    }
+
+    #[cfg(feature = "std")]
+    pub fn note_admission(&mut self, next_id: u64) {
+        self.next_distributed_id = self.next_distributed_id.max(next_id);
     }
 
     /// Aligns an idle allocator to a continuity-validated recorded boundary.
     /// Generated replay calls this off the real-time path.
     pub fn prepare_recorded_replay(&mut self, next_id: u64) -> CuResult<()> {
-        if !self.inner.is_empty() {
+        if !self.inner.as_ref().is_none_or(CuListsManager::is_empty) {
             return Err(CuError::from(
                 "Cannot reposition replay with active CopperLists",
             ));
         }
-        self.inner.set_next_replay_id(next_id);
+        if let Some(inner) = &mut self.inner {
+            inner.set_next_replay_id(next_id);
+        }
+        #[cfg(feature = "std")]
+        {
+            self.next_distributed_id = next_id;
+        }
         Ok(())
     }
 
     pub fn last_cl_id(&self) -> u64 {
-        self.inner.last_cl_id()
+        self.next_cl_id().saturating_sub(1)
     }
 
     pub fn peek(&self) -> Option<&CopperList<P>> {
-        self.inner.peek()
+        self.inner.as_ref().and_then(CuListsManager::peek)
     }
 
     #[cfg(feature = "remote-debug")]
@@ -562,6 +616,8 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         P: CuListZeroedInit,
     {
         self.inner
+            .as_mut()
+            .expect("serial storage")
             .create()
             .ok_or_else(|| CuError::from("Ran out of space for copper lists"))
     }
@@ -576,7 +632,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         self.last_handle_bytes = 0;
         #[cfg(feature = "remote-debug")]
         let last_completed_encoded = &mut self.last_completed_encoded;
-        for cl in self.inner.iter_mut() {
+        for cl in self.inner.as_mut().expect("serial storage").iter_mut() {
             if cl.id == culistid && cl.get_state() == CopperListState::Processing {
                 cl.change_state(CopperListState::DoneProcessing);
                 #[cfg(feature = "remote-debug")]
@@ -598,7 +654,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
             }
         }
         for _ in 0..nb_done {
-            let _ = self.inner.pop();
+            let _ = self.inner.as_mut().expect("serial storage").pop();
         }
         Ok(())
     }
@@ -608,7 +664,17 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
     }
 
     pub fn available_copper_lists(&mut self) -> CuResult<usize> {
-        Ok(NBCL - self.inner.len())
+        if let Some(inner) = &self.inner {
+            return Ok(NBCL - inner.len());
+        }
+        #[cfg(feature = "std")]
+        {
+            Ok(self.free_pool.len())
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            Ok(0)
+        }
     }
 
     #[inline]
@@ -617,14 +683,22 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
     }
 
     #[cfg(feature = "std")]
-    pub fn end_of_processing_boxed(
+    pub fn submit_slot(
         &mut self,
-        mut culist: Box<CopperList<P>>,
+        mut culist: CuSlotLease<P>,
     ) -> CuResult<OwnedCopperListSubmission<P>> {
         #[cfg(debug_assertions)]
-        debug_assert_processing_completion_state(culist.as_ref(), "sync boxed end_of_processing");
+        debug_assert_processing_completion_state(culist.as_ref(), "sync slot completion");
 
+        self.note_admission(culist.id + 1);
         culist.change_state(CopperListState::DoneProcessing);
+        self.last_keyframe_bytes = 0;
+        if let Some(sink) = &mut self.keyframe_sink
+            && let Some(keyframe) = culist.keyframe().filter(|keyframe| keyframe.is_active())
+        {
+            sink.log(keyframe)?;
+            self.last_keyframe_bytes = sink.last_log_bytes().unwrap_or(0) as u64;
+        }
         self.last_encoded_bytes = 0;
         self.last_handle_bytes = 0;
         if let Some(sink) = &mut self.sink {
@@ -638,19 +712,19 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
     }
 
     #[cfg(feature = "std")]
-    pub fn try_reclaim_boxed(&mut self) -> CuResult<Option<Box<CopperList<P>>>> {
+    pub fn try_reclaim_slot(&mut self) -> CuResult<Option<CuSlotLease<P>>> {
         Ok(None)
     }
 
     #[cfg(feature = "std")]
-    pub fn wait_reclaim_boxed(&mut self) -> CuResult<Box<CopperList<P>>> {
+    pub fn wait_reclaim_slot(&mut self) -> CuResult<CuSlotLease<P>> {
         Err(CuError::from(
-            "Synchronous CopperList I/O cannot block waiting for boxed completions",
+            "Synchronous CopperList I/O cannot block waiting for slot completions",
         ))
     }
 
     #[cfg(feature = "std")]
-    pub fn finish_pending_boxed(&mut self) -> CuResult<Vec<Box<CopperList<P>>>> {
+    pub fn finish_pending_slots(&mut self) -> CuResult<Vec<CuSlotLease<P>>> {
         Ok(Vec::new())
     }
 
@@ -658,7 +732,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
     fn debug_assert_end_of_processing_target(&self, culistid: u64) {
         let mut matches = 0usize;
         let mut state = None;
-        for cl in self.inner.iter() {
+        for cl in self.inner.as_ref().expect("serial storage").iter() {
             if cl.id == culistid {
                 matches += 1;
                 state = Some(cl.get_state());
@@ -678,20 +752,41 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
     }
 }
 
+#[cfg(feature = "std")]
+impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, NBCL> {
+    pub fn acquire_iteration_slot(&mut self) -> CuResult<CuSlotLease<P>> {
+        self.free_pool
+            .pop()
+            .ok_or_else(|| CuError::from("CopperList arena has no free slot"))
+    }
+
+    pub fn prepare_keyframes(&mut self, capacities: &[usize]) {
+        if !capacities.is_empty()
+            && let Some(slot) = self.free_pool.first_mut()
+        {
+            slot.prepare_keyframes(capacities);
+        }
+    }
+
+    pub fn recycle_slot(&mut self, slot: CuSlotLease<P>) {
+        self.free_pool.push(slot);
+    }
+}
+
 /// Result of handing an owned boxed CopperList to the runtime-side CL I/O path.
 #[cfg(feature = "std")]
 #[doc(hidden)]
 pub enum OwnedCopperListSubmission<P: CopperListTuple> {
     /// The CL has been fully handled and can be recycled immediately by the caller.
-    Recycled(Box<CopperList<P>>),
+    Recycled(CuSlotLease<P>),
     /// The CL was queued asynchronously and will be returned by a later reclaim call.
     Pending,
 }
 
 #[cfg(all(feature = "std", feature = "async-cl-io"))]
 struct AsyncCopperListCompletion<P: CopperListTuple> {
-    culist: Box<CopperList<P>>,
-    sink_result: CuResult<(u64, u64)>,
+    culist: CuSlotLease<P>,
+    sink_result: CuResult<(u64, u64, u64)>,
     #[cfg(feature = "remote-debug")]
     completed_snapshot: CuResult<Vec<u8>>,
 }
@@ -706,42 +801,17 @@ impl Drop for AsyncOutputWorkerRunningGuard {
     }
 }
 
-#[cfg(all(feature = "std", any(feature = "async-cl-io", feature = "parallel-rt")))]
-fn allocate_copperlist<P>() -> Box<CopperList<P>>
-where
-    P: CopperListTuple + CuListZeroedInit,
-{
-    let mut culist = Box::<CopperList<P>>::new_uninit();
-    // SAFETY: The initializer writes every field before the box is assumed valid.
-    unsafe {
-        CopperList::init_in_place(culist.as_mut_ptr());
-        culist.assume_init()
-    }
-}
-
-#[cfg(all(feature = "std", feature = "parallel-rt"))]
-pub fn allocate_boxed_copperlists<P, const NBCL: usize>() -> Vec<Box<CopperList<P>>>
-where
-    P: CopperListTuple + CuListZeroedInit,
-{
-    let mut free_pool = Vec::with_capacity(NBCL);
-    for _ in 0..NBCL {
-        free_pool.push(allocate_copperlist::<P>());
-    }
-    free_pool
-}
-
 /// Manages the lifecycle and completed-list sink on the asynchronous path.
 #[cfg(all(feature = "std", feature = "async-cl-io"))]
 #[doc(hidden)]
 pub struct AsyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usize> {
-    free_pool: Vec<Box<CopperList<P>>>,
-    current: Option<Box<CopperList<P>>>,
+    free_pool: Vec<CuSlotLease<P>>,
+    current: Option<CuSlotLease<P>>,
     #[cfg(feature = "remote-debug")]
     last_completed_encoded: Option<Vec<u8>>,
     pending_count: usize,
     next_cl_id: u64,
-    pending_producer: Option<Producer<Box<CopperList<P>>>>,
+    pending_producer: Option<Producer<CuSlotLease<P>>>,
     completion_consumer: Option<Consumer<AsyncCopperListCompletion<P>>>,
     worker_handle: Option<JoinHandle<()>>,
     worker_thread: Option<Thread>,
@@ -752,6 +822,8 @@ pub struct AsyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usi
     pub last_encoded_bytes: u64,
     /// Last handle-backed payload bytes observed while the sink ran.
     pub last_handle_bytes: u64,
+    pub last_keyframe_bytes: u64,
+    distributed: bool,
 }
 
 #[cfg(all(feature = "std", feature = "async-cl-io"))]
@@ -760,12 +832,19 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
     where
         P: CuListZeroedInit + AsyncCopperListPayload + 'static,
     {
-        let mut free_pool = Vec::with_capacity(NBCL);
-        for _ in 0..NBCL {
-            free_pool.push(allocate_copperlist::<P>());
-        }
+        Self::new_with_keyframes(sink, None)
+    }
 
-        if sink.is_some() && NBCL < 2 {
+    pub fn new_with_keyframes(
+        sink: Option<Box<CompletedCopperListSink<P>>>,
+        keyframe_sink: Option<Box<CompletedKeyFrameSink>>,
+    ) -> CuResult<Self>
+    where
+        P: CuListZeroedInit + AsyncCopperListPayload + 'static,
+    {
+        let free_pool = allocate_slots::<P>(NBCL);
+
+        if sink.is_some() && !P::DISTRIBUTED && NBCL < 2 {
             return Err(CuError::from(
                 "async CopperList output requires at least two CopperList slots",
             ));
@@ -778,10 +857,12 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
             worker_thread,
             worker_shutdown,
             worker_running,
-        ) = if let Some(mut sink) = sink {
-            let handoff_capacity = NBCL - 1;
+        ) = if sink.is_some() || keyframe_sink.is_some() {
+            let mut sink = sink;
+            let mut keyframe_sink = keyframe_sink;
+            let handoff_capacity = NBCL.max(1);
             let (pending_producer, mut pending_consumer) =
-                RingBuffer::<Box<CopperList<P>>>::new(handoff_capacity);
+                RingBuffer::<CuSlotLease<P>>::new(handoff_capacity);
             let (mut completion_producer, completion_consumer) =
                 RingBuffer::<AsyncCopperListCompletion<P>>::new(handoff_capacity);
             let worker_shutdown = Arc::new(AtomicBool::new(false));
@@ -811,12 +892,26 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
                             encode_completed_copperlist_snapshot(&culist)
                         };
                         culist.change_state(CopperListState::BeingSerialized);
-                        let sink_result = sink.log(&culist).map(|_| {
-                            (
-                                sink.last_log_bytes().unwrap_or(0) as u64,
-                                take_last_completed_handle_bytes(),
-                            )
-                        });
+                        let sink_result = (|| {
+                            let mut keyframe_bytes = 0;
+                            if let Some(keyframe_sink) = &mut keyframe_sink
+                                && let Some(keyframe) =
+                                    culist.keyframe().filter(|keyframe| keyframe.is_active())
+                            {
+                                keyframe_sink.log(keyframe)?;
+                                keyframe_bytes = keyframe_sink.last_log_bytes().unwrap_or(0) as u64;
+                            }
+                            if let Some(sink) = &mut sink {
+                                sink.log(&culist)?;
+                                Ok((
+                                    sink.last_log_bytes().unwrap_or(0) as u64,
+                                    take_last_completed_handle_bytes(),
+                                    keyframe_bytes,
+                                ))
+                            } else {
+                                Ok((0, 0, keyframe_bytes))
+                            }
+                        })();
                         let should_stop = sink_result.is_err();
                         #[cfg(feature = "remote-debug")]
                         let should_stop = should_stop || completed_snapshot.is_err();
@@ -873,7 +968,33 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
             dropped_copperlists_total: 0,
             last_encoded_bytes: 0,
             last_handle_bytes: 0,
+            last_keyframe_bytes: 0,
+            distributed: P::DISTRIBUTED,
         })
+    }
+
+    pub fn acquire_iteration_slot(&mut self) -> CuResult<CuSlotLease<P>> {
+        self.reclaim_completed()?;
+        match self.free_pool.pop() {
+            Some(slot) => Ok(slot),
+            None => self.wait_reclaim_slot(),
+        }
+    }
+
+    pub fn prepare_keyframes(&mut self, capacities: &[usize]) {
+        if !capacities.is_empty()
+            && let Some(slot) = self.free_pool.first_mut()
+        {
+            slot.prepare_keyframes(capacities);
+        }
+    }
+
+    pub fn recycle_slot(&mut self, slot: CuSlotLease<P>) {
+        self.free_pool.push(slot);
+    }
+
+    pub fn note_admission(&mut self, next_id: u64) {
+        self.next_cl_id = self.next_cl_id.max(next_id);
     }
 
     pub fn next_cl_id(&self) -> u64 {
@@ -935,7 +1056,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
             .current
             .as_mut()
             .expect("current CopperList is missing");
-        current.reset_for_runtime_use(self.next_cl_id);
+        current.reset(self.next_cl_id);
         self.next_cl_id += 1;
         Ok(current.as_mut())
     }
@@ -991,12 +1112,13 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
         self.dropped_copperlists_total
     }
 
-    pub fn end_of_processing_boxed(
+    pub fn submit_slot(
         &mut self,
-        mut culist: Box<CopperList<P>>,
+        mut culist: CuSlotLease<P>,
     ) -> CuResult<OwnedCopperListSubmission<P>> {
         #[cfg(debug_assertions)]
-        debug_assert_processing_completion_state(culist.as_ref(), "async boxed end_of_processing");
+        debug_assert_processing_completion_state(culist.as_ref(), "async slot completion");
+        self.next_cl_id = self.next_cl_id.max(culist.id + 1);
         culist.change_state(CopperListState::DoneProcessing);
         self.last_encoded_bytes = 0;
         self.last_handle_bytes = 0;
@@ -1004,10 +1126,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
         self.try_submit(culist)
     }
 
-    fn try_submit(
-        &mut self,
-        mut culist: Box<CopperList<P>>,
-    ) -> CuResult<OwnedCopperListSubmission<P>> {
+    fn try_submit(&mut self, mut culist: CuSlotLease<P>) -> CuResult<OwnedCopperListSubmission<P>> {
         let Some(pending_producer) = self.pending_producer.as_mut() else {
             culist.change_state(CopperListState::Free);
             return Ok(OwnedCopperListSubmission::Recycled(culist));
@@ -1016,7 +1135,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
         // Keep one of the preallocated CopperLists available to execute the
         // next iteration. Queue capacity alone cannot enforce this because a
         // record may be in the worker or waiting on the completion channel.
-        if self.pending_count >= NBCL - 1 {
+        if !self.distributed && self.pending_count >= NBCL - 1 {
             return Ok(self.drop_copperlist(culist));
         }
 
@@ -1033,13 +1152,13 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
         }
     }
 
-    fn drop_copperlist(&mut self, mut culist: Box<CopperList<P>>) -> OwnedCopperListSubmission<P> {
+    fn drop_copperlist(&mut self, mut culist: CuSlotLease<P>) -> OwnedCopperListSubmission<P> {
         self.dropped_copperlists_total = self.dropped_copperlists_total.saturating_add(1);
         culist.change_state(CopperListState::Free);
         OwnedCopperListSubmission::Recycled(culist)
     }
 
-    pub fn try_reclaim_boxed(&mut self) -> CuResult<Option<Box<CopperList<P>>>> {
+    pub fn try_reclaim_slot(&mut self) -> CuResult<Option<CuSlotLease<P>>> {
         let pop_result = {
             let Some(completion_consumer) = self.completion_consumer.as_mut() else {
                 return Ok(None);
@@ -1065,21 +1184,21 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
         }
     }
 
-    pub fn wait_reclaim_boxed(&mut self) -> CuResult<Box<CopperList<P>>> {
+    pub fn wait_reclaim_slot(&mut self) -> CuResult<CuSlotLease<P>> {
         if self.completion_consumer.is_none() {
             return Err(CuError::from(
                 "No async CopperList output worker is active to return a free slot",
             ));
         }
         loop {
-            if let Some(culist) = self.try_reclaim_boxed()? {
+            if let Some(culist) = self.try_reclaim_slot()? {
                 return Ok(culist);
             }
             std::thread::yield_now();
         }
     }
 
-    pub fn finish_pending_boxed(&mut self) -> CuResult<Vec<Box<CopperList<P>>>> {
+    pub fn finish_pending_slots(&mut self) -> CuResult<Vec<CuSlotLease<P>>> {
         let mut reclaimed = Vec::with_capacity(self.pending_count);
         if self.current.is_some() {
             return Err(CuError::from(
@@ -1087,14 +1206,14 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
             ));
         }
         while self.pending_count > 0 {
-            reclaimed.push(self.wait_reclaim_boxed()?);
+            reclaimed.push(self.wait_reclaim_slot()?);
         }
         Ok(reclaimed)
     }
 
     fn reclaim_completed(&mut self) -> CuResult<()> {
         loop {
-            let Some(culist) = self.try_reclaim_boxed()? else {
+            let Some(culist) = self.try_reclaim_slot()? else {
                 break;
             };
             self.free_pool.push(culist);
@@ -1103,7 +1222,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
     }
 
     fn wait_for_completion(&mut self) -> CuResult<()> {
-        let culist = self.wait_reclaim_boxed()?;
+        let culist = self.wait_reclaim_slot()?;
         self.free_pool.push(culist);
         Ok(())
     }
@@ -1111,11 +1230,12 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
     fn handle_completion(
         &mut self,
         mut completion: AsyncCopperListCompletion<P>,
-    ) -> CuResult<Box<CopperList<P>>> {
+    ) -> CuResult<CuSlotLease<P>> {
         self.pending_count = self.pending_count.saturating_sub(1);
-        if let Ok((encoded_bytes, handle_bytes)) = completion.sink_result.as_ref() {
+        if let Ok((encoded_bytes, handle_bytes, keyframe_bytes)) = completion.sink_result.as_ref() {
             self.last_encoded_bytes = *encoded_bytes;
             self.last_handle_bytes = *handle_bytes;
+            self.last_keyframe_bytes = *keyframe_bytes;
         }
         completion.culist.change_state(CopperListState::Free);
         completion.sink_result?;
@@ -1184,6 +1304,10 @@ struct AsyncKeyFrameCompletion {
 
 /// Manages bounded task-state keyframe capture and output.
 pub struct KeyFramesManager {
+    distributed: bool,
+    /// Per-component region capacities in generated restore order.
+    #[doc(hidden)]
+    pub capture_capacities: Vec<usize>,
     /// Active capture buffer. It is absent when no downstream consumer needs keyframes.
     inner: Option<KeyFrame>,
 
@@ -1251,6 +1375,20 @@ impl Writer for PreallocatedVecWriter<'_> {
 }
 
 impl KeyFramesManager {
+    fn distributed(enabled: bool, keyframe_interval: u32) -> CuResult<Self> {
+        if enabled && keyframe_interval == 0 {
+            return Err(CuError::from("Keyframe interval cannot be zero"));
+        }
+        let mut manager = Self::new(None, keyframe_interval)?;
+        manager.distributed = enabled;
+        Ok(manager)
+    }
+
+    #[doc(hidden)]
+    pub fn capture_interval(&self) -> u32 {
+        self.keyframe_interval
+    }
+
     #[doc(hidden)]
     pub fn new(sink: Option<Box<CompletedKeyFrameSink>>, keyframe_interval: u32) -> CuResult<Self> {
         if sink.is_some() && keyframe_interval == 0 {
@@ -1342,6 +1480,8 @@ impl KeyFramesManager {
                 Vec::new()
             };
             Ok(Self {
+                distributed: false,
+                capture_capacities: Vec::new(),
                 inner: enabled.then(KeyFrame::new),
                 forced_timestamp: None,
                 locked: false,
@@ -1365,6 +1505,8 @@ impl KeyFramesManager {
         {
             let enabled = sink.is_some();
             Ok(Self {
+                distributed: false,
+                capture_capacities: Vec::new(),
                 inner: enabled.then(KeyFrame::new),
                 forced_timestamp: None,
                 locked: false,
@@ -1377,7 +1519,8 @@ impl KeyFramesManager {
     }
 
     fn is_keyframe_due(&self, culistid: u64) -> bool {
-        self.inner.is_some() && culistid.is_multiple_of(self.keyframe_interval as u64)
+        (self.inner.is_some() || self.distributed)
+            && culistid.is_multiple_of(self.keyframe_interval as u64)
     }
 
     #[cfg(all(feature = "std", feature = "async-cl-io"))]
@@ -1399,12 +1542,13 @@ impl KeyFramesManager {
     #[doc(hidden)]
     pub fn begin_capture_preallocation(&mut self) {
         self.capture_size_hint = KEYFRAME_PAYLOAD_HEADER.len();
+        self.capture_capacities.clear();
     }
 
     /// Include one component's current frozen size in the cold-path capacity estimate.
     #[doc(hidden)]
     pub fn include_capture_capacity(&mut self, item: &impl Freezable) -> CuResult<()> {
-        if self.inner.is_none() {
+        if self.inner.is_none() && !self.distributed {
             return Ok(());
         }
         let mut sizer = EncoderImpl::new(SizeWriter::default(), bincode::config::standard());
@@ -1412,6 +1556,14 @@ impl KeyFramesManager {
             .encode(&mut sizer)
             .map_err(|_| CuError::from("Failed to size component keyframe state"))?;
         let payload_bytes = sizer.into_writer().bytes_written as usize;
+        if self.distributed {
+            self.capture_capacities.push(
+                (KEYFRAME_FRAME_HEADER_LEN + payload_bytes)
+                    .max(DISTRIBUTED_REGION_ALIGN)
+                    .checked_next_power_of_two()
+                    .ok_or_else(|| CuError::from("Keyframe region size overflow"))?,
+            );
+        }
         self.capture_size_hint = self
             .capture_size_hint
             .checked_add(KEYFRAME_FRAME_HEADER_LEN)
@@ -1423,6 +1575,9 @@ impl KeyFramesManager {
     /// Reserve the capture buffer before entering the execution loop.
     #[doc(hidden)]
     pub fn finish_capture_preallocation(&mut self) -> CuResult<()> {
+        if self.distributed {
+            return Ok(());
+        }
         if self.inner.is_none() {
             return Ok(());
         }
@@ -1878,7 +2033,19 @@ where
             .and_then(|logging| logging.keyframe_interval)
             .unwrap_or(DEFAULT_KEYFRAME_INTERVAL);
 
-        let copperlists_manager = CopperListsManager::new(copperlist_sink)?;
+        let (copperlists_manager, keyframes_manager) = if P::DISTRIBUTED {
+            let keyframes_manager =
+                KeyFramesManager::distributed(keyframe_sink.is_some(), keyframe_interval)?;
+            (
+                CopperListsManager::new_with_keyframes(copperlist_sink, keyframe_sink)?,
+                keyframes_manager,
+            )
+        } else {
+            (
+                CopperListsManager::new(copperlist_sink)?,
+                KeyFramesManager::new(keyframe_sink, keyframe_interval)?,
+            )
+        };
         #[cfg(target_os = "none")]
         {
             let cl_size = core::mem::size_of::<CopperList<P>>();
@@ -1889,7 +2056,6 @@ where
             );
         }
 
-        let keyframes_manager = KeyFramesManager::new(keyframe_sink, keyframe_interval)?;
         #[cfg(all(feature = "std", feature = "parallel-rt"))]
         let parallel_rt = ParallelRt::new(parts.parallel_rt_metadata)?;
 
@@ -1988,7 +2154,19 @@ where
             .and_then(|logging| logging.keyframe_interval)
             .unwrap_or(DEFAULT_KEYFRAME_INTERVAL);
 
-        let copperlists_manager = CopperListsManager::new(copperlist_sink)?;
+        let (copperlists_manager, keyframes_manager) = if P::DISTRIBUTED {
+            let keyframes_manager =
+                KeyFramesManager::distributed(keyframe_sink.is_some(), keyframe_interval)?;
+            (
+                CopperListsManager::new_with_keyframes(copperlist_sink, keyframe_sink)?,
+                keyframes_manager,
+            )
+        } else {
+            (
+                CopperListsManager::new(copperlist_sink)?,
+                KeyFramesManager::new(keyframe_sink, keyframe_interval)?,
+            )
+        };
         #[cfg(target_os = "none")]
         {
             let cl_size = core::mem::size_of::<CopperList<P>>();
@@ -1998,8 +2176,6 @@ where
                 NBCL, cl_size, total_bytes
             );
         }
-
-        let keyframes_manager = KeyFramesManager::new(keyframe_sink, keyframe_interval)?;
 
         let runtime_config = config.runtime.clone().unwrap_or_default();
         runtime_config.validate()?;
@@ -2024,7 +2200,7 @@ where
 ///
 /// `serialized_tasks` contains a versioned sequence of length-framed component
 /// snapshots in their generated execution-wave freeze order.
-#[derive(Clone, Encode, Decode)]
+#[derive(Clone, Decode)]
 pub struct KeyFrame {
     // This is the id of the copper list that this keyframe is associated with (recorded before the copperlist).
     pub culistid: u64,
@@ -2034,13 +2210,368 @@ pub struct KeyFrame {
     pub serialized_tasks: Vec<u8>,
 }
 
+const DISTRIBUTED_KEYFRAME_HEADER: &[u8; 5] = b"CUKD\x01";
+const DISTRIBUTED_ACTIVE_OFFSET: usize = DISTRIBUTED_KEYFRAME_HEADER.len();
+const DISTRIBUTED_COUNT_OFFSET: usize = DISTRIBUTED_ACTIVE_OFFSET + 1;
+const DISTRIBUTED_TABLE_OFFSET: usize = DISTRIBUTED_COUNT_OFFSET + 4;
+const DISTRIBUTED_ENTRY_LEN: usize = 16;
+const DISTRIBUTED_REGION_LEN: usize = 8;
+const DISTRIBUTED_REGION_ALIGN: usize = 128;
+
+struct RegionWriter<'a> {
+    bytes: &'a mut [u8],
+    written: usize,
+}
+
+impl Writer for RegionWriter<'_> {
+    fn write(&mut self, bytes: &[u8]) -> Result<(), EncodeError> {
+        let end = self
+            .written
+            .checked_add(bytes.len())
+            .ok_or(EncodeError::UnexpectedEnd)?;
+        self.bytes
+            .get_mut(self.written..end)
+            .ok_or(EncodeError::UnexpectedEnd)?
+            .copy_from_slice(bytes);
+        self.written = end;
+        Ok(())
+    }
+}
+
+fn distributed_count(bytes: &[u8]) -> Result<Option<usize>, &'static str> {
+    if !bytes.starts_with(DISTRIBUTED_KEYFRAME_HEADER) {
+        return Ok(None);
+    }
+    let count_end = DISTRIBUTED_COUNT_OFFSET + 4;
+    let count = u32::from_le_bytes(
+        bytes
+            .get(DISTRIBUTED_COUNT_OFFSET..count_end)
+            .ok_or("distributed keyframe header is truncated")?
+            .try_into()
+            .map_err(|_| "distributed keyframe count is invalid")?,
+    ) as usize;
+    let table_end = DISTRIBUTED_TABLE_OFFSET
+        .checked_add(
+            count
+                .checked_mul(DISTRIBUTED_ENTRY_LEN)
+                .ok_or("distributed keyframe table overflows")?,
+        )
+        .ok_or("distributed keyframe table overflows")?;
+    if table_end > bytes.len() {
+        return Err("distributed keyframe table is truncated");
+    }
+    Ok(Some(count))
+}
+
+fn distributed_region(bytes: &[u8], component: usize) -> Result<(usize, usize), &'static str> {
+    let count = distributed_count(bytes)?.ok_or("distributed keyframe storage is unavailable")?;
+    if component >= count {
+        return Err("keyframe component is out of bounds");
+    }
+    let entry = DISTRIBUTED_TABLE_OFFSET + component * DISTRIBUTED_ENTRY_LEN;
+    let offset = u64::from_le_bytes(
+        bytes[entry..entry + 8]
+            .try_into()
+            .map_err(|_| "distributed keyframe offset is invalid")?,
+    );
+    let capacity = u64::from_le_bytes(
+        bytes[entry + 8..entry + DISTRIBUTED_ENTRY_LEN]
+            .try_into()
+            .map_err(|_| "distributed keyframe capacity is invalid")?,
+    );
+    let offset = usize::try_from(offset).map_err(|_| "distributed keyframe offset is too large")?;
+    let capacity =
+        usize::try_from(capacity).map_err(|_| "distributed keyframe capacity is too large")?;
+    let end = offset
+        .checked_add(DISTRIBUTED_REGION_LEN)
+        .and_then(|value| value.checked_add(capacity))
+        .ok_or("distributed keyframe region overflows")?;
+    if end > bytes.len() {
+        return Err("distributed keyframe region is truncated");
+    }
+    Ok((offset, capacity))
+}
+
+unsafe fn distributed_region_raw(
+    ptr: *const u8,
+    allocation_len: usize,
+    component: usize,
+) -> Result<(usize, usize), &'static str> {
+    if allocation_len < DISTRIBUTED_COUNT_OFFSET + 4 {
+        return Err("distributed keyframe header is truncated");
+    }
+    for (index, expected) in DISTRIBUTED_KEYFRAME_HEADER.iter().copied().enumerate() {
+        // SAFETY: the caller provides an allocation of `allocation_len` bytes,
+        // and the header bound was checked above.
+        if unsafe { ptr.add(index).read() } != expected {
+            return Err("distributed keyframe storage is unavailable");
+        }
+    }
+    // SAFETY: the count field is inside the checked header. It is immutable
+    // while execution lanes write their disjoint component regions.
+    let count = u32::from_le(unsafe {
+        ptr.add(DISTRIBUTED_COUNT_OFFSET)
+            .cast::<u32>()
+            .read_unaligned()
+    }) as usize;
+    let table_end = DISTRIBUTED_TABLE_OFFSET
+        .checked_add(
+            count
+                .checked_mul(DISTRIBUTED_ENTRY_LEN)
+                .ok_or("distributed keyframe table overflows")?,
+        )
+        .ok_or("distributed keyframe table overflows")?;
+    if table_end > allocation_len {
+        return Err("distributed keyframe table is truncated");
+    }
+    if component >= count {
+        return Err("keyframe component is out of bounds");
+    }
+    let entry = DISTRIBUTED_TABLE_OFFSET + component * DISTRIBUTED_ENTRY_LEN;
+    // SAFETY: the entry lies inside the checked immutable descriptor table.
+    let offset = u64::from_le(unsafe { ptr.add(entry).cast::<u64>().read_unaligned() });
+    // SAFETY: the capacity immediately follows the checked offset field.
+    let capacity = u64::from_le(unsafe { ptr.add(entry + 8).cast::<u64>().read_unaligned() });
+    let offset = usize::try_from(offset).map_err(|_| "distributed keyframe offset is too large")?;
+    let capacity =
+        usize::try_from(capacity).map_err(|_| "distributed keyframe capacity is too large")?;
+    let end = offset
+        .checked_add(DISTRIBUTED_REGION_LEN)
+        .and_then(|value| value.checked_add(capacity))
+        .ok_or("distributed keyframe region overflows")?;
+    if end > allocation_len {
+        return Err("distributed keyframe region is truncated");
+    }
+    Ok((offset, capacity))
+}
+
+fn distributed_frame(bytes: &[u8], component: usize) -> Result<&[u8], &'static str> {
+    let (offset, capacity) = distributed_region(bytes, component)?;
+    let frame_len = u64::from_le_bytes(
+        bytes[offset..offset + DISTRIBUTED_REGION_LEN]
+            .try_into()
+            .map_err(|_| "distributed keyframe length is invalid")?,
+    );
+    let frame_len =
+        usize::try_from(frame_len).map_err(|_| "distributed keyframe length is too large")?;
+    if !(KEYFRAME_FRAME_HEADER_LEN..=capacity).contains(&frame_len) {
+        return Err("distributed keyframe component is incomplete");
+    }
+    let frame_start = offset + DISTRIBUTED_REGION_LEN;
+    Ok(&bytes[frame_start..frame_start + frame_len])
+}
+
+fn align_up(value: usize, alignment: usize) -> Option<usize> {
+    value
+        .checked_add(alignment - 1)
+        .map(|value| value & !(alignment - 1))
+}
+
+impl Encode for KeyFrame {
+    fn encode<__E: bincode::enc::Encoder>(&self, encoder: &mut __E) -> Result<(), EncodeError> {
+        self.culistid.encode(encoder)?;
+        self.timestamp.encode(encoder)?;
+        let bytes = self.serialized_tasks.as_slice();
+        let Some(count) = distributed_count(bytes).map_err(EncodeError::Other)? else {
+            return self.serialized_tasks.encode(encoder);
+        };
+        let mut length = KEYFRAME_PAYLOAD_HEADER.len();
+        for component in 0..count {
+            length = length
+                .checked_add(
+                    distributed_frame(bytes, component)
+                        .map_err(EncodeError::Other)?
+                        .len(),
+                )
+                .ok_or(EncodeError::Other("distributed keyframe length overflows"))?;
+        }
+        length.encode(encoder)?;
+        encoder.writer().write(KEYFRAME_PAYLOAD_HEADER)?;
+        for component in 0..count {
+            encoder
+                .writer()
+                .write(distributed_frame(bytes, component).map_err(EncodeError::Other)?)?;
+        }
+        Ok(())
+    }
+}
+
 impl KeyFrame {
-    fn new() -> Self {
-        KeyFrame {
+    pub(crate) fn from_serialized(
+        culistid: u64,
+        timestamp: CuTime,
+        serialized_tasks: Vec<u8>,
+    ) -> Self {
+        Self {
+            culistid,
+            timestamp,
+            serialized_tasks,
+        }
+    }
+
+    #[inline]
+    #[cfg(feature = "std")]
+    pub(crate) fn is_active(&self) -> bool {
+        self.serialized_tasks
+            .starts_with(DISTRIBUTED_KEYFRAME_HEADER)
+            && self.serialized_tasks[DISTRIBUTED_ACTIVE_OFFSET] != 0
+    }
+
+    /// Build one keyframe with a single cache-aligned backing slab.
+    #[doc(hidden)]
+    pub fn distributed(capacities: &[usize]) -> Self {
+        let table_end = DISTRIBUTED_TABLE_OFFSET
+            .checked_add(
+                capacities
+                    .len()
+                    .checked_mul(DISTRIBUTED_ENTRY_LEN)
+                    .expect("distributed keyframe region table overflow"),
+            )
+            .expect("distributed keyframe region table overflow");
+        let slab_bytes = capacities.iter().fold(0usize, |total, &capacity| {
+            let capacity = capacity.max(KEYFRAME_FRAME_HEADER_LEN);
+            let region_bytes =
+                align_up(DISTRIBUTED_REGION_LEN + capacity, DISTRIBUTED_REGION_ALIGN)
+                    .expect("distributed keyframe region size overflow");
+            total
+                .checked_add(region_bytes)
+                .expect("distributed keyframe slab size overflow")
+        });
+        let maximum = table_end
+            .checked_add(DISTRIBUTED_REGION_ALIGN - 1)
+            .and_then(|value| value.checked_add(slab_bytes))
+            .expect("distributed keyframe allocation size overflow");
+        let mut serialized_tasks = alloc::vec![0; maximum];
+        serialized_tasks[..DISTRIBUTED_KEYFRAME_HEADER.len()]
+            .copy_from_slice(DISTRIBUTED_KEYFRAME_HEADER);
+        let count = u32::try_from(capacities.len()).expect("too many keyframe components");
+        serialized_tasks[DISTRIBUTED_COUNT_OFFSET..DISTRIBUTED_COUNT_OFFSET + 4]
+            .copy_from_slice(&count.to_le_bytes());
+
+        let allocation = serialized_tasks.as_ptr() as usize;
+        let mut region_offset = align_up(
+            allocation
+                .checked_add(table_end)
+                .expect("distributed keyframe address overflow"),
+            DISTRIBUTED_REGION_ALIGN,
+        )
+        .expect("distributed keyframe alignment overflow")
+            - allocation;
+        for (component, &capacity) in capacities.iter().enumerate() {
+            let capacity = capacity.max(KEYFRAME_FRAME_HEADER_LEN);
+            let entry = DISTRIBUTED_TABLE_OFFSET + component * DISTRIBUTED_ENTRY_LEN;
+            serialized_tasks[entry..entry + 8]
+                .copy_from_slice(&(region_offset as u64).to_le_bytes());
+            serialized_tasks[entry + 8..entry + DISTRIBUTED_ENTRY_LEN]
+                .copy_from_slice(&(capacity as u64).to_le_bytes());
+            region_offset += align_up(DISTRIBUTED_REGION_LEN + capacity, DISTRIBUTED_REGION_ALIGN)
+                .expect("distributed keyframe region size overflow");
+        }
+        serialized_tasks.truncate(region_offset);
+        Self {
             culistid: 0,
             timestamp: CuTime::default(),
-            serialized_tasks: KEYFRAME_PAYLOAD_HEADER.to_vec(),
+            serialized_tasks,
         }
+    }
+
+    #[doc(hidden)]
+    pub fn reset_distributed(&mut self, culistid: u64, timestamp: CuTime, interval: u32) {
+        self.culistid = culistid;
+        self.timestamp = timestamp;
+        let active = interval != 0 && culistid.is_multiple_of(u64::from(interval));
+        if distributed_count(&self.serialized_tasks)
+            .ok()
+            .flatten()
+            .is_some()
+        {
+            self.serialized_tasks[DISTRIBUTED_ACTIVE_OFFSET] = u8::from(active);
+        }
+        if active {
+            let count = distributed_count(&self.serialized_tasks)
+                .expect("distributed keyframe descriptor")
+                .expect("distributed keyframe storage");
+            for component in 0..count {
+                let (offset, _) = distributed_region(&self.serialized_tasks, component)
+                    .expect("distributed keyframe region");
+                self.serialized_tasks[offset..offset + DISTRIBUTED_REGION_LEN].fill(0);
+            }
+        }
+    }
+
+    #[doc(hidden)]
+    #[inline]
+    pub fn discard_distributed(&mut self) {
+        if distributed_count(&self.serialized_tasks)
+            .ok()
+            .flatten()
+            .is_some()
+        {
+            self.serialized_tasks[DISTRIBUTED_ACTIVE_OFFSET] = 0;
+        }
+    }
+
+    /// Capture one scheduled component into its exclusive region.
+    ///
+    /// # Safety
+    /// `ptr` is null or points to the admitted slot's distributed keyframe
+    /// allocation of `allocation_len` bytes. Generated execution exclusively
+    /// owns `component` until the call returns and joins all component writers
+    /// before output reads the keyframe.
+    #[doc(hidden)]
+    pub unsafe fn freeze_region(
+        ptr: *mut u8,
+        allocation_len: usize,
+        component: usize,
+        task: &impl Freezable,
+    ) -> CuResult<usize> {
+        if ptr.is_null() || allocation_len <= DISTRIBUTED_ACTIVE_OFFSET {
+            return Ok(0);
+        }
+        if unsafe { ptr.add(DISTRIBUTED_ACTIVE_OFFSET).read() } == 0 {
+            return Ok(0);
+        }
+        // SAFETY: only the immutable descriptor table is read here. No shared
+        // reference spanning regions being written by other lanes is formed.
+        let (offset, capacity) =
+            unsafe { distributed_region_raw(ptr.cast_const(), allocation_len, component) }
+                .map_err(CuError::from)?;
+        // SAFETY: the region bounds were checked above, and this component has
+        // exclusive access to its length word for the duration of the call.
+        let length = u64::from_le(unsafe { ptr.add(offset).cast::<u64>().read_unaligned() });
+        if length != 0 {
+            return Err(CuError::from(
+                "Component captured twice in one distributed keyframe",
+            ));
+        }
+        // SAFETY: generated scheduling assigns this disjoint region to exactly
+        // one component writer until the execution wave joins.
+        let frame = unsafe {
+            core::slice::from_raw_parts_mut(ptr.add(offset + DISTRIBUTED_REGION_LEN), capacity)
+        };
+        let mut writer = RegionWriter {
+            bytes: &mut frame[KEYFRAME_FRAME_HEADER_LEN..],
+            written: 0,
+        };
+        let mut encoder = EncoderImpl::new(&mut writer, bincode::config::standard());
+        BincodeAdapter(task).encode(&mut encoder).map_err(|error| {
+            CuError::from(format!("Failed to capture keyframe component: {error}"))
+        })?;
+        let payload_len = writer.written;
+        let payload_len = u32::try_from(payload_len)
+            .map_err(|_| CuError::from("Keyframe component exceeds u32 size"))?;
+        frame[..KEYFRAME_FRAME_HEADER_LEN].copy_from_slice(&payload_len.to_le_bytes());
+        let frame_len = KEYFRAME_FRAME_HEADER_LEN + payload_len as usize;
+        unsafe {
+            ptr.add(offset)
+                .cast::<u64>()
+                .write_unaligned(frame_len as u64);
+        }
+        Ok(frame_len)
+    }
+
+    fn new() -> Self {
+        Self::from_serialized(0, CuTime::default(), KEYFRAME_PAYLOAD_HEADER.to_vec())
     }
 
     /// This is to be able to avoid reallocations
@@ -2100,12 +2631,19 @@ const KEYFRAME_FRAME_HEADER_LEN: usize = 4;
 #[doc(hidden)]
 pub struct KeyFramePayloadReader<'a> {
     remaining: &'a [u8],
+    distributed: Option<(&'a [u8], usize, usize)>,
 }
 
 impl<'a> KeyFramePayloadReader<'a> {
     /// Validate a keyframe payload and prepare to consume its component frames.
     pub fn new(keyframe: &'a KeyFrame) -> CuResult<Self> {
         let payload = keyframe.serialized_tasks.as_slice();
+        if let Some(count) = distributed_count(payload).map_err(CuError::from)? {
+            return Ok(Self {
+                remaining: &[],
+                distributed: Some((payload, 0, count)),
+            });
+        }
         if payload.len() < KEYFRAME_PAYLOAD_HEADER.len()
             || payload[..KEYFRAME_PAYLOAD_MAGIC.len()] != *KEYFRAME_PAYLOAD_MAGIC
         {
@@ -2121,11 +2659,20 @@ impl<'a> KeyFramePayloadReader<'a> {
         }
         Ok(Self {
             remaining: &payload[KEYFRAME_PAYLOAD_HEADER.len()..],
+            distributed: None,
         })
     }
 
     /// Consume the next component frame in generated execution order.
     pub fn next_frame(&mut self) -> CuResult<&'a [u8]> {
+        if let Some((bytes, index, count)) = &mut self.distributed {
+            if *index >= *count {
+                return Err(CuError::from("Keyframe ended before next component frame"));
+            }
+            let frame = distributed_frame(bytes, *index).map_err(CuError::from)?;
+            *index += 1;
+            return Ok(&frame[KEYFRAME_FRAME_HEADER_LEN..]);
+        }
         if self.remaining.len() < KEYFRAME_FRAME_HEADER_LEN {
             return Err(CuError::from("Keyframe ended before next component frame"));
         }
@@ -2147,6 +2694,13 @@ impl<'a> KeyFramePayloadReader<'a> {
 
     /// Reject trailing component frames that the generated restore did not consume.
     pub fn finish(self) -> CuResult<()> {
+        if let Some((_, index, count)) = self.distributed {
+            return if index == count {
+                Ok(())
+            } else {
+                Err(CuError::from("Keyframe contains trailing component data"))
+            };
+        }
         if self.remaining.is_empty() {
             Ok(())
         } else {
@@ -2667,6 +3221,132 @@ mod tests {
         assert_eq!((first.0, second.0), (11, 22));
     }
 
+    #[test]
+    fn distributed_keyframe_preserves_serial_wire_and_restore_order() {
+        let serial_calls = Cell::new(0);
+        let mut serial = KeyFrame::new();
+        serial.serialized_tasks.reserve(256);
+        serial.reset(17, CuTime::from_nanos(123));
+        serial
+            .add_frozen_task(&CountingSnapshot {
+                calls: &serial_calls,
+                value: 11,
+                fail: false,
+            })
+            .unwrap();
+        serial
+            .add_frozen_task(&CountingSnapshot {
+                calls: &serial_calls,
+                value: 22,
+                fail: false,
+            })
+            .unwrap();
+
+        let distributed_calls = Cell::new(0);
+        let mut distributed = KeyFrame::distributed(&[128, 128]);
+        distributed.reset_distributed(17, CuTime::from_nanos(123), 1);
+        for component in 0..2 {
+            let (offset, _) = distributed_region(&distributed.serialized_tasks, component).unwrap();
+            assert_eq!(
+                (distributed.serialized_tasks.as_ptr() as usize + offset)
+                    % DISTRIBUTED_REGION_ALIGN,
+                0,
+            );
+        }
+        let capture_ptr = distributed.serialized_tasks.as_mut_ptr();
+        let capture_len = distributed.serialized_tasks.len();
+        unsafe {
+            KeyFrame::freeze_region(
+                capture_ptr,
+                capture_len,
+                1,
+                &CountingSnapshot {
+                    calls: &distributed_calls,
+                    value: 22,
+                    fail: false,
+                },
+            )
+            .unwrap();
+            KeyFrame::freeze_region(
+                capture_ptr,
+                capture_len,
+                0,
+                &CountingSnapshot {
+                    calls: &distributed_calls,
+                    value: 11,
+                    fail: false,
+                },
+            )
+            .unwrap();
+        }
+
+        let config = bincode::config::standard();
+        assert_eq!(
+            bincode::encode_to_vec(&distributed, config).unwrap(),
+            bincode::encode_to_vec(&serial, config).unwrap(),
+        );
+        let mut frames = KeyFramePayloadReader::new(&distributed).unwrap();
+        let mut first = SnapshotValue::default();
+        thaw_keyframe_component(&mut first, frames.next_frame().unwrap()).unwrap();
+        let mut second = SnapshotValue::default();
+        thaw_keyframe_component(&mut second, frames.next_frame().unwrap()).unwrap();
+        frames.finish().unwrap();
+        assert_eq!((first.0, second.0), (11, 22));
+        assert_eq!(distributed_calls.get(), 2);
+    }
+
+    #[cfg(all(feature = "std", feature = "memory_monitoring"))]
+    #[test]
+    fn arena_reset_and_distributed_capture_do_not_allocate() {
+        let calls = Cell::new(0);
+        let mut slots = allocate_slots::<Msgs>(1);
+        slots[0].prepare_keyframes(&[128]);
+        let mut slot = slots.pop().unwrap();
+
+        let allocations = crate::monitoring::ScopedAllocCounter::new();
+        slot.reset(3);
+        slot.keyframe_mut()
+            .unwrap()
+            .reset_distributed(3, CuTime::from_nanos(30), 1);
+        let (capture_ptr, capture_len) = slot.keyframe_capture();
+        unsafe {
+            KeyFrame::freeze_region(
+                capture_ptr,
+                capture_len,
+                0,
+                &CountingSnapshot {
+                    calls: &calls,
+                    value: 42,
+                    fail: false,
+                },
+            )
+            .unwrap();
+        }
+
+        assert_eq!(allocations.allocated(), 0);
+        assert_eq!(calls.get(), 1);
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn arena_slots_wrap_without_moving_storage() {
+        let mut slots = allocate_slots::<Msgs>(2);
+        let pointers = slots
+            .iter_mut()
+            .map(CuSlotLease::as_ptr)
+            .collect::<Vec<_>>();
+
+        for generation in 1..=4 {
+            slots.rotate_left(1);
+            for slot in &mut slots {
+                let index = slot.index();
+                slot.reset((generation * 2 + index) as u64);
+                assert_eq!(slot.generation(), generation as u64);
+                assert_eq!(slot.as_ptr(), pointers[index]);
+            }
+        }
+    }
+
     #[cfg(all(feature = "std", feature = "memory_monitoring"))]
     #[test]
     fn preallocated_keyframe_append_does_not_allocate() {
@@ -2693,11 +3373,7 @@ mod tests {
 
     #[test]
     fn keyframe_reader_rejects_legacy_payload_clearly() {
-        let keyframe = KeyFrame {
-            culistid: 0,
-            timestamp: CuTime::default(),
-            serialized_tasks: vec![0, 1, 2],
-        };
+        let keyframe = KeyFrame::from_serialized(0, CuTime::default(), vec![0, 1, 2]);
         let error = match KeyFramePayloadReader::new(&keyframe) {
             Ok(_) => panic!("legacy payload unexpectedly accepted"),
             Err(error) => error,
@@ -2786,6 +3462,31 @@ mod tests {
     }
 
     impl CuListZeroedInit for IntMsgs {
+        fn init_zeroed(&mut self) {}
+    }
+
+    #[cfg(not(feature = "async-cl-io"))]
+    #[derive(Debug, Encode, Decode, Serialize, Deserialize, Default)]
+    struct DistributedIntMsgs(i32);
+
+    #[cfg(not(feature = "async-cl-io"))]
+    impl ErasedCuStampedDataSet for DistributedIntMsgs {
+        fn cumsgs(&self) -> Vec<&dyn ErasedCuStampedData> {
+            Vec::new()
+        }
+    }
+
+    #[cfg(not(feature = "async-cl-io"))]
+    impl MatchingTasks for DistributedIntMsgs {
+        fn get_all_task_ids() -> &'static [&'static str] {
+            &[]
+        }
+    }
+
+    #[cfg(not(feature = "async-cl-io"))]
+    impl CuListZeroedInit for DistributedIntMsgs {
+        const DISTRIBUTED: bool = true;
+
         fn init_zeroed(&mut self) {}
     }
 
@@ -3351,14 +4052,13 @@ mod tests {
 
     #[cfg(all(not(feature = "async-cl-io"), feature = "std", debug_assertions))]
     #[test]
-    #[should_panic(
-        expected = "sync boxed end_of_processing expected CopperList #7 to be Processing"
-    )]
-    fn test_sync_end_of_processing_boxed_wrong_state_panics_in_debug() {
-        let mut copperlists = SyncCopperListsManager::<IntMsgs, 1>::new(None).unwrap();
-        let culist = Box::new(CopperList::new(7, IntMsgs::default()));
+    #[should_panic(expected = "sync slot completion expected CopperList #7 to be Processing")]
+    fn test_sync_submit_slot_wrong_state_panics_in_debug() {
+        let mut copperlists = SyncCopperListsManager::<DistributedIntMsgs, 1>::new(None).unwrap();
+        let mut culist = copperlists.acquire_iteration_slot().unwrap();
+        culist.reset(7);
 
-        let _ = copperlists.end_of_processing_boxed(culist);
+        let _ = copperlists.submit_slot(culist);
     }
 
     #[cfg(all(feature = "std", feature = "async-cl-io"))]
@@ -3375,6 +4075,144 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(2));
             Ok(())
         }
+    }
+
+    #[cfg(feature = "std")]
+    #[derive(Debug)]
+    struct OrderedCopperListSink {
+        events: Arc<Mutex<Vec<&'static str>>>,
+    }
+
+    #[cfg(feature = "std")]
+    impl WriteStream<CopperList<Msgs>> for OrderedCopperListSink {
+        fn log(&mut self, _culist: &CopperList<Msgs>) -> CuResult<()> {
+            self.events.lock().unwrap().push("copperlist");
+            Ok(())
+        }
+    }
+
+    #[cfg(feature = "std")]
+    #[derive(Debug)]
+    struct OrderedKeyFrameSink {
+        events: Arc<Mutex<Vec<&'static str>>>,
+    }
+
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    #[derive(Debug)]
+    struct BlockingKeyFrameSink {
+        events: Arc<Mutex<Vec<&'static str>>>,
+        started: SyncSender<()>,
+        release: Arc<Mutex<Receiver<()>>>,
+    }
+
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    impl WriteStream<KeyFrame> for BlockingKeyFrameSink {
+        fn log(&mut self, _keyframe: &KeyFrame) -> CuResult<()> {
+            self.events.lock().unwrap().push("keyframe");
+            self.started
+                .send(())
+                .map_err(|_| CuError::from("failed to signal keyframe writer start"))?;
+            self.release
+                .lock()
+                .unwrap()
+                .recv()
+                .map_err(|_| CuError::from("failed to release keyframe writer"))
+        }
+    }
+
+    #[cfg(feature = "std")]
+    impl WriteStream<KeyFrame> for OrderedKeyFrameSink {
+        fn log(&mut self, _keyframe: &KeyFrame) -> CuResult<()> {
+            self.events.lock().unwrap().push("keyframe");
+            Ok(())
+        }
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn slot_output_writes_keyframe_then_copperlist_before_recycling() {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let mut manager = SyncCopperListsManager::<Msgs, 1>::new_with_keyframes(
+            Some(Box::new(OrderedCopperListSink {
+                events: Arc::clone(&events),
+            })),
+            Some(Box::new(OrderedKeyFrameSink {
+                events: Arc::clone(&events),
+            })),
+        )
+        .unwrap();
+        let mut slot = allocate_slots::<Msgs>(1).pop().unwrap();
+        slot.prepare_keyframes(&[128]);
+        slot.reset(0);
+        slot.keyframe_mut()
+            .unwrap()
+            .reset_distributed(0, CuTime::default(), 1);
+        let (capture_ptr, capture_len) = slot.keyframe_capture();
+        unsafe {
+            KeyFrame::freeze_region(capture_ptr, capture_len, 0, &SnapshotValue(42)).unwrap();
+        }
+        slot.change_state(CopperListState::Processing);
+        let index = slot.index();
+        let generation = slot.generation();
+
+        let recycled = match manager.submit_slot(slot).unwrap() {
+            OwnedCopperListSubmission::Recycled(slot) => slot,
+            OwnedCopperListSubmission::Pending => panic!("sync output retained slot"),
+        };
+
+        assert_eq!(*events.lock().unwrap(), vec!["keyframe", "copperlist"]);
+        assert_eq!(recycled.index(), index);
+        assert_eq!(recycled.generation(), generation);
+        assert_eq!(recycled.get_state(), CopperListState::Free);
+    }
+
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    #[test]
+    fn async_slot_is_reclaimed_only_after_keyframe_and_copperlist_output() {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let (started_tx, started_rx) = sync_channel(1);
+        let (release_tx, release_rx) = sync_channel(1);
+        let mut manager = AsyncCopperListsManager::<Msgs, 2>::new_with_keyframes(
+            Some(Box::new(OrderedCopperListSink {
+                events: Arc::clone(&events),
+            })),
+            Some(Box::new(BlockingKeyFrameSink {
+                events: Arc::clone(&events),
+                started: started_tx,
+                release: Arc::new(Mutex::new(release_rx)),
+            })),
+        )
+        .unwrap();
+        manager.prepare_keyframes(&[128]);
+        let mut slot = manager.acquire_iteration_slot().unwrap();
+        slot.reset(0);
+        slot.keyframe_mut()
+            .unwrap()
+            .reset_distributed(0, CuTime::default(), 1);
+        let (capture_ptr, capture_len) = slot.keyframe_capture();
+        unsafe {
+            KeyFrame::freeze_region(capture_ptr, capture_len, 0, &SnapshotValue(42)).unwrap();
+        }
+        slot.change_state(CopperListState::Processing);
+        let index = slot.index();
+        let generation = slot.generation();
+
+        assert!(matches!(
+            manager.submit_slot(slot).unwrap(),
+            OwnedCopperListSubmission::Pending
+        ));
+        started_rx
+            .recv_timeout(std::time::Duration::from_secs(1))
+            .unwrap();
+        assert!(manager.try_reclaim_slot().unwrap().is_none());
+        assert_eq!(*events.lock().unwrap(), vec!["keyframe"]);
+
+        release_tx.send(()).unwrap();
+        let recycled = manager.wait_reclaim_slot().unwrap();
+        assert_eq!(*events.lock().unwrap(), vec!["keyframe", "copperlist"]);
+        assert_eq!(recycled.index(), index);
+        assert_eq!(recycled.generation(), generation);
+        assert_eq!(recycled.get_state(), CopperListState::Free);
     }
 
     #[cfg(all(feature = "std", feature = "async-cl-io"))]
@@ -3558,7 +4396,7 @@ mod tests {
 
     #[cfg(all(feature = "std", feature = "async-cl-io"))]
     #[test]
-    fn test_async_boxed_handoff_returns_dropped_copperlist_to_caller() {
+    fn test_async_slot_handoff_returns_dropped_copperlist_to_caller() {
         let ids = Arc::new(Mutex::new(Vec::new()));
         let (started_tx, started_rx) = sync_channel(1);
         let (release_tx, release_rx) = sync_channel(1);
@@ -3569,19 +4407,21 @@ mod tests {
         })))
         .unwrap();
 
-        let mut first = Box::new(CopperList::new(0, Msgs::default()));
+        let mut first = copperlists.acquire_iteration_slot().unwrap();
+        first.reset(0);
         first.change_state(CopperListState::Processing);
         assert!(matches!(
-            copperlists.end_of_processing_boxed(first).unwrap(),
+            copperlists.submit_slot(first).unwrap(),
             OwnedCopperListSubmission::Pending
         ));
         started_rx
             .recv_timeout(std::time::Duration::from_secs(1))
             .unwrap();
 
-        let mut second = Box::new(CopperList::new(1, Msgs::default()));
+        let mut second = copperlists.acquire_iteration_slot().unwrap();
+        second.reset(1);
         second.change_state(CopperListState::Processing);
-        let recycled = match copperlists.end_of_processing_boxed(second).unwrap() {
+        let recycled = match copperlists.submit_slot(second).unwrap() {
             OwnedCopperListSubmission::Recycled(culist) => culist,
             OwnedCopperListSubmission::Pending => panic!("saturated handoff accepted CopperList"),
         };
@@ -3592,7 +4432,7 @@ mod tests {
         assert_eq!(*ids.lock().unwrap(), vec![0]);
 
         release_tx.send(()).unwrap();
-        let completed = copperlists.finish_pending_boxed().unwrap();
+        let completed = copperlists.finish_pending_slots().unwrap();
         assert_eq!(completed.len(), 1);
         assert_eq!(completed[0].id, 0);
     }

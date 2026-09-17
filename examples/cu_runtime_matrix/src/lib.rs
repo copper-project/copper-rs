@@ -1531,6 +1531,8 @@ pub fn run_bench_cli() -> CuResult<()> {
 mod tests {
     use super::*;
     use cu29_export::copperlists_reader;
+    #[cfg(feature = "parallel-rt")]
+    use cu29_export::keyframes_reader;
     use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader};
     use serde_json::Value;
     use std::path::Path;
@@ -1628,6 +1630,20 @@ mod tests {
                 read_copperlists_normalized::<BridgeFanoutBackground::CuStampedDataSet>(log_base)
             }
         }
+    }
+
+    #[cfg(feature = "parallel-rt")]
+    fn read_keyframes(log_base: &Path) -> Vec<KeyFrame> {
+        let UnifiedLogger::Read(read_logger) = UnifiedLoggerBuilder::new()
+            .file_base_name(log_base)
+            .build()
+            .expect("failed to open runtime matrix keyframes for read")
+        else {
+            panic!("expected read logger");
+        };
+
+        let mut reader = UnifiedLoggerIOReader::new(read_logger, UnifiedLogType::FrozenTasks);
+        keyframes_reader(&mut reader).collect()
     }
 
     fn configure_trace_fixture_logging(config: &mut CuConfig) {
@@ -1960,6 +1976,27 @@ mod tests {
 
         let trace = take_trace();
         let copperlists = read_mission_copperlists(mission, &log_path)?;
+        #[cfg(feature = "parallel-rt")]
+        {
+            let keyframes = read_keyframes(&log_path);
+            assert_eq!(
+                keyframes
+                    .iter()
+                    .map(|keyframe| keyframe.culistid)
+                    .collect::<Vec<_>>(),
+                copperlists
+                    .iter()
+                    .map(|copperlist| copperlist.id)
+                    .collect::<Vec<_>>(),
+                "keyframes must follow the completed execution wave for mission {mission:?}"
+            );
+            assert!(
+                keyframes
+                    .iter()
+                    .all(|keyframe| !keyframe.serialized_tasks.is_empty()),
+                "every configured keyframe must contain task state for mission {mission:?}"
+            );
+        }
         Ok((trace, copperlists))
     }
 
