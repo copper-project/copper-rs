@@ -54,6 +54,9 @@ use imp::*;
 /// and the code generation.
 pub type NodeId = u32;
 pub const DEFAULT_MISSION_ID: &str = "default";
+/// Default number of preallocated CopperLists compiled into a runtime.
+#[doc(hidden)]
+pub const DEFAULT_COPPERLIST_COUNT: usize = 2;
 
 /// This is the configuration of a component (like a task config or a monitoring config):w
 /// It is a map of key-value pairs.
@@ -971,8 +974,8 @@ impl TaskKind {
 /// Default thread pool name used by `background: true` tasks.
 pub const DEFAULT_BACKGROUND_POOL: &str = "background";
 
-/// Reserved thread pool name driving the `parallel-rt` execution engine. Applied
-/// to each stage worker at startup; never task-bound nor built as a rayon pool.
+/// Reserved thread pool name driving the Pipeline execution engine. Applied to
+/// each lane worker at startup; never task-bound nor built as a rayon pool.
 #[allow(dead_code)] // consumed by cu29_derive; unused in some binary targets
 pub const RT_POOL: &str = "rt";
 
@@ -2627,7 +2630,7 @@ impl CuConfig {
         }
     }
 
-    /// The configured planner selection, if any (absent means `Linearity`).
+    /// The configured planner selection, if any (absent means serial execution).
     // rendercfg.rs recompiles this file via `mod config;`, so pub helpers it
     // does not call are dead code in that bin under `clippy --deny warnings`.
     #[allow(dead_code)]
@@ -2635,35 +2638,11 @@ impl CuConfig {
         self.runtime.as_ref()?.planner.as_ref()
     }
 
-    /// The step order baked at build time for `mission`, if the config carries one.
-    #[doc(hidden)]
+    /// Execution strategy selected by the configuration.
     #[allow(dead_code)]
-    pub fn planner_resolved_order(&self, mission: &str) -> Option<&[String]> {
-        self.planner_config()?
-            .resolved
-            .as_ref()?
-            .get(mission)
-            .map(Vec::as_slice)
-    }
-
-    /// Bake per-mission resolved step orders into the planner section,
-    /// creating the section (with `type_`) if the loaded config lacks one.
-    /// Codegen contract: generated apps call this before logging the
-    /// effective config.
-    #[doc(hidden)]
-    #[allow(dead_code)]
-    pub fn set_planner_resolved_orders(
-        &mut self,
-        type_: &str,
-        orders: impl IntoIterator<Item = (String, Vec<String>)>,
-    ) {
-        let runtime = self.runtime.get_or_insert_with(RuntimeConfig::default);
-        let planner = runtime.planner.get_or_insert_with(|| PlannerConfig {
-            type_: type_.to_string(),
-            config: None,
-            resolved: None,
-        });
-        planner.resolved = Some(orders.into_iter().collect());
+    pub fn planner_kind(&self) -> PlannerKind {
+        self.planner_config()
+            .map_or(PlannerKind::Serial, PlannerConfig::kind)
     }
 
     #[cfg(feature = "std")]
@@ -2788,7 +2767,7 @@ pub struct RuntimeConfig {
     pub rate_target_hz: Option<u64>,
 
     /// Declarative thread pool definitions used by the background-task pools and
-    /// the `parallel-rt` execution engine. Each pool carries an optional CPU
+    /// the Pipeline execution engine. Each pool carries an optional CPU
     /// affinity and a scheduling policy/priority.
     ///
     /// This is a `std`-only concept; on `no_std`/embedded targets there are no
@@ -2806,28 +2785,32 @@ pub struct RuntimeConfig {
     pub planner: Option<PlannerConfig>,
 }
 
-/// Selects the planner that orders the steps of every mission graph, plus its
-/// config. Mirrors [`MonitorConfig`]: `type` names a `CuPlanner` implementation.
-/// Copper ships `cu29::planner::Linearity` (the default when this section is
-/// absent) and `cu29::planner::Pinned`; any other type is an out-of-tree
-/// planner resolved at build time by `cu29::planner::emit_plan` in the
-/// application's `build.rs`.
+/// Selects the compile-time execution strategy for every mission graph.
+///
+/// Pipeline execution is selected explicitly with:
+///
+/// ```text
+/// runtime: (
+///     planner: (
+///         kind: Pipeline,
+///         config: { "max_in_flight": 2 },
+///     ),
+/// )
+/// ```
+///
+/// `Pipeline` requires the `parallel-rt` Cargo feature. Omitting `planner`
+/// selects [`PlannerKind::Serial`], even when that feature is enabled.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PlannerConfig {
-    #[serde(rename = "type")]
-    pub(crate) type_: String,
+    pub(crate) kind: PlannerKind,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) config: Option<ComponentConfig>,
-    /// Step order per mission (stable step keys), baked at build time when an
-    /// out-of-tree planner resolved the plan. Takes precedence over `type`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) resolved: Option<BTreeMap<String, Vec<String>>>,
 }
 
 impl PlannerConfig {
     #[allow(dead_code)]
-    pub fn get_type(&self) -> &str {
-        &self.type_
+    pub fn kind(&self) -> PlannerKind {
+        self.kind
     }
 
     #[allow(dead_code)]
@@ -2835,12 +2818,41 @@ impl PlannerConfig {
         self.config.as_ref()
     }
 
-    /// The per-mission step orders baked at build time, if any.
-    #[doc(hidden)]
-    #[allow(dead_code)]
-    pub fn resolved_orders(&self) -> Option<&BTreeMap<String, Vec<String>>> {
-        self.resolved.as_ref()
+    /// Pipeline capacity, defaulting to the number of preallocated CopperLists.
+    pub fn max_in_flight(&self, copperlist_count: usize) -> CuResult<usize> {
+        if self.kind != PlannerKind::Pipeline {
+            return Ok(1);
+        }
+        let configured = match self.config.as_ref() {
+            Some(config) => config
+                .get_value::<usize>("max_in_flight")?
+                .unwrap_or(copperlist_count),
+            None => copperlist_count,
+        };
+        if configured == 0 {
+            return Err(CuError::from(
+                "Pipeline planner max_in_flight cannot be zero.",
+            ));
+        }
+        if configured > copperlist_count {
+            return Err(CuError::from(format!(
+                "Pipeline planner max_in_flight ({configured}) exceeds logging.copperlist_count ({copperlist_count})."
+            )));
+        }
+        Ok(configured)
     }
+}
+
+/// Built-in compile-time execution strategies.
+#[derive(Serialize, Deserialize, Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlannerKind {
+    /// Deterministic single-threaded execution in graph order.
+    #[default]
+    Serial,
+    /// Deterministic single-threaded execution in the configured task order.
+    TaskOrder,
+    /// One ordered worker lane per process stage.
+    Pipeline,
 }
 
 /// Smallest valid real-time priority for [`SchedulingPolicy::Fifo`]/[`SchedulingPolicy::RoundRobin`].
@@ -2905,7 +2917,7 @@ pub enum OnError {
 /// Declarative definition of a single thread pool.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct ThreadPoolConfig {
-    /// Unique pool id. Reserved ids: [`RT_POOL`] (the `parallel-rt` execution
+    /// Unique pool id. Reserved ids: [`RT_POOL`] (the Pipeline execution
     /// engine) and [`DEFAULT_BACKGROUND_POOL`] (the default background pool).
     pub id: String,
     /// Number of worker threads in the pool.
@@ -4007,7 +4019,15 @@ impl CuConfig {
     /// Validate the runtime configuration.
     pub fn validate_runtime_config(&self) -> CuResult<()> {
         if let Some(runtime) = &self.runtime {
-            return runtime.validate();
+            runtime.validate()?;
+            if let Some(planner) = &runtime.planner {
+                let copperlist_count = self
+                    .logging
+                    .as_ref()
+                    .and_then(|logging| logging.copperlist_count)
+                    .unwrap_or(DEFAULT_COPPERLIST_COUNT);
+                planner.max_in_flight(copperlist_count)?;
+            }
         }
         Ok(())
     }
@@ -5678,12 +5698,12 @@ mod tests {
         assert!(!config.serialize_ron().unwrap().contains("planner"));
         assert!(config.planner_config().is_none());
 
-        // A planner selection round-trips, including baked resolved orders.
+        // A planner selection and its static task order round-trip.
         let txt = r#"( tasks: [], cnx: [],
-            runtime: ( planner: ( type: "cu29::planner::Pinned", config: { "order": ["a", "b"] } ) ) )"#;
-        let mut config = CuConfig::deserialize_ron(txt).unwrap();
+            runtime: ( planner: ( kind: TaskOrder, config: { "order": ["a", "b"] } ) ) )"#;
+        let config = CuConfig::deserialize_ron(txt).unwrap();
         let planner = config.planner_config().unwrap();
-        assert_eq!(planner.get_type(), "cu29::planner::Pinned");
+        assert_eq!(planner.kind(), PlannerKind::TaskOrder);
         let order: Vec<String> = planner
             .get_config()
             .unwrap()
@@ -5691,27 +5711,58 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(order, ["a", "b"]);
-
-        config.set_planner_resolved_orders(
-            "cu29::planner::Pinned",
-            [("default".to_string(), vec!["task:a".to_string()])],
-        );
         let reparsed = CuConfig::deserialize_ron(&config.serialize_ron().unwrap()).unwrap();
+        assert_eq!(reparsed.planner_kind(), PlannerKind::TaskOrder);
+    }
+
+    #[test]
+    fn test_pipeline_capacity_defaults_and_validation() {
+        let parse = |planner: &str| {
+            read_configuration_str(
+                format!(
+                    r#"(
+                        tasks: [(id: "src", type: "demo::Src", kind: source)],
+                        cnx: [(src: "src", dst: "__nc__", msg: "u8")],
+                        logging: (copperlist_count: 4),
+                        runtime: (planner: {planner}),
+                    )"#
+                ),
+                None,
+            )
+        };
+
+        let defaulted = parse("(kind: Pipeline)").unwrap();
+        assert_eq!(defaulted.planner_kind(), PlannerKind::Pipeline);
         assert_eq!(
-            reparsed.planner_resolved_order("default").unwrap(),
-            ["task:a".to_string()]
+            defaulted
+                .planner_config()
+                .unwrap()
+                .max_in_flight(4)
+                .unwrap(),
+            4
         );
 
-        // The stamp creates the planner section when the loaded RON lacks one.
-        let mut bare = CuConfig::default();
-        bare.set_planner_resolved_orders(
-            "acme::Planner",
-            [("default".to_string(), vec!["task:a".to_string()])],
-        );
-        assert_eq!(bare.planner_config().unwrap().get_type(), "acme::Planner");
+        let configured = parse(r#"(kind: Pipeline, config: { "max_in_flight": 2 })"#).unwrap();
         assert_eq!(
-            bare.planner_resolved_order("default").unwrap(),
-            ["task:a".to_string()]
+            configured
+                .planner_config()
+                .unwrap()
+                .max_in_flight(4)
+                .unwrap(),
+            2
+        );
+
+        let zero = parse(r#"(kind: Pipeline, config: { "max_in_flight": 0 })"#)
+            .unwrap_err()
+            .to_string();
+        assert!(zero.contains("cannot be zero"), "{zero}");
+
+        let excess = parse(r#"(kind: Pipeline, config: { "max_in_flight": 5 })"#)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            excess.contains("exceeds logging.copperlist_count"),
+            "{excess}"
         );
     }
 

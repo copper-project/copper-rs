@@ -1,0 +1,10 @@
+(
+    runtime: (
+        thread_pools: [
+            (
+                id: "background",
+                threads: 2,
+            ),
+        ],
+    ),
+)

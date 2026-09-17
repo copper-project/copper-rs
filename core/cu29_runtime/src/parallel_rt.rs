@@ -74,11 +74,15 @@ impl ParallelRtStageMetadata {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ParallelRtMetadata {
     pub stages: &'static [ParallelRtStageMetadata],
+    pub max_in_flight: usize,
 }
 
 impl ParallelRtMetadata {
-    pub const fn new(stages: &'static [ParallelRtStageMetadata]) -> Self {
-        Self { stages }
+    pub const fn new(stages: &'static [ParallelRtStageMetadata], max_in_flight: usize) -> Self {
+        Self {
+            stages,
+            max_in_flight,
+        }
     }
 
     #[inline]
@@ -89,7 +93,7 @@ impl ParallelRtMetadata {
 
 /// Empty metadata used by tests and by code paths that do not generate any
 /// process-stage parallel layout.
-pub const DISABLED_PARALLEL_RT_METADATA: ParallelRtMetadata = ParallelRtMetadata::new(&[]);
+pub const DISABLED_PARALLEL_RT_METADATA: ParallelRtMetadata = ParallelRtMetadata::new(&[], 1);
 
 /// Minimal cache-line padding wrapper used for hot scheduler cursors.
 #[repr(align(64))]
@@ -218,16 +222,22 @@ mod imp {
 
     impl<const NBCL: usize> ParallelRt<NBCL> {
         pub fn new(metadata: &'static ParallelRtMetadata) -> CuResult<Self> {
+            if metadata.max_in_flight == 0 || metadata.max_in_flight > NBCL {
+                return Err(cu29_traits::CuError::from(format!(
+                    "Pipeline max_in_flight ({}) must be within 1..={NBCL}",
+                    metadata.max_in_flight,
+                )));
+            }
             Ok(Self {
                 metadata,
                 commit_checkpoint: CachePadded::new(CausalityCheckpoint::new(0)),
-                in_flight_limit: NBCL,
+                in_flight_limit: metadata.max_in_flight,
             })
         }
 
         #[inline]
-        pub const fn enabled(&self) -> bool {
-            true
+        pub fn enabled(&self) -> bool {
+            !self.metadata.stages.is_empty()
         }
 
         #[inline]
@@ -352,7 +362,7 @@ mod tests {
             7,
             ComponentId::new(3),
         )];
-        const METADATA: ParallelRtMetadata = ParallelRtMetadata::new(STAGES);
+        const METADATA: ParallelRtMetadata = ParallelRtMetadata::new(STAGES, 4);
         assert_eq!(METADATA.process_stage_count(), 1);
         assert_eq!(METADATA.stages[0].label, "demo");
     }
@@ -364,12 +374,23 @@ mod tests {
             ParallelRtStageMetadata::new("a", ParallelRtStageKind::Task, 0, ComponentId::new(0)),
             ParallelRtStageMetadata::new("b", ParallelRtStageKind::Task, 1, ComponentId::new(1)),
         ];
-        const METADATA: ParallelRtMetadata = ParallelRtMetadata::new(STAGES);
+        const METADATA: ParallelRtMetadata = ParallelRtMetadata::new(STAGES, 4);
 
         let rt = ParallelRt::<4>::new(&METADATA).expect("parallel rt should build");
         assert!(rt.enabled());
         assert_eq!(rt.metadata().process_stage_count(), 2);
         assert_eq!(rt.in_flight_limit(), 4);
+    }
+
+    #[cfg(all(feature = "std", feature = "parallel-rt"))]
+    #[test]
+    fn parallel_rt_rejects_invalid_capacity() {
+        const EMPTY: &[ParallelRtStageMetadata] = &[];
+        const ZERO: ParallelRtMetadata = ParallelRtMetadata::new(EMPTY, 0);
+        const EXCESS: ParallelRtMetadata = ParallelRtMetadata::new(EMPTY, 5);
+
+        assert!(ParallelRt::<4>::new(&ZERO).is_err());
+        assert!(ParallelRt::<4>::new(&EXCESS).is_err());
     }
 
     #[cfg(not(all(feature = "std", feature = "parallel-rt")))]
@@ -381,7 +402,7 @@ mod tests {
             0,
             ComponentId::new(0),
         )];
-        const METADATA: ParallelRtMetadata = ParallelRtMetadata::new(STAGES);
+        const METADATA: ParallelRtMetadata = ParallelRtMetadata::new(STAGES, 4);
 
         let rt = ParallelRt::<4>::new(&METADATA).expect("parallel rt placeholder should build");
         assert!(!rt.enabled());

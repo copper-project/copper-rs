@@ -3,7 +3,7 @@
 This example is a focused runtime matrix for:
 
 - `async-cl-io` on and off
-- `parallel-rt` on and off
+- serial and Pipeline planners (`parallel-rt` compiles Pipeline support)
 - background tasks on and off
 - graph shapes: `1->many`, `many->1`, `many->many`, and bridges
 

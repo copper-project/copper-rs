@@ -1,4 +1,4 @@
-//! Scratch SPSC handoff queue used by the parallel runtime stage pipeline.
+//! Bounded SPSC handoff used between generated Pipeline lanes.
 //!
 //! The generated stage graph is single-producer/single-consumer between
 //! adjacent stages, so a bounded SPSC ring is a closer match than a general
@@ -102,7 +102,7 @@ impl StageQueueShared {
 }
 
 #[inline]
-pub fn stage_queue<T>(capacity: usize) -> (StageSender<T>, StageReceiver<T>) {
+pub fn lane_queue<T>(capacity: usize) -> (StageSender<T>, StageReceiver<T>) {
     let (producer, consumer) = RingBuffer::new(capacity.max(1));
     let shared = Arc::new(StageQueueShared {
         sender_thread: OnceLock::new(),
@@ -122,6 +122,12 @@ pub fn stage_queue<T>(capacity: usize) -> (StageSender<T>, StageReceiver<T>) {
             shared,
         },
     )
+}
+
+/// Compatibility constructor for the former stage-queue API.
+#[deprecated(note = "use lane_queue")]
+pub fn stage_queue<T>(capacity: usize) -> (StageSender<T>, StageReceiver<T>) {
+    lane_queue(capacity)
 }
 
 impl<T> StageSender<T> {

@@ -1,4 +1,12 @@
 (
+    includes: [
+        (
+            path: "pipeline.ron",
+            when: Feature(
+                "parallel-rt",
+            ),
+        ),
+    ],
     missions: [
         (id: "log_only"),
         (id: "viewer_live"),

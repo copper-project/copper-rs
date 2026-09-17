@@ -1,0 +1,17 @@
+(
+    runtime: (
+        planner: (
+            kind: Pipeline,
+            config: {
+                "max_in_flight": 10,
+            },
+        ),
+        thread_pools: [
+            (
+                id: "background",
+                threads: 2,
+            ),
+            (id: "rt", threads: 1),
+        ],
+    ),
+)

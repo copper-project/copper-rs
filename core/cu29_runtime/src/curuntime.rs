@@ -19,8 +19,10 @@ use crate::monitoring::{
     take_last_completed_handle_bytes,
 };
 #[cfg(all(feature = "std", feature = "parallel-rt"))]
-use crate::parallel_rt::{ParallelRt, ParallelRtMetadata};
-use crate::planner::{CuPlanner, Linearity, check_order, plan_from_order};
+use crate::parallel_rt::ParallelRt;
+#[cfg(feature = "std")]
+use crate::parallel_rt::ParallelRtMetadata;
+use crate::planner::{check_order, plan_from_order, topo_bfs_order};
 use crate::resource::ResourceManager;
 #[cfg(feature = "std")]
 use alloc::sync::Arc;
@@ -99,7 +101,7 @@ pub struct CuRuntimeParts<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: 
     pub tasks_instanciator: TI,
     pub monitored_components: &'static [MonitorComponentMetadata],
     pub culist_component_mapping: &'static [ComponentId],
-    #[cfg(all(feature = "std", feature = "parallel-rt"))]
+    #[cfg(feature = "std")]
     pub parallel_rt_metadata: &'static ParallelRtMetadata,
     pub monitor_instanciator: MI,
     pub bridges_instanciator: BI,
@@ -113,8 +115,7 @@ impl<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, MI>
         tasks_instanciator: TI,
         monitored_components: &'static [MonitorComponentMetadata],
         culist_component_mapping: &'static [ComponentId],
-        #[cfg(all(feature = "std", feature = "parallel-rt"))]
-        parallel_rt_metadata: &'static ParallelRtMetadata,
+        #[cfg(feature = "std")] parallel_rt_metadata: &'static ParallelRtMetadata,
         monitor_instanciator: MI,
         bridges_instanciator: BI,
     ) -> Self {
@@ -122,7 +123,7 @@ impl<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, MI>
             tasks_instanciator,
             monitored_components,
             culist_component_mapping,
-            #[cfg(all(feature = "std", feature = "parallel-rt"))]
+            #[cfg(feature = "std")]
             parallel_rt_metadata,
             monitor_instanciator,
             bridges_instanciator,
@@ -2444,13 +2445,9 @@ pub fn find_task_type_for_id(graph: &CuGraph, node_id: NodeId) -> CuResult<CuTas
     })
 }
 
-/// Compute the default (`Linearity`) execution plan for `graph`.
-///
-/// The plan is now pluggable: this splits into the shared
-/// `order` + `check_order` + `plan_from_order` pipeline in `planner`, kept here
-/// so direct callers (tests, tooling) keep a one-call entry point.
+/// Compute the default serial execution plan for `graph`.
 pub fn compute_runtime_plan(graph: &CuGraph) -> CuResult<CuExecutionLoop> {
-    let order = Linearity.plan(graph)?;
+    let order = topo_bfs_order(graph)?;
     check_order(graph, &order)?;
     plan_from_order(graph, &order)
 }
@@ -2932,7 +2929,7 @@ mod tests {
                     tasks_instanciator,
                     &[],
                     &[],
-                    #[cfg(all(feature = "std", feature = "parallel-rt"))]
+                    #[cfg(feature = "std")]
                     &crate::parallel_rt::DISABLED_PARALLEL_RT_METADATA,
                     monitor_instanciator,
                     bridges_instanciator,
@@ -2972,7 +2969,7 @@ mod tests {
                     tasks_instanciator,
                     &[],
                     &[],
-                    #[cfg(all(feature = "std", feature = "parallel-rt"))]
+                    #[cfg(feature = "std")]
                     &crate::parallel_rt::DISABLED_PARALLEL_RT_METADATA,
                     monitor_instanciator,
                     bridges_instanciator,
@@ -3067,7 +3064,7 @@ mod tests {
                     tasks_instanciator,
                     &[],
                     &[],
-                    #[cfg(all(feature = "std", feature = "parallel-rt"))]
+                    #[cfg(feature = "std")]
                     &crate::parallel_rt::DISABLED_PARALLEL_RT_METADATA,
                     monitor_instanciator,
                     bridges_instanciator,

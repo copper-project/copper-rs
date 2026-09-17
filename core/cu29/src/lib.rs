@@ -30,7 +30,7 @@
 //! - `async-cl-io`: hand completed CopperLists and keyframes to dedicated std output threads
 //!   without blocking; drops are reported through `CopperListIoStats`
 //! - `flat-copperlist-encoding`: override the default compression for CPU-constrained applications
-//! - `parallel-rt`: prepare the runtime for a future multi-threaded deterministic executor
+//! - `parallel-rt`: compile threaded support for `PlannerKind::Pipeline`; the feature alone does not select it
 //! - `cuda`: enable CUDA-backed Copper pools and handles on supported host platforms
 //! - `safety-ids`: std-only safety-case metadata collection and JSON export helpers
 //!
@@ -100,7 +100,8 @@ pub use cu29_runtime::monitoring;
 pub use cu29_runtime::output_msg;
 #[cfg(all(feature = "std", feature = "parallel-rt"))]
 pub use cu29_runtime::parallel_queue;
-#[cfg(all(feature = "std", feature = "parallel-rt"))]
+#[cfg(feature = "std")]
+#[cfg_attr(not(feature = "parallel-rt"), doc(hidden))]
 pub use cu29_runtime::parallel_rt;
 pub use cu29_runtime::payload;
 pub use cu29_runtime::planner;
