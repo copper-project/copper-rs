@@ -36,18 +36,26 @@ impl WireFormat {
 
 /// Per-channel Rx queue strategy, configured via `queue_mode` in the channel config.
 ///
-/// - `"fifo"` (default): zenoh's default handler. Ordered, lossless, and bounded at
+/// - `"ring"` (default): drops the OLDEST sample when full, so `receive` always yields the
+///   newest one available. `ring_size` sets the depth (default 1, i.e. latest-wins).
+/// - `"fifo"`: zenoh's default handler. Ordered, lossless, and bounded at
 ///   `API_DATA_RECEPTION_CHANNEL_SIZE` (256) — but a bridge consumes at most ONE sample per
 ///   `receive` call, so a channel whose publisher is faster than the consuming graph's rate
-///   accumulates an unbounded backlog and the consumer reads ever-older samples.
-/// - `"ring"`: drops the OLDEST sample when full, so `receive` always yields the newest one
-///   available. `ring_size` sets the depth (default 1, i.e. latest-wins).
+///   accumulates an unbounded backlog and the consumer reads ever-older samples. Ask for it
+///   when every sample matters more than freshness and the publisher is known to be slower.
 ///
 /// Measured on a loopback link, 724 B at 200 Hz against a consumer draining 100/s: with `fifo`
 /// the consumer received sequence numbers 0..2490 contiguously while the publisher was at 5908 —
 /// 12 s behind and growing linearly, with nothing dropped and no error on either side. The
 /// publisher was NOT slowed (197 Hz sustained), so this is a staleness problem rather than a
 /// back-pressure one, and it is invisible to a consumer that only checks whether samples arrive.
+/// `ring` is the default because that failure is silent while a drop is not.
+///
+/// A leaking ring does NOT cost determinism. Resim copies every recorded task and bridge output
+/// out of the CopperList and skips the implementation (`recorded_replay_step`), so no subscriber
+/// runs at replay time and this setting has no effect there. A drop reaches the log as an empty
+/// message with no origin, which removes a provenance edge rather than dangling one — see
+/// `engine_replays_deterministically_when_a_ring_rx_leaks` in `cu29_runtime::distributed_replay`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RxQueueConfig {
     Fifo,
@@ -55,12 +63,14 @@ enum RxQueueConfig {
 }
 
 impl RxQueueConfig {
+    const DEFAULT: Self = Self::Ring { size: 1 };
+
     fn from_config(config: Option<&ComponentConfig>) -> CuResult<Self> {
         let Some(cfg) = config else {
-            return Ok(Self::Fifo);
+            return Ok(Self::DEFAULT);
         };
         match cfg.get::<String>("queue_mode")?.as_deref() {
-            Some("ring") => {
+            Some("ring") | None => {
                 // Zero would be rejected by `RingChannel::new` at declare time, which is a
                 // confusing place for a config error to surface.
                 let size = cfg.get::<u32>("ring_size")?.unwrap_or(1) as usize;
@@ -71,7 +81,7 @@ impl RxQueueConfig {
                 }
                 Ok(Self::Ring { size })
             }
-            Some("fifo") | None => Ok(Self::Fifo),
+            Some("fifo") => Ok(Self::Fifo),
             Some(other) => Err(CuError::from(format!(
                 "ZenohBridge: unknown queue_mode '{other}', expected fifo/ring"
             ))),
@@ -566,22 +576,39 @@ mod tests {
         cfg
     }
 
+    /// Latest-wins is the default: unbounded staleness is silent, a drop is not.
     #[test]
-    fn an_absent_config_is_fifo() {
-        assert_eq!(RxQueueConfig::from_config(None).unwrap(), RxQueueConfig::Fifo);
-    }
-
-    #[test]
-    fn a_config_without_queue_mode_is_fifo() {
-        let cfg = config_with(&[("wire_format", "json")]);
+    fn an_absent_config_is_a_ring_of_one() {
         assert_eq!(
-            RxQueueConfig::from_config(Some(&cfg)).unwrap(),
-            RxQueueConfig::Fifo
+            RxQueueConfig::from_config(None).unwrap(),
+            RxQueueConfig::Ring { size: 1 }
         );
     }
 
     #[test]
-    fn fifo_is_spelled_out_as_well_as_defaulted() {
+    fn a_config_without_queue_mode_is_a_ring_of_one() {
+        let cfg = config_with(&[("wire_format", "json")]);
+        assert_eq!(
+            RxQueueConfig::from_config(Some(&cfg)).unwrap(),
+            RxQueueConfig::Ring { size: 1 }
+        );
+    }
+
+    /// `ring_size` alone is enough — it used to be read only under an explicit `queue_mode`,
+    /// so a channel asking for a depth of 8 got a fifo and no diagnostic.
+    #[test]
+    fn ring_size_alone_sets_the_depth() {
+        let mut cfg = ComponentConfig::default();
+        cfg.set("ring_size", 8u32);
+        assert_eq!(
+            RxQueueConfig::from_config(Some(&cfg)).unwrap(),
+            RxQueueConfig::Ring { size: 8 }
+        );
+    }
+
+    /// Fifo is still reachable, and only by asking for it.
+    #[test]
+    fn fifo_must_be_spelled_out() {
         let cfg = config_with(&[("queue_mode", "fifo")]);
         assert_eq!(
             RxQueueConfig::from_config(Some(&cfg)).unwrap(),
