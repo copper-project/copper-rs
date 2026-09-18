@@ -1,18 +1,18 @@
 # cu-parallel-mandelbrot
 
-This example is a synthetic Copper graph built to exercise `PlannerKind::Pipeline` on a deterministic, stateful, compute-bound workload. The `parallel-rt` feature enables the executor, while the feature-gated `pipeline.ron` selects it.
+This example is a synthetic Copper graph built to exercise `PlannerKind::Pipeline` on a deterministic, compute-bound workload. The `parallel-rt` feature enables the executor, while the feature-gated `pipeline.ron` selects it.
 
-It is not pretending Mandelbrot is a robotics task. The point is to isolate scheduler behavior from device IO, clocks, driver jitter, and transport noise while still exercising the same runtime property that matters in robot graphs: stateful stages must stay deterministic even when multiple CopperLists are in flight.
+It is not pretending Mandelbrot is a robotics task. The point is to isolate scheduler behavior from device IO, clocks, driver jitter, and transport noise while exercising concurrent stateless transforms between stateful source and output stages.
 
 ## What The Graph Does
 
 - `src` emits one `(frame, stripe)` work item per CopperList
-- `band_*` tasks advance one stripe through the Mandelbrot iteration pipeline
+- `band_*` stateless tasks advance one stripe through the Mandelbrot iteration pipeline
 - `frames` assembles completed stripes into a full `CuImage<Vec<u8>>`
 - `image_drain` keeps the `log_only` mission terminal
 - `viewer_sink` assembles and displays the live zoom directly in the `viewer_live` mission
 
-The hot stripe payload is handle-backed, so the graph stresses the scheduler and compute stages instead of spending its time copying stripe buffers around.
+The hot stripe payload is handle-backed, so the graph stresses the scheduler and compute stages instead of spending its time copying stripe buffers around. On x86-64, each band runtime-dispatches to an eight-lane AVX2/FMA kernel when the processor supports it and otherwise uses the scalar kernel.
 
 The example also enables Copper's terminal monitor. When you run it in a real terminal, use:
 - `2` or `DAG` for the graph view
@@ -62,7 +62,7 @@ Use the justfile itself for the full recipe list and exact command lines.
 ## What To Watch
 
 - Throughput: compare `just serial` vs `just parallel`
-- Determinism: the band tasks and assembler check strict stripe order and fail if mutable state is observed out of order
+- Determinism: the assembler checks strict stripe order; the bands keep all mutable iteration state in each stripe and can process different CopperLists concurrently
 - Monitor feedback: the DAG view shows per-stage status text while the latency view shows per-stage timing
 - Logs: only completed frame images are logged; intermediate stripe traffic is intentionally not logged
 
