@@ -34,15 +34,66 @@ impl WireFormat {
     }
 }
 
+/// Per-channel Rx queue strategy, configured via `queue_mode` in the channel config.
+///
+/// - `"fifo"` (default): zenoh's default handler. Ordered, lossless, and bounded at
+///   `API_DATA_RECEPTION_CHANNEL_SIZE` (256) — but a bridge consumes at most ONE sample per
+///   `receive` call, so a channel whose publisher is faster than the consuming graph's rate
+///   accumulates an unbounded backlog and the consumer reads ever-older samples.
+/// - `"ring"`: drops the OLDEST sample when full, so `receive` always yields the newest one
+///   available. `ring_size` sets the depth (default 1, i.e. latest-wins).
+///
+/// Measured on a loopback link, 724 B at 200 Hz against a consumer draining 100/s: with `fifo`
+/// the consumer received sequence numbers 0..2490 contiguously while the publisher was at 5908 —
+/// 12 s behind and growing linearly, with nothing dropped and no error on either side. The
+/// publisher was NOT slowed (197 Hz sustained), so this is a staleness problem rather than a
+/// back-pressure one, and it is invisible to a consumer that only checks whether samples arrive.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RxQueueConfig {
+    Fifo,
+    Ring { size: usize },
+}
+
+impl RxQueueConfig {
+    fn from_config(config: Option<&ComponentConfig>) -> CuResult<Self> {
+        let Some(cfg) = config else {
+            return Ok(Self::Fifo);
+        };
+        match cfg.get::<String>("queue_mode")?.as_deref() {
+            Some("ring") => {
+                // Zero would be rejected by `RingChannel::new` at declare time, which is a
+                // confusing place for a config error to surface.
+                let size = cfg.get::<u32>("ring_size")?.unwrap_or(1) as usize;
+                if size == 0 {
+                    return Err(CuError::from(
+                        "ZenohBridge: ring_size must be at least 1".to_string(),
+                    ));
+                }
+                Ok(Self::Ring { size })
+            }
+            Some("fifo") | None => Ok(Self::Fifo),
+            Some(other) => Err(CuError::from(format!(
+                "ZenohBridge: unknown queue_mode '{other}', expected fifo/ring"
+            ))),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 struct ZenohChannelConfig<Id: Copy> {
     id: Id,
     route: String,
     wire_format: WireFormat,
+    /// Meaningful on Rx only; `new` rejects `queue_mode` on a Tx channel rather than ignoring it.
+    queue: RxQueueConfig,
 }
 
-type ZenohSubscriber =
-    zenoh::pubsub::Subscriber<zenoh::handlers::FifoChannelHandler<zenoh::sample::Sample>>;
+/// A subscriber under either handler. The two are distinct types, so the choice cannot be made
+/// behind a `dyn` and the enum is what carries it to `receive`.
+enum ZenohSubscriber {
+    Fifo(zenoh::pubsub::Subscriber<zenoh::handlers::FifoChannelHandler<zenoh::sample::Sample>>),
+    Ring(zenoh::pubsub::Subscriber<zenoh::handlers::RingChannelHandler<zenoh::sample::Sample>>),
+}
 
 struct ZenohTxChannel<Id: Copy> {
     id: Id,
@@ -293,10 +344,22 @@ where
         for channel in tx_channels {
             let route = Self::channel_route(channel)?;
             let wire_format = Self::channel_wire_format(channel, default_wire_format)?;
+            // REFUSED on Tx rather than ignored: `queue_mode` on the sending side reads like it
+            // bounds the publisher and does nothing at all, which is the kind of config that
+            // looks applied for months.
+            if let Some(config) = channel.config.as_ref()
+                && config.get::<String>("queue_mode")?.is_some()
+            {
+                return Err(CuError::from(
+                    "ZenohBridge: queue_mode is an Rx-only setting, but it was set on a Tx channel"
+                        .to_string(),
+                ));
+            }
             tx_cfgs.push(ZenohChannelConfig {
                 id: channel.channel.id,
                 route,
                 wire_format,
+                queue: RxQueueConfig::Fifo,
             });
         }
 
@@ -304,10 +367,12 @@ where
         for channel in rx_channels {
             let route = Self::channel_route(channel)?;
             let wire_format = Self::channel_wire_format(channel, default_wire_format)?;
+            let queue = RxQueueConfig::from_config(channel.config.as_ref())?;
             rx_cfgs.push(ZenohChannelConfig {
                 id: channel.channel.id,
                 route,
                 wire_format,
+                queue,
             });
         }
 
@@ -340,8 +405,20 @@ where
         for channel in &self.rx_channels {
             let key_expr = KeyExpr::<'static>::new(channel.route.clone())
                 .map_err(cu_error_map("ZenohBridge: Invalid Rx key expression"))?;
-            let subscriber = zenoh::Wait::wait(session.declare_subscriber(key_expr))
-                .map_err(cu_error_map("ZenohBridge: Failed to declare subscriber"))?;
+            let subscriber = match channel.queue {
+                RxQueueConfig::Fifo => ZenohSubscriber::Fifo(
+                    zenoh::Wait::wait(session.declare_subscriber(key_expr))
+                        .map_err(cu_error_map("ZenohBridge: Failed to declare subscriber"))?,
+                ),
+                RxQueueConfig::Ring { size } => ZenohSubscriber::Ring(
+                    zenoh::Wait::wait(
+                        session
+                            .declare_subscriber(key_expr)
+                            .with(zenoh::handlers::RingChannel::new(size)),
+                    )
+                    .map_err(cu_error_map("ZenohBridge: Failed to declare subscriber"))?,
+                ),
+            };
             rx_channels.push(ZenohRxChannel {
                 id: channel.id,
                 subscriber,
@@ -420,10 +497,11 @@ where
 
         msg.tov = Tov::Time(ctx.now());
 
-        let sample = rx_channel
-            .subscriber
-            .try_recv()
-            .map_err(|e| CuError::from(format!("ZenohBridge: receive failed: {e}")))?;
+        let sample = match &rx_channel.subscriber {
+            ZenohSubscriber::Fifo(s) => s.try_recv(),
+            ZenohSubscriber::Ring(s) => s.try_recv(),
+        }
+        .map_err(|e| CuError::from(format!("ZenohBridge: receive failed: {e}")))?;
         if let Some(sample) = sample {
             let origin = Self::decode_attachment(&sample)?;
             let payload = sample.payload().to_bytes();
@@ -454,8 +532,12 @@ where
                     .map_err(cu_error_map("ZenohBridge: Failed to undeclare publisher"))?;
             }
             for channel in rx_channels {
-                zenoh::Wait::wait(channel.subscriber.undeclare())
-                    .map_err(cu_error_map("ZenohBridge: Failed to undeclare subscriber"))?;
+                match channel.subscriber {
+                    ZenohSubscriber::Fifo(s) => zenoh::Wait::wait(s.undeclare())
+                        .map_err(cu_error_map("ZenohBridge: Failed to undeclare subscriber"))?,
+                    ZenohSubscriber::Ring(s) => zenoh::Wait::wait(s.undeclare())
+                        .map_err(cu_error_map("ZenohBridge: Failed to undeclare subscriber"))?,
+                }
             }
             zenoh::Wait::wait(session.close())
                 .map_err(cu_error_map("ZenohBridge: Failed to close session"))?;
@@ -470,4 +552,88 @@ fn cu_error(msg: &str, error: ZenohError) -> CuError {
 
 fn cu_error_map(msg: &str) -> impl FnOnce(ZenohError) -> CuError + '_ {
     move |e| cu_error(msg, e)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn config_with(pairs: &[(&str, &str)]) -> ComponentConfig {
+        let mut cfg = ComponentConfig::default();
+        for (k, v) in pairs {
+            cfg.set(k, v.to_string());
+        }
+        cfg
+    }
+
+    #[test]
+    fn an_absent_config_is_fifo() {
+        assert_eq!(RxQueueConfig::from_config(None).unwrap(), RxQueueConfig::Fifo);
+    }
+
+    #[test]
+    fn a_config_without_queue_mode_is_fifo() {
+        let cfg = config_with(&[("wire_format", "json")]);
+        assert_eq!(
+            RxQueueConfig::from_config(Some(&cfg)).unwrap(),
+            RxQueueConfig::Fifo
+        );
+    }
+
+    #[test]
+    fn fifo_is_spelled_out_as_well_as_defaulted() {
+        let cfg = config_with(&[("queue_mode", "fifo")]);
+        assert_eq!(
+            RxQueueConfig::from_config(Some(&cfg)).unwrap(),
+            RxQueueConfig::Fifo
+        );
+    }
+
+    /// The default depth is 1 — latest-wins — because that is what a sensor stream wants and
+    /// because any larger default would reintroduce the staleness this option exists to remove.
+    #[test]
+    fn ring_defaults_to_a_depth_of_one() {
+        let cfg = config_with(&[("queue_mode", "ring")]);
+        assert_eq!(
+            RxQueueConfig::from_config(Some(&cfg)).unwrap(),
+            RxQueueConfig::Ring { size: 1 }
+        );
+    }
+
+    #[test]
+    fn ring_size_is_honoured() {
+        let mut cfg = ComponentConfig::default();
+        cfg.set("queue_mode", "ring".to_string());
+        cfg.set("ring_size", 8u32);
+        assert_eq!(
+            RxQueueConfig::from_config(Some(&cfg)).unwrap(),
+            RxQueueConfig::Ring { size: 8 }
+        );
+    }
+
+    /// `RingChannel::new(0)` panics inside zenoh at declare time, which is a bewildering place
+    /// for a typo in a RON to surface.
+    #[test]
+    fn a_zero_ring_size_is_refused_at_config_time() {
+        let mut cfg = ComponentConfig::default();
+        cfg.set("queue_mode", "ring".to_string());
+        cfg.set("ring_size", 0u32);
+        let err = RxQueueConfig::from_config(Some(&cfg)).unwrap_err();
+        assert!(
+            err.to_string().contains("ring_size"),
+            "the error must name the key the operator got wrong, got: {err}"
+        );
+    }
+
+    /// A misspelling must not silently fall back to `fifo`: that is the exact failure this
+    /// option exists to make impossible, arriving through the config instead of the default.
+    #[test]
+    fn an_unknown_queue_mode_is_an_error_not_a_fallback() {
+        let cfg = config_with(&[("queue_mode", "rng")]);
+        let err = RxQueueConfig::from_config(Some(&cfg)).unwrap_err();
+        assert!(
+            err.to_string().contains("rng"),
+            "the error must quote the value it rejected, got: {err}"
+        );
+    }
 }

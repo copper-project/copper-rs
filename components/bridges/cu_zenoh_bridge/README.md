@@ -17,6 +17,28 @@ Bridge-level config:
 Per-channel config (inside `channels`):
 - `route`: Zenoh key expression for the channel.
 - `config.wire_format`: override the default wire format per channel.
+- `config.queue_mode` (**Rx only**): `fifo` (default) or `ring`.
+- `config.ring_size`: depth when `queue_mode` is `ring` (default `1`, i.e. latest-wins).
+
+### Choosing a queue mode
+
+The bridge consumes **at most one sample per `receive` call**, i.e. one per graph iteration. So a
+channel whose publisher is faster than the consuming graph's rate falls behind, and under the
+default `fifo` handler it falls behind *losslessly and without bound*: the consumer keeps reading
+ever-older samples, in order, with nothing dropped and no error on either side.
+
+Measured on a loopback link, 724 B at 200 Hz against a consumer draining 100/s: the consumer
+received sequence numbers 0..2490 contiguously while the publisher had reached 5908 — 12 s behind
+and growing linearly. The publisher was not slowed (197 Hz sustained), so this is staleness, not
+back-pressure, and it is invisible to a consumer that only checks *whether* samples arrive.
+
+- `fifo` — use when every sample matters and the consumer is guaranteed to keep up: commands,
+  events, anything where dropping one is a lost instruction.
+- `ring` with `ring_size: 1` — use for sensor streams, where only the newest value is wanted.
+  Drops the oldest sample when full, so `receive` always yields the most recent one available.
+
+`queue_mode` on a **Tx** channel is rejected at construction rather than ignored: it reads like it
+bounds the publisher and would do nothing at all.
 
 Tx empty-message behavior is static and comes from the Rust channel declaration, not from
 `copperconfig.ron`:
@@ -49,6 +71,8 @@ bridges: [
       Tx(id: "ping_json", route: "demo/ping/json", config: { "wire_format": "json" }),
       Rx(id: "pong_bin", route: "demo/pong/bin"),
       Rx(id: "pong_json", route: "demo/pong/json", config: { "wire_format": "json" }),
+      // A sensor stream: keep only the newest sample rather than falling behind in order.
+      Rx(id: "odom", route: "demo/odom", config: { "queue_mode": "ring", "ring_size": 1 }),
     ],
   ),
 ],
