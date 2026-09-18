@@ -2,8 +2,8 @@
 //! plan.
 
 use crate::config::{
-    BridgeChannelConfigRepresentation, ConfigGraphs, CuConfig, CuDirection, CuGraph, Flavor, Node,
-    NodeId, PlannerKind, TaskKind,
+    BridgeChannelConfigRepresentation, ComponentConfig, ConfigGraphs, CuConfig, CuDirection,
+    CuGraph, Flavor, Node, NodeId, PlannerKind, TaskKind,
 };
 use crate::curuntime::{
     CuExecutionLoop, CuExecutionStep, CuExecutionUnit, CuInputMsg, CuOutputPack, CuStepPhase,
@@ -16,6 +16,23 @@ use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
 use cu29_traits::{CuError, CuResult};
+
+mod distributed;
+pub use distributed::DistributedSchedule;
+mod explicit_schedule;
+pub use explicit_schedule::CuPlan;
+pub use explicit_schedule::ExplicitSchedule;
+mod pipeline;
+pub use pipeline::Pipeline;
+mod schedule;
+pub use schedule::CuMissionPlan;
+pub use schedule::CuPlanBackground;
+pub use schedule::CuPlanBackgroundResult;
+pub use schedule::CuPlanDependency;
+pub use schedule::CuPlanPlacement;
+pub use schedule::CuPlanStep;
+pub use schedule::CuPlanThread;
+pub use schedule::CuPlanWorker;
 
 /// Code generation and plan tooling share this value so the displayed
 /// in-flight bound cannot drift from the generated executor.
@@ -57,11 +74,144 @@ pub struct AssembledPlan {
     pub entities: Vec<PlanEntity>,
     /// Indexed by the plan `NodeId`; bridge stages contain `None`.
     pub plan_to_original: Vec<Option<NodeId>>,
+    /// Background result semantics selected by the plan.
+    pub background: Vec<CuPlanBackground>,
+    /// Multicore schedule to generate, when the plan is not serial.
+    pub lanes: Option<LanePlan>,
+}
+
+/// A multicore plan resolved against `AssembledPlan::execution`.
+#[doc(hidden)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LanePlan {
+    pub copperlists_per_cycle: u32,
+    pub max_in_flight: u32,
+    pub occurrences: Vec<LaneOccurrence>,
+    pub workers: Vec<LaneWorker>,
+    pub dispatcher: Option<CuPlanThread>,
+    pub dependencies: Vec<CuPlanDependency>,
+}
+
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LaneOccurrence {
+    pub step: usize,
+    pub copperlist: u32,
+}
+
+#[doc(hidden)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LaneWorker {
+    pub id: String,
+    pub placement: CuPlanPlacement,
+    pub occurrences: Vec<usize>,
 }
 
 /// A total step order over plan `NodeId`s.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct StepOrder(pub Vec<NodeId>);
+
+/// Shared build-time input for every complete-schedule planner.
+pub struct PlanningInput<'a> {
+    pub config: &'a CuConfig,
+    pub baseline: CuPlan,
+}
+
+impl<'a> PlanningInput<'a> {
+    pub fn new(config: &'a CuConfig) -> CuResult<Self> {
+        Ok(Self {
+            config,
+            baseline: CuPlan::from_config_cyclic(config, 1)?,
+        })
+    }
+}
+
+/// Complete-schedule interface shared by built-in and offline planners.
+pub trait CuPlanner {
+    fn plan(&self, input: &PlanningInput<'_>) -> CuResult<CuPlan>;
+}
+
+trait NodeOrderPlanner {
+    fn node_order(&self, graph: &CuGraph) -> CuResult<StepOrder>;
+}
+
+/// Default graph-order planner.
+#[derive(Default)]
+pub struct Serial;
+
+impl NodeOrderPlanner for Serial {
+    fn node_order(&self, graph: &CuGraph) -> CuResult<StepOrder> {
+        topo_bfs_order(graph)
+    }
+}
+
+/// Exact task order with bridge placement derived from graph dependencies.
+pub struct TaskOrder {
+    order: Vec<String>,
+}
+
+impl TaskOrder {
+    fn new(config: Option<&ComponentConfig>) -> CuResult<Self> {
+        const NEEDS_ORDER: &str = "TaskOrder needs config: { \"order\": [..task ids..] }";
+        let order = config
+            .ok_or(CuError::from(NEEDS_ORDER))?
+            .get_value::<Vec<String>>("order")?
+            .ok_or(CuError::from(NEEDS_ORDER))?;
+        Ok(Self { order })
+    }
+}
+
+impl NodeOrderPlanner for TaskOrder {
+    fn node_order(&self, graph: &CuGraph) -> CuResult<StepOrder> {
+        task_order(graph, &resolve_task_order_ids(graph, &self.order)?)
+    }
+}
+
+impl CuPlanner for Serial {
+    fn plan(&self, input: &PlanningInput<'_>) -> CuResult<CuPlan> {
+        Ok(input.baseline.clone())
+    }
+}
+
+impl CuPlanner for TaskOrder {
+    fn plan(&self, input: &PlanningInput<'_>) -> CuResult<CuPlan> {
+        let mut plan = input.baseline.clone();
+        for (mission, graph) in mission_graphs(input.config) {
+            let assembled = assemble_runtime_plan_with_planner(input.config, graph, self)?;
+            plan.missions.insert(
+                mission.clone(),
+                schedule::PlanShape::new(&assembled, input.config, graph, &mission, &[])?
+                    .serial_plan()?,
+            );
+        }
+        Ok(plan)
+    }
+}
+
+fn resolve_schedule(config: &CuConfig) -> CuResult<CuPlan> {
+    let selection = config.planner_config();
+    let params = selection.and_then(|selection| selection.get_config());
+    let planner: Box<dyn CuPlanner> = match selection
+        .map(|selection| selection.kind)
+        .unwrap_or_default()
+    {
+        PlannerKind::Serial => Box::new(Serial),
+        PlannerKind::TaskOrder => Box::new(TaskOrder::new(params)?),
+        PlannerKind::Pipeline => Box::new(Pipeline::new(params)?),
+        PlannerKind::ExplicitSchedule => {
+            let plan = params
+                .ok_or_else(|| CuError::from("ExplicitSchedule needs config.plan"))?
+                .get_value::<CuPlan>("plan")
+                .map_err(|error| CuError::from(format!("ExplicitSchedule: {error}")))?
+                .ok_or_else(|| CuError::from("ExplicitSchedule needs config.plan"))?;
+            Box::new(ExplicitSchedule::new(plan))
+        }
+    };
+    let input = PlanningInput::new(config)?;
+    let plan = planner.plan(&input)?;
+    plan.validate(config)?;
+    Ok(plan)
+}
 
 /// Map the configured task ids onto plan node ids, rejecting duplicates,
 /// unknown ids, bridge stage labels, and lists that miss a task.
@@ -744,29 +894,48 @@ fn assemble_from_order(plan_graph: PlanGraph, order: StepOrder) -> CuResult<Asse
         execution,
         entities: plan_graph.entities,
         plan_to_original: plan_graph.plan_to_original,
+        background: Vec::new(),
+        lanes: None,
     })
 }
 
-/// Assemble the generated execution plan selected by `runtime.planner`.
+/// Assemble a graph-node heuristic plan (`Serial` or `TaskOrder`).
 #[doc(hidden)]
 pub fn assemble_runtime_plan(config: &CuConfig, graph: &CuGraph) -> CuResult<AssembledPlan> {
+    match config.planner_kind() {
+        PlannerKind::Serial => assemble_runtime_plan_with_planner(config, graph, &Serial),
+        PlannerKind::TaskOrder => assemble_runtime_plan_with_planner(
+            config,
+            graph,
+            &TaskOrder::new(
+                config
+                    .planner_config()
+                    .and_then(|selection| selection.get_config()),
+            )?,
+        ),
+        PlannerKind::Pipeline | PlannerKind::ExplicitSchedule => Err(CuError::from(
+            "Use assemble_runtime_plan_for_mission for complete schedules",
+        )),
+    }
+}
+
+/// Resolve and validate the selected schedule, then materialize one mission.
+#[doc(hidden)]
+pub fn assemble_runtime_plan_for_mission(
+    config: &CuConfig,
+    graph: &CuGraph,
+    mission: &str,
+) -> CuResult<AssembledPlan> {
+    ExplicitSchedule::new(resolve_schedule(config)?).assemble(config, graph, mission)
+}
+
+fn assemble_runtime_plan_with_planner(
+    config: &CuConfig,
+    graph: &CuGraph,
+    planner: &dyn NodeOrderPlanner,
+) -> CuResult<AssembledPlan> {
     let plan_graph = build_plan_graph(config, graph)?;
-    let order = match config.planner_kind() {
-        PlannerKind::Serial | PlannerKind::Pipeline => topo_bfs_order(&plan_graph.graph)?,
-        PlannerKind::TaskOrder => {
-            const NEEDS_ORDER: &str = "TaskOrder needs config: { \"order\": [..task ids..] }";
-            let ids = config
-                .planner_config()
-                .and_then(|selection| selection.get_config())
-                .ok_or(CuError::from(NEEDS_ORDER))?
-                .get_value::<Vec<String>>("order")?
-                .ok_or(CuError::from(NEEDS_ORDER))?;
-            task_order(
-                &plan_graph.graph,
-                &resolve_task_order_ids(&plan_graph.graph, &ids)?,
-            )?
-        }
-    };
+    let order = planner.node_order(&plan_graph.graph)?;
     assemble_from_order(plan_graph, order)
 }
 

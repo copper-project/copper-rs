@@ -37,8 +37,6 @@ pub mod fanout;
 pub(crate) mod log;
 pub mod logcodec;
 pub mod monitoring;
-#[cfg(all(feature = "std", feature = "parallel-rt"))]
-pub mod parallel_queue;
 #[cfg(feature = "std")]
 #[cfg_attr(not(feature = "parallel-rt"), doc(hidden))]
 pub mod parallel_rt;

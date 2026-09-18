@@ -101,8 +101,6 @@ pub use cu29_runtime::input_msg;
 pub use cu29_runtime::logcodec;
 pub use cu29_runtime::monitoring;
 pub use cu29_runtime::output_msg;
-#[cfg(all(feature = "std", feature = "parallel-rt"))]
-pub use cu29_runtime::parallel_queue;
 #[cfg(feature = "std")]
 #[cfg_attr(not(feature = "parallel-rt"), doc(hidden))]
 pub use cu29_runtime::parallel_rt;
