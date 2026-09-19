@@ -2057,6 +2057,76 @@ mod tests {
         })
     }
 
+    /// Which producer CopperList each consumer CopperList actually drained, as a
+    /// `queue_mode: "ring"` Rx records it once the producer outruns the consumer.
+    ///
+    /// A leaking ring overwrites the samples that arrive between two drains, so they reach
+    /// no task and leave NO provenance edge — never a dangling one. `None` is the other
+    /// half of the same story: the ring was empty on that tick. The shape is therefore a
+    /// strict SUBGRAPH of the fifo recording, and a subgraph of a DAG is still a DAG.
+    const RING_DRAINS: [Option<u64>; 6] = [Some(0), None, Some(3), None, None, Some(5)];
+
+    fn fake_ring_producer_session(
+        assignment: &DistributedReplayAssignment,
+        _session_config: &DistributedReplaySessionConfig,
+    ) -> CuResult<DistributedReplaySessionBuild> {
+        Ok(DistributedReplaySessionBuild {
+            session: Box::new(FakeReplaySession),
+            nodes: (0..RING_DRAINS.len() as u64)
+                .map(|cl_id| DistributedReplayNodeDescriptor {
+                    cursor: DistributedReplayCursor::new(
+                        assignment.instance_id,
+                        assignment.subsystem_id.clone(),
+                        assignment.log.subsystem_code(),
+                        cl_id,
+                    ),
+                    origin_key: DistributedReplayOriginKey {
+                        instance_id: assignment.instance_id,
+                        subsystem_code: assignment.log.subsystem_code(),
+                        cl_id,
+                    },
+                    incoming_origins: BTreeSet::new(),
+                })
+                .collect(),
+            output_log_path: None,
+        })
+    }
+
+    fn fake_ring_consumer_session(
+        assignment: &DistributedReplayAssignment,
+        _session_config: &DistributedReplaySessionConfig,
+    ) -> CuResult<DistributedReplaySessionBuild> {
+        Ok(DistributedReplaySessionBuild {
+            session: Box::new(FakeReplaySession),
+            nodes: RING_DRAINS
+                .iter()
+                .enumerate()
+                .map(|(cl_id, drained)| DistributedReplayNodeDescriptor {
+                    cursor: DistributedReplayCursor::new(
+                        assignment.instance_id,
+                        assignment.subsystem_id.clone(),
+                        assignment.log.subsystem_code(),
+                        cl_id as u64,
+                    ),
+                    origin_key: DistributedReplayOriginKey {
+                        instance_id: assignment.instance_id,
+                        subsystem_code: assignment.log.subsystem_code(),
+                        cl_id: cl_id as u64,
+                    },
+                    incoming_origins: drained
+                        .map(|producer_cl_id| DistributedReplayOriginKey {
+                            instance_id: assignment.instance_id,
+                            subsystem_code: 0,
+                            cl_id: producer_cl_id,
+                        })
+                        .into_iter()
+                        .collect(),
+                })
+                .collect(),
+            output_log_path: None,
+        })
+    }
+
     const STRESS_SUBSYSTEMS: [(&str, u16); 4] =
         [("sense", 0), ("plan", 1), ("control", 2), ("telemetry", 3)];
 
@@ -2544,6 +2614,49 @@ mod tests {
             err.to_string()
                 .contains("Unresolved recorded provenance edge")
         );
+        Ok(())
+    }
+
+    #[test]
+    fn engine_replays_deterministically_when_a_ring_rx_leaks() -> CuResult<()> {
+        let build = || {
+            fake_plan(vec![
+                fake_assignment(1, "ping", 0, fake_ring_producer_session),
+                fake_assignment(1, "pong", 1, fake_ring_consumer_session),
+            ])
+            .start()
+        };
+        let position = |order: &[DistributedReplayCursor], subsystem: &str, cl_id: u64| {
+            order
+                .iter()
+                .position(|cursor| cursor.subsystem_id == subsystem && cursor.cl_id == cl_id)
+                .unwrap_or_else(|| panic!("{subsystem} CopperList {cl_id} never replayed"))
+        };
+
+        let mut engine = build()?;
+        let order = collect_engine_order(&mut engine)?;
+
+        // Every recorded CopperList replays, the producer ones the ring dropped included: a
+        // node nothing consumed is a leaf, not an orphan, so it never stalls the frontier.
+        assert_eq!(engine.executed_nodes(), engine.total_nodes());
+        assert_eq!(order.len(), 2 * RING_DRAINS.len());
+
+        // Causality survives the holes: every SURVIVING edge still replays producer first.
+        for (consumer_cl, drained) in RING_DRAINS.iter().enumerate() {
+            let Some(producer_cl) = *drained else {
+                continue;
+            };
+            assert!(
+                position(&order, "ping", producer_cl)
+                    < position(&order, "pong", consumer_cl as u64)
+            );
+        }
+
+        // The point of the test: a second plan built from the same leaky recording replays in
+        // the identical order. Drops are recorded history, so resim reproduces them exactly
+        // rather than re-deciding them.
+        let mut again = build()?;
+        assert_eq!(collect_engine_order(&mut again)?, order);
         Ok(())
     }
 

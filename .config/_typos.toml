@@ -14,6 +14,7 @@ ser = "ser"
 
 [files]
 extend-exclude = [
+  "**/target/**",
   "patches/*",
   "components/payloads/cu_ros2_payloads/**",
   "components/libs/zed_sdk_sys/vendor/**",

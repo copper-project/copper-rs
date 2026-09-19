@@ -32,6 +32,7 @@
         (
             id: "band_0",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 1,
                 "band_iters": 16,
@@ -42,6 +43,7 @@
         (
             id: "band_1",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 2,
                 "band_iters": 16,
@@ -52,6 +54,7 @@
         (
             id: "band_2",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 3,
                 "band_iters": 16,
@@ -62,6 +65,7 @@
         (
             id: "band_3",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 4,
                 "band_iters": 16,
@@ -72,6 +76,7 @@
         (
             id: "band_4",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 5,
                 "band_iters": 16,
@@ -82,6 +87,7 @@
         (
             id: "band_5",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 6,
                 "band_iters": 16,
@@ -92,6 +98,7 @@
         (
             id: "band_6",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 7,
                 "band_iters": 16,
@@ -102,6 +109,7 @@
         (
             id: "band_7",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 8,
                 "band_iters": 16,
@@ -112,6 +120,7 @@
         (
             id: "band_8",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 9,
                 "band_iters": 16,
@@ -122,6 +131,7 @@
         (
             id: "band_9",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 10,
                 "band_iters": 16,
@@ -132,6 +142,7 @@
         (
             id: "band_10",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 11,
                 "band_iters": 16,
@@ -142,6 +153,7 @@
         (
             id: "band_11",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 12,
                 "band_iters": 16,
@@ -152,6 +164,7 @@
         (
             id: "band_12",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 13,
                 "band_iters": 16,
@@ -162,6 +175,7 @@
         (
             id: "band_13",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 14,
                 "band_iters": 16,
@@ -172,6 +186,7 @@
         (
             id: "band_14",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 15,
                 "band_iters": 16,
@@ -182,6 +197,7 @@
         (
             id: "band_15",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 16,
                 "band_iters": 16,
@@ -192,6 +208,7 @@
         (
             id: "band_16",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 17,
                 "band_iters": 16,
@@ -202,6 +219,7 @@
         (
             id: "band_17",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 18,
                 "band_iters": 16,
@@ -212,6 +230,7 @@
         (
             id: "band_18",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 19,
                 "band_iters": 16,
@@ -222,6 +241,7 @@
         (
             id: "band_19",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 20,
                 "band_iters": 16,
@@ -232,6 +252,7 @@
         (
             id: "band_20",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 21,
                 "band_iters": 16,
@@ -242,6 +263,7 @@
         (
             id: "band_21",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 22,
                 "band_iters": 16,
@@ -252,6 +274,7 @@
         (
             id: "band_22",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 23,
                 "band_iters": 16,
@@ -262,6 +285,7 @@
         (
             id: "band_23",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 24,
                 "band_iters": 16,
@@ -272,6 +296,7 @@
         (
             id: "band_24",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 25,
                 "band_iters": 16,
@@ -282,6 +307,7 @@
         (
             id: "band_25",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 26,
                 "band_iters": 16,
@@ -292,6 +318,7 @@
         (
             id: "band_26",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 27,
                 "band_iters": 16,
@@ -302,6 +329,7 @@
         (
             id: "band_27",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 28,
                 "band_iters": 16,
@@ -312,6 +340,7 @@
         (
             id: "band_28",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 29,
                 "band_iters": 16,
@@ -322,6 +351,7 @@
         (
             id: "band_29",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 30,
                 "band_iters": 16,
@@ -332,6 +362,7 @@
         (
             id: "band_30",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 31,
                 "band_iters": 16,
@@ -342,6 +373,7 @@
         (
             id: "band_31",
             type: "tasks::MandelbrotIterBand",
+            kind: stateless_task,
             config: {
                 "stage_id": 32,
                 "band_iters": 16,
