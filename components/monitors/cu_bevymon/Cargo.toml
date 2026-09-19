@@ -44,6 +44,8 @@ cu29 = { path = "../../../core/cu29", version = "1.3.0-dev", default-features = 
 cu-tuimon = { path = "../../libs/cu_tuimon", version = "1.3.0-dev", default-features = false, features = [
   "log_pane",
 ] }
+# Constrain Bevy's transitive derive implementation to its syn 2-compatible release.
+encase_derive_impl = { workspace = true }
 ratatui = { version = "0.30.0", default-features = false }
 soft_ratatui = { version = "0.2.0", default-features = false, features = [
   "embedded-ttf",
