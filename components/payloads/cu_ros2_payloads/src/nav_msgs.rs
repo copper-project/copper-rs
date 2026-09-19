@@ -168,7 +168,8 @@ mod tests {
 
         let bytes =
             cdr::serialize::<_, _, cdr::CdrLe>(&value, cdr::Infinite).expect("cdr encode succeeds");
-        let decoded: OccupancyGrid = cdr::deserialize(bytes.as_slice()).expect("cdr decode succeeds");
+        let decoded: OccupancyGrid =
+            cdr::deserialize(bytes.as_slice()).expect("cdr decode succeeds");
         assert_eq!(decoded, value);
     }
 
@@ -188,7 +189,8 @@ mod tests {
 
         let bytes =
             cdr::serialize::<_, _, cdr::CdrLe>(&value, cdr::Infinite).expect("cdr encode succeeds");
-        let decoded: OccupancyGrid = cdr::deserialize(bytes.as_slice()).expect("cdr decode succeeds");
+        let decoded: OccupancyGrid =
+            cdr::deserialize(bytes.as_slice()).expect("cdr decode succeeds");
         assert!(
             decoded.data.iter().all(|&c| c == -1),
             "unknown cells decoded as {:?}",
