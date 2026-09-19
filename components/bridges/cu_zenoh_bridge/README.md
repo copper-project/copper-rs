@@ -17,6 +17,36 @@ Bridge-level config:
 Per-channel config (inside `channels`):
 - `route`: Zenoh key expression for the channel.
 - `config.wire_format`: override the default wire format per channel.
+- `config.queue_mode` (**Rx only**): `ring` (default) or `fifo`.
+- `config.ring_size`: ring depth (default `1`, i.e. latest-wins). Setting it alone is enough;
+  `queue_mode` need not be spelled out.
+
+### Choosing a queue mode
+
+The bridge consumes **at most one sample per `receive` call**, i.e. one per graph iteration. So a
+channel whose publisher is faster than the consuming graph's rate falls behind, and under the
+`fifo` handler it falls behind *losslessly and without bound*: the consumer keeps reading
+ever-older samples, in order, with nothing dropped and no error on either side.
+
+Measured on a loopback link, 724 B at 200 Hz against a consumer draining 100/s: the consumer
+received sequence numbers 0..2490 contiguously while the publisher had reached 5908 — 12 s behind
+and growing linearly. The publisher was not slowed (197 Hz sustained), so this is staleness, not
+back-pressure, and it is invisible to a consumer that only checks *whether* samples arrive.
+
+- `ring` with `ring_size: 1` (**the default**) — drops the oldest sample when full, so `receive`
+  always yields the most recent one available. Right for sensor streams, and the default because
+  the failure it avoids is silent while the one it causes is not.
+- `fifo` — ask for it when every sample matters and the consumer is guaranteed to keep up:
+  commands, events, anything where dropping one is a lost instruction.
+
+Neither mode costs determinism. Resim copies every recorded task and bridge output out of the
+CopperList and skips the implementation, so no subscriber runs at replay time and `queue_mode` has
+no effect there. A drop reaches the log as an empty message with no origin, which removes a
+provenance edge rather than dangling one — see `engine_replays_deterministically_when_a_ring_rx_leaks`
+in `cu29_runtime::distributed_replay`.
+
+`queue_mode` on a **Tx** channel is rejected at construction rather than ignored: it reads like it
+bounds the publisher and would do nothing at all.
 
 Tx empty-message behavior is static and comes from the Rust channel declaration, not from
 `copperconfig.ron`:
@@ -49,6 +79,8 @@ bridges: [
       Tx(id: "ping_json", route: "demo/ping/json", config: { "wire_format": "json" }),
       Rx(id: "pong_bin", route: "demo/pong/bin"),
       Rx(id: "pong_json", route: "demo/pong/json", config: { "wire_format": "json" }),
+      // A sensor stream: keep only the newest sample rather than falling behind in order.
+      Rx(id: "odom", route: "demo/odom", config: { "queue_mode": "ring", "ring_size": 1 }),
     ],
   ),
 ],
