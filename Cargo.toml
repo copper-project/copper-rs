@@ -400,6 +400,8 @@ ctrlc = "3.5"
 defmt = { version = "1.0", default-features = false }
 defmt-rtt = "1.1"
 embedded-alloc = { version = "0.7", default-features = false }
+# Bevy 0.19.1 passes syn 2 types into this crate, but 0.12.2 switched to syn 3.
+encase_derive_impl = "=0.12.1"
 ffmpeg-next = { version = "8.1.0", default-features = false, features = [
   "codec",
   "format",
