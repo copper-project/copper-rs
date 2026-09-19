@@ -10,6 +10,8 @@ use std::arch::x86_64::{
     _CMP_GT_OQ, _mm256_add_ps, _mm256_andnot_ps, _mm256_blendv_ps, _mm256_castsi256_ps,
     _mm256_cmp_ps, _mm256_fmadd_ps, _mm256_loadu_ps, _mm256_movemask_ps, _mm256_mul_ps,
     _mm256_or_ps, _mm256_set_epi32, _mm256_set_ps, _mm256_set1_ps, _mm256_storeu_ps, _mm256_sub_ps,
+    _mm512_add_ps, _mm512_cmp_ps_mask, _mm512_fmadd_ps, _mm512_loadu_ps, _mm512_mask_blend_ps,
+    _mm512_mul_ps, _mm512_set_ps, _mm512_set1_ps, _mm512_storeu_ps, _mm512_sub_ps,
 };
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{SyncSender, sync_channel};
@@ -416,6 +418,99 @@ unsafe fn iterate_band_avx2(
     }
 }
 
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx512f,fma")]
+unsafe fn iterate_band_avx512(
+    plane: StripePlane,
+    z_re: &mut [f32],
+    z_im: &mut [f32],
+    escape_iter: &mut [u16],
+    start_iter: u16,
+    target_iters: u16,
+) {
+    const LANES: usize = 16;
+
+    let four = _mm512_set1_ps(4.0);
+    let shadow_rr = _mm512_set1_ps(0.754_877_7);
+    let shadow_ri = _mm512_set1_ps(0.569_840_3);
+    let shadow_ir = _mm512_set1_ps(0.137_631_3);
+    let shadow_ii = _mm512_set1_ps(0.819_172_5);
+
+    for local_row in 0..plane.row_count {
+        let row_base = local_row * plane.width;
+        let row_im = plane.row_imag(local_row as u32);
+        let row_im_vec = _mm512_set1_ps(row_im);
+
+        let mut x = 0;
+        while x + LANES <= plane.width {
+            let index = row_base + x;
+            let c_re = _mm512_set_ps(
+                plane.pixel_real(x + 15),
+                plane.pixel_real(x + 14),
+                plane.pixel_real(x + 13),
+                plane.pixel_real(x + 12),
+                plane.pixel_real(x + 11),
+                plane.pixel_real(x + 10),
+                plane.pixel_real(x + 9),
+                plane.pixel_real(x + 8),
+                plane.pixel_real(x + 7),
+                plane.pixel_real(x + 6),
+                plane.pixel_real(x + 5),
+                plane.pixel_real(x + 4),
+                plane.pixel_real(x + 3),
+                plane.pixel_real(x + 2),
+                plane.pixel_real(x + 1),
+                plane.pixel_real(x),
+            );
+
+            let mut zr = unsafe { _mm512_loadu_ps(z_re.as_ptr().add(index)) };
+            let mut zi = unsafe { _mm512_loadu_ps(z_im.as_ptr().add(index)) };
+            let mut escaped_mask = escape_mask_from_slice(&escape_iter[index..index + LANES]);
+
+            for iter in start_iter..target_iters {
+                let zr2 = _mm512_mul_ps(zr, zr);
+                let zi2 = _mm512_mul_ps(zi, zi);
+                let mag2 = _mm512_add_ps(zr2, zi2);
+                let newly_escaped = (!escaped_mask) & _mm512_cmp_ps_mask(mag2, four, _CMP_GT_OQ);
+                if newly_escaped != 0 {
+                    record_escape_mask(&mut escape_iter[index..index + LANES], newly_escaped, iter);
+                }
+
+                let zrzi = _mm512_mul_ps(zr, zi);
+                let next_re_active = _mm512_add_ps(_mm512_sub_ps(zr2, zi2), c_re);
+                let next_im_active = _mm512_add_ps(_mm512_add_ps(zrzi, zrzi), row_im_vec);
+
+                let next_re_shadow = _mm512_sub_ps(
+                    _mm512_fmadd_ps(zr, shadow_rr, c_re),
+                    _mm512_mul_ps(zi, shadow_ri),
+                );
+                let next_im_shadow = _mm512_add_ps(
+                    _mm512_fmadd_ps(zi, shadow_ii, row_im_vec),
+                    _mm512_mul_ps(zr, shadow_ir),
+                );
+
+                escaped_mask |= newly_escaped;
+                zr = _mm512_mask_blend_ps(escaped_mask, next_re_active, next_re_shadow);
+                zi = _mm512_mask_blend_ps(escaped_mask, next_im_active, next_im_shadow);
+            }
+
+            unsafe {
+                _mm512_storeu_ps(z_re.as_mut_ptr().add(index), zr);
+                _mm512_storeu_ps(z_im.as_mut_ptr().add(index), zi);
+            }
+            x += LANES;
+        }
+
+        iterate_row_scalar(
+            plane,
+            row_base,
+            row_im,
+            RowIterationBuffers::new(z_re, z_im, escape_iter),
+            IterationRange::new(x, start_iter, target_iters),
+        );
+    }
+}
+
 fn iterate_band(
     plane: StripePlane,
     z_re: &mut [f32],
@@ -426,6 +521,15 @@ fn iterate_band(
 ) {
     #[cfg(target_arch = "x86_64")]
     {
+        if std::arch::is_x86_feature_detected!("avx512f")
+            && std::arch::is_x86_feature_detected!("fma")
+        {
+            unsafe {
+                iterate_band_avx512(plane, z_re, z_im, escape_iter, start_iter, target_iters);
+            }
+            return;
+        }
+
         if std::arch::is_x86_feature_detected!("avx2") && std::arch::is_x86_feature_detected!("fma")
         {
             unsafe {
@@ -1182,14 +1286,10 @@ mod tests {
     use super::*;
 
     #[cfg(target_arch = "x86_64")]
-    #[test]
-    fn avx2_matches_scalar_escape_iterations() {
-        if !std::arch::is_x86_feature_detected!("avx2")
-            || !std::arch::is_x86_feature_detected!("fma")
-        {
-            return;
-        }
+    type IterateBandFn = unsafe fn(StripePlane, &mut [f32], &mut [f32], &mut [u16], u16, u16);
 
+    #[cfg(target_arch = "x86_64")]
+    fn assert_simd_matches_scalar(iterate_band_simd: IterateBandFn) {
         let plane = StripePlane {
             width: 19,
             row_count: 3,
@@ -1204,9 +1304,9 @@ mod tests {
         let mut scalar_z_re = vec![0.0; len];
         let mut scalar_z_im = vec![0.0; len];
         let mut scalar_escape = vec![0; len];
-        let mut avx2_z_re = scalar_z_re.clone();
-        let mut avx2_z_im = scalar_z_im.clone();
-        let mut avx2_escape = scalar_escape.clone();
+        let mut simd_z_re = scalar_z_re.clone();
+        let mut simd_z_im = scalar_z_im.clone();
+        let mut simd_escape = scalar_escape.clone();
 
         for (start_iter, target_iters) in [(0, 16), (16, 32)] {
             iterate_band_scalar(
@@ -1218,23 +1318,47 @@ mod tests {
                 target_iters,
             );
             unsafe {
-                iterate_band_avx2(
+                iterate_band_simd(
                     plane,
-                    &mut avx2_z_re,
-                    &mut avx2_z_im,
-                    &mut avx2_escape,
+                    &mut simd_z_re,
+                    &mut simd_z_im,
+                    &mut simd_escape,
                     start_iter,
                     target_iters,
                 );
             }
         }
 
-        assert_eq!(avx2_escape, scalar_escape);
-        for (avx2, scalar) in avx2_z_re.iter().zip(&scalar_z_re) {
-            assert!((avx2 - scalar).abs() <= 1.0e-5);
+        assert_eq!(simd_escape, scalar_escape);
+        for (simd, scalar) in simd_z_re.iter().zip(&scalar_z_re) {
+            assert!((simd - scalar).abs() <= 1.0e-5);
         }
-        for (avx2, scalar) in avx2_z_im.iter().zip(&scalar_z_im) {
-            assert!((avx2 - scalar).abs() <= 1.0e-5);
+        for (simd, scalar) in simd_z_im.iter().zip(&scalar_z_im) {
+            assert!((simd - scalar).abs() <= 1.0e-5);
         }
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn avx512_matches_scalar_escape_iterations() {
+        if !std::arch::is_x86_feature_detected!("avx512f")
+            || !std::arch::is_x86_feature_detected!("fma")
+        {
+            return;
+        }
+
+        assert_simd_matches_scalar(iterate_band_avx512);
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn avx2_matches_scalar_escape_iterations() {
+        if !std::arch::is_x86_feature_detected!("avx2")
+            || !std::arch::is_x86_feature_detected!("fma")
+        {
+            return;
+        }
+
+        assert_simd_matches_scalar(iterate_band_avx2);
     }
 }
