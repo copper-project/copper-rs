@@ -1,11 +1,9 @@
 //! Parallel runtime scheduler state for concurrent CopperList execution.
 //!
-//! The proc macro emits one ordered process-stage entry per generated runtime
-//! plan node. The feature-enabled runtime executes those stages as a FIFO
-//! pipeline: each stage worker drains CopperLists in ascending `clid` order and
-//! forwards them to the next stage. Determinism therefore comes from queue
-//! order, while commit/log handoff is still protected by an explicit ordered
-//! cursor.
+//! The proc macro emits exact ordered workers and their cross-worker
+//! dependencies. Workers publish one cache-isolated monotonic progress word;
+//! the dispatcher derives CopperList completion from generated terminal
+//! thresholds and commits in `clid` order.
 
 use crate::config::NodeId;
 pub use crate::curuntime::{ProcessStepOutcome, ProcessStepResult};
@@ -63,9 +61,7 @@ impl ParallelRtStageMetadata {
 /// Immutable scheduler layout shared by every runtime instance of a mission.
 ///
 /// `stages` is in the exact order emitted by the proc macro for the per-CL
-/// process path. The stage-affine executor spawns one FIFO worker lane per
-/// entry and hands ownership of each in-flight CopperList from one lane to the
-/// next.
+/// process path. The generated schedule maps those stages onto exact workers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ParallelRtMetadata {
     pub stages: &'static [ParallelRtStageMetadata],
@@ -90,8 +86,8 @@ impl ParallelRtMetadata {
 /// process-stage parallel layout.
 pub const DISABLED_PARALLEL_RT_METADATA: ParallelRtMetadata = ParallelRtMetadata::new(&[], 1);
 
-/// Minimal cache-line padding wrapper used for hot scheduler cursors.
-#[repr(align(64))]
+/// Cache isolation used for independently written scheduler state.
+#[repr(align(128))]
 pub struct CachePadded<T>(pub T);
 
 impl<T> CachePadded<T> {
@@ -223,6 +219,307 @@ mod imp {
     }
 }
 
+#[cfg(all(feature = "std", feature = "parallel-rt"))]
+mod lanes {
+    use super::{CachePadded, ProcessStepOutcome, ProcessStepResult};
+    use alloc::vec::Vec;
+    use core::cell::UnsafeCell;
+    use core::sync::atomic::AtomicBool;
+    use core::sync::atomic::AtomicPtr;
+    use core::sync::atomic::AtomicU8;
+    use core::sync::atomic::AtomicU64;
+    use core::sync::atomic::AtomicUsize;
+    use core::sync::atomic::Ordering;
+    use cu29_traits::CuError;
+    use std::sync::OnceLock;
+    use std::thread::Thread;
+
+    const SPIN_ROUNDS: u32 = 256;
+
+    const ERROR_EMPTY: u8 = 0;
+    const ERROR_WRITING: u8 = 1;
+    const ERROR_READY: u8 = 2;
+    const ERROR_TAKEN: u8 = 3;
+
+    #[repr(align(128))]
+    struct LaneSlot {
+        culist: AtomicPtr<u8>,
+        keyframe: AtomicPtr<u8>,
+        keyframe_len: AtomicUsize,
+        aborted: AtomicBool,
+        clid: AtomicU64,
+    }
+
+    struct FailureSlot {
+        state: AtomicU8,
+        clid: AtomicU64,
+        error: UnsafeCell<Option<CuError>>,
+    }
+
+    // One worker claims the cell with ERROR_WRITING. The dispatcher reads it
+    // only after the release store of ERROR_READY. Admission stops immediately,
+    // while workers finish CopperLists older than the failing one.
+    unsafe impl Sync for FailureSlot {}
+
+    /// Preallocated admission, dependency, and completion state for workers.
+    pub struct LaneExecutor {
+        first_clid: u64,
+        admitted: CachePadded<AtomicU64>,
+        stopping: AtomicBool,
+        shutdown: AtomicBool,
+        worker_progress: Vec<CachePadded<AtomicU64>>,
+        slots: Vec<LaneSlot>,
+        copperlists_per_cycle: u64,
+        dispatcher_generation: CachePadded<AtomicU64>,
+        dispatcher: Thread,
+        worker_threads: Vec<OnceLock<Thread>>,
+        failure: CachePadded<FailureSlot>,
+    }
+
+    impl LaneExecutor {
+        pub fn new(
+            first_clid: u64,
+            max_in_flight: usize,
+            copperlists_per_cycle: u32,
+            workers: usize,
+        ) -> Self {
+            Self {
+                first_clid,
+                admitted: CachePadded::new(AtomicU64::new(first_clid)),
+                stopping: AtomicBool::new(false),
+                shutdown: AtomicBool::new(false),
+                worker_progress: (0..workers)
+                    .map(|_| CachePadded::new(AtomicU64::new(0)))
+                    .collect(),
+                slots: (0..max_in_flight.max(1))
+                    .map(|_| LaneSlot {
+                        culist: AtomicPtr::new(core::ptr::null_mut()),
+                        keyframe: AtomicPtr::new(core::ptr::null_mut()),
+                        keyframe_len: AtomicUsize::new(0),
+                        aborted: AtomicBool::new(false),
+                        clid: AtomicU64::new(u64::MAX),
+                    })
+                    .collect(),
+                copperlists_per_cycle: u64::from(copperlists_per_cycle.max(1)),
+                dispatcher_generation: CachePadded::new(AtomicU64::new(0)),
+                dispatcher: std::thread::current(),
+                worker_threads: (0..workers).map(|_| OnceLock::new()).collect(),
+                failure: CachePadded::new(FailureSlot {
+                    state: AtomicU8::new(ERROR_EMPTY),
+                    clid: AtomicU64::new(u64::MAX),
+                    error: UnsafeCell::new(None),
+                }),
+            }
+        }
+
+        fn slot(&self, clid: u64) -> &LaneSlot {
+            &self.slots[(clid % self.slots.len() as u64) as usize]
+        }
+
+        fn wake_dispatcher(&self) {
+            self.dispatcher_generation.fetch_add(1, Ordering::AcqRel);
+            self.dispatcher.unpark();
+        }
+
+        fn wake_all_workers(&self) {
+            for worker in &self.worker_threads {
+                if let Some(worker) = worker.get() {
+                    worker.unpark();
+                }
+            }
+        }
+
+        fn wait_until(&self, mut condition: impl FnMut() -> bool) -> bool {
+            loop {
+                for _ in 0..SPIN_ROUNDS {
+                    if condition() {
+                        return true;
+                    }
+                    if self.shutdown.load(Ordering::Acquire) {
+                        return false;
+                    }
+                    core::hint::spin_loop();
+                }
+                if condition() {
+                    return true;
+                }
+                if self.shutdown.load(Ordering::Acquire) {
+                    return false;
+                }
+                std::thread::park();
+            }
+        }
+
+        pub fn register_worker(&self, worker: usize) {
+            self.worker_threads[worker]
+                .set(std::thread::current())
+                .unwrap_or_else(|_| panic!("lane worker {worker} registered twice"));
+        }
+
+        pub fn progress_generation(&self) -> u64 {
+            self.dispatcher_generation.load(Ordering::Acquire)
+        }
+
+        pub fn wait_for_progress(&self, observed: u64, timeout: Option<std::time::Duration>) {
+            if self.dispatcher_generation.load(Ordering::Acquire) != observed {
+                return;
+            }
+            if let Some(timeout) = timeout {
+                std::thread::park_timeout(timeout);
+            } else {
+                std::thread::park();
+            }
+        }
+
+        pub fn first_clid(&self) -> u64 {
+            self.first_clid
+        }
+
+        pub fn cycle_of(&self, clid: u64) -> u64 {
+            (clid - self.first_clid) / self.copperlists_per_cycle
+        }
+
+        pub fn keyframe_capture(&self, clid: u64) -> (*mut u8, usize) {
+            let slot = self.slot(clid);
+            (
+                slot.keyframe.load(Ordering::Acquire),
+                slot.keyframe_len.load(Ordering::Acquire),
+            )
+        }
+
+        pub fn admit_with_keyframe(
+            &self,
+            clid: u64,
+            culist: *mut u8,
+            keyframe: *mut u8,
+            keyframe_len: usize,
+        ) {
+            debug_assert_eq!(self.admitted.load(Ordering::Acquire), clid);
+            let slot = self.slot(clid);
+            slot.aborted.store(false, Ordering::Relaxed);
+            slot.clid.store(clid, Ordering::Relaxed);
+            slot.keyframe.store(keyframe, Ordering::Relaxed);
+            slot.keyframe_len.store(keyframe_len, Ordering::Relaxed);
+            slot.culist.store(culist, Ordering::Release);
+            self.admitted.store(clid + 1, Ordering::Release);
+            self.wake_all_workers();
+        }
+
+        pub fn next_admission(&self) -> u64 {
+            self.admitted.load(Ordering::Acquire)
+        }
+
+        pub fn stop_admitting(&self) {
+            self.stopping.store(true, Ordering::Release);
+            self.wake_all_workers();
+        }
+
+        pub fn request_shutdown(&self) {
+            self.shutdown.store(true, Ordering::Release);
+            self.wake_dispatcher();
+            self.wake_all_workers();
+        }
+
+        pub fn is_shut_down(&self) -> bool {
+            self.shutdown.load(Ordering::Acquire)
+        }
+
+        pub fn wait_admitted(&self, clid: u64) -> Option<*mut u8> {
+            let ready = self.wait_until(|| {
+                self.admitted.load(Ordering::Acquire) > clid
+                    || self.stopping.load(Ordering::Acquire)
+            });
+            if !ready || self.admitted.load(Ordering::Acquire) <= clid {
+                return None;
+            }
+            Some(self.slot(clid).culist.load(Ordering::Acquire))
+        }
+
+        pub fn wait_progress(&self, worker: usize, target: u64) -> bool {
+            let progress = &self.worker_progress[worker];
+            self.wait_until(|| progress.load(Ordering::Acquire) >= target)
+        }
+
+        pub fn worker_reached(&self, worker: usize, target: u64) -> bool {
+            self.worker_progress[worker].load(Ordering::Acquire) >= target
+        }
+
+        pub fn publish_progress(
+            &self,
+            worker: usize,
+            progress: u64,
+            dependent_workers: &[usize],
+            terminal: bool,
+        ) {
+            self.worker_progress[worker].store(progress, Ordering::Release);
+            for &dependent in dependent_workers {
+                if let Some(thread) = self.worker_threads[dependent].get() {
+                    thread.unpark();
+                }
+            }
+            if terminal {
+                self.wake_dispatcher();
+            }
+        }
+
+        pub fn publish_error(&self, clid: u64, error: CuError) {
+            if self
+                .failure
+                .state
+                .compare_exchange(
+                    ERROR_EMPTY,
+                    ERROR_WRITING,
+                    Ordering::AcqRel,
+                    Ordering::Acquire,
+                )
+                .is_ok()
+            {
+                // SAFETY: this worker exclusively claimed the error cell above.
+                unsafe { *self.failure.error.get() = Some(error) };
+                self.failure.clid.store(clid, Ordering::Relaxed);
+                self.failure.state.store(ERROR_READY, Ordering::Release);
+            }
+            self.stop_admitting();
+            self.wake_dispatcher();
+        }
+
+        pub fn completion_outcome(&self, clid: u64) -> ProcessStepResult {
+            let slot = self.slot(clid);
+            debug_assert_eq!(slot.clid.load(Ordering::Acquire), clid);
+            if slot.aborted.load(Ordering::Acquire) {
+                Ok(ProcessStepOutcome::AbortCopperList)
+            } else {
+                Ok(ProcessStepOutcome::Continue)
+            }
+        }
+
+        pub fn take_failure(&self) -> Option<(u64, CuError)> {
+            if self.failure.state.load(Ordering::Acquire) != ERROR_READY {
+                return None;
+            }
+            let clid = self.failure.clid.load(Ordering::Acquire);
+            // SAFETY: ERROR_READY publishes the value, and only the dispatcher
+            // calls this method.
+            let error = unsafe { &mut *self.failure.error.get() }
+                .take()
+                .expect("lane error state without an error");
+            self.failure.state.store(ERROR_TAKEN, Ordering::Release);
+            Some((clid, error))
+        }
+
+        pub fn abort(&self, clid: u64) {
+            self.slot(clid).aborted.store(true, Ordering::Release);
+        }
+
+        pub fn is_aborted(&self, clid: u64) -> bool {
+            self.slot(clid).aborted.load(Ordering::Acquire)
+        }
+    }
+}
+
+#[cfg(all(feature = "std", feature = "parallel-rt"))]
+pub use lanes::LaneExecutor;
+
 #[cfg(not(all(feature = "std", feature = "parallel-rt")))]
 mod imp {
     use super::{CachePadded, CausalityCheckpoint, ParallelRtMetadata};
@@ -300,6 +597,12 @@ mod tests {
     }
 
     #[test]
+    fn hot_scheduler_words_are_cache_isolated() {
+        assert_eq!(core::mem::align_of::<CachePadded<AtomicU64>>(), 128);
+        assert_eq!(core::mem::size_of::<CachePadded<AtomicU64>>(), 128);
+    }
+
+    #[test]
     fn disabled_metadata_is_empty() {
         assert_eq!(DISABLED_PARALLEL_RT_METADATA.process_stage_count(), 0);
     }
@@ -341,6 +644,79 @@ mod tests {
 
         assert!(ParallelRt::<4>::new(&ZERO).is_err());
         assert!(ParallelRt::<4>::new(&EXCESS).is_err());
+    }
+
+    #[cfg(all(feature = "std", feature = "parallel-rt"))]
+    #[test]
+    fn lane_progress_wakes_after_release_publication() {
+        use std::sync::Arc;
+        use std::sync::mpsc;
+
+        let lanes = Arc::new(LaneExecutor::new(10, 2, 1, 2));
+        let (registered_tx, registered_rx) = mpsc::channel();
+        let waiter = {
+            let lanes = Arc::clone(&lanes);
+            std::thread::spawn(move || {
+                lanes.register_worker(1);
+                registered_tx.send(()).unwrap();
+                lanes.wait_progress(0, 7)
+            })
+        };
+        registered_rx.recv().unwrap();
+        assert!(!lanes.worker_reached(0, 7));
+        lanes.publish_progress(0, 7, &[1], true);
+        assert!(waiter.join().unwrap());
+        assert!(lanes.worker_reached(0, 7));
+        assert_ne!(lanes.progress_generation(), 0);
+    }
+
+    #[cfg(all(feature = "std", feature = "parallel-rt"))]
+    #[test]
+    fn shutdown_releases_waiters_and_admission_reinitializes_slot_state() {
+        use std::sync::Arc;
+        use std::sync::mpsc;
+
+        let lanes = Arc::new(LaneExecutor::new(4, 1, 2, 1));
+        let (registered_tx, registered_rx) = mpsc::channel();
+        let waiter = {
+            let lanes = Arc::clone(&lanes);
+            std::thread::spawn(move || {
+                lanes.register_worker(0);
+                registered_tx.send(()).unwrap();
+                lanes.wait_admitted(4).is_none()
+            })
+        };
+        registered_rx.recv().unwrap();
+        lanes.request_shutdown();
+        assert!(waiter.join().unwrap());
+
+        let lanes = LaneExecutor::new(4, 1, 2, 0);
+        let mut culist = 0u8;
+        let mut keyframe = [0u8; 8];
+        lanes.admit_with_keyframe(4, &mut culist, keyframe.as_mut_ptr(), keyframe.len());
+        assert_eq!(lanes.wait_admitted(4), Some(&mut culist as *mut u8));
+        assert_eq!(lanes.keyframe_capture(4), (keyframe.as_mut_ptr(), 8));
+        lanes.abort(4);
+        assert!(lanes.is_aborted(4));
+        lanes.admit_with_keyframe(5, &mut culist, core::ptr::null_mut(), 0);
+        assert!(!lanes.is_aborted(5));
+        assert_eq!(lanes.cycle_of(5), 0);
+        assert_eq!(lanes.cycle_of(6), 1);
+    }
+
+    #[cfg(all(feature = "std", feature = "parallel-rt"))]
+    #[test]
+    fn worker_error_stops_admission_without_interrupting_older_work() {
+        use cu29_traits::CuError;
+
+        let lanes = LaneExecutor::new(4, 1, 1, 0);
+        lanes.publish_error(7, CuError::from("worker failed"));
+
+        assert!(!lanes.is_shut_down());
+        assert!(lanes.wait_admitted(4).is_none());
+        let (clid, error) = lanes.take_failure().expect("published failure");
+        assert_eq!(clid, 7);
+        assert!(error.to_string().contains("worker failed"));
     }
 
     #[cfg(not(all(feature = "std", feature = "parallel-rt")))]

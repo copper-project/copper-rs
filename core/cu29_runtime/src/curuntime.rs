@@ -717,6 +717,11 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
     }
 
     #[cfg(feature = "std")]
+    pub const fn has_pending_slots(&self) -> bool {
+        false
+    }
+
+    #[cfg(feature = "std")]
     pub fn wait_reclaim_slot(&mut self) -> CuResult<CuSlotLease<P>> {
         Err(CuError::from(
             "Synchronous CopperList I/O cannot block waiting for slot completions",
@@ -726,6 +731,11 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
     #[cfg(feature = "std")]
     pub fn finish_pending_slots(&mut self) -> CuResult<Vec<CuSlotLease<P>>> {
         Ok(Vec::new())
+    }
+
+    #[cfg(feature = "std")]
+    pub fn finish_pending_with(&mut self, _reclaim: impl FnMut(CuSlotLease<P>)) -> CuResult<()> {
+        Ok(())
     }
 
     #[cfg(debug_assertions)]
@@ -770,6 +780,14 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
 
     pub fn recycle_slot(&mut self, slot: CuSlotLease<P>) {
         self.free_pool.push(slot);
+    }
+
+    pub fn take_execution_slots(&mut self) -> Vec<CuSlotLease<P>> {
+        core::mem::take(&mut self.free_pool)
+    }
+
+    pub fn return_execution_slots(&mut self, slots: Vec<CuSlotLease<P>>) {
+        self.free_pool = slots;
     }
 }
 
@@ -993,6 +1011,14 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
         self.free_pool.push(slot);
     }
 
+    pub fn take_execution_slots(&mut self) -> Vec<CuSlotLease<P>> {
+        core::mem::take(&mut self.free_pool)
+    }
+
+    pub fn return_execution_slots(&mut self, slots: Vec<CuSlotLease<P>>) {
+        self.free_pool = slots;
+    }
+
     pub fn note_admission(&mut self, next_id: u64) {
         self.next_cl_id = self.next_cl_id.max(next_id);
     }
@@ -1184,6 +1210,10 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
         }
     }
 
+    pub fn has_pending_slots(&self) -> bool {
+        self.pending_count > 0
+    }
+
     pub fn wait_reclaim_slot(&mut self) -> CuResult<CuSlotLease<P>> {
         if self.completion_consumer.is_none() {
             return Err(CuError::from(
@@ -1209,6 +1239,18 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
             reclaimed.push(self.wait_reclaim_slot()?);
         }
         Ok(reclaimed)
+    }
+
+    pub fn finish_pending_with(&mut self, mut reclaim: impl FnMut(CuSlotLease<P>)) -> CuResult<()> {
+        if self.current.is_some() {
+            return Err(CuError::from(
+                "Cannot flush CopperList I/O while a CopperList is still active",
+            ));
+        }
+        while self.pending_count > 0 {
+            reclaim(self.wait_reclaim_slot()?);
+        }
+        Ok(())
     }
 
     fn reclaim_completed(&mut self) -> CuResult<()> {

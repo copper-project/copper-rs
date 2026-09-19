@@ -369,6 +369,80 @@ impl<P: CopperListTuple, const N: usize> CuListsManager<P, N> {
     }
 }
 
+/// One cache-isolated message output owned by a generated execution stage.
+#[repr(C, align(128))]
+#[derive(Default, Debug, Encode, Decode, Serialize, Deserialize)]
+#[serde(transparent)]
+#[doc(hidden)]
+pub struct MessageRegion<T> {
+    pub value: T,
+}
+
+impl<T> From<T> for MessageRegion<T> {
+    fn from(value: T) -> Self {
+        Self { value }
+    }
+}
+
+impl<T> core::ops::Deref for MessageRegion<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl<T> core::ops::DerefMut for MessageRegion<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
+    }
+}
+
+/// Cache-isolated storage for a task or bridge instance used by worker threads.
+#[repr(C, align(128))]
+#[doc(hidden)]
+pub struct ComponentRegion<T> {
+    pub value: T,
+}
+
+impl<T> ComponentRegion<T> {
+    pub const fn new(value: T) -> Self {
+        Self { value }
+    }
+}
+
+impl<T> core::ops::Deref for ComponentRegion<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl<T> core::ops::DerefMut for ComponentRegion<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
+    }
+}
+
+impl<T: crate::cutask::Freezable> crate::cutask::Freezable for ComponentRegion<T> {
+    #[inline(always)]
+    fn freeze<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        self.value.freeze(encoder)
+    }
+
+    #[inline(always)]
+    fn thaw<D: bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), bincode::error::DecodeError> {
+        self.value.thaw(decoder)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -377,6 +451,20 @@ mod tests {
 
     #[derive(Debug, Encode, Decode, PartialEq, Clone, Copy, Serialize, Deserialize, Default)]
     struct CuStampedDataSet(i32);
+
+    #[test]
+    fn independently_written_regions_are_cache_isolated() {
+        assert_eq!(core::mem::align_of::<MessageRegion<u8>>(), 128);
+        assert_eq!(core::mem::size_of::<MessageRegion<u8>>(), 128);
+        assert_eq!(core::mem::align_of::<ComponentRegion<u8>>(), 128);
+        assert_eq!(core::mem::size_of::<ComponentRegion<u8>>(), 128);
+
+        let messages = [MessageRegion::from(0u8), MessageRegion::from(1u8)];
+        let first = core::ptr::addr_of!(messages[0]) as usize;
+        let second = core::ptr::addr_of!(messages[1]) as usize;
+        assert_eq!(first % 128, 0);
+        assert_eq!(second - first, 128);
+    }
 
     impl ErasedCuStampedDataSet for CuStampedDataSet {
         fn cumsgs(&self) -> Vec<&dyn ErasedCuStampedData> {
