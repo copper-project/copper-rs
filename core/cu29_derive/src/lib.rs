@@ -4004,6 +4004,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     let (parallel_pre, parallel_post) = parallel_task_lifecycle_tokens(
                                         task_trait_for_specs(&task_specs, *task_index),
                                         &task_specs.task_types[*task_index],
+                                        task_specs.stateless_flags[*task_index],
                                         *task_index,
                                         &mission_mod,
                                         &task_instance,
@@ -5912,14 +5913,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: creating runtime lifecycle stream");
-                let mut local_lifecycle_sink = stream_write::<RuntimeLifecycleRecord, S>(
-                    unified_logger.clone(),
-                    UnifiedLogType::RuntimeLifecycle,
-                    1024 * 64, // 64 KiB
-                )?;
                 let effective_config_ron = config
                     .serialize_ron()
                     .unwrap_or_else(|_| "<failed to serialize config>".to_string());
+                let mut local_lifecycle_sink = stream_write::<RuntimeLifecycleRecord, S>(
+                    unified_logger.clone(),
+                    UnifiedLogType::RuntimeLifecycle,
+                    effective_config_ron.len().saturating_add(1024 * 64),
+                )?;
                 ::cu29::logcodec::set_effective_config_ron::<super::#mission_mod::CuStampedDataSet>(&effective_config_ron);
                 let stack_info = RuntimeLifecycleStackInfo {
                     app_name: env!("CARGO_PKG_NAME").to_string(),
@@ -9920,6 +9921,7 @@ fn abort_process_step_tokens(wrap_process_step: bool) -> proc_macro2::TokenStrea
 fn parallel_task_lifecycle_tokens(
     task_trait: proc_macro2::TokenStream,
     task_type: &Type,
+    stateless: bool,
     component_index: usize,
     mission_mod: &Ident,
     task_instance: &proc_macro2::TokenStream,
@@ -9940,6 +9942,11 @@ fn parallel_task_lifecycle_tokens(
         quote! { #component_index },
         quote! { CuComponentState::Postprocess },
     );
+    let task_borrow = if stateless {
+        quote! { &#task_instance }
+    } else {
+        quote! { &mut #task_instance }
+    };
     let preprocess = if placement.preprocess {
         quote! {
             execution_probe.record(cu29::monitoring::ExecutionMarker {
@@ -9951,7 +9958,7 @@ fn parallel_task_lifecycle_tokens(
             #preprocess_alloc_open
             let maybe_error = {
                 #rt_guard
-                <#task_type as #task_trait>::preprocess(&mut #task_instance, &ctx)
+                <#task_type as #task_trait>::preprocess(#task_borrow, &ctx)
             };
             #preprocess_alloc_close
             if let Err(error) = maybe_error {
@@ -10003,7 +10010,7 @@ fn parallel_task_lifecycle_tokens(
             #postprocess_alloc_open
             let maybe_error = {
                 #rt_guard
-                <#task_type as #task_trait>::postprocess(&mut #task_instance, &ctx)
+                <#task_type as #task_trait>::postprocess(#task_borrow, &ctx)
             };
             #postprocess_alloc_close
             if let Err(error) = maybe_error {
@@ -10905,6 +10912,7 @@ fn generate_task_execution_tokens(
     let (parallel_task_preprocess, parallel_task_postprocess) = parallel_task_lifecycle_tokens(
         task_trait_for_specs(task_specs, tid),
         runtime_task_type,
+        task_specs.stateless_flags[tid],
         tid,
         mission_mod,
         &task_instance,
