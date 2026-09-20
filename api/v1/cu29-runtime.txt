@@ -205,6 +205,7 @@ pub enum cu29_runtime::config::OnError
 pub cu29_runtime::config::OnError::Strict
 pub cu29_runtime::config::OnError::Warn
 pub enum cu29_runtime::config::PlannerKind
+pub cu29_runtime::config::PlannerKind::ExplicitSchedule
 pub cu29_runtime::config::PlannerKind::Pipeline
 pub cu29_runtime::config::PlannerKind::Serial
 pub cu29_runtime::config::PlannerKind::TaskOrder
@@ -1822,6 +1823,87 @@ pub fn cu29_runtime::payload::CuArrayVec<T, N>::short_type_path() -> &'static st
 pub fn cu29_runtime::payload::CuArrayVec<T, N>::type_ident() -> core::option::Option<&'static str>
 pub fn cu29_runtime::payload::CuArrayVec<T, N>::type_path() -> &'static str
 pub mod cu29_runtime::planner
+pub enum cu29_runtime::planner::CuPlanBackgroundResult
+pub cu29_runtime::planner::CuPlanBackgroundResult::Lag
+pub cu29_runtime::planner::CuPlanBackgroundResult::Lag::lag: u32
+pub cu29_runtime::planner::CuPlanBackgroundResult::Sampled
+pub enum cu29_runtime::planner::CuPlanPlacement
+pub cu29_runtime::planner::CuPlanPlacement::Main
+pub cu29_runtime::planner::CuPlanPlacement::Thread
+pub cu29_runtime::planner::CuPlanPlacement::Thread::cpu: core::option::Option<usize>
+pub cu29_runtime::planner::CuPlanPlacement::Thread::policy: cu29_runtime::config::SchedulingPolicy
+pub struct cu29_runtime::planner::CuMissionPlan
+pub cu29_runtime::planner::CuMissionPlan::background: alloc::vec::Vec<cu29_runtime::planner::CuPlanBackground>
+pub cu29_runtime::planner::CuMissionPlan::copperlists_per_cycle: u32
+pub cu29_runtime::planner::CuMissionPlan::dependencies: alloc::vec::Vec<cu29_runtime::planner::CuPlanDependency>
+pub cu29_runtime::planner::CuMissionPlan::dispatcher: core::option::Option<cu29_runtime::planner::CuPlanThread>
+pub cu29_runtime::planner::CuMissionPlan::max_in_flight: u32
+pub cu29_runtime::planner::CuMissionPlan::steps: alloc::vec::Vec<cu29_runtime::planner::CuPlanStep>
+pub cu29_runtime::planner::CuMissionPlan::workers: alloc::vec::Vec<cu29_runtime::planner::CuPlanWorker>
+impl cu29_runtime::planner::CuMissionPlan
+pub fn cu29_runtime::planner::CuMissionPlan::is_serial(&self) -> bool
+pub fn cu29_runtime::planner::CuMissionPlan::nondeterminism(&self) -> alloc::vec::Vec<alloc::string::String>
+pub struct cu29_runtime::planner::CuPlan
+pub cu29_runtime::planner::CuPlan::concurrent_resources: alloc::vec::Vec<alloc::string::String>
+pub cu29_runtime::planner::CuPlan::missions: alloc::collections::btree::map::BTreeMap<alloc::string::String, cu29_runtime::planner::CuMissionPlan>
+impl cu29_runtime::planner::CuPlan
+pub fn cu29_runtime::planner::CuPlan::deserialize_ron(text: &str) -> cu29_traits::CuResult<Self>
+pub fn cu29_runtime::planner::CuPlan::from_config(config: &cu29_runtime::config::CuConfig) -> cu29_traits::CuResult<Self>
+pub fn cu29_runtime::planner::CuPlan::from_config_cyclic(config: &cu29_runtime::config::CuConfig, copperlists_per_cycle: u32) -> cu29_traits::CuResult<Self>
+pub fn cu29_runtime::planner::CuPlan::provide_capacity(&self, config: &mut cu29_runtime::config::CuConfig)
+pub fn cu29_runtime::planner::CuPlan::read(path: &std::path::Path) -> cu29_traits::CuResult<Self>
+pub fn cu29_runtime::planner::CuPlan::serialize_ron(&self) -> cu29_traits::CuResult<alloc::string::String>
+pub fn cu29_runtime::planner::CuPlan::validate(&self, config: &cu29_runtime::config::CuConfig) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::planner::CuPlan::write(&self, path: &std::path::Path) -> cu29_traits::CuResult<()>
+pub struct cu29_runtime::planner::CuPlanBackground
+pub cu29_runtime::planner::CuPlanBackground::max_running: u32
+pub cu29_runtime::planner::CuPlanBackground::pool: alloc::string::String
+pub cu29_runtime::planner::CuPlanBackground::result: cu29_runtime::planner::CuPlanBackgroundResult
+pub cu29_runtime::planner::CuPlanBackground::task: alloc::string::String
+pub struct cu29_runtime::planner::CuPlanDependency
+pub cu29_runtime::planner::CuPlanDependency::cycle_lag: u32
+pub cu29_runtime::planner::CuPlanDependency::from: u32
+pub cu29_runtime::planner::CuPlanDependency::to: u32
+pub struct cu29_runtime::planner::CuPlanStep
+pub cu29_runtime::planner::CuPlanStep::copperlist: u32
+pub cu29_runtime::planner::CuPlanStep::key: alloc::string::String
+pub struct cu29_runtime::planner::CuPlanThread
+pub cu29_runtime::planner::CuPlanThread::cpu: core::option::Option<usize>
+pub cu29_runtime::planner::CuPlanThread::policy: cu29_runtime::config::SchedulingPolicy
+pub struct cu29_runtime::planner::CuPlanWorker
+pub cu29_runtime::planner::CuPlanWorker::id: alloc::string::String
+pub cu29_runtime::planner::CuPlanWorker::placement: cu29_runtime::planner::CuPlanPlacement
+pub cu29_runtime::planner::CuPlanWorker::steps: alloc::vec::Vec<u32>
+pub struct cu29_runtime::planner::ExplicitSchedule
+impl cu29_runtime::planner::ExplicitSchedule
+pub fn cu29_runtime::planner::ExplicitSchedule::apply(&self, config: &mut cu29_runtime::config::CuConfig) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::planner::ExplicitSchedule::new(plan: cu29_runtime::planner::CuPlan) -> Self
+impl cu29_runtime::planner::CuPlanner for cu29_runtime::planner::ExplicitSchedule
+pub fn cu29_runtime::planner::ExplicitSchedule::plan(&self, _input: &cu29_runtime::planner::PlanningInput<'_>) -> cu29_traits::CuResult<cu29_runtime::planner::CuPlan>
+pub struct cu29_runtime::planner::Pipeline
+impl cu29_runtime::planner::CuPlanner for cu29_runtime::planner::Pipeline
+pub fn cu29_runtime::planner::Pipeline::plan(&self, input: &cu29_runtime::planner::PlanningInput<'_>) -> cu29_traits::CuResult<cu29_runtime::planner::CuPlan>
+pub struct cu29_runtime::planner::PlanningInput<'a>
+pub cu29_runtime::planner::PlanningInput::baseline: cu29_runtime::planner::CuPlan
+pub cu29_runtime::planner::PlanningInput::config: &'a cu29_runtime::config::CuConfig
+impl<'a> cu29_runtime::planner::PlanningInput<'a>
+pub fn cu29_runtime::planner::PlanningInput<'a>::new(config: &'a cu29_runtime::config::CuConfig) -> cu29_traits::CuResult<Self>
+pub struct cu29_runtime::planner::Serial
+impl cu29_runtime::planner::CuPlanner for cu29_runtime::planner::Serial
+pub fn cu29_runtime::planner::Serial::plan(&self, input: &cu29_runtime::planner::PlanningInput<'_>) -> cu29_traits::CuResult<cu29_runtime::planner::CuPlan>
+pub struct cu29_runtime::planner::TaskOrder
+impl cu29_runtime::planner::CuPlanner for cu29_runtime::planner::TaskOrder
+pub fn cu29_runtime::planner::TaskOrder::plan(&self, input: &cu29_runtime::planner::PlanningInput<'_>) -> cu29_traits::CuResult<cu29_runtime::planner::CuPlan>
+pub trait cu29_runtime::planner::CuPlanner
+pub fn cu29_runtime::planner::CuPlanner::plan(&self, input: &cu29_runtime::planner::PlanningInput<'_>) -> cu29_traits::CuResult<cu29_runtime::planner::CuPlan>
+impl cu29_runtime::planner::CuPlanner for cu29_runtime::planner::ExplicitSchedule
+pub fn cu29_runtime::planner::ExplicitSchedule::plan(&self, _input: &cu29_runtime::planner::PlanningInput<'_>) -> cu29_traits::CuResult<cu29_runtime::planner::CuPlan>
+impl cu29_runtime::planner::CuPlanner for cu29_runtime::planner::Pipeline
+pub fn cu29_runtime::planner::Pipeline::plan(&self, input: &cu29_runtime::planner::PlanningInput<'_>) -> cu29_traits::CuResult<cu29_runtime::planner::CuPlan>
+impl cu29_runtime::planner::CuPlanner for cu29_runtime::planner::Serial
+pub fn cu29_runtime::planner::Serial::plan(&self, input: &cu29_runtime::planner::PlanningInput<'_>) -> cu29_traits::CuResult<cu29_runtime::planner::CuPlan>
+impl cu29_runtime::planner::CuPlanner for cu29_runtime::planner::TaskOrder
+pub fn cu29_runtime::planner::TaskOrder::plan(&self, input: &cu29_runtime::planner::PlanningInput<'_>) -> cu29_traits::CuResult<cu29_runtime::planner::CuPlan>
 pub mod cu29_runtime::pool
 pub enum cu29_runtime::pool::CuHandleInner<T: core::fmt::Debug + core::marker::Send + core::marker::Sync>
 pub cu29_runtime::pool::CuHandleInner::Detached(alloc::boxed::Box<T>)

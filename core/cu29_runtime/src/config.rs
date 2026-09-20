@@ -2851,6 +2851,8 @@ pub enum PlannerKind {
     Serial,
     /// Deterministic single-threaded execution in the configured task order.
     TaskOrder,
+    /// An exact portable schedule validated and compiled with the application.
+    ExplicitSchedule,
     /// One ordered worker lane per process stage.
     Pipeline,
 }
