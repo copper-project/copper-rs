@@ -5,6 +5,22 @@ ROOT := shell('cd "$1/../.." && pwd', justfile_directory())
 # Run the parallel log-only mission in release mode and time the executable.
 default: parallel
 
+# Record the naive schedule used as the PGS baseline.
+pgs-baseline:
+  cargo run --release --bin cu-parallel-mandelbrot -- --log logs/pgs-baseline.copper
+
+# Profile the baseline and emit ranked candidate configurations.
+pgs-optimize:
+  cargo run --release --bin cu-parallel-mandelbrot-logreader -- logs/pgs-baseline.copper optimize-schedule --contract schedule.ron --output pgs
+
+# Build and run the first emitted candidate.
+pgs-candidate:
+  cargo run --release --features 'parallel-rt pgs-candidate' --bin cu-parallel-mandelbrot-pgs-candidate -- --log logs/parallel_mandelbrot_pgs_plan_1.copper
+
+# Compare the predicted candidate with its measured run.
+pgs-measure:
+  cargo run --release --bin cu-parallel-mandelbrot-logreader -- logs/pgs-baseline.copper optimize-schedule --contract schedule.ron --output pgs --measure plan-1=logs/parallel_mandelbrot_pgs_plan_1.copper
+
 # Render the benchmark graph for the selected mission.
 dag mission="log_only":
   #!/usr/bin/env bash

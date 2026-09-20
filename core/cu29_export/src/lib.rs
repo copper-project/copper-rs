@@ -15,6 +15,8 @@
 
 mod fsck;
 pub mod logstats;
+#[doc(hidden)]
+pub mod pgs;
 mod runs;
 
 #[cfg(feature = "mcap")]
@@ -36,6 +38,8 @@ use fsck::check;
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 use logstats::{compute_logstats, write_logstats};
 use serde::Serialize;
+use std::collections::BTreeMap;
+use std::fmt::Write as _;
 use std::fmt::{Display, Formatter};
 #[cfg(feature = "mcap")]
 use std::io::IsTerminal;
@@ -157,6 +161,21 @@ pub enum Command {
         /// Comma-separated Cargo features used by conditional config fragments
         #[arg(long, value_delimiter = ',')]
         features: Vec<String>,
+    },
+    /// Build ranked schedules from this recorded run.
+    OptimizeSchedule {
+        /// Scheduling requirements and allowed CPUs in RON format.
+        #[arg(long)]
+        contract: PathBuf,
+        /// Directory for the profile, plans, prepared configs, and report.
+        #[arg(short, long, default_value = "schedule")]
+        output: PathBuf,
+        /// Maximum number of distinct candidate plans to emit.
+        #[arg(long, default_value_t = 3)]
+        candidates: usize,
+        /// Candidate measurement as NAME=LOG_BASE; may be repeated.
+        #[arg(long = "measure", value_name = "NAME=LOG_BASE")]
+        measurements: Vec<String>,
     },
     /// Export copperlists to MCAP format (requires 'mcap' feature)
     #[cfg(feature = "mcap")]
@@ -347,6 +366,14 @@ where
         } => {
             run_logstats::<P>(run, dl, output, config, mission, &features)?;
         }
+        Command::OptimizeSchedule {
+            contract,
+            output,
+            candidates,
+            measurements,
+        } => {
+            run_schedule_optimizer::<P>(run, dl, &contract, &output, candidates, &measurements)?;
+        }
         #[cfg(feature = "mcap")]
         Command::ExportMcap {
             output,
@@ -417,6 +444,227 @@ where
     let reader = dl.stream(UnifiedLogType::CopperList);
     let stats = compute_logstats::<P>(reader, &cfg, mission.as_deref())?;
     write_logstats(&stats, &output)
+}
+
+fn run_schedule_optimizer<P>(
+    run: &runs::RecordedRun,
+    dl: runs::RunReader,
+    contract_path: &Path,
+    output: &Path,
+    candidate_count: usize,
+    measurement_args: &[String],
+) -> CuResult<()>
+where
+    P: CopperListTuple + CuPayloadRawBytes,
+{
+    let config_ron = run.config.as_deref().ok_or_else(|| {
+        CuError::from(
+            "The selected run has no recorded configuration; profile-guided scheduling requires a runtime lifecycle record",
+        )
+    })?;
+    let config = CuConfig::deserialize_ron(config_ron).map_err(|error| {
+        CuError::new_with_cause("Failed to read the recorded configuration", error)
+    })?;
+    let mission = resolve_schedule_mission(&config, &run.missions)?;
+    let mission_id = mission
+        .as_deref()
+        .unwrap_or(cu29::config::DEFAULT_MISSION_ID);
+    let contract = cu29::planner::CuContract::read(contract_path)?;
+    let profile = pgs::compute_profile::<P>(
+        dl.stream(UnifiedLogType::CopperList),
+        &config,
+        mission.as_deref(),
+        &contract,
+    )?;
+    let candidates = cu29::planner::propose(&cu29::planner::ProposeRequest {
+        config: &config,
+        mission: mission_id,
+        contract: &contract,
+        profile: &profile,
+        candidates: candidate_count,
+    })?;
+
+    std::fs::create_dir_all(output).map_err(|error| {
+        CuError::new_with_cause("Could not create schedule output directory", error)
+    })?;
+    contract.write(&output.join("contract.ron"))?;
+    profile.write(&output.join("profile.ron"))?;
+
+    let mut predictions = BTreeMap::new();
+    for (index, candidate) in candidates.iter().enumerate() {
+        let name = format!("plan-{}", index + 1);
+        candidate
+            .plan
+            .write(&output.join(format!("{name}.plan.ron")))?;
+        let mut prepared = config.clone();
+        cu29::planner::ExplicitSchedule::new(candidate.plan.clone()).apply(&mut prepared)?;
+        write_text(
+            &output.join(format!("{name}.config.ron")),
+            prepared.serialize_ron()?,
+            "candidate configuration",
+        )?;
+        predictions.insert(name, candidate.prediction.clone());
+    }
+    let predictions_ron =
+        ron::ser::to_string_pretty(&predictions, ron::ser::PrettyConfig::default()).map_err(
+            |error| CuError::new_with_cause("Could not serialize schedule predictions", error),
+        )?;
+    write_text(
+        &output.join("predictions.ron"),
+        predictions_ron,
+        "schedule predictions",
+    )?;
+
+    let mut report = prediction_report(&candidates, mission_id);
+    if !measurement_args.is_empty() {
+        let mut measured = BTreeMap::from([("baseline".to_string(), profile)]);
+        for argument in measurement_args {
+            let (name, log_base) = parse_measurement(argument)?;
+            if measured.contains_key(name) {
+                return Err(CuError::from(format!(
+                    "Schedule measurement name '{name}' is repeated"
+                )));
+            }
+            let measured_runs = runs::discover(log_base)?;
+            let measured_run = runs::select(&measured_runs, None)?;
+            let measured_config_ron = measured_run.config.as_deref().ok_or_else(|| {
+                CuError::from(format!(
+                    "Measurement '{name}' has no recorded configuration"
+                ))
+            })?;
+            let measured_config =
+                CuConfig::deserialize_ron(measured_config_ron).map_err(|error| {
+                    CuError::from(format!(
+                        "Failed to read measurement '{name}' configuration: {error}"
+                    ))
+                })?;
+            let measured_mission =
+                resolve_schedule_mission(&measured_config, &measured_run.missions)?;
+            let measured_reader = measured_run.reader(log_base)?;
+            let measured_profile = pgs::compute_profile::<P>(
+                measured_reader.stream(UnifiedLogType::CopperList),
+                &measured_config,
+                measured_mission.as_deref(),
+                &contract,
+            )?;
+            measured.insert(name.to_string(), measured_profile);
+        }
+        let score = cu29::planner::CuScoreTable::new(&contract, &predictions, &measured)?;
+        write_text(
+            &output.join("measurements.ron"),
+            score.serialize_ron()?,
+            "schedule measurements",
+        )?;
+        writeln!(report, "\nMeasured ranking:\n{score}")
+            .map_err(|_| CuError::from("Could not format schedule report"))?;
+        if let Some(best) = score.best() {
+            let selected = output.join("selected.plan.ron");
+            if best.candidate == "baseline" {
+                cu29::planner::CuPlan::from_config(&config)?.write(&selected)?;
+            } else if let Some(index) = candidate_index(&best.candidate) {
+                let candidate = candidates.get(index).ok_or_else(|| {
+                    CuError::from(format!(
+                        "Measurement '{}' does not name an emitted candidate",
+                        best.candidate
+                    ))
+                })?;
+                candidate.plan.write(&selected)?;
+            }
+        }
+    }
+    write_text(&output.join("report.txt"), &report, "schedule report")?;
+    print!("{report}");
+    println!("Artifacts: {}", output.display());
+    Ok(())
+}
+
+fn write_text(path: &Path, contents: impl AsRef<[u8]>, kind: &str) -> CuResult<()> {
+    std::fs::write(path, contents)
+        .map_err(|error| CuError::from(format!("Could not write {kind}: {error}")))
+}
+
+fn parse_measurement(argument: &str) -> CuResult<(&str, &Path)> {
+    let (name, path) = argument.split_once('=').ok_or_else(|| {
+        CuError::from(format!(
+            "Invalid measurement '{argument}'; expected NAME=LOG_BASE"
+        ))
+    })?;
+    if name.is_empty() || path.is_empty() || name == "baseline" {
+        return Err(CuError::from(format!(
+            "Invalid measurement '{argument}'; use a non-empty name other than 'baseline'"
+        )));
+    }
+    Ok((name, Path::new(path)))
+}
+
+fn candidate_index(name: &str) -> Option<usize> {
+    name.split('/')
+        .next()?
+        .strip_prefix("plan-")?
+        .parse::<usize>()
+        .ok()?
+        .checked_sub(1)
+}
+
+fn prediction_report(candidates: &[cu29::planner::CuCandidate], mission_id: &str) -> String {
+    let mut report = String::from("Predicted schedule ranking\n");
+    for (index, candidate) in candidates.iter().enumerate() {
+        let mission = candidate.plan.missions.get(mission_id);
+        let shape = mission.map_or_else(
+            || "unknown".to_string(),
+            |mission| {
+                format!(
+                    "{} CopperList(s)/cycle, {} in flight, {} worker(s)",
+                    mission.copperlists_per_cycle,
+                    mission.max_in_flight,
+                    mission.workers.len()
+                )
+            },
+        );
+        let _ = writeln!(
+            report,
+            "{}. plan-{} score {:?} ({shape})",
+            index + 1,
+            index + 1,
+            candidate.prediction.score
+        );
+        for (chain, prediction) in &candidate.prediction.chains {
+            let _ = writeln!(
+                report,
+                "   {chain}: {:.2} ms / {:.2} ms ({:.1}%)",
+                prediction.latency_ns as f64 / 1e6,
+                prediction.deadline_ns as f64 / 1e6,
+                prediction.ratio * 100.0
+            );
+        }
+        for (source, rate) in &candidate.prediction.sources {
+            let _ = writeln!(report, "   {source}: {:.1}% delivered", rate * 100.0);
+        }
+        for (worker, prediction) in &candidate.prediction.workers {
+            let response = prediction.response_ns.map_or_else(
+                || "unbounded".to_string(),
+                |ns| format!("{:.2} ms", ns as f64 / 1e6),
+            );
+            let _ = writeln!(
+                report,
+                "   {worker}: CPU {}, {:.1}% load, {:.1}% rate, {response} response",
+                prediction.cpu,
+                prediction.load * 100.0,
+                prediction.rate * 100.0,
+            );
+        }
+    }
+    report
+}
+
+fn resolve_schedule_mission(config: &CuConfig, logged: &[String]) -> CuResult<Option<String>> {
+    if logged.len() > 1 {
+        return Err(CuError::from(format!(
+            "Profile-guided scheduling needs a run containing one mission; this run contains {}",
+            logged.join(", ")
+        )));
+    }
+    resolve_logstats_mission(config, None, logged.first().cloned())
 }
 
 fn resolve_logstats_mission(
@@ -1610,6 +1858,61 @@ mod tests {
                 .unwrap()
                 .as_deref(),
             Some("alpha")
+        );
+    }
+
+    #[test]
+    fn schedule_optimizer_cli_is_explicit_and_measurements_are_validated() {
+        let args = LogReaderCli::try_parse_from([
+            "logreader",
+            "robot.copper",
+            "optimize-schedule",
+            "--contract",
+            "schedule.ron",
+            "--output",
+            "target/pgs",
+            "--candidates",
+            "2",
+            "--measure",
+            "plan-1=logs/plan-1.copper",
+        ])
+        .unwrap();
+        let Command::OptimizeSchedule {
+            contract,
+            output,
+            candidates,
+            measurements,
+        } = args.command
+        else {
+            panic!("expected optimize-schedule command");
+        };
+        assert_eq!(contract, PathBuf::from("schedule.ron"));
+        assert_eq!(output, PathBuf::from("target/pgs"));
+        assert_eq!(candidates, 2);
+        assert_eq!(measurements, ["plan-1=logs/plan-1.copper"]);
+        assert_eq!(
+            parse_measurement(&measurements[0]).unwrap(),
+            ("plan-1", Path::new("logs/plan-1.copper"))
+        );
+        assert!(parse_measurement("plan-1").is_err());
+        assert!(parse_measurement("baseline=other.copper").is_err());
+        assert_eq!(candidate_index("plan-2/round-3"), Some(1));
+        assert_eq!(candidate_index("baseline"), None);
+
+        let config = CuConfig::deserialize_ron(
+            r#"(
+                missions: [(id: "drive"), (id: "park")],
+                tasks: [],
+                cnx: [],
+            )"#,
+        )
+        .unwrap();
+        assert!(resolve_schedule_mission(&config, &["drive".into(), "park".into()]).is_err());
+        assert_eq!(
+            resolve_schedule_mission(&config, &["park".into()])
+                .unwrap()
+                .as_deref(),
+            Some("park")
         );
     }
 }

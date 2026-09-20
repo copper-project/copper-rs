@@ -2,6 +2,7 @@ use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
+use cu29::logcodec::CuLogCodec;
 use cu29::prelude::*;
 use serde::{Deserialize, Serialize, Serializer};
 
@@ -45,6 +46,94 @@ pub struct MandelbrotStripe {
     pub escape_iter: CuHandle<Vec<u16>>,
     /// Final RGB bytes for the stripe; filled by the last compute stage.
     pub pixels_rgb: CuHandle<Vec<u8>>,
+}
+
+/// Compact, lossless codec for the source's freshly zeroed stripe buffers.
+///
+/// PGS needs source payload presence and timestamps, but recording four large
+/// zero-filled buffers before any compute stage runs would distort the
+/// benchmark. The decoder recreates those initial buffers for replay.
+pub struct MandelbrotSourceLogCodec;
+
+#[derive(Encode, Decode)]
+struct MandelbrotSourceWire {
+    frame_index: u32,
+    stripe_index: u32,
+    start_row: u32,
+    row_count: u32,
+    stripe_rows: u32,
+    width: u32,
+    height: u32,
+    center_x: f32,
+    center_y: f32,
+    span_x: f32,
+    max_iter: u16,
+    completed_iters: u16,
+}
+
+impl CuLogCodec<MandelbrotStripe> for MandelbrotSourceLogCodec {
+    type Config = ();
+
+    fn new(_config: Self::Config) -> CuResult<Self> {
+        Ok(Self)
+    }
+
+    fn source_payload_handle_bytes(&self, _payload: &MandelbrotStripe) -> usize {
+        0
+    }
+
+    fn encode_payload<E: Encoder>(
+        &mut self,
+        payload: &MandelbrotStripe,
+        encoder: &mut E,
+    ) -> Result<(), EncodeError> {
+        MandelbrotSourceWire {
+            frame_index: payload.frame_index,
+            stripe_index: payload.stripe_index,
+            start_row: payload.start_row,
+            row_count: payload.row_count,
+            stripe_rows: payload.stripe_rows,
+            width: payload.width,
+            height: payload.height,
+            center_x: payload.center_x,
+            center_y: payload.center_y,
+            span_x: payload.span_x,
+            max_iter: payload.max_iter,
+            completed_iters: payload.completed_iters,
+        }
+        .encode(encoder)
+    }
+
+    fn decode_payload<D: Decoder<Context = ()>>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<MandelbrotStripe, DecodeError> {
+        let wire = MandelbrotSourceWire::decode(decoder)?;
+        let pixels = (wire.width as usize)
+            .checked_mul(wire.row_count as usize)
+            .ok_or(DecodeError::Other("Mandelbrot source stripe size overflow"))?;
+        let rgb = pixels
+            .checked_mul(3)
+            .ok_or(DecodeError::Other("Mandelbrot source RGB size overflow"))?;
+        Ok(MandelbrotStripe {
+            frame_index: wire.frame_index,
+            stripe_index: wire.stripe_index,
+            start_row: wire.start_row,
+            row_count: wire.row_count,
+            stripe_rows: wire.stripe_rows,
+            width: wire.width,
+            height: wire.height,
+            center_x: wire.center_x,
+            center_y: wire.center_y,
+            span_x: wire.span_x,
+            max_iter: wire.max_iter,
+            completed_iters: wire.completed_iters,
+            z_re: CuHandle::new_detached(vec![0.0; pixels]),
+            z_im: CuHandle::new_detached(vec![0.0; pixels]),
+            escape_iter: CuHandle::new_detached(vec![0; pixels]),
+            pixels_rgb: CuHandle::new_detached(vec![0; rgb]),
+        })
+    }
 }
 
 impl MandelbrotStripe {

@@ -59,6 +59,24 @@ Run these from [examples/cu_parallel_mandelbrot](/home/gbin/projects/copper/copp
 
 Use the justfile itself for the full recipe list and exact command lines.
 
+## Profile-Guided Scheduling Fixture
+
+Mandelbrot is the controlled PGS fixture. Its deterministic, compute-bound graph
+makes prediction errors and scheduling regressions easy to reproduce; it is not
+intended as representative robot performance evidence.
+
+Run the complete naive-to-measured workflow from this directory:
+
+1. `just pgs-baseline` records the existing serial placement.
+2. `just pgs-optimize` writes ranked plans, prepared configs, predictions, and a
+   report under `pgs/`.
+3. `just pgs-candidate` rebuilds against `pgs/plan-1.config.ron` and records it.
+4. `just pgs-measure` compares the prediction with both measured runs and writes
+   the selected plan.
+
+Every PGS input is an explicit CLI argument or file. The four Just recipes are
+one-line aliases for the Rust executables.
+
 ## What To Watch
 
 - Throughput: compare `just serial` vs `just parallel`

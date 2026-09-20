@@ -24,7 +24,13 @@ pub use explicit_schedule::CuPlan;
 pub use explicit_schedule::ExplicitSchedule;
 mod pipeline;
 pub use pipeline::Pipeline;
+#[cfg(feature = "std")]
+mod pgs;
+#[cfg(feature = "std")]
+mod propose;
 mod schedule;
+#[cfg(feature = "std")]
+mod score;
 pub use schedule::CuMissionPlan;
 pub use schedule::CuPlanBackground;
 pub use schedule::CuPlanBackgroundResult;
@@ -33,6 +39,40 @@ pub use schedule::CuPlanPlacement;
 pub use schedule::CuPlanStep;
 pub use schedule::CuPlanThread;
 pub use schedule::CuPlanWorker;
+
+#[cfg(feature = "std")]
+#[doc(hidden)]
+pub use pgs::{
+    CuChain, CuChainProfile, CuContract, CuCostStats, CuFiringPattern, CuOperationProfile,
+    CuProfile, CuSourceProfile, CuSourceRate, graph_signature,
+};
+#[cfg(feature = "std")]
+#[doc(hidden)]
+pub use propose::CuCandidate;
+#[cfg(feature = "std")]
+#[doc(hidden)]
+pub use propose::CuChainPrediction;
+#[cfg(feature = "std")]
+#[doc(hidden)]
+pub use propose::CuPrediction;
+#[cfg(feature = "std")]
+#[doc(hidden)]
+pub use propose::CuWorkerPrediction;
+#[cfg(feature = "std")]
+#[doc(hidden)]
+pub use propose::ProposeRequest;
+#[cfg(feature = "std")]
+#[doc(hidden)]
+pub use propose::propose;
+#[cfg(feature = "std")]
+#[doc(hidden)]
+pub use score::CuChainScore;
+#[cfg(feature = "std")]
+#[doc(hidden)]
+pub use score::CuScoreRow;
+#[cfg(feature = "std")]
+#[doc(hidden)]
+pub use score::CuScoreTable;
 
 /// Code generation and plan tooling share this value so the displayed
 /// in-flight bound cannot drift from the generated executor.

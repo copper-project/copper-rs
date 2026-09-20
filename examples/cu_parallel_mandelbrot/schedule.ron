@@ -1,0 +1,14 @@
+(
+    chains: [
+        (
+            id: "stripe_to_frame",
+            source: "src",
+            sink: "image_drain",
+            deadline_ms: 250,
+        ),
+    ],
+    cpus: [0, 1, 2, 3],
+    max_in_flight: 8,
+    headroom: 0.2,
+    worker_policy: Fair,
+)

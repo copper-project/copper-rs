@@ -95,12 +95,16 @@ fn log_summary(
 }
 
 pub fn run_log_only() -> CuResult<()> {
+    let logger_path = benchmark_logger_path("parallel_mandelbrot_log_only.copper")?;
+    run_log_only_with_path(&logger_path)
+}
+
+pub fn run_log_only_with_path(logger_path: &Path) -> CuResult<()> {
     tasks::reset_benchmark_summary();
     let settings = load_benchmark_settings()?;
-    let logger_path = benchmark_logger_path("parallel_mandelbrot_log_only.copper")?;
     let logger_path_display = logger_path.display().to_string();
     let app = log_only::App::builder()
-        .with_log_path(&logger_path, SLAB_SIZE)?
+        .with_log_path(logger_path, SLAB_SIZE)?
         .build()
         .map_err(|err| CuError::from(format!("failed to build log_only mission: {err}")))?;
 
@@ -110,7 +114,7 @@ pub fn run_log_only() -> CuResult<()> {
     );
     let started = Instant::now();
     app.run_until_shutdown()?;
-    log_summary("log_only", &logger_path, settings, started.elapsed());
+    log_summary("log_only", logger_path, settings, started.elapsed());
     Ok(())
 }
 

@@ -30,6 +30,22 @@ end2end:
   cd "{{ROOT}}"
   cargo run -p cu-flight-controller --no-default-features --features end2end --bin quad-compute
 
+# Record a representative profile on the deployed companion-compute runtime.
+pgs-compute-baseline:
+  cargo run --release -p cu-flight-controller --no-default-features --features end2end --bin quad-compute -- --log "{{justfile_directory()}}/logs/pgs_compute_baseline.copper"
+
+# Generate ranked compute-runtime schedules from the deployed baseline log.
+pgs-compute-optimize:
+  cargo run --release -p cu-flight-controller --no-default-features --features compute-logreader --bin quad-compute-logreader -- "{{justfile_directory()}}/logs/pgs_compute_baseline.copper" optimize-schedule --contract "{{justfile_directory()}}/compute_schedule.ron" --output "{{justfile_directory()}}/pgs"
+
+# Build and run the first emitted compute-runtime candidate.
+pgs-compute-candidate:
+  cargo run --release -p cu-flight-controller --no-default-features --features pgs-compute-candidate --bin quad-compute-pgs-candidate -- --log "{{justfile_directory()}}/logs/pgs_compute_plan_1.copper"
+
+# Compare the predicted compute schedule with the candidate's deployed measurement.
+pgs-compute-measure:
+  cargo run --release -p cu-flight-controller --no-default-features --features compute-logreader --bin quad-compute-logreader -- "{{justfile_directory()}}/logs/pgs_compute_baseline.copper" optimize-schedule --contract "{{justfile_directory()}}/compute_schedule.ron" --output "{{justfile_directory()}}/pgs" --measure plan-1="{{justfile_directory()}}/logs/pgs_compute_plan_1.copper"
+
 # Render the simulated default mission across the complete two-subsystem deployment.
 dag config="flight_controller.ron" mission="default" features="sim":
   #!/usr/bin/env bash

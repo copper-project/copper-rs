@@ -25,6 +25,7 @@ cu29-intern-strs = { workspace = true }
 clap = { workspace = true }
 bincode = { workspace = true }
 serde = { workspace = true }
+ron = "0.12"
 num-format = "0.4"
 indicatif = { version = "0.18", optional = true, default-features = false }
 

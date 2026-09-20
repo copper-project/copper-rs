@@ -16,6 +16,7 @@ publish = false
 
 [dependencies]
 bincode = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
 cu29 = { workspace = true }
 cu29-export = { workspace = true, features = ["mcap"] }
 cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "1.3.0-dev" }
@@ -29,6 +30,7 @@ default = ["std"]
 std = []
 mmap-fsync = ["cu29/mmap-fsync"]
 parallel-rt = ["cu29/parallel-rt"]
+pgs-candidate = []
 
 [lib]
 path = "src/lib.rs"
@@ -44,6 +46,11 @@ path = "src/viewer.rs"
 [[bin]]
 name = "cu-parallel-mandelbrot-logreader"
 path = "src/logreader.rs"
+
+[[bin]]
+name = "cu-parallel-mandelbrot-pgs-candidate"
+path = "src/bin/pgs_candidate.rs"
+required-features = ["parallel-rt", "pgs-candidate"]
 
 [package.metadata.cargo-shear]
 ignored = ["bincode", "serde"]
