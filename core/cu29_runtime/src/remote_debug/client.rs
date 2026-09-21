@@ -1,9 +1,11 @@
 //! Remote-debug Zenoh client.
 
+#[cfg(target_os = "linux")]
+use super::format_bytes;
 use super::{
     API_VERSION, DebugRpcRequest, DebugRpcResponse, RemoteDebugPaths, RemoteDebugShmConfig,
     RemoteDebugShmRole, WireCodec, ZenohSubscriber, cu_error_map, decode_response, decode_value,
-    encode_payload, format_bytes, keyexpr, local_client_zenoh_config, preflight_remote_debug_shm,
+    encode_payload, keyexpr, local_client_zenoh_config, preflight_remote_debug_shm,
     validate_client_zenoh_shm_config,
 };
 use cu29_traits::{CuError, CuResult};
