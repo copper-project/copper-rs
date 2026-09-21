@@ -19,6 +19,8 @@ members = [
   "core/cu29_log_derive",
   "core/cu29_log_runtime",
   "core/cu29_logstream",
+  "core/cu29_plan",
+  "core/cu29_rendercfg",
   "core/cu29_runtime",
   "core/cu29_soa_derive",
   "core/cu29_traits",

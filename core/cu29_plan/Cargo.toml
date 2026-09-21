@@ -1,0 +1,24 @@
+[package]
+name = "cu29-plan"
+description = "Render Copper runtime execution plans as SVG diagrams."
+documentation = "https://docs.rs/cu29-plan"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+cu29-runtime = { workspace = true, features = ["std"] }
+cu29-traits = { workspace = true }
+
+clap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true, features = ["std"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }

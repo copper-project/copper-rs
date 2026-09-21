@@ -89,8 +89,8 @@ The generated project includes helper commands in its `justfile`:
 * `just cl`: Extract CopperLists (sequences of operations) from the application's log output.
 * `just resim`: Replay the recorded log once into a fresh replay log.
 * `just resim-debug`: Start the replay-backed remote debug server manually.
-* `just dag`: Render the application's execution Directed Acyclic Graph (DAG). Local-checkout templates run the tool from the Copper repo; crates.io and git templates use `cu29-rendercfg` from `PATH` or install the matching `cu29-runtime` on demand. `just rcfg` remains as a compatibility alias.
-* `just plan`: Render the exact generated per-CopperList process order as `plan.svg`, including Pipeline lanes when `runtime.planner.kind` is `Pipeline`. Pass `log=logs/<app>.copper` to append packed typical/slowest timelines whose back-to-back segments remain proportional to recorded task duration, or `mission=<id>` / `features=<a,b>` when needed. Templates use the local `cu29-plan` binary or install the matching `cu29-runtime` on demand.
+* `just dag`: Render the application's execution Directed Acyclic Graph (DAG). Local-checkout templates run the tool from the Copper repo; crates.io and git templates use `cu29-rendercfg` from `PATH` or install the matching `cu29-rendercfg` on demand. `just rcfg` remains as a compatibility alias.
+* `just plan`: Render the exact generated per-CopperList process order as `plan.svg`, including Pipeline lanes when `runtime.planner.kind` is `Pipeline`. Pass `log=logs/<app>.copper` to append packed typical/slowest timelines whose back-to-back segments remain proportional to recorded task duration, or `mission=<id>` / `features=<a,b>` when needed. Templates use the local `cu29-plan` binary or install the matching `cu29-plan` on demand.
 * `just plan-log`: Render the same SVG with observed timing from the project's default Copper log.
 
 The replay recipes use the generated `debug-optimized` Cargo profile. It enables optimization

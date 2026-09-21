@@ -71,7 +71,7 @@ dag-logstats bin="cu-caterpillar-logreader" log="logs/caterpillar.copper" missio
 
 		(
 			cd "{{ROOT}}"
-			cargo run -p cu29-runtime --bin cu29-rendercfg -- --logstats "$out_path" --open "$cfg_path" --mission "$mission_value"
+			cargo run -p cu29-rendercfg -- --logstats "$out_path" --open "$cfg_path" --mission "$mission_value"
 		)
 	else
 		(
@@ -81,7 +81,7 @@ dag-logstats bin="cu-caterpillar-logreader" log="logs/caterpillar.copper" missio
 
 		(
 			cd "{{ROOT}}"
-			cargo run -p cu29-runtime --bin cu29-rendercfg -- --logstats "$out_path" --open "$cfg_path"
+			cargo run -p cu29-rendercfg -- --logstats "$out_path" --open "$cfg_path"
 		)
 	fi
 

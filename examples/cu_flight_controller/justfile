@@ -52,7 +52,7 @@ dag config="flight_controller.ron" mission="default" features="sim":
   if [[ -n "$features_value" ]]; then
     args+=(--features "$features_value")
   fi
-  cargo run -p cu29-runtime --bin cu29-rendercfg -- "${args[@]}" --open "$cfg_path"
+  cargo run -p cu29-rendercfg -- "${args[@]}" --open "$cfg_path"
 
 # A quick test to see if the sim can pick up your RC.
 rc:

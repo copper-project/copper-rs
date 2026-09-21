@@ -143,7 +143,7 @@ dag-stats bin="balancebot-logreader" log="logs/balance.copper" mission="" out="t
 
 		(
 			cd "{{ROOT}}"
-			cargo run -p cu29-runtime --bin cu29-rendercfg -- --logstats "$out_path" --open "$cfg_path" --mission "$mission_value"
+			cargo run -p cu29-rendercfg -- --logstats "$out_path" --open "$cfg_path" --mission "$mission_value"
 		)
 	else
 		(
@@ -153,7 +153,7 @@ dag-stats bin="balancebot-logreader" log="logs/balance.copper" mission="" out="t
 
 		(
 			cd "{{ROOT}}"
-			cargo run -p cu29-runtime --bin cu29-rendercfg -- --logstats "$out_path" --open "$cfg_path"
+			cargo run -p cu29-rendercfg -- --logstats "$out_path" --open "$cfg_path"
 		)
 	fi
 
