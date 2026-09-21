@@ -3,6 +3,7 @@ mod error;
 mod keyexpr;
 mod liveliness;
 mod node;
+mod qos;
 mod topic;
 
 use attachment::encode_attachment;
