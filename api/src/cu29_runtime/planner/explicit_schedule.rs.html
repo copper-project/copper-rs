@@ -57,265 +57,273 @@
 <a href=#57 id=57 data-nosnippet>57</a>
 <a href=#58 id=58 data-nosnippet>58</a>    <span class="doccomment">/// Export the canonical schedule for a repeating number of CopperLists.
 <a href=#59 id=59 data-nosnippet>59</a>    </span><span class="kw">pub fn </span>from_config_cyclic(config: <span class="kw-2">&amp;</span>CuConfig, copperlists_per_cycle: u32) -&gt; CuResult&lt;<span class="self">Self</span>&gt; {
-<a href=#60 id=60 data-nosnippet>60</a>        <span class="kw">if </span>copperlists_per_cycle == <span class="number">0 </span>{
-<a href=#61 id=61 data-nosnippet>61</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(<span class="string">"copperlists_per_cycle must be positive"</span>));
-<a href=#62 id=62 data-nosnippet>62</a>        }
-<a href=#63 id=63 data-nosnippet>63</a>        <span class="kw">let </span><span class="kw-2">mut </span>missions = BTreeMap::new();
-<a href=#64 id=64 data-nosnippet>64</a>        <span class="kw">for </span>(mission, graph) <span class="kw">in </span>mission_graphs(config) {
-<a href=#65 id=65 data-nosnippet>65</a>            <span class="kw">let </span>assembled = assemble_runtime_plan_with_planner(config, graph, <span class="kw-2">&amp;</span>Serial)<span class="question-mark">?</span>;
-<a href=#66 id=66 data-nosnippet>66</a>            missions.insert(
-<a href=#67 id=67 data-nosnippet>67</a>                mission.clone(),
-<a href=#68 id=68 data-nosnippet>68</a>                PlanShape::new(<span class="kw-2">&amp;</span>assembled, config, graph, <span class="kw-2">&amp;</span>mission, <span class="kw-2">&amp;</span>[])<span class="question-mark">?
-<a href=#69 id=69 data-nosnippet>69</a>                    </span>.cyclic_plan(copperlists_per_cycle)<span class="question-mark">?</span>,
-<a href=#70 id=70 data-nosnippet>70</a>            );
-<a href=#71 id=71 data-nosnippet>71</a>        }
-<a href=#72 id=72 data-nosnippet>72</a>        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
-<a href=#73 id=73 data-nosnippet>73</a>            concurrent_resources: Vec::new(),
-<a href=#74 id=74 data-nosnippet>74</a>            missions,
-<a href=#75 id=75 data-nosnippet>75</a>        })
-<a href=#76 id=76 data-nosnippet>76</a>    }
-<a href=#77 id=77 data-nosnippet>77</a>
-<a href=#78 id=78 data-nosnippet>78</a>    <span class="doccomment">/// Validate inventory, placement, precedence, recurrence, and capacity.
-<a href=#79 id=79 data-nosnippet>79</a>    </span><span class="kw">pub fn </span>validate(<span class="kw-2">&amp;</span><span class="self">self</span>, config: <span class="kw-2">&amp;</span>CuConfig) -&gt; CuResult&lt;()&gt; {
-<a href=#80 id=80 data-nosnippet>80</a>        <span class="self">self</span>.validate_orders(config).map(|<span class="kw">_</span>| ())
-<a href=#81 id=81 data-nosnippet>81</a>    }
-<a href=#82 id=82 data-nosnippet>82</a>
-<a href=#83 id=83 data-nosnippet>83</a>    <span class="kw">fn </span>validate_orders(<span class="kw-2">&amp;</span><span class="self">self</span>, config: <span class="kw-2">&amp;</span>CuConfig) -&gt; CuResult&lt;BTreeMap&lt;String, Vec&lt;usize&gt;&gt;&gt; {
-<a href=#84 id=84 data-nosnippet>84</a>        <span class="kw">let </span>missions = mission_graphs(config);
-<a href=#85 id=85 data-nosnippet>85</a>        <span class="kw">if </span>!<span class="self">self</span>.missions.keys().eq(missions.iter().map(|(id, <span class="kw">_</span>)| id)) {
-<a href=#86 id=86 data-nosnippet>86</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(
-<a href=#87 id=87 data-nosnippet>87</a>                <span class="string">"Execution plan must contain exactly the configured missions"</span>,
-<a href=#88 id=88 data-nosnippet>88</a>            ));
-<a href=#89 id=89 data-nosnippet>89</a>        }
-<a href=#90 id=90 data-nosnippet>90</a>        <span class="kw">let </span><span class="kw-2">mut </span>orders = BTreeMap::new();
-<a href=#91 id=91 data-nosnippet>91</a>        <span class="kw">for </span>(mission, graph) <span class="kw">in </span>missions {
-<a href=#92 id=92 data-nosnippet>92</a>            <span class="kw">let </span>canonical = assemble_runtime_plan_with_planner(config, graph, <span class="kw-2">&amp;</span>Serial)<span class="question-mark">?</span>;
-<a href=#93 id=93 data-nosnippet>93</a>            <span class="kw">let </span>shape = PlanShape::new(
-<a href=#94 id=94 data-nosnippet>94</a>                <span class="kw-2">&amp;</span>canonical,
-<a href=#95 id=95 data-nosnippet>95</a>                config,
-<a href=#96 id=96 data-nosnippet>96</a>                graph,
-<a href=#97 id=97 data-nosnippet>97</a>                <span class="kw-2">&amp;</span>mission,
-<a href=#98 id=98 data-nosnippet>98</a>                <span class="kw-2">&amp;</span><span class="self">self</span>.concurrent_resources,
-<a href=#99 id=99 data-nosnippet>99</a>            )<span class="question-mark">?</span>;
-<a href=#100 id=100 data-nosnippet>100</a>            <span class="kw">let </span>order = <span class="self">self</span>.missions[<span class="kw-2">&amp;</span>mission]
-<a href=#101 id=101 data-nosnippet>101</a>                .validate(config, <span class="kw-2">&amp;</span>shape)
-<a href=#102 id=102 data-nosnippet>102</a>                .map_err(|error| CuError::from(<span class="macro">format!</span>(<span class="string">"Plan for mission '{mission}': {error}"</span>)))<span class="question-mark">?</span>;
-<a href=#103 id=103 data-nosnippet>103</a>            orders.insert(mission, order);
-<a href=#104 id=104 data-nosnippet>104</a>        }
-<a href=#105 id=105 data-nosnippet>105</a>        <span class="prelude-val">Ok</span>(orders)
-<a href=#106 id=106 data-nosnippet>106</a>    }
-<a href=#107 id=107 data-nosnippet>107</a>
-<a href=#108 id=108 data-nosnippet>108</a>    <span class="doccomment">/// Raise CopperList storage to the largest admission window in this plan.
-<a href=#109 id=109 data-nosnippet>109</a>    </span><span class="kw">pub fn </span>provide_capacity(<span class="kw-2">&amp;</span><span class="self">self</span>, config: <span class="kw-2">&amp;mut </span>CuConfig) {
-<a href=#110 id=110 data-nosnippet>110</a>        <span class="kw">let </span>needed = <span class="self">self
-<a href=#111 id=111 data-nosnippet>111</a>            </span>.missions
-<a href=#112 id=112 data-nosnippet>112</a>            .values()
-<a href=#113 id=113 data-nosnippet>113</a>            .map(|mission| mission.max_in_flight <span class="kw">as </span>usize)
-<a href=#114 id=114 data-nosnippet>114</a>            .max()
-<a href=#115 id=115 data-nosnippet>115</a>            .unwrap_or(<span class="number">0</span>);
-<a href=#116 id=116 data-nosnippet>116</a>        <span class="kw">let </span>current = config
-<a href=#117 id=117 data-nosnippet>117</a>            .logging
-<a href=#118 id=118 data-nosnippet>118</a>            .as_ref()
-<a href=#119 id=119 data-nosnippet>119</a>            .and_then(|logging| logging.copperlist_count)
-<a href=#120 id=120 data-nosnippet>120</a>            .unwrap_or(<span class="kw">super</span>::DEFAULT_COPPERLIST_COUNT);
-<a href=#121 id=121 data-nosnippet>121</a>        <span class="kw">if </span>needed &gt; current {
-<a href=#122 id=122 data-nosnippet>122</a>            config
-<a href=#123 id=123 data-nosnippet>123</a>                .logging
-<a href=#124 id=124 data-nosnippet>124</a>                .get_or_insert_with(Default::default)
-<a href=#125 id=125 data-nosnippet>125</a>                .copperlist_count = <span class="prelude-val">Some</span>(needed);
-<a href=#126 id=126 data-nosnippet>126</a>        }
-<a href=#127 id=127 data-nosnippet>127</a>    }
-<a href=#128 id=128 data-nosnippet>128</a>
-<a href=#129 id=129 data-nosnippet>129</a>    <span class="doccomment">/// Serialize this plan as human-editable RON.
-<a href=#130 id=130 data-nosnippet>130</a>    </span><span class="kw">pub fn </span>serialize_ron(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; CuResult&lt;String&gt; {
-<a href=#131 id=131 data-nosnippet>131</a>        ron::ser::to_string_pretty(<span class="self">self</span>, ron::ser::PrettyConfig::default())
-<a href=#132 id=132 data-nosnippet>132</a>            .map_err(|error| CuError::new_with_cause(<span class="string">"Could not serialize execution plan"</span>, error))
-<a href=#133 id=133 data-nosnippet>133</a>    }
-<a href=#134 id=134 data-nosnippet>134</a>
-<a href=#135 id=135 data-nosnippet>135</a>    <span class="doccomment">/// Parse a plan from RON.
-<a href=#136 id=136 data-nosnippet>136</a>    </span><span class="kw">pub fn </span>deserialize_ron(text: <span class="kw-2">&amp;</span>str) -&gt; CuResult&lt;<span class="self">Self</span>&gt; {
-<a href=#137 id=137 data-nosnippet>137</a>        ron::from_str(text)
-<a href=#138 id=138 data-nosnippet>138</a>            .map_err(|error| CuError::new_with_cause(<span class="string">"Could not parse execution plan"</span>, error))
-<a href=#139 id=139 data-nosnippet>139</a>    }
-<a href=#140 id=140 data-nosnippet>140</a>
-<a href=#141 id=141 data-nosnippet>141</a>    <span class="doccomment">/// Read a standalone plan file in host tooling or a build script.
-<a href=#142 id=142 data-nosnippet>142</a>    </span><span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
-<a href=#143 id=143 data-nosnippet>143</a>    </span><span class="kw">pub fn </span>read(path: <span class="kw-2">&amp;</span>std::path::Path) -&gt; CuResult&lt;<span class="self">Self</span>&gt; {
-<a href=#144 id=144 data-nosnippet>144</a>        <span class="kw">let </span>text = std::fs::read_to_string(path)
-<a href=#145 id=145 data-nosnippet>145</a>            .map_err(|error| CuError::new_with_cause(<span class="string">"Could not read execution plan"</span>, error))<span class="question-mark">?</span>;
-<a href=#146 id=146 data-nosnippet>146</a>        <span class="self">Self</span>::deserialize_ron(<span class="kw-2">&amp;</span>text)
+<a href=#60 id=60 data-nosnippet>60</a>        <span class="self">Self</span>::from_config_cyclic_with_resources(config, copperlists_per_cycle, <span class="kw-2">&amp;</span>[])
+<a href=#61 id=61 data-nosnippet>61</a>    }
+<a href=#62 id=62 data-nosnippet>62</a>
+<a href=#63 id=63 data-nosnippet>63</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>from_config_cyclic_with_resources(
+<a href=#64 id=64 data-nosnippet>64</a>        config: <span class="kw-2">&amp;</span>CuConfig,
+<a href=#65 id=65 data-nosnippet>65</a>        copperlists_per_cycle: u32,
+<a href=#66 id=66 data-nosnippet>66</a>        concurrent_resources: <span class="kw-2">&amp;</span>[String],
+<a href=#67 id=67 data-nosnippet>67</a>    ) -&gt; CuResult&lt;<span class="self">Self</span>&gt; {
+<a href=#68 id=68 data-nosnippet>68</a>        <span class="kw">if </span>copperlists_per_cycle == <span class="number">0 </span>{
+<a href=#69 id=69 data-nosnippet>69</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(<span class="string">"copperlists_per_cycle must be positive"</span>));
+<a href=#70 id=70 data-nosnippet>70</a>        }
+<a href=#71 id=71 data-nosnippet>71</a>        <span class="kw">let </span><span class="kw-2">mut </span>missions = BTreeMap::new();
+<a href=#72 id=72 data-nosnippet>72</a>        <span class="kw">for </span>(mission, graph) <span class="kw">in </span>mission_graphs(config) {
+<a href=#73 id=73 data-nosnippet>73</a>            <span class="kw">let </span>assembled = assemble_runtime_plan_with_planner(config, graph, <span class="kw-2">&amp;</span>Serial)<span class="question-mark">?</span>;
+<a href=#74 id=74 data-nosnippet>74</a>            missions.insert(
+<a href=#75 id=75 data-nosnippet>75</a>                mission.clone(),
+<a href=#76 id=76 data-nosnippet>76</a>                PlanShape::new(<span class="kw-2">&amp;</span>assembled, config, graph, <span class="kw-2">&amp;</span>mission, concurrent_resources)<span class="question-mark">?
+<a href=#77 id=77 data-nosnippet>77</a>                    </span>.cyclic_plan(copperlists_per_cycle)<span class="question-mark">?</span>,
+<a href=#78 id=78 data-nosnippet>78</a>            );
+<a href=#79 id=79 data-nosnippet>79</a>        }
+<a href=#80 id=80 data-nosnippet>80</a>        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
+<a href=#81 id=81 data-nosnippet>81</a>            concurrent_resources: concurrent_resources.to_vec(),
+<a href=#82 id=82 data-nosnippet>82</a>            missions,
+<a href=#83 id=83 data-nosnippet>83</a>        })
+<a href=#84 id=84 data-nosnippet>84</a>    }
+<a href=#85 id=85 data-nosnippet>85</a>
+<a href=#86 id=86 data-nosnippet>86</a>    <span class="doccomment">/// Validate inventory, placement, precedence, recurrence, and capacity.
+<a href=#87 id=87 data-nosnippet>87</a>    </span><span class="kw">pub fn </span>validate(<span class="kw-2">&amp;</span><span class="self">self</span>, config: <span class="kw-2">&amp;</span>CuConfig) -&gt; CuResult&lt;()&gt; {
+<a href=#88 id=88 data-nosnippet>88</a>        <span class="self">self</span>.validate_orders(config).map(|<span class="kw">_</span>| ())
+<a href=#89 id=89 data-nosnippet>89</a>    }
+<a href=#90 id=90 data-nosnippet>90</a>
+<a href=#91 id=91 data-nosnippet>91</a>    <span class="kw">fn </span>validate_orders(<span class="kw-2">&amp;</span><span class="self">self</span>, config: <span class="kw-2">&amp;</span>CuConfig) -&gt; CuResult&lt;BTreeMap&lt;String, Vec&lt;usize&gt;&gt;&gt; {
+<a href=#92 id=92 data-nosnippet>92</a>        <span class="kw">let </span>missions = mission_graphs(config);
+<a href=#93 id=93 data-nosnippet>93</a>        <span class="kw">if </span>!<span class="self">self</span>.missions.keys().eq(missions.iter().map(|(id, <span class="kw">_</span>)| id)) {
+<a href=#94 id=94 data-nosnippet>94</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(
+<a href=#95 id=95 data-nosnippet>95</a>                <span class="string">"Execution plan must contain exactly the configured missions"</span>,
+<a href=#96 id=96 data-nosnippet>96</a>            ));
+<a href=#97 id=97 data-nosnippet>97</a>        }
+<a href=#98 id=98 data-nosnippet>98</a>        <span class="kw">let </span><span class="kw-2">mut </span>orders = BTreeMap::new();
+<a href=#99 id=99 data-nosnippet>99</a>        <span class="kw">for </span>(mission, graph) <span class="kw">in </span>missions {
+<a href=#100 id=100 data-nosnippet>100</a>            <span class="kw">let </span>canonical = assemble_runtime_plan_with_planner(config, graph, <span class="kw-2">&amp;</span>Serial)<span class="question-mark">?</span>;
+<a href=#101 id=101 data-nosnippet>101</a>            <span class="kw">let </span>shape = PlanShape::new(
+<a href=#102 id=102 data-nosnippet>102</a>                <span class="kw-2">&amp;</span>canonical,
+<a href=#103 id=103 data-nosnippet>103</a>                config,
+<a href=#104 id=104 data-nosnippet>104</a>                graph,
+<a href=#105 id=105 data-nosnippet>105</a>                <span class="kw-2">&amp;</span>mission,
+<a href=#106 id=106 data-nosnippet>106</a>                <span class="kw-2">&amp;</span><span class="self">self</span>.concurrent_resources,
+<a href=#107 id=107 data-nosnippet>107</a>            )<span class="question-mark">?</span>;
+<a href=#108 id=108 data-nosnippet>108</a>            <span class="kw">let </span>order = <span class="self">self</span>.missions[<span class="kw-2">&amp;</span>mission]
+<a href=#109 id=109 data-nosnippet>109</a>                .validate(config, <span class="kw-2">&amp;</span>shape)
+<a href=#110 id=110 data-nosnippet>110</a>                .map_err(|error| CuError::from(<span class="macro">format!</span>(<span class="string">"Plan for mission '{mission}': {error}"</span>)))<span class="question-mark">?</span>;
+<a href=#111 id=111 data-nosnippet>111</a>            orders.insert(mission, order);
+<a href=#112 id=112 data-nosnippet>112</a>        }
+<a href=#113 id=113 data-nosnippet>113</a>        <span class="prelude-val">Ok</span>(orders)
+<a href=#114 id=114 data-nosnippet>114</a>    }
+<a href=#115 id=115 data-nosnippet>115</a>
+<a href=#116 id=116 data-nosnippet>116</a>    <span class="doccomment">/// Raise CopperList storage to the largest admission window in this plan.
+<a href=#117 id=117 data-nosnippet>117</a>    </span><span class="kw">pub fn </span>provide_capacity(<span class="kw-2">&amp;</span><span class="self">self</span>, config: <span class="kw-2">&amp;mut </span>CuConfig) {
+<a href=#118 id=118 data-nosnippet>118</a>        <span class="kw">let </span>needed = <span class="self">self
+<a href=#119 id=119 data-nosnippet>119</a>            </span>.missions
+<a href=#120 id=120 data-nosnippet>120</a>            .values()
+<a href=#121 id=121 data-nosnippet>121</a>            .map(|mission| mission.max_in_flight <span class="kw">as </span>usize)
+<a href=#122 id=122 data-nosnippet>122</a>            .max()
+<a href=#123 id=123 data-nosnippet>123</a>            .unwrap_or(<span class="number">0</span>);
+<a href=#124 id=124 data-nosnippet>124</a>        <span class="kw">let </span>current = config
+<a href=#125 id=125 data-nosnippet>125</a>            .logging
+<a href=#126 id=126 data-nosnippet>126</a>            .as_ref()
+<a href=#127 id=127 data-nosnippet>127</a>            .and_then(|logging| logging.copperlist_count)
+<a href=#128 id=128 data-nosnippet>128</a>            .unwrap_or(<span class="kw">super</span>::DEFAULT_COPPERLIST_COUNT);
+<a href=#129 id=129 data-nosnippet>129</a>        <span class="kw">if </span>needed &gt; current {
+<a href=#130 id=130 data-nosnippet>130</a>            config
+<a href=#131 id=131 data-nosnippet>131</a>                .logging
+<a href=#132 id=132 data-nosnippet>132</a>                .get_or_insert_with(Default::default)
+<a href=#133 id=133 data-nosnippet>133</a>                .copperlist_count = <span class="prelude-val">Some</span>(needed);
+<a href=#134 id=134 data-nosnippet>134</a>        }
+<a href=#135 id=135 data-nosnippet>135</a>    }
+<a href=#136 id=136 data-nosnippet>136</a>
+<a href=#137 id=137 data-nosnippet>137</a>    <span class="doccomment">/// Serialize this plan as human-editable RON.
+<a href=#138 id=138 data-nosnippet>138</a>    </span><span class="kw">pub fn </span>serialize_ron(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; CuResult&lt;String&gt; {
+<a href=#139 id=139 data-nosnippet>139</a>        ron::ser::to_string_pretty(<span class="self">self</span>, ron::ser::PrettyConfig::default())
+<a href=#140 id=140 data-nosnippet>140</a>            .map_err(|error| CuError::new_with_cause(<span class="string">"Could not serialize execution plan"</span>, error))
+<a href=#141 id=141 data-nosnippet>141</a>    }
+<a href=#142 id=142 data-nosnippet>142</a>
+<a href=#143 id=143 data-nosnippet>143</a>    <span class="doccomment">/// Parse a plan from RON.
+<a href=#144 id=144 data-nosnippet>144</a>    </span><span class="kw">pub fn </span>deserialize_ron(text: <span class="kw-2">&amp;</span>str) -&gt; CuResult&lt;<span class="self">Self</span>&gt; {
+<a href=#145 id=145 data-nosnippet>145</a>        ron::from_str(text)
+<a href=#146 id=146 data-nosnippet>146</a>            .map_err(|error| CuError::new_with_cause(<span class="string">"Could not parse execution plan"</span>, error))
 <a href=#147 id=147 data-nosnippet>147</a>    }
 <a href=#148 id=148 data-nosnippet>148</a>
-<a href=#149 id=149 data-nosnippet>149</a>    <span class="doccomment">/// Write a standalone plan file in host tooling or a build script.
+<a href=#149 id=149 data-nosnippet>149</a>    <span class="doccomment">/// Read a standalone plan file in host tooling or a build script.
 <a href=#150 id=150 data-nosnippet>150</a>    </span><span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
-<a href=#151 id=151 data-nosnippet>151</a>    </span><span class="kw">pub fn </span>write(<span class="kw-2">&amp;</span><span class="self">self</span>, path: <span class="kw-2">&amp;</span>std::path::Path) -&gt; CuResult&lt;()&gt; {
-<a href=#152 id=152 data-nosnippet>152</a>        std::fs::write(path, <span class="self">self</span>.serialize_ron()<span class="question-mark">?</span>)
-<a href=#153 id=153 data-nosnippet>153</a>            .map_err(|error| CuError::new_with_cause(<span class="string">"Could not write execution plan"</span>, error))
-<a href=#154 id=154 data-nosnippet>154</a>    }
-<a href=#155 id=155 data-nosnippet>155</a>}
+<a href=#151 id=151 data-nosnippet>151</a>    </span><span class="kw">pub fn </span>read(path: <span class="kw-2">&amp;</span>std::path::Path) -&gt; CuResult&lt;<span class="self">Self</span>&gt; {
+<a href=#152 id=152 data-nosnippet>152</a>        <span class="kw">let </span>text = std::fs::read_to_string(path)
+<a href=#153 id=153 data-nosnippet>153</a>            .map_err(|error| CuError::new_with_cause(<span class="string">"Could not read execution plan"</span>, error))<span class="question-mark">?</span>;
+<a href=#154 id=154 data-nosnippet>154</a>        <span class="self">Self</span>::deserialize_ron(<span class="kw-2">&amp;</span>text)
+<a href=#155 id=155 data-nosnippet>155</a>    }
 <a href=#156 id=156 data-nosnippet>156</a>
-<a href=#157 id=157 data-nosnippet>157</a><span class="doccomment">/// Enforce an exact saved process schedule during runtime generation.
-<a href=#158 id=158 data-nosnippet>158</a></span><span class="attr">#[derive(Clone, Debug)]
-<a href=#159 id=159 data-nosnippet>159</a></span><span class="kw">pub struct </span>ExplicitSchedule {
-<a href=#160 id=160 data-nosnippet>160</a>    plan: CuPlan,
-<a href=#161 id=161 data-nosnippet>161</a>}
-<a href=#162 id=162 data-nosnippet>162</a>
-<a href=#163 id=163 data-nosnippet>163</a><span class="kw">impl </span>CuPlanner <span class="kw">for </span>ExplicitSchedule {
-<a href=#164 id=164 data-nosnippet>164</a>    <span class="kw">fn </span>plan(<span class="kw-2">&amp;</span><span class="self">self</span>, _input: <span class="kw-2">&amp;</span>PlanningInput&lt;<span class="lifetime">'_</span>&gt;) -&gt; CuResult&lt;CuPlan&gt; {
-<a href=#165 id=165 data-nosnippet>165</a>        <span class="prelude-val">Ok</span>(<span class="self">self</span>.plan.clone())
-<a href=#166 id=166 data-nosnippet>166</a>    }
-<a href=#167 id=167 data-nosnippet>167</a>}
-<a href=#168 id=168 data-nosnippet>168</a>
-<a href=#169 id=169 data-nosnippet>169</a><span class="kw">impl </span>ExplicitSchedule {
-<a href=#170 id=170 data-nosnippet>170</a>    <span class="doccomment">/// Take ownership of a saved plan.
-<a href=#171 id=171 data-nosnippet>171</a>    </span><span class="kw">pub fn </span>new(plan: CuPlan) -&gt; <span class="self">Self </span>{
-<a href=#172 id=172 data-nosnippet>172</a>        <span class="self">Self </span>{ plan }
-<a href=#173 id=173 data-nosnippet>173</a>    }
-<a href=#174 id=174 data-nosnippet>174</a>
-<a href=#175 id=175 data-nosnippet>175</a>    <span class="doccomment">/// Validate all missions and select this exact plan in `config`.
-<a href=#176 id=176 data-nosnippet>176</a>    </span><span class="kw">pub fn </span>apply(<span class="kw-2">&amp;</span><span class="self">self</span>, config: <span class="kw-2">&amp;mut </span>CuConfig) -&gt; CuResult&lt;()&gt; {
-<a href=#177 id=177 data-nosnippet>177</a>        <span class="kw">let </span><span class="kw-2">mut </span>prepared = config.clone();
-<a href=#178 id=178 data-nosnippet>178</a>        <span class="self">self</span>.plan.provide_capacity(<span class="kw-2">&amp;mut </span>prepared);
-<a href=#179 id=179 data-nosnippet>179</a>        <span class="self">self</span>.plan.validate(<span class="kw-2">&amp;</span>prepared)<span class="question-mark">?</span>;
-<a href=#180 id=180 data-nosnippet>180</a>        <span class="kw">let </span>value = cu29_value::to_value(<span class="kw-2">&amp;</span><span class="self">self</span>.plan)
-<a href=#181 id=181 data-nosnippet>181</a>            .map_err(|error| CuError::new_with_cause(<span class="string">"Could not encode execution plan"</span>, error))<span class="question-mark">?</span>;
-<a href=#182 id=182 data-nosnippet>182</a>        <span class="kw">let </span>value = Value::deserialize(value)
-<a href=#183 id=183 data-nosnippet>183</a>            .map_err(|error| CuError::new_with_cause(<span class="string">"Could not embed execution plan"</span>, error))<span class="question-mark">?</span>;
-<a href=#184 id=184 data-nosnippet>184</a>        <span class="kw">let </span><span class="kw-2">mut </span>params = ComponentConfig::default();
-<a href=#185 id=185 data-nosnippet>185</a>        params.set(<span class="string">"plan"</span>, value);
-<a href=#186 id=186 data-nosnippet>186</a>        prepared
-<a href=#187 id=187 data-nosnippet>187</a>            .runtime
-<a href=#188 id=188 data-nosnippet>188</a>            .get_or_insert_with(RuntimeConfig::default)
-<a href=#189 id=189 data-nosnippet>189</a>            .planner = <span class="prelude-val">Some</span>(PlannerConfig {
-<a href=#190 id=190 data-nosnippet>190</a>            kind: PlannerKind::ExplicitSchedule,
-<a href=#191 id=191 data-nosnippet>191</a>            config: <span class="prelude-val">Some</span>(params),
-<a href=#192 id=192 data-nosnippet>192</a>        });
-<a href=#193 id=193 data-nosnippet>193</a>        <span class="kw-2">*</span>config = prepared;
-<a href=#194 id=194 data-nosnippet>194</a>        <span class="prelude-val">Ok</span>(())
-<a href=#195 id=195 data-nosnippet>195</a>    }
-<a href=#196 id=196 data-nosnippet>196</a>
-<a href=#197 id=197 data-nosnippet>197</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>assemble(
-<a href=#198 id=198 data-nosnippet>198</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#199 id=199 data-nosnippet>199</a>        config: <span class="kw-2">&amp;</span>CuConfig,
-<a href=#200 id=200 data-nosnippet>200</a>        graph: <span class="kw-2">&amp;</span>CuGraph,
-<a href=#201 id=201 data-nosnippet>201</a>        mission: <span class="kw-2">&amp;</span>str,
-<a href=#202 id=202 data-nosnippet>202</a>    ) -&gt; CuResult&lt;AssembledPlan&gt; {
-<a href=#203 id=203 data-nosnippet>203</a>        <span class="kw">let </span>orders = <span class="self">self</span>.plan.validate_orders(config)<span class="question-mark">?</span>;
-<a href=#204 id=204 data-nosnippet>204</a>        <span class="self">self</span>.assemble_steps(config, graph, mission, <span class="kw-2">&amp;</span>orders[mission])
-<a href=#205 id=205 data-nosnippet>205</a>            .map_err(|error| {
-<a href=#206 id=206 data-nosnippet>206</a>                CuError::from(<span class="macro">format!</span>(
-<a href=#207 id=207 data-nosnippet>207</a>                    <span class="string">"ExplicitSchedule plan for mission '{mission}': {error}"
-<a href=#208 id=208 data-nosnippet>208</a>                </span>))
-<a href=#209 id=209 data-nosnippet>209</a>            })
-<a href=#210 id=210 data-nosnippet>210</a>    }
-<a href=#211 id=211 data-nosnippet>211</a>
-<a href=#212 id=212 data-nosnippet>212</a>    <span class="kw">fn </span>assemble_steps(
-<a href=#213 id=213 data-nosnippet>213</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#214 id=214 data-nosnippet>214</a>        config: <span class="kw-2">&amp;</span>CuConfig,
-<a href=#215 id=215 data-nosnippet>215</a>        graph: <span class="kw-2">&amp;</span>CuGraph,
-<a href=#216 id=216 data-nosnippet>216</a>        mission: <span class="kw-2">&amp;</span>str,
-<a href=#217 id=217 data-nosnippet>217</a>        order: <span class="kw-2">&amp;</span>[usize],
-<a href=#218 id=218 data-nosnippet>218</a>    ) -&gt; CuResult&lt;AssembledPlan&gt; {
-<a href=#219 id=219 data-nosnippet>219</a>        <span class="kw">let </span>plan = <span class="self">self
-<a href=#220 id=220 data-nosnippet>220</a>            </span>.plan
-<a href=#221 id=221 data-nosnippet>221</a>            .missions
-<a href=#222 id=222 data-nosnippet>222</a>            .get(mission)
-<a href=#223 id=223 data-nosnippet>223</a>            .ok_or_else(|| CuError::from(<span class="string">"Missing mission"</span>))<span class="question-mark">?</span>;
-<a href=#224 id=224 data-nosnippet>224</a>        <span class="kw">let </span>requested = <span class="kw">if </span>plan.is_serial() {
-<a href=#225 id=225 data-nosnippet>225</a>            plan.serial_keys()<span class="question-mark">?
-<a href=#226 id=226 data-nosnippet>226</a>        </span>} <span class="kw">else </span>{
-<a href=#227 id=227 data-nosnippet>227</a>            plan.layout_keys(order)
-<a href=#228 id=228 data-nosnippet>228</a>        };
-<a href=#229 id=229 data-nosnippet>229</a>        <span class="kw">let </span>canonical = assemble_runtime_plan_with_planner(config, graph, <span class="kw-2">&amp;</span>Serial)<span class="question-mark">?</span>;
-<a href=#230 id=230 data-nosnippet>230</a>        <span class="kw">let </span>keys = execution_keys(<span class="kw-2">&amp;</span>canonical, mission)<span class="question-mark">?</span>;
-<a href=#231 id=231 data-nosnippet>231</a>        <span class="kw">let </span>by_key: BTreeMap&lt;<span class="kw">_</span>, <span class="kw">_</span>&gt; = keys.iter().enumerate().map(|(i, key)| (key, i)).collect();
-<a href=#232 id=232 data-nosnippet>232</a>        <span class="kw">let </span><span class="kw-2">mut </span>node_order = Vec::with_capacity(canonical.entities.len());
-<a href=#233 id=233 data-nosnippet>233</a>        <span class="kw">for </span>key <span class="kw">in </span><span class="kw-2">&amp;</span>requested {
-<a href=#234 id=234 data-nosnippet>234</a>            <span class="kw">let </span>index = <span class="kw-2">*</span>by_key
-<a href=#235 id=235 data-nosnippet>235</a>                .get(key)
-<a href=#236 id=236 data-nosnippet>236</a>                .ok_or_else(|| CuError::from(<span class="macro">format!</span>(<span class="string">"Unknown process step '{key}'"</span>)))<span class="question-mark">?</span>;
-<a href=#237 id=237 data-nosnippet>237</a>            <span class="kw">let </span>CuExecutionUnit::Step(step) = <span class="kw-2">&amp;</span>canonical.execution.steps[index] <span class="kw">else </span>{
-<a href=#238 id=238 data-nosnippet>238</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(<span class="string">"Nested loops cannot be materialized"</span>));
-<a href=#239 id=239 data-nosnippet>239</a>            };
-<a href=#240 id=240 data-nosnippet>240</a>            <span class="kw">if </span>step.phase != CuStepPhase::AnytimeRefine {
-<a href=#241 id=241 data-nosnippet>241</a>                node_order.push(step.node_id);
-<a href=#242 id=242 data-nosnippet>242</a>            }
-<a href=#243 id=243 data-nosnippet>243</a>        }
-<a href=#244 id=244 data-nosnippet>244</a>        <span class="kw">let </span><span class="kw-2">mut </span>assembled =
-<a href=#245 id=245 data-nosnippet>245</a>            assemble_from_order(build_plan_graph(config, graph)<span class="question-mark">?</span>, StepOrder(node_order))<span class="question-mark">?</span>;
-<a href=#246 id=246 data-nosnippet>246</a>        <span class="kw">let </span>remapped_keys = execution_keys(<span class="kw-2">&amp;</span>assembled, mission)<span class="question-mark">?</span>;
-<a href=#247 id=247 data-nosnippet>247</a>        <span class="kw">let </span><span class="kw-2">mut </span>units: BTreeMap&lt;<span class="kw">_</span>, <span class="kw">_</span>&gt; = remapped_keys
-<a href=#248 id=248 data-nosnippet>248</a>            .into_iter()
-<a href=#249 id=249 data-nosnippet>249</a>            .zip(assembled.execution.steps)
-<a href=#250 id=250 data-nosnippet>250</a>            .collect();
-<a href=#251 id=251 data-nosnippet>251</a>        assembled.execution.steps = requested
-<a href=#252 id=252 data-nosnippet>252</a>            .iter()
-<a href=#253 id=253 data-nosnippet>253</a>            .map(|key| {
-<a href=#254 id=254 data-nosnippet>254</a>                units.remove(key).ok_or_else(|| {
-<a href=#255 id=255 data-nosnippet>255</a>                    CuError::from(<span class="macro">format!</span>(<span class="string">"Could not materialize process step '{key}'"</span>))
-<a href=#256 id=256 data-nosnippet>256</a>                })
-<a href=#257 id=257 data-nosnippet>257</a>            })
-<a href=#258 id=258 data-nosnippet>258</a>            .collect::&lt;CuResult&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;&gt;()<span class="question-mark">?</span>;
-<a href=#259 id=259 data-nosnippet>259</a>        assembled.background = plan.background.clone();
-<a href=#260 id=260 data-nosnippet>260</a>        <span class="kw">if </span>!plan.is_serial() {
-<a href=#261 id=261 data-nosnippet>261</a>            <span class="kw">let </span>step_of: BTreeMap&lt;<span class="kw">_</span>, <span class="kw">_</span>&gt; = requested
-<a href=#262 id=262 data-nosnippet>262</a>                .iter()
-<a href=#263 id=263 data-nosnippet>263</a>                .enumerate()
-<a href=#264 id=264 data-nosnippet>264</a>                .map(|(index, key)| (key.as_str(), index))
-<a href=#265 id=265 data-nosnippet>265</a>                .collect();
-<a href=#266 id=266 data-nosnippet>266</a>            assembled.lanes = <span class="prelude-val">Some</span>(LanePlan {
-<a href=#267 id=267 data-nosnippet>267</a>                copperlists_per_cycle: plan.copperlists_per_cycle,
-<a href=#268 id=268 data-nosnippet>268</a>                max_in_flight: plan.max_in_flight,
-<a href=#269 id=269 data-nosnippet>269</a>                occurrences: plan
-<a href=#270 id=270 data-nosnippet>270</a>                    .steps
-<a href=#271 id=271 data-nosnippet>271</a>                    .iter()
-<a href=#272 id=272 data-nosnippet>272</a>                    .map(|step| LaneOccurrence {
-<a href=#273 id=273 data-nosnippet>273</a>                        step: step_of[step.key.as_str()],
-<a href=#274 id=274 data-nosnippet>274</a>                        copperlist: step.copperlist,
-<a href=#275 id=275 data-nosnippet>275</a>                    })
-<a href=#276 id=276 data-nosnippet>276</a>                    .collect(),
-<a href=#277 id=277 data-nosnippet>277</a>                workers: plan
-<a href=#278 id=278 data-nosnippet>278</a>                    .workers
+<a href=#157 id=157 data-nosnippet>157</a>    <span class="doccomment">/// Write a standalone plan file in host tooling or a build script.
+<a href=#158 id=158 data-nosnippet>158</a>    </span><span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
+<a href=#159 id=159 data-nosnippet>159</a>    </span><span class="kw">pub fn </span>write(<span class="kw-2">&amp;</span><span class="self">self</span>, path: <span class="kw-2">&amp;</span>std::path::Path) -&gt; CuResult&lt;()&gt; {
+<a href=#160 id=160 data-nosnippet>160</a>        std::fs::write(path, <span class="self">self</span>.serialize_ron()<span class="question-mark">?</span>)
+<a href=#161 id=161 data-nosnippet>161</a>            .map_err(|error| CuError::new_with_cause(<span class="string">"Could not write execution plan"</span>, error))
+<a href=#162 id=162 data-nosnippet>162</a>    }
+<a href=#163 id=163 data-nosnippet>163</a>}
+<a href=#164 id=164 data-nosnippet>164</a>
+<a href=#165 id=165 data-nosnippet>165</a><span class="doccomment">/// Enforce an exact saved process schedule during runtime generation.
+<a href=#166 id=166 data-nosnippet>166</a></span><span class="attr">#[derive(Clone, Debug)]
+<a href=#167 id=167 data-nosnippet>167</a></span><span class="kw">pub struct </span>ExplicitSchedule {
+<a href=#168 id=168 data-nosnippet>168</a>    plan: CuPlan,
+<a href=#169 id=169 data-nosnippet>169</a>}
+<a href=#170 id=170 data-nosnippet>170</a>
+<a href=#171 id=171 data-nosnippet>171</a><span class="kw">impl </span>CuPlanner <span class="kw">for </span>ExplicitSchedule {
+<a href=#172 id=172 data-nosnippet>172</a>    <span class="kw">fn </span>plan(<span class="kw-2">&amp;</span><span class="self">self</span>, _input: <span class="kw-2">&amp;</span>PlanningInput&lt;<span class="lifetime">'_</span>&gt;) -&gt; CuResult&lt;CuPlan&gt; {
+<a href=#173 id=173 data-nosnippet>173</a>        <span class="prelude-val">Ok</span>(<span class="self">self</span>.plan.clone())
+<a href=#174 id=174 data-nosnippet>174</a>    }
+<a href=#175 id=175 data-nosnippet>175</a>}
+<a href=#176 id=176 data-nosnippet>176</a>
+<a href=#177 id=177 data-nosnippet>177</a><span class="kw">impl </span>ExplicitSchedule {
+<a href=#178 id=178 data-nosnippet>178</a>    <span class="doccomment">/// Take ownership of a saved plan.
+<a href=#179 id=179 data-nosnippet>179</a>    </span><span class="kw">pub fn </span>new(plan: CuPlan) -&gt; <span class="self">Self </span>{
+<a href=#180 id=180 data-nosnippet>180</a>        <span class="self">Self </span>{ plan }
+<a href=#181 id=181 data-nosnippet>181</a>    }
+<a href=#182 id=182 data-nosnippet>182</a>
+<a href=#183 id=183 data-nosnippet>183</a>    <span class="doccomment">/// Validate all missions and select this exact plan in `config`.
+<a href=#184 id=184 data-nosnippet>184</a>    </span><span class="kw">pub fn </span>apply(<span class="kw-2">&amp;</span><span class="self">self</span>, config: <span class="kw-2">&amp;mut </span>CuConfig) -&gt; CuResult&lt;()&gt; {
+<a href=#185 id=185 data-nosnippet>185</a>        <span class="kw">let </span><span class="kw-2">mut </span>prepared = config.clone();
+<a href=#186 id=186 data-nosnippet>186</a>        <span class="self">self</span>.plan.provide_capacity(<span class="kw-2">&amp;mut </span>prepared);
+<a href=#187 id=187 data-nosnippet>187</a>        <span class="self">self</span>.plan.validate(<span class="kw-2">&amp;</span>prepared)<span class="question-mark">?</span>;
+<a href=#188 id=188 data-nosnippet>188</a>        <span class="kw">let </span>value = cu29_value::to_value(<span class="kw-2">&amp;</span><span class="self">self</span>.plan)
+<a href=#189 id=189 data-nosnippet>189</a>            .map_err(|error| CuError::new_with_cause(<span class="string">"Could not encode execution plan"</span>, error))<span class="question-mark">?</span>;
+<a href=#190 id=190 data-nosnippet>190</a>        <span class="kw">let </span>value = Value::deserialize(value)
+<a href=#191 id=191 data-nosnippet>191</a>            .map_err(|error| CuError::new_with_cause(<span class="string">"Could not embed execution plan"</span>, error))<span class="question-mark">?</span>;
+<a href=#192 id=192 data-nosnippet>192</a>        <span class="kw">let </span><span class="kw-2">mut </span>params = ComponentConfig::default();
+<a href=#193 id=193 data-nosnippet>193</a>        params.set(<span class="string">"plan"</span>, value);
+<a href=#194 id=194 data-nosnippet>194</a>        prepared
+<a href=#195 id=195 data-nosnippet>195</a>            .runtime
+<a href=#196 id=196 data-nosnippet>196</a>            .get_or_insert_with(RuntimeConfig::default)
+<a href=#197 id=197 data-nosnippet>197</a>            .planner = <span class="prelude-val">Some</span>(PlannerConfig {
+<a href=#198 id=198 data-nosnippet>198</a>            kind: PlannerKind::ExplicitSchedule,
+<a href=#199 id=199 data-nosnippet>199</a>            config: <span class="prelude-val">Some</span>(params),
+<a href=#200 id=200 data-nosnippet>200</a>        });
+<a href=#201 id=201 data-nosnippet>201</a>        <span class="kw-2">*</span>config = prepared;
+<a href=#202 id=202 data-nosnippet>202</a>        <span class="prelude-val">Ok</span>(())
+<a href=#203 id=203 data-nosnippet>203</a>    }
+<a href=#204 id=204 data-nosnippet>204</a>
+<a href=#205 id=205 data-nosnippet>205</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>assemble(
+<a href=#206 id=206 data-nosnippet>206</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#207 id=207 data-nosnippet>207</a>        config: <span class="kw-2">&amp;</span>CuConfig,
+<a href=#208 id=208 data-nosnippet>208</a>        graph: <span class="kw-2">&amp;</span>CuGraph,
+<a href=#209 id=209 data-nosnippet>209</a>        mission: <span class="kw-2">&amp;</span>str,
+<a href=#210 id=210 data-nosnippet>210</a>    ) -&gt; CuResult&lt;AssembledPlan&gt; {
+<a href=#211 id=211 data-nosnippet>211</a>        <span class="kw">let </span>orders = <span class="self">self</span>.plan.validate_orders(config)<span class="question-mark">?</span>;
+<a href=#212 id=212 data-nosnippet>212</a>        <span class="self">self</span>.assemble_steps(config, graph, mission, <span class="kw-2">&amp;</span>orders[mission])
+<a href=#213 id=213 data-nosnippet>213</a>            .map_err(|error| {
+<a href=#214 id=214 data-nosnippet>214</a>                CuError::from(<span class="macro">format!</span>(
+<a href=#215 id=215 data-nosnippet>215</a>                    <span class="string">"ExplicitSchedule plan for mission '{mission}': {error}"
+<a href=#216 id=216 data-nosnippet>216</a>                </span>))
+<a href=#217 id=217 data-nosnippet>217</a>            })
+<a href=#218 id=218 data-nosnippet>218</a>    }
+<a href=#219 id=219 data-nosnippet>219</a>
+<a href=#220 id=220 data-nosnippet>220</a>    <span class="kw">fn </span>assemble_steps(
+<a href=#221 id=221 data-nosnippet>221</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#222 id=222 data-nosnippet>222</a>        config: <span class="kw-2">&amp;</span>CuConfig,
+<a href=#223 id=223 data-nosnippet>223</a>        graph: <span class="kw-2">&amp;</span>CuGraph,
+<a href=#224 id=224 data-nosnippet>224</a>        mission: <span class="kw-2">&amp;</span>str,
+<a href=#225 id=225 data-nosnippet>225</a>        order: <span class="kw-2">&amp;</span>[usize],
+<a href=#226 id=226 data-nosnippet>226</a>    ) -&gt; CuResult&lt;AssembledPlan&gt; {
+<a href=#227 id=227 data-nosnippet>227</a>        <span class="kw">let </span>plan = <span class="self">self
+<a href=#228 id=228 data-nosnippet>228</a>            </span>.plan
+<a href=#229 id=229 data-nosnippet>229</a>            .missions
+<a href=#230 id=230 data-nosnippet>230</a>            .get(mission)
+<a href=#231 id=231 data-nosnippet>231</a>            .ok_or_else(|| CuError::from(<span class="string">"Missing mission"</span>))<span class="question-mark">?</span>;
+<a href=#232 id=232 data-nosnippet>232</a>        <span class="kw">let </span>requested = <span class="kw">if </span>plan.is_serial() {
+<a href=#233 id=233 data-nosnippet>233</a>            plan.serial_keys()<span class="question-mark">?
+<a href=#234 id=234 data-nosnippet>234</a>        </span>} <span class="kw">else </span>{
+<a href=#235 id=235 data-nosnippet>235</a>            plan.layout_keys(order)
+<a href=#236 id=236 data-nosnippet>236</a>        };
+<a href=#237 id=237 data-nosnippet>237</a>        <span class="kw">let </span>canonical = assemble_runtime_plan_with_planner(config, graph, <span class="kw-2">&amp;</span>Serial)<span class="question-mark">?</span>;
+<a href=#238 id=238 data-nosnippet>238</a>        <span class="kw">let </span>keys = execution_keys(<span class="kw-2">&amp;</span>canonical, mission)<span class="question-mark">?</span>;
+<a href=#239 id=239 data-nosnippet>239</a>        <span class="kw">let </span>by_key: BTreeMap&lt;<span class="kw">_</span>, <span class="kw">_</span>&gt; = keys.iter().enumerate().map(|(i, key)| (key, i)).collect();
+<a href=#240 id=240 data-nosnippet>240</a>        <span class="kw">let </span><span class="kw-2">mut </span>node_order = Vec::with_capacity(canonical.entities.len());
+<a href=#241 id=241 data-nosnippet>241</a>        <span class="kw">for </span>key <span class="kw">in </span><span class="kw-2">&amp;</span>requested {
+<a href=#242 id=242 data-nosnippet>242</a>            <span class="kw">let </span>index = <span class="kw-2">*</span>by_key
+<a href=#243 id=243 data-nosnippet>243</a>                .get(key)
+<a href=#244 id=244 data-nosnippet>244</a>                .ok_or_else(|| CuError::from(<span class="macro">format!</span>(<span class="string">"Unknown process step '{key}'"</span>)))<span class="question-mark">?</span>;
+<a href=#245 id=245 data-nosnippet>245</a>            <span class="kw">let </span>CuExecutionUnit::Step(step) = <span class="kw-2">&amp;</span>canonical.execution.steps[index] <span class="kw">else </span>{
+<a href=#246 id=246 data-nosnippet>246</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(<span class="string">"Nested loops cannot be materialized"</span>));
+<a href=#247 id=247 data-nosnippet>247</a>            };
+<a href=#248 id=248 data-nosnippet>248</a>            <span class="kw">if </span>step.phase != CuStepPhase::AnytimeRefine {
+<a href=#249 id=249 data-nosnippet>249</a>                node_order.push(step.node_id);
+<a href=#250 id=250 data-nosnippet>250</a>            }
+<a href=#251 id=251 data-nosnippet>251</a>        }
+<a href=#252 id=252 data-nosnippet>252</a>        <span class="kw">let </span><span class="kw-2">mut </span>assembled =
+<a href=#253 id=253 data-nosnippet>253</a>            assemble_from_order(build_plan_graph(config, graph)<span class="question-mark">?</span>, StepOrder(node_order))<span class="question-mark">?</span>;
+<a href=#254 id=254 data-nosnippet>254</a>        <span class="kw">let </span>remapped_keys = execution_keys(<span class="kw-2">&amp;</span>assembled, mission)<span class="question-mark">?</span>;
+<a href=#255 id=255 data-nosnippet>255</a>        <span class="kw">let </span><span class="kw-2">mut </span>units: BTreeMap&lt;<span class="kw">_</span>, <span class="kw">_</span>&gt; = remapped_keys
+<a href=#256 id=256 data-nosnippet>256</a>            .into_iter()
+<a href=#257 id=257 data-nosnippet>257</a>            .zip(assembled.execution.steps)
+<a href=#258 id=258 data-nosnippet>258</a>            .collect();
+<a href=#259 id=259 data-nosnippet>259</a>        assembled.execution.steps = requested
+<a href=#260 id=260 data-nosnippet>260</a>            .iter()
+<a href=#261 id=261 data-nosnippet>261</a>            .map(|key| {
+<a href=#262 id=262 data-nosnippet>262</a>                units.remove(key).ok_or_else(|| {
+<a href=#263 id=263 data-nosnippet>263</a>                    CuError::from(<span class="macro">format!</span>(<span class="string">"Could not materialize process step '{key}'"</span>))
+<a href=#264 id=264 data-nosnippet>264</a>                })
+<a href=#265 id=265 data-nosnippet>265</a>            })
+<a href=#266 id=266 data-nosnippet>266</a>            .collect::&lt;CuResult&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;&gt;()<span class="question-mark">?</span>;
+<a href=#267 id=267 data-nosnippet>267</a>        assembled.background = plan.background.clone();
+<a href=#268 id=268 data-nosnippet>268</a>        <span class="kw">if </span>!plan.is_serial() {
+<a href=#269 id=269 data-nosnippet>269</a>            <span class="kw">let </span>step_of: BTreeMap&lt;<span class="kw">_</span>, <span class="kw">_</span>&gt; = requested
+<a href=#270 id=270 data-nosnippet>270</a>                .iter()
+<a href=#271 id=271 data-nosnippet>271</a>                .enumerate()
+<a href=#272 id=272 data-nosnippet>272</a>                .map(|(index, key)| (key.as_str(), index))
+<a href=#273 id=273 data-nosnippet>273</a>                .collect();
+<a href=#274 id=274 data-nosnippet>274</a>            assembled.lanes = <span class="prelude-val">Some</span>(LanePlan {
+<a href=#275 id=275 data-nosnippet>275</a>                copperlists_per_cycle: plan.copperlists_per_cycle,
+<a href=#276 id=276 data-nosnippet>276</a>                max_in_flight: plan.max_in_flight,
+<a href=#277 id=277 data-nosnippet>277</a>                occurrences: plan
+<a href=#278 id=278 data-nosnippet>278</a>                    .steps
 <a href=#279 id=279 data-nosnippet>279</a>                    .iter()
-<a href=#280 id=280 data-nosnippet>280</a>                    .map(|worker| LaneWorker {
-<a href=#281 id=281 data-nosnippet>281</a>                        id: worker.id.clone(),
-<a href=#282 id=282 data-nosnippet>282</a>                        placement: worker.placement.clone(),
-<a href=#283 id=283 data-nosnippet>283</a>                        occurrences: worker.steps.iter().map(|<span class="kw-2">&amp;</span>index| index <span class="kw">as </span>usize).collect(),
-<a href=#284 id=284 data-nosnippet>284</a>                    })
-<a href=#285 id=285 data-nosnippet>285</a>                    .collect(),
-<a href=#286 id=286 data-nosnippet>286</a>                dispatcher: plan.dispatcher.clone(),
-<a href=#287 id=287 data-nosnippet>287</a>                dependencies: plan.dependencies.clone(),
-<a href=#288 id=288 data-nosnippet>288</a>            });
-<a href=#289 id=289 data-nosnippet>289</a>        }
-<a href=#290 id=290 data-nosnippet>290</a>        <span class="prelude-val">Ok</span>(assembled)
-<a href=#291 id=291 data-nosnippet>291</a>    }
-<a href=#292 id=292 data-nosnippet>292</a>}
-<a href=#293 id=293 data-nosnippet>293</a>
-<a href=#294 id=294 data-nosnippet>294</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>execution_keys(plan: <span class="kw-2">&amp;</span>AssembledPlan, mission: <span class="kw-2">&amp;</span>str) -&gt; CuResult&lt;Vec&lt;String&gt;&gt; {
-<a href=#295 id=295 data-nosnippet>295</a>    <span class="kw">let </span><span class="kw-2">mut </span>refines: BTreeMap&lt;NodeId, u32&gt; = BTreeMap::new();
-<a href=#296 id=296 data-nosnippet>296</a>    plan.execution
-<a href=#297 id=297 data-nosnippet>297</a>        .steps
-<a href=#298 id=298 data-nosnippet>298</a>        .iter()
-<a href=#299 id=299 data-nosnippet>299</a>        .map(|unit| {
-<a href=#300 id=300 data-nosnippet>300</a>            <span class="kw">let </span>CuExecutionUnit::Step(step) = unit <span class="kw">else </span>{
-<a href=#301 id=301 data-nosnippet>301</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(
-<a href=#302 id=302 data-nosnippet>302</a>                    <span class="string">"Nested loops are not supported by portable plans"</span>,
-<a href=#303 id=303 data-nosnippet>303</a>                ));
-<a href=#304 id=304 data-nosnippet>304</a>            };
-<a href=#305 id=305 data-nosnippet>305</a>            <span class="kw">let </span>ordinal = <span class="kw">if </span>step.phase == CuStepPhase::AnytimeRefine {
-<a href=#306 id=306 data-nosnippet>306</a>                <span class="kw">let </span>next = refines.entry(step.node_id).or_default();
-<a href=#307 id=307 data-nosnippet>307</a>                <span class="kw-2">*</span>next += <span class="number">1</span>;
-<a href=#308 id=308 data-nosnippet>308</a>                <span class="prelude-val">Some</span>(<span class="kw-2">*</span>next)
-<a href=#309 id=309 data-nosnippet>309</a>            } <span class="kw">else </span>{
-<a href=#310 id=310 data-nosnippet>310</a>                <span class="prelude-val">None
-<a href=#311 id=311 data-nosnippet>311</a>            </span>};
-<a href=#312 id=312 data-nosnippet>312</a>            <span class="prelude-val">Ok</span>(step_key(
-<a href=#313 id=313 data-nosnippet>313</a>                mission,
-<a href=#314 id=314 data-nosnippet>314</a>                <span class="kw-2">&amp;</span>plan.entities[step.node_id <span class="kw">as </span>usize],
-<a href=#315 id=315 data-nosnippet>315</a>                step.phase,
-<a href=#316 id=316 data-nosnippet>316</a>                ordinal,
-<a href=#317 id=317 data-nosnippet>317</a>            ))
-<a href=#318 id=318 data-nosnippet>318</a>        })
-<a href=#319 id=319 data-nosnippet>319</a>        .collect()
-<a href=#320 id=320 data-nosnippet>320</a>}
+<a href=#280 id=280 data-nosnippet>280</a>                    .map(|step| LaneOccurrence {
+<a href=#281 id=281 data-nosnippet>281</a>                        step: step_of[step.key.as_str()],
+<a href=#282 id=282 data-nosnippet>282</a>                        copperlist: step.copperlist,
+<a href=#283 id=283 data-nosnippet>283</a>                    })
+<a href=#284 id=284 data-nosnippet>284</a>                    .collect(),
+<a href=#285 id=285 data-nosnippet>285</a>                workers: plan
+<a href=#286 id=286 data-nosnippet>286</a>                    .workers
+<a href=#287 id=287 data-nosnippet>287</a>                    .iter()
+<a href=#288 id=288 data-nosnippet>288</a>                    .map(|worker| LaneWorker {
+<a href=#289 id=289 data-nosnippet>289</a>                        id: worker.id.clone(),
+<a href=#290 id=290 data-nosnippet>290</a>                        placement: worker.placement.clone(),
+<a href=#291 id=291 data-nosnippet>291</a>                        occurrences: worker.steps.iter().map(|<span class="kw-2">&amp;</span>index| index <span class="kw">as </span>usize).collect(),
+<a href=#292 id=292 data-nosnippet>292</a>                    })
+<a href=#293 id=293 data-nosnippet>293</a>                    .collect(),
+<a href=#294 id=294 data-nosnippet>294</a>                dispatcher: plan.dispatcher.clone(),
+<a href=#295 id=295 data-nosnippet>295</a>                dependencies: plan.dependencies.clone(),
+<a href=#296 id=296 data-nosnippet>296</a>            });
+<a href=#297 id=297 data-nosnippet>297</a>        }
+<a href=#298 id=298 data-nosnippet>298</a>        <span class="prelude-val">Ok</span>(assembled)
+<a href=#299 id=299 data-nosnippet>299</a>    }
+<a href=#300 id=300 data-nosnippet>300</a>}
+<a href=#301 id=301 data-nosnippet>301</a>
+<a href=#302 id=302 data-nosnippet>302</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>execution_keys(plan: <span class="kw-2">&amp;</span>AssembledPlan, mission: <span class="kw-2">&amp;</span>str) -&gt; CuResult&lt;Vec&lt;String&gt;&gt; {
+<a href=#303 id=303 data-nosnippet>303</a>    <span class="kw">let </span><span class="kw-2">mut </span>refines: BTreeMap&lt;NodeId, u32&gt; = BTreeMap::new();
+<a href=#304 id=304 data-nosnippet>304</a>    plan.execution
+<a href=#305 id=305 data-nosnippet>305</a>        .steps
+<a href=#306 id=306 data-nosnippet>306</a>        .iter()
+<a href=#307 id=307 data-nosnippet>307</a>        .map(|unit| {
+<a href=#308 id=308 data-nosnippet>308</a>            <span class="kw">let </span>CuExecutionUnit::Step(step) = unit <span class="kw">else </span>{
+<a href=#309 id=309 data-nosnippet>309</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(
+<a href=#310 id=310 data-nosnippet>310</a>                    <span class="string">"Nested loops are not supported by portable plans"</span>,
+<a href=#311 id=311 data-nosnippet>311</a>                ));
+<a href=#312 id=312 data-nosnippet>312</a>            };
+<a href=#313 id=313 data-nosnippet>313</a>            <span class="kw">let </span>ordinal = <span class="kw">if </span>step.phase == CuStepPhase::AnytimeRefine {
+<a href=#314 id=314 data-nosnippet>314</a>                <span class="kw">let </span>next = refines.entry(step.node_id).or_default();
+<a href=#315 id=315 data-nosnippet>315</a>                <span class="kw-2">*</span>next += <span class="number">1</span>;
+<a href=#316 id=316 data-nosnippet>316</a>                <span class="prelude-val">Some</span>(<span class="kw-2">*</span>next)
+<a href=#317 id=317 data-nosnippet>317</a>            } <span class="kw">else </span>{
+<a href=#318 id=318 data-nosnippet>318</a>                <span class="prelude-val">None
+<a href=#319 id=319 data-nosnippet>319</a>            </span>};
+<a href=#320 id=320 data-nosnippet>320</a>            <span class="prelude-val">Ok</span>(step_key(
+<a href=#321 id=321 data-nosnippet>321</a>                mission,
+<a href=#322 id=322 data-nosnippet>322</a>                <span class="kw-2">&amp;</span>plan.entities[step.node_id <span class="kw">as </span>usize],
+<a href=#323 id=323 data-nosnippet>323</a>                step.phase,
+<a href=#324 id=324 data-nosnippet>324</a>                ordinal,
+<a href=#325 id=325 data-nosnippet>325</a>            ))
+<a href=#326 id=326 data-nosnippet>326</a>        })
+<a href=#327 id=327 data-nosnippet>327</a>        .collect()
+<a href=#328 id=328 data-nosnippet>328</a>}
 </code></pre></div></section></main></body></html>
