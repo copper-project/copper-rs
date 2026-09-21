@@ -8,10 +8,7 @@
         ),
     ],
     sources: [
-        (
-            task: "zed",
-            period_ms: 33,
-        ),
+        (task: "zed", period_ms: 33),
     ],
     cpus: [0, 1, 2, 3],
     max_in_flight: 2,
