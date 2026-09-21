@@ -74,6 +74,11 @@ pub cu29_export::Command::LogStats::config: core::option::Option<std::path::Path
 pub cu29_export::Command::LogStats::features: alloc::vec::Vec<alloc::string::String>
 pub cu29_export::Command::LogStats::mission: core::option::Option<alloc::string::String>
 pub cu29_export::Command::LogStats::output: std::path::PathBuf
+pub cu29_export::Command::OptimizeSchedule
+pub cu29_export::Command::OptimizeSchedule::candidates: usize
+pub cu29_export::Command::OptimizeSchedule::contract: std::path::PathBuf
+pub cu29_export::Command::OptimizeSchedule::measurements: alloc::vec::Vec<alloc::string::String>
+pub cu29_export::Command::OptimizeSchedule::output: std::path::PathBuf
 pub enum cu29_export::ExportFormat
 pub cu29_export::ExportFormat::Csv
 pub cu29_export::ExportFormat::Json

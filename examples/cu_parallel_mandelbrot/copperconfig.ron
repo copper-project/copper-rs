@@ -27,7 +27,9 @@
                 "initial_span_x": 2.8,
                 "zoom_ratio": 0.994133335507456,
             },
-            logging: (enabled: false),
+            logging: (
+                codec: "pgs_source",
+            ),
         ),
         (
             id: "band_0",
@@ -596,6 +598,12 @@
         slab_size_mib: 512,
         section_size_mib: 64,
         keyframe_interval: 1000000,
+        codecs: [
+            (
+                id: "pgs_source",
+                type: "crate::payloads::MandelbrotSourceLogCodec",
+            ),
+        ],
     ),
     monitor: (
         type: "cu_consolemon::CuConsoleMon",

@@ -57,6 +57,14 @@ impl CuPlan {
 
     /// Export the canonical schedule for a repeating number of CopperLists.
     pub fn from_config_cyclic(config: &CuConfig, copperlists_per_cycle: u32) -> CuResult<Self> {
+        Self::from_config_cyclic_with_resources(config, copperlists_per_cycle, &[])
+    }
+
+    pub(crate) fn from_config_cyclic_with_resources(
+        config: &CuConfig,
+        copperlists_per_cycle: u32,
+        concurrent_resources: &[String],
+    ) -> CuResult<Self> {
         if copperlists_per_cycle == 0 {
             return Err(CuError::from("copperlists_per_cycle must be positive"));
         }
@@ -65,12 +73,12 @@ impl CuPlan {
             let assembled = assemble_runtime_plan_with_planner(config, graph, &Serial)?;
             missions.insert(
                 mission.clone(),
-                PlanShape::new(&assembled, config, graph, &mission, &[])?
+                PlanShape::new(&assembled, config, graph, &mission, concurrent_resources)?
                     .cyclic_plan(copperlists_per_cycle)?,
             );
         }
         Ok(Self {
-            concurrent_resources: Vec::new(),
+            concurrent_resources: concurrent_resources.to_vec(),
             missions,
         })
     }

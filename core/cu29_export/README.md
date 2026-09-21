@@ -14,7 +14,22 @@ see
 - the `run_cli::<P>()` logreader entrypoint used by Copper examples and templates
 - structured log export helpers
 - CopperList export helpers
+- profile-guided scheduling from a recorded run
 - optional Python bindings for iterating logs without going through JSON first
+
+## Profile-Guided Scheduling
+
+The typed logreader also turns a representative run into ranked, exact `CuPlan`
+candidates:
+
+```sh
+logreader logs/robot.copper optimize-schedule \
+  --contract schedule.ron --output target/pgs --candidates 3
+```
+
+See [Profile-Guided Scheduling](../../doc/profile-guided-scheduling.md) for the
+contract, generated artifacts, compile-time application step, and measured
+comparison workflow.
 
 ## Selecting a Recorded Run
 
