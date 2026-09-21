@@ -107,23 +107,6 @@ just end2end-check
 just end2end
 ```
 
-### Profile-guided scheduling on companion compute
-
-PGS applies only to the deployed companion-compute runtime. It does not profile,
-plan, build, or change the MCU runtime.
-
-Run these commands on the companion computer with the real ZED workload:
-
-1. `just pgs-compute-baseline` records the existing compute placement.
-2. `just pgs-compute-optimize` writes ranked candidates and predictions to
-   `pgs/`.
-3. `just pgs-compute-candidate` rebuilds and runs `pgs/plan-1.config.ron`.
-4. `just pgs-compute-measure` compares prediction with the deployed measurement.
-
-The Bevy simulator is useful for checking graph and logging integration, but its
-serialized one-CopperList stepping is not representative scheduling evidence.
-Use only companion-compute recordings to evaluate or select a PGS plan.
-
 ### Firmware (for flashing to hardware)
 
 ```bash

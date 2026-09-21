@@ -112,10 +112,3 @@ background and anytime policy, and graph connections.
 `examples/cu_parallel_mandelbrot` is the controlled soundness fixture: its
 deterministic compute graph exposes prediction and scheduling regressions without
 device noise. It is not representative robotics performance evidence.
-
-`examples/cu_flight_controller` demonstrates the realistic workflow on the
-deployed companion-compute runtime. Its PGS contract covers the compute graph
-from ZED input to ViTFly command output. The MCU runtime is outside PGS scope and
-is not changed. The simulator's serialized one-CopperList stepping can check
-wiring, but candidate evaluation and selection require fresh deployed-compute
-recordings.

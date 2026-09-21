@@ -57,7 +57,6 @@ cu-gnss-ublox = { path = "../../components/sources/cu_gnss_ublox", version = "1.
 cu-pid = { path = "../../components/tasks/cu_pid", version = "1.3.0-dev", default-features = false }
 cu-sensor-payloads = { path = "../../components/payloads/cu_sensor_payloads", version = "1.3.0-dev", default-features = false }
 bincode = { workspace = true }
-clap = { workspace = true, features = ["derive"], optional = true }
 serde = { workspace = true }
 spin = { workspace = true }
 libm = { version = "0.2", default-features = false }
@@ -241,7 +240,6 @@ firmware = [
   "cu-logmon/defmt",
 ]
 end2end = [
-  "dep:clap",
   "dep:cu29",
   "cu29/std",
   "cu29/signal-handler",
@@ -253,7 +251,6 @@ end2end = [
   "dep:cu-zenoh-bridge",
   "dep:cu-ratelimit",
 ]
-pgs-compute-candidate = ["end2end", "cu29/parallel-rt"]
 logreader = [
   "dep:cu29",
   "cu29/std",
@@ -342,11 +339,6 @@ required-features = ["logreader"]
 name = "quad-compute-logreader"
 path = "src/compute_logreader.rs"
 required-features = ["compute-logreader"]
-
-[[bin]]
-name = "quad-compute-pgs-candidate"
-path = "src/pgs_compute_candidate.rs"
-required-features = ["pgs-compute-candidate"]
 
 [[bin]]
 name = "quad-sim"
