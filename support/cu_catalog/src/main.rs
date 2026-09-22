@@ -1550,13 +1550,23 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
         return values.map((value) => `<span class="chip chip-warning">${value}</span>`).join("");
       }
 
+      function resolveVisualUrl(relativeUrl) {
+        const base = new URL(window.location.href);
+        if (!base.pathname.endsWith("/") && !base.pathname.endsWith(".html")) {
+          base.pathname += "/";
+        }
+        base.search = "";
+        base.hash = "";
+        return new URL(relativeUrl, base).href;
+      }
+
       function renderVisual(entry) {
         if (!entry.visual_url) {
           return "";
         }
         return `
           <div class="card-media${entry.visual_attribution ? " with-credit" : ""}">
-            <img src="${entry.visual_url}" alt="${entry.package_name} visual" loading="lazy" />
+            <img src="${resolveVisualUrl(entry.visual_url)}" alt="${entry.package_name} visual" loading="lazy" />
             ${entry.visual_attribution ? `<small>Photo: <a href="${entry.visual_attribution.source_url}" target="_blank" rel="noreferrer">${entry.visual_attribution.creator}</a> · <a href="${entry.visual_attribution.license_url}" target="_blank" rel="noreferrer">${entry.visual_attribution.license}</a></small>` : ""}
           </div>
         `;
