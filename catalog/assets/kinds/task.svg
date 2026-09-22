@@ -2,13 +2,13 @@
   <title>Task fallback visual</title>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#122d1a"/>
-      <stop offset="100%" stop-color="#25643a"/>
+      <stop offset="0%" stop-color="#181825"/>
+      <stop offset="100%" stop-color="#313244"/>
     </linearGradient>
   </defs>
   <rect width="160" height="90" rx="18" fill="url(#bg)"/>
   <g transform="translate(55 45)">
-    <g fill="#9aefaf">
+    <g fill="#a6e3a1">
       <polygon points="-4,-28 4,-28 5.5,-19 -5.5,-19"/>
       <polygon points="-4,-28 4,-28 5.5,-19 -5.5,-19" transform="rotate(45)"/>
       <polygon points="-4,-28 4,-28 5.5,-19 -5.5,-19" transform="rotate(90)"/>
@@ -18,8 +18,8 @@
       <polygon points="-4,-28 4,-28 5.5,-19 -5.5,-19" transform="rotate(270)"/>
       <polygon points="-4,-28 4,-28 5.5,-19 -5.5,-19" transform="rotate(315)"/>
     </g>
-    <circle r="20" fill="#9aefaf"/>
-    <circle r="12" fill="#25643a"/>
-    <circle r="7" fill="#245734"/>
+    <circle r="20" fill="#a6e3a1"/>
+    <circle r="12" fill="#313244"/>
+    <circle r="7" fill="#45475a"/>
   </g>
 </svg>

@@ -291,6 +291,33 @@
             ),
         ),
         (
+            name: "cu-zed-f9r",
+            source: GitLab(
+                repo: "rdynamics/cu-zed-f9r",
+                rev: "main",
+                path: "components/sources/cu_zed_f9r",
+            ),
+            overrides: (
+                description: "Copper GPS/RTK positioning source for the SparkFun ZED-F9R with NTRIP corrections and dead reckoning",
+                keywords: [
+                    "gps",
+                    "rtk",
+                    "positioning",
+                    "ntrip",
+                    "gnss",
+                    "zed-f9r",
+                ],
+                repository: "https://gitlab.com/rdynamics/cu-zed-f9r",
+                host_os: ["linux"],
+            ),
+            visual_attribution: (
+                creator: "SparkFun Electronics",
+                source_url: "https://www.sparkfun.com/sparkfun-gps-rtk-dead-reckoning-breakout-zed-f9r-qwiic-gps-22693.html",
+                license: "CC BY-NC-SA 3.0",
+                license_url: "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+            ),
+        ),
+        (
             name: "cu-zenoh-bridge",
             source: GitHub(
                 path: "components/bridges/cu_zenoh_bridge",
