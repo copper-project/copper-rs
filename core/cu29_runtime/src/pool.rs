@@ -718,9 +718,8 @@ impl<T: ArrayLike> DerefMut for CuHandleInner<T> {
     }
 }
 
-// `HandleContent` is defined in `config.rs` so it lives in both the library and the
-// `cu29-rendercfg` bin (which includes config.rs standalone). Re-export it here for
-// pool consumers that don't otherwise reach for the config module.
+// Re-export the configuration policy here for pool consumers that don't otherwise
+// reach for the config module.
 pub use crate::config::HandleContent;
 
 /// Backing storage for a [`CuHandle`]: the payload mutex plus the per-handle touched flag

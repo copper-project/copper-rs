@@ -7,12 +7,12 @@ ping:
 dag-ping:
   #!/usr/bin/env bash
   set -euo pipefail
-  cargo run -p cu29-runtime --bin cu29-rendercfg -- --open ping_config.ron
+  cargo run -p cu29-rendercfg -- --open ping_config.ron
 
 dag-pong:
   #!/usr/bin/env bash
   set -euo pipefail
-  cargo run -p cu29-runtime --bin cu29-rendercfg -- --open pong_config.ron
+  cargo run -p cu29-rendercfg -- --open pong_config.ron
 
 pong:
   #!/usr/bin/env bash

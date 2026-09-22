@@ -1,11 +1,10 @@
-mod config;
 use clap::Parser;
-use config::{
-    ConfigGraphs, PortLookup, build_render_topology, read_configuration,
+use cu29_runtime::config::{
+    self, ConfigGraphs, PortLookup, build_render_topology, read_configuration,
     read_configuration_with_features, read_multi_configuration,
     read_multi_configuration_with_features,
 };
-pub use cu29_traits::*;
+use cu29_traits::{CuError, CuResult};
 use hashbrown::HashMap;
 use hashbrown::hash_map::Entry;
 use layout::adt::dag::NodeHandle;
@@ -5029,7 +5028,7 @@ mod tests {
     fn resource_owners_preserve_mission_scoping() {
         let config = read_configuration(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/tests/render_resource_tables.ron"
+            "/../cu29_runtime/tests/render_resource_tables.ron"
         ))
         .expect("resource config should load");
         let alpha =

@@ -606,7 +606,8 @@ mod tests {
         assert!(manifest.contains("[profile.debug-optimized]"));
         assert!(!manifest.contains("\n[workspace]\n"));
         assert!(justfile.contains("--profile debug-optimized"));
-        assert!(justfile.contains("cargo install --locked cu29-runtime --version \"9.9.9\""));
+        assert!(justfile.contains("cargo install --locked cu29-rendercfg --version \"9.9.9\""));
+        assert!(justfile.contains("cargo install --locked cu29-plan --version \"9.9.9\""));
         assert!(justfile.contains("dag:"));
         assert!(justfile.contains("[positional-arguments]"));
         assert!(justfile.contains("plan *options:"));

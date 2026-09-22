@@ -94,7 +94,7 @@ plan *options:
   fi
 
   cd "{{PLAN_WORKSPACE_ROOT}}"
-  cargo run -p cu29-runtime --bin cu29-plan -- "${args[@]}"
+  cargo run -p cu29-plan -- "${args[@]}"
 
 # Render observed timing from this example's default local Copper log.
 [positional-arguments]

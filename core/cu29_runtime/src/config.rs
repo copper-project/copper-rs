@@ -841,8 +841,7 @@ impl Display for Value {
 /// decide whether to write the payload bytes or just a metadata-only record for the
 /// frame. See `cu29_runtime::pool::CuHandle` for the runtime side.
 ///
-/// Defined here (instead of in `pool.rs`) so the type is reachable from both the
-/// library and the `cu29-rendercfg` binary, which compiles `config.rs` standalone.
+/// Defined here because this policy is part of the serialized runtime configuration.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[repr(u8)]
 pub enum HandleContent {
@@ -2631,15 +2630,11 @@ impl CuConfig {
     }
 
     /// The configured planner selection, if any (absent means serial execution).
-    // rendercfg.rs recompiles this file via `mod config;`, so pub helpers it
-    // does not call are dead code in that bin under `clippy --deny warnings`.
-    #[allow(dead_code)]
     pub fn planner_config(&self) -> Option<&PlannerConfig> {
         self.runtime.as_ref()?.planner.as_ref()
     }
 
     /// Execution strategy selected by the configuration.
-    #[allow(dead_code)]
     pub fn planner_kind(&self) -> PlannerKind {
         self.planner_config()
             .map_or(PlannerKind::Serial, PlannerConfig::kind)
@@ -4184,7 +4179,8 @@ fn validate_stateless_graph(graph: &CuGraph) -> CuResult<()> {
 
 #[cfg(feature = "std")]
 #[derive(Default)]
-pub(crate) struct PortLookup {
+#[doc(hidden)]
+pub struct PortLookup {
     pub inputs: HashMap<String, String>,
     pub outputs: HashMap<String, String>,
     pub default_input: Option<String>,
@@ -4193,7 +4189,8 @@ pub(crate) struct PortLookup {
 
 #[cfg(feature = "std")]
 #[derive(Clone)]
-pub(crate) struct RenderNode {
+#[doc(hidden)]
+pub struct RenderNode {
     pub id: String,
     pub type_name: String,
     pub flavor: Flavor,
@@ -4203,7 +4200,8 @@ pub(crate) struct RenderNode {
 
 #[cfg(feature = "std")]
 #[derive(Clone)]
-pub(crate) struct RenderConnection {
+#[doc(hidden)]
+pub struct RenderConnection {
     pub src: String,
     pub src_port: Option<String>,
     #[allow(dead_code)]
@@ -4216,7 +4214,8 @@ pub(crate) struct RenderConnection {
 }
 
 #[cfg(feature = "std")]
-pub(crate) struct RenderTopology {
+#[doc(hidden)]
+pub struct RenderTopology {
     pub nodes: Vec<RenderNode>,
     pub connections: Vec<RenderConnection>,
 }
@@ -4393,7 +4392,8 @@ impl CuConfig {
 }
 
 #[cfg(feature = "std")]
-pub(crate) fn build_render_topology(graph: &CuGraph, bridges: &[BridgeConfig]) -> RenderTopology {
+#[doc(hidden)]
+pub fn build_render_topology(graph: &CuGraph, bridges: &[BridgeConfig]) -> RenderTopology {
     let mut bridge_lookup = HashMap::new();
     for bridge in bridges {
         bridge_lookup.insert(bridge.id.as_str(), bridge);

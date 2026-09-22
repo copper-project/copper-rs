@@ -109,9 +109,9 @@ dag mission="":
 	cd "{{ROOT}}"
 	mission_value="{{mission}}"
 	if [[ -n "$mission_value" ]]; then
-		cargo run -p cu29-runtime --bin cu29-rendercfg -- --mission "$mission_value" --open examples/cu_runtime_matrix/copperconfig.ron
+		cargo run -p cu29-rendercfg -- --mission "$mission_value" --open examples/cu_runtime_matrix/copperconfig.ron
 	else
-		cargo run -p cu29-runtime --bin cu29-rendercfg -- --open examples/cu_runtime_matrix/copperconfig.ron
+		cargo run -p cu29-rendercfg -- --open examples/cu_runtime_matrix/copperconfig.ron
 	fi
 
 test-serial:

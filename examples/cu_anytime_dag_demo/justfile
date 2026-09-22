@@ -7,4 +7,4 @@ dag:
   #!/usr/bin/env bash
   set -euo pipefail
   cd "{{ROOT}}"
-  cargo run -p cu29-runtime --bin cu29-rendercfg -- --open examples/cu_anytime_dag_demo/copperconfig.ron
+  cargo run -p cu29-rendercfg -- --open examples/cu_anytime_dag_demo/copperconfig.ron

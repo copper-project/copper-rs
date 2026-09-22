@@ -175,10 +175,10 @@ test:
 	cargo +stable nextest run --all-targets --workspace {{WORKSPACE_EXCLUDES}}
 	cargo +stable nextest run --no-default-features
 
-# DAG rendering, resource usage labels, and config parsing regressions.
+# DAG/plan rendering, resource usage labels, and config parsing regressions.
 dag-check:
-	cargo +stable clippy -p cu29-runtime --bin cu29-rendercfg -- --deny warnings
-	cargo +stable test -p cu29-runtime --bin cu29-rendercfg
+	cargo +stable clippy -p cu29-rendercfg -p cu29-plan -- --deny warnings
+	cargo +stable test -p cu29-rendercfg -p cu29-plan
 
 # UDP carrier contracts and generated sender/session-router localhost integration.
 logstream-udp-check:
@@ -194,10 +194,10 @@ logstream-receiver-check:
 
 # Compile-time resource composition and DAG dependency rendering.
 resource-stack-check:
-	cargo +stable clippy -p cu29-runtime --bin cu29-rendercfg -p cu29-derive --lib -- --deny warnings
+	cargo +stable clippy -p cu29-rendercfg -p cu29-derive --lib -- --deny warnings
 	cargo +stable test -p cu29 --test resource_stack
 	cargo +stable test -p cu29-derive --lib resource
-	cargo +stable test -p cu29-runtime --bin cu29-rendercfg
+	cargo +stable test -p cu29-rendercfg
 	cargo +stable check -p cu29 --no-default-features --target thumbv7em-none-eabihf
 
 # Resource stacking, HC-12 startup, serial bridge/framing, and DAG ownership.
@@ -208,7 +208,7 @@ hc12-check:
 	cargo +stable test -p cu-hc12 -p cu-serial -p cu-serial-bridge -p cu29-logstream-serial -p cu-linux-resources --features cu29/reflect
 	cargo +stable test -p cu29 --test resource_stack
 	cargo +stable test -p cu29-derive --lib resource
-	cargo +stable test -p cu29-runtime --bin cu29-rendercfg
+	cargo +stable test -p cu29-rendercfg
 	cargo +stable test -p cu29-logstream --test pacing
 	cargo +stable check -p cu-hc12 -p cu-serial -p cu-serial-bridge -p cu29-logstream-serial --no-default-features
 
@@ -576,9 +576,9 @@ dag mission="":
 	cd "{{ROOT}}"
 	mission_value="{{mission}}"
 	if [[ -n "$mission_value" ]]; then
-		cargo run -p cu29-runtime --bin cu29-rendercfg -- --mission "$mission_value" --open "$cfg_path"
+		cargo run -p cu29-rendercfg -- --mission "$mission_value" --open "$cfg_path"
 	else
-		cargo run -p cu29-runtime --bin cu29-rendercfg -- --open "$cfg_path"
+		cargo run -p cu29-rendercfg -- --open "$cfg_path"
 	fi
 
 # Helpers for managing git worktrees for different branches.
