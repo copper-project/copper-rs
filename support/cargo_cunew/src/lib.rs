@@ -598,6 +598,7 @@ mod tests {
 
         let manifest = fs::read_to_string(project.join("Cargo.toml")).expect("manifest");
         let justfile = fs::read_to_string(project.join("justfile")).expect("justfile");
+        let plan = fs::read_to_string(project.join("src/plan.rs")).expect("plan helper");
 
         assert!(manifest.contains("edition = \"2024\""));
         assert!(manifest.contains("version = \"9.9.9\""));
@@ -607,13 +608,14 @@ mod tests {
         assert!(!manifest.contains("\n[workspace]\n"));
         assert!(justfile.contains("--profile debug-optimized"));
         assert!(justfile.contains("cargo install --locked cu29-rendercfg --version \"9.9.9\""));
-        assert!(justfile.contains("cargo install --locked cu29-plan --version \"9.9.9\""));
         assert!(justfile.contains("dag:"));
         assert!(justfile.contains("[positional-arguments]"));
         assert!(justfile.contains("plan *options:"));
         assert!(justfile.contains("plan-log:"));
-        assert!(justfile.contains("log-stats"));
-        assert!(justfile.contains("--bin cu29-plan"));
+        assert!(justfile.contains("cargo run --quiet --bin hello-copper-plan"));
+        assert!(plan.contains("#[derive(Debug, Parser)]"));
+        assert!(plan.contains("\"9.9.9\""));
+        assert!(plan.contains("\"log-stats\""));
     }
 
     #[test]
@@ -647,6 +649,8 @@ mod tests {
         let app_manifest = fs::read_to_string(project.join("apps/cu_example_app/Cargo.toml"))
             .expect("app manifest");
         let justfile = fs::read_to_string(project.join("justfile")).expect("justfile");
+        let plan = fs::read_to_string(project.join("tools/cu29_plan_helper/src/main.rs"))
+            .expect("plan helper");
 
         assert!(manifest.contains("core/cu29"));
         assert!(manifest.contains("core/cu29_export"));
@@ -656,7 +660,9 @@ mod tests {
         assert!(justfile.contains("cu29-rendercfg"));
         assert!(justfile.contains("cu29-plan"));
         assert!(justfile.contains("plan-log:"));
-        assert!(justfile.contains("log-stats"));
+        assert!(justfile.contains("cargo run --quiet -p cu29-plan-helper"));
+        assert!(plan.contains("#[derive(Debug, Parser)]"));
+        assert!(plan.contains("\"log-stats\""));
         assert!(!project.join(".git").exists());
     }
 
@@ -689,10 +695,12 @@ mod tests {
 
         let manifest = fs::read_to_string(project.join("Cargo.toml")).expect("manifest");
         let justfile = fs::read_to_string(project.join("justfile")).expect("justfile");
+        let plan = fs::read_to_string(project.join("src/plan.rs")).expect("plan helper");
 
         assert!(manifest.contains("git = \"https://github.com/copper-project/copper-rs.git\""));
         assert!(manifest.contains("branch = \"main\""));
-        assert!(justfile.contains("cargo install --locked --git"));
-        assert!(justfile.contains("--branch \"main\""));
+        assert!(plan.contains("https://github.com/copper-project/copper-rs.git"));
+        assert!(plan.contains("command.args([\"--branch\", r#\"main\"#])"));
+        assert!(!justfile.contains("--bin cu29-plan cu29-plan"));
     }
 }
