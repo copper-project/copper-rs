@@ -65,11 +65,17 @@ The generated catalog resolves visuals in this order:
 3. kind asset
 4. `unclassified` kind asset
 
+For third-party photos, set `visual_attribution` on the entry with the creator,
+source URL, license name, and license URL. The catalog displays this credit next
+to the photo. The `cu-zed-f9r.jpg` photo is from SparkFun Electronics and is
+licensed under CC BY-NC-SA 3.0; the unmodified product image is credited in its
+entry separately from the Apache-2.0 crate license.
+
 ## Index Format
 
-`index.ron` is a list of source entries. For the current branch experiment all
-entries point at GitHub on `gbin/catalog`, and the generator can resolve them
-locally before that branch is pushed.
+`index.ron` is a list of source entries. First-party GitHub entries can resolve
+from the local checkout during development; external sources are fetched from
+their repository or package registry.
 
 ```ron
 (
@@ -92,6 +98,10 @@ Supported sources:
 - `GitHub`
   - Fetches `Cargo.toml` from the GitHub repo/path/rev
   - Also fetches the repo root `Cargo.toml` so `*.workspace = true` fields work
+- `GitLab`
+  - Fetches `Cargo.toml` from the GitLab repo/path/rev
+  - Also fetches the repo root `Cargo.toml` for workspace fields
+  - Requires explicit `repo` and `rev`
 - `CratesIo`
   - Fetches package metadata from the crates.io API
   - For now, Copper-specific classification should come from `overrides`

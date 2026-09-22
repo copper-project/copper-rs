@@ -53,6 +53,15 @@ struct CatalogIndexEntry {
     source: CatalogSource,
     #[serde(default)]
     overrides: CatalogOverrides,
+    visual_attribution: Option<VisualAttribution>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct VisualAttribution {
+    creator: String,
+    source_url: String,
+    license: String,
+    license_url: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -66,6 +75,17 @@ enum CatalogSource {
         rev: Option<String>,
         path: String,
     },
+    GitLab {
+        repo: String,
+        rev: String,
+        path: String,
+    },
+}
+
+#[derive(Clone, Copy)]
+enum GitHost {
+    GitHub,
+    GitLab,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -128,6 +148,7 @@ struct ResolvedCatalogEntry {
     license: Option<String>,
     copper: Option<CopperMetadataResolved>,
     visual_url: Option<String>,
+    visual_attribution: Option<VisualAttribution>,
     metadata_warnings: Vec<String>,
     source: ResolvedCatalogSource,
 }
@@ -264,9 +285,17 @@ fn resolve_entry(
     entry: &CatalogIndexEntry,
 ) -> Result<ResolvedCatalogEntry> {
     let source_metadata = match &entry.source {
-        CatalogSource::GitHub { repo, rev, path } => {
-            resolve_github_source(resolver, repo.as_deref(), rev.as_deref(), path)
-                .with_context(|| format!("failed to resolve GitHub entry {}", entry.name))?
+        CatalogSource::GitHub { repo, rev, path } => resolve_git_source(
+            resolver,
+            GitHost::GitHub,
+            repo.as_deref(),
+            rev.as_deref(),
+            path,
+        )
+        .with_context(|| format!("failed to resolve GitHub entry {}", entry.name))?,
+        CatalogSource::GitLab { repo, rev, path } => {
+            resolve_git_source(resolver, GitHost::GitLab, Some(repo), Some(rev), path)
+                .with_context(|| format!("failed to resolve GitLab entry {}", entry.name))?
         }
         CatalogSource::CratesIo {
             crate_name,
@@ -324,32 +353,41 @@ fn resolve_entry(
         license,
         copper,
         visual_url: None,
+        visual_attribution: entry.visual_attribution.clone(),
         metadata_warnings,
         source: source_metadata.source,
     })
 }
 
-fn resolve_github_source(
+fn resolve_git_source(
     resolver: &Resolver<'_>,
+    host: GitHost,
     repo: Option<&str>,
     rev: Option<&str>,
     path: &str,
 ) -> Result<SourceMetadata> {
     let repo = repo
         .map(ToOwned::to_owned)
-        .or_else(|| resolver.defaults.github_repo.clone())
-        .ok_or_else(|| anyhow!("missing GitHub repo and no default github_repo configured"))?;
+        .or_else(|| match host {
+            GitHost::GitHub => resolver.defaults.github_repo.clone(),
+            GitHost::GitLab => None,
+        })
+        .ok_or_else(|| anyhow!("missing Git repository"))?;
     let rev = rev
         .map(ToOwned::to_owned)
-        .or_else(|| resolver.defaults.github_rev.clone())
-        .ok_or_else(|| anyhow!("missing GitHub rev and no default github_rev configured"))?;
+        .or_else(|| match host {
+            GitHost::GitHub => resolver.defaults.github_rev.clone(),
+            GitHost::GitLab => None,
+        })
+        .ok_or_else(|| anyhow!("missing Git revision"))?;
 
     let local_manifest_path = resolver
         .local_root
         .map(|local_root| local_root.join(path).join("Cargo.toml"));
-    let use_local_checkout = local_manifest_path
-        .as_ref()
-        .is_some_and(|manifest_path| manifest_path.is_file());
+    let use_local_checkout = matches!(host, GitHost::GitHub)
+        && local_manifest_path
+            .as_ref()
+            .is_some_and(|manifest_path| manifest_path.is_file());
 
     let crate_manifest = if use_local_checkout {
         let manifest_path = local_manifest_path
@@ -360,7 +398,7 @@ fn resolve_github_source(
     } else {
         fetch_text(
             &resolver.client,
-            &github_raw_url(&repo, &rev, &format!("{path}/Cargo.toml")),
+            &git_raw_url(host, &repo, &rev, &format!("{path}/Cargo.toml")),
         )?
     };
 
@@ -375,7 +413,10 @@ fn resolve_github_source(
             )
         })?
     } else {
-        fetch_text(&resolver.client, &github_raw_url(&repo, &rev, "Cargo.toml"))?
+        fetch_text(
+            &resolver.client,
+            &git_raw_url(host, &repo, &rev, "Cargo.toml"),
+        )?
     };
 
     let manifest: Value = toml::from_str(&crate_manifest)
@@ -395,7 +436,8 @@ fn resolve_github_source(
 
     let readme_path = resolve_package_string(&manifest, Some(&workspace_manifest), "readme");
     let readme_url = if let Some(readme_path) = readme_path {
-        Some(github_blob_url(
+        Some(git_blob_url(
+            host,
             &repo,
             &rev,
             &format!("{path}/{readme_path}"),
@@ -405,7 +447,12 @@ fn resolve_github_source(
             .local_root
             .is_some_and(|local_root| local_root.join(path).join("README.md").is_file())
     {
-        Some(github_blob_url(&repo, &rev, &format!("{path}/README.md")))
+        Some(git_blob_url(
+            host,
+            &repo,
+            &rev,
+            &format!("{path}/README.md"),
+        ))
     } else {
         None
     };
@@ -420,14 +467,23 @@ fn resolve_github_source(
         license,
         copper,
         source: ResolvedCatalogSource {
-            source_type: "github".to_owned(),
+            source_type: match host {
+                GitHost::GitHub => "github",
+                GitHost::GitLab => "gitlab",
+            }
+            .to_owned(),
             repo: Some(repo.clone()),
             rev: Some(rev.clone()),
             path: Some(path.to_owned()),
             crate_name: None,
             version: Some(rev.clone()),
-            source_url: github_tree_url(&repo, &rev, path),
-            manifest_url: Some(github_blob_url(&repo, &rev, &format!("{path}/Cargo.toml"))),
+            source_url: git_tree_url(host, &repo, &rev, path),
+            manifest_url: Some(git_blob_url(
+                host,
+                &repo,
+                &rev,
+                &format!("{path}/Cargo.toml"),
+            )),
             readme_url,
         },
     })
@@ -714,8 +770,13 @@ fn attach_visual_urls(
     let kinds_dir = assets_root.join("kinds");
 
     for entry in entries {
-        entry.visual_url =
-            resolve_visual_url(entry, &components_dir, &domains_dir, &kinds_dir, &output_dir)?;
+        entry.visual_url = resolve_visual_url(
+            entry,
+            &components_dir,
+            &domains_dir,
+            &kinds_dir,
+            &output_dir,
+        )?;
     }
 
     Ok(())
@@ -755,7 +816,8 @@ fn find_visual_asset(
             })
         })
         .or_else(|| {
-            entry.copper
+            entry
+                .copper
                 .as_ref()
                 .and_then(|copper| find_asset_by_stem(kinds_dir, &copper.kind))
         })
@@ -874,16 +936,25 @@ fn escape_markdown_cell(value: &str) -> String {
     value.replace('|', "\\|").replace('\n', " ")
 }
 
-fn github_raw_url(repo: &str, rev: &str, path: &str) -> String {
-    format!("https://raw.githubusercontent.com/{repo}/{rev}/{path}")
+fn git_raw_url(host: GitHost, repo: &str, rev: &str, path: &str) -> String {
+    match host {
+        GitHost::GitHub => format!("https://raw.githubusercontent.com/{repo}/{rev}/{path}"),
+        GitHost::GitLab => format!("https://gitlab.com/{repo}/-/raw/{rev}/{path}"),
+    }
 }
 
-fn github_tree_url(repo: &str, rev: &str, path: &str) -> String {
-    format!("https://github.com/{repo}/tree/{rev}/{path}")
+fn git_tree_url(host: GitHost, repo: &str, rev: &str, path: &str) -> String {
+    match host {
+        GitHost::GitHub => format!("https://github.com/{repo}/tree/{rev}/{path}"),
+        GitHost::GitLab => format!("https://gitlab.com/{repo}/-/tree/{rev}/{path}"),
+    }
 }
 
-fn github_blob_url(repo: &str, rev: &str, path: &str) -> String {
-    format!("https://github.com/{repo}/blob/{rev}/{path}")
+fn git_blob_url(host: GitHost, repo: &str, rev: &str, path: &str) -> String {
+    match host {
+        GitHost::GitHub => format!("https://github.com/{repo}/blob/{rev}/{path}"),
+        GitHost::GitLab => format!("https://gitlab.com/{repo}/-/blob/{rev}/{path}"),
+    }
 }
 
 const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
@@ -894,23 +965,23 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
     <title>copper-rs component catalog</title>
     <style>
       :root {
-        --bg: #171c27;
-        --bg-deep: #0f141c;
-        --panel: rgba(27, 34, 47, 0.9);
-        --panel-strong: rgba(35, 43, 59, 0.96);
-        --field-bg: rgba(11, 15, 24, 0.92);
-        --line: rgba(111, 145, 215, 0.22);
-        --line-strong: rgba(111, 145, 215, 0.44);
-        --text: #eef3ff;
-        --muted: #aab6cd;
-        --accent: #73a8ff;
-        --accent-strong: #9ac8ff;
-        --chip: rgba(115, 168, 255, 0.12);
-        --chip-text: #dbe8ff;
-        --warn: #ffcc7a;
-        --warn-bg: rgba(255, 204, 122, 0.14);
-        --warn-line: rgba(255, 204, 122, 0.28);
-        --shadow: 0 24px 72px rgba(4, 8, 17, 0.42);
+        --bg: #1e1e2e;
+        --bg-deep: #11111b;
+        --panel: rgba(49, 50, 68, 0.9);
+        --panel-strong: rgba(69, 71, 90, 0.96);
+        --field-bg: rgba(24, 24, 37, 0.92);
+        --line: rgba(180, 190, 254, 0.22);
+        --line-strong: rgba(180, 190, 254, 0.44);
+        --text: #cdd6f4;
+        --muted: #bac2de;
+        --accent: #b4befe;
+        --accent-strong: #cba6f7;
+        --chip: rgba(180, 190, 254, 0.12);
+        --chip-text: #cdd6f4;
+        --warn: #f38ba8;
+        --warn-bg: rgba(243, 139, 168, 0.14);
+        --warn-line: rgba(243, 139, 168, 0.28);
+        --shadow: 0 24px 72px rgba(17, 17, 27, 0.42);
       }
 
       * {
@@ -923,9 +994,9 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
         font-family: "Avenir Next", "Segoe UI Variable", "Inter", "Helvetica Neue", Arial, sans-serif;
         color: var(--text);
         background:
-          radial-gradient(circle at top left, rgba(115, 168, 255, 0.12), transparent 34%),
-          radial-gradient(circle at 86% 14%, rgba(71, 95, 150, 0.18), transparent 24%),
-          linear-gradient(180deg, #232938 0%, var(--bg) 28%, var(--bg-deep) 100%);
+          radial-gradient(circle at top left, rgba(203, 166, 247, 0.12), transparent 34%),
+          radial-gradient(circle at 86% 14%, rgba(180, 190, 254, 0.18), transparent 24%),
+          linear-gradient(180deg, #313244 0%, var(--bg) 28%, var(--bg-deep) 100%);
       }
 
       body::before {
@@ -934,8 +1005,8 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
         inset: 0;
         pointer-events: none;
         background-image:
-          linear-gradient(rgba(136, 156, 204, 0.035) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(136, 156, 204, 0.035) 1px, transparent 1px);
+          linear-gradient(rgba(180, 190, 254, 0.035) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(180, 190, 254, 0.035) 1px, transparent 1px);
         background-size: 34px 34px;
         mask-image: linear-gradient(180deg, black 0%, rgba(0, 0, 0, 0.88) 54%, transparent 96%);
       }
@@ -952,7 +1023,7 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
         padding: 24px 28px 24px;
         border: 1px solid var(--line);
         border-radius: 24px;
-        background: linear-gradient(180deg, rgba(31, 39, 54, 0.96), rgba(20, 25, 36, 0.92));
+        background: linear-gradient(180deg, rgba(49, 50, 68, 0.96), rgba(24, 24, 37, 0.92));
         box-shadow: var(--shadow);
       }
 
@@ -1018,11 +1089,11 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
         width: 100%;
         padding: 15px 16px;
         border-radius: 14px;
-        border: 1px solid rgba(255, 255, 255, 0.07);
+        border: 1px solid var(--line);
         background: var(--field-bg);
         color: var(--text);
         font: inherit;
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+        box-shadow: inset 0 1px 0 rgba(205, 214, 244, 0.02);
         transition:
           border-color 120ms ease,
           box-shadow 120ms ease,
@@ -1030,14 +1101,14 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
       }
 
       .field input::placeholder {
-        color: #7f8ca6;
+        color: #9399b2;
       }
 
       .field input:focus,
       .field select:focus {
         outline: none;
         border-color: var(--line-strong);
-        box-shadow: 0 0 0 4px rgba(115, 168, 255, 0.12);
+        box-shadow: 0 0 0 4px rgba(180, 190, 254, 0.12);
       }
 
       .meta {
@@ -1053,7 +1124,7 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
         padding: 9px 14px;
         border: 1px solid var(--line);
         border-radius: 999px;
-        background: rgba(9, 12, 19, 0.68);
+        background: rgba(24, 24, 37, 0.68);
       }
 
       .grid {
@@ -1080,7 +1151,7 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
       .card:hover {
         transform: translateY(-2px);
         border-color: var(--line-strong);
-        background: linear-gradient(180deg, rgba(39, 48, 66, 0.98), rgba(22, 28, 39, 0.94));
+        background: linear-gradient(180deg, rgba(69, 71, 90, 0.98), rgba(49, 50, 68, 0.94));
       }
 
       .card-media {
@@ -1090,10 +1161,10 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
         display: flex;
         align-items: center;
         justify-content: center;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        border-bottom: 1px solid var(--line);
         background:
-          radial-gradient(circle at top left, rgba(115, 168, 255, 0.18), transparent 42%),
-          linear-gradient(180deg, rgba(18, 24, 34, 0.98), rgba(10, 13, 19, 0.94));
+          radial-gradient(circle at top left, rgba(203, 166, 247, 0.18), transparent 42%),
+          linear-gradient(180deg, rgba(30, 30, 46, 0.98), rgba(24, 24, 37, 0.94));
       }
 
       .card-media img {
@@ -1101,7 +1172,21 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
         height: 100%;
         display: block;
         object-fit: contain;
-        filter: drop-shadow(0 12px 28px rgba(0, 0, 0, 0.32));
+        filter: drop-shadow(0 12px 28px rgba(17, 17, 27, 0.32));
+      }
+
+      .card-media.with-credit {
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .card-media.with-credit img {
+        flex: 1;
+        min-height: 0;
+      }
+
+      .card-media small {
+        color: var(--muted);
       }
 
       .card-header {
@@ -1128,8 +1213,8 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
       }
 
       .kind {
-        --kind-border: rgba(115, 168, 255, 0.18);
-        --kind-bg: rgba(115, 168, 255, 0.14);
+        --kind-border: rgba(180, 190, 254, 0.18);
+        --kind-bg: rgba(180, 190, 254, 0.14);
         --kind-text: var(--accent-strong);
         padding: 6px 10px;
         border-radius: 999px;
@@ -1142,69 +1227,69 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
       }
 
       .kind-source {
-        --kind-border: rgba(132, 211, 255, 0.3);
-        --kind-bg: rgba(132, 211, 255, 0.12);
-        --kind-text: #8edcff;
+        --kind-border: rgba(137, 180, 250, 0.3);
+        --kind-bg: rgba(137, 180, 250, 0.12);
+        --kind-text: #89b4fa;
       }
 
       .kind-sink {
-        --kind-border: rgba(255, 202, 147, 0.32);
-        --kind-bg: rgba(255, 202, 147, 0.12);
-        --kind-text: #ffd4a6;
+        --kind-border: rgba(242, 205, 205, 0.32);
+        --kind-bg: rgba(242, 205, 205, 0.12);
+        --kind-text: #f2cdcd;
       }
 
       .kind-bridge {
-        --kind-border: rgba(138, 240, 228, 0.3);
-        --kind-bg: rgba(138, 240, 228, 0.12);
-        --kind-text: #93f4e8;
+        --kind-border: rgba(203, 166, 247, 0.3);
+        --kind-bg: rgba(203, 166, 247, 0.12);
+        --kind-text: #cba6f7;
       }
 
       .kind-task {
-        --kind-border: rgba(154, 239, 175, 0.3);
-        --kind-bg: rgba(154, 239, 175, 0.12);
-        --kind-text: #a8f5b9;
+        --kind-border: rgba(166, 227, 161, 0.3);
+        --kind-bg: rgba(166, 227, 161, 0.12);
+        --kind-text: #a6e3a1;
       }
 
       .kind-payload {
-        --kind-border: rgba(255, 179, 154, 0.3);
-        --kind-bg: rgba(255, 179, 154, 0.12);
-        --kind-text: #ffc0ab;
+        --kind-border: rgba(245, 194, 231, 0.3);
+        --kind-bg: rgba(245, 194, 231, 0.12);
+        --kind-text: #f5c2e7;
       }
 
       .kind-resource {
-        --kind-border: rgba(197, 229, 242, 0.3);
-        --kind-bg: rgba(197, 229, 242, 0.12);
-        --kind-text: #d7eff8;
+        --kind-border: rgba(180, 190, 254, 0.3);
+        --kind-bg: rgba(180, 190, 254, 0.12);
+        --kind-text: #b4befe;
       }
 
       .kind-monitor {
-        --kind-border: rgba(136, 224, 255, 0.3);
-        --kind-bg: rgba(136, 224, 255, 0.12);
-        --kind-text: #95e5ff;
+        --kind-border: rgba(243, 139, 168, 0.3);
+        --kind-bg: rgba(243, 139, 168, 0.12);
+        --kind-text: #f38ba8;
       }
 
       .kind-codec {
-        --kind-border: rgba(255, 224, 139, 0.3);
-        --kind-bg: rgba(255, 224, 139, 0.12);
-        --kind-text: #ffe7a1;
+        --kind-border: rgba(245, 224, 220, 0.3);
+        --kind-bg: rgba(245, 224, 220, 0.12);
+        --kind-text: #f5e0dc;
       }
 
       .kind-lib {
-        --kind-border: rgba(214, 230, 255, 0.3);
-        --kind-bg: rgba(214, 230, 255, 0.12);
-        --kind-text: #e0ecff;
+        --kind-border: rgba(186, 194, 222, 0.3);
+        --kind-bg: rgba(186, 194, 222, 0.12);
+        --kind-text: #bac2de;
       }
 
       .kind-testing {
-        --kind-border: rgba(240, 176, 255, 0.3);
-        --kind-bg: rgba(240, 176, 255, 0.12);
-        --kind-text: #f3bcff;
+        --kind-border: rgba(245, 194, 231, 0.3);
+        --kind-bg: rgba(245, 194, 231, 0.12);
+        --kind-text: #f5c2e7;
       }
 
       .kind-unclassified {
-        --kind-border: rgba(217, 223, 236, 0.3);
-        --kind-bg: rgba(217, 223, 236, 0.12);
-        --kind-text: #edf1fb;
+        --kind-border: rgba(147, 153, 178, 0.3);
+        --kind-bg: rgba(147, 153, 178, 0.12);
+        --kind-text: #9399b2;
       }
 
       .kind-missing {
@@ -1232,13 +1317,13 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
         border-radius: 999px;
         background: var(--chip);
         color: var(--chip-text);
-        border: 1px solid rgba(255, 255, 255, 0.06);
+        border: 1px solid var(--line);
         font-size: 0.82rem;
       }
 
       .chip-warning {
         background: var(--warn-bg);
-        color: #ffe2b2;
+        color: var(--warn);
         border-color: var(--warn-line);
       }
 
@@ -1274,7 +1359,7 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
         padding: 22px 24px;
         border: 1px solid var(--line);
         border-radius: 20px;
-        background: linear-gradient(180deg, rgba(24, 31, 43, 0.94), rgba(17, 22, 31, 0.94));
+        background: linear-gradient(180deg, rgba(49, 50, 68, 0.94), rgba(24, 24, 37, 0.94));
         box-shadow: var(--shadow);
       }
 
@@ -1470,8 +1555,9 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
           return "";
         }
         return `
-          <div class="card-media">
+          <div class="card-media${entry.visual_attribution ? " with-credit" : ""}">
             <img src="${entry.visual_url}" alt="${entry.package_name} visual" loading="lazy" />
+            ${entry.visual_attribution ? `<small>Photo: <a href="${entry.visual_attribution.source_url}" target="_blank" rel="noreferrer">${entry.visual_attribution.creator}</a> · <a href="${entry.visual_attribution.license_url}" target="_blank" rel="noreferrer">${entry.visual_attribution.license}</a></small>` : ""}
           </div>
         `;
       }
