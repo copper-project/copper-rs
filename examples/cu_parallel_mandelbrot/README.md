@@ -53,7 +53,7 @@ Run these from this example directory:
 - `just monitor-parallel`
 - `just serial`
 - `just viewer-parallel`
-- `just graph-view copperconfig.ron graph.svg log_only`
+- `just graph copperconfig.ron graph.svg log_only`
 - `just logreader`
 - `just fsck`
 

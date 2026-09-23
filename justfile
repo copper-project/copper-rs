@@ -560,6 +560,24 @@ extract-log dev out="logs/embedded_0.copper":
 	echo "Reading Cu29 partition $PART -> $OUT"
 	sudo dd if="$PART" of="$OUT" bs=4M status=progress conv=fsync
 
+# Compatibility alias for rendering the current Copper config from the working directory.
+dag mission="":
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	echo "just dag is deprecated; use just graph <config>" >&2
+	invocation_dir="{{invocation_directory()}}"
+	cfg_path="${invocation_dir}/copperconfig.ron"
+	if [[ ! -f "$cfg_path" ]]; then
+		cfg_path="${invocation_dir}/multi_copper.ron"
+		if [[ ! -f "$cfg_path" ]]; then
+			echo "No copperconfig.ron or multi_copper.ron found in ${invocation_dir}" >&2
+			exit 1
+		fi
+	fi
+
+	just graph "$cfg_path" graph.svg "{{mission}}"
+
 # Helpers for managing git worktrees for different branches.
 wt branch:
   #!/usr/bin/env bash

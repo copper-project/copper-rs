@@ -85,9 +85,9 @@ cargo run
 In about 30 seconds, you have a typed `source → task → sink` graph that prints its
 first messages and records `logs/hello-copper.copper`. Start with
 `copperconfig.ron`, `src/main.rs`, and `src/tasks.rs`; the generated `justfile`
-also provides helpers for logs, CopperLists, topology (`just graph-view`), the exact
-generated process schedule (`just schedule-view`), post-execution timing from the default
-Copper log (`just schedule-view-log`), and replay. Host projects also include
+also provides helpers for logs, CopperLists, topology (`just graph`), the exact
+generated process schedule (`just sched`), post-execution timing from the default
+Copper log (`just sched-log`), and replay. Host projects also include
 `just pgs-baseline`, `just pgs-optimize`, `just pgs-candidate`, and
 `just pgs-measure`; the starter `schedule.ron` is a conservative placeholder to tune
 for the real workload. Project creation asks whether the target is bare metal/no_std

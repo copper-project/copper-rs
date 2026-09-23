@@ -95,8 +95,9 @@ The generated project includes helper commands in its `justfile`:
 * `just cl`: Extract CopperLists (sequences of operations) from the application's log output.
 * `just resim`: Replay the recorded log once into a fresh replay log.
 * `just resim-debug`: Start the replay-backed remote debug server manually.
-* `just graph-view`: Render the graph to `graph.svg`; `just graph-view-log` adds observed timing from a Copper log.
-* `just schedule-view`: Render the exact generated per-CopperList process order to `schedule.svg`; `just schedule-view-log` adds observed timing.
+* `just graph`: Render the graph to `graph.svg`; `just graph-log` adds observed timing from a Copper log.
+* `just dag`: Compatibility alias for `graph`; prints a deprecation notice.
+* `just sched`: Render the exact generated per-CopperList process order to `schedule.svg`; `just sched-log` adds observed timing.
 * `just pgs-baseline`, `pgs-optimize`, `pgs-candidate`, `pgs-measure`: host-project PGS loop. `schedule.ron` starts with the template's `src → sink` chain, CPU 0, `Fair`, and a placeholder deadline that must be tuned. Artifacts and ranked SVGs live under `target/pgs`.
 
 Viewer recipes accept explicit config, output, and log paths. The generated Rust
@@ -108,7 +109,7 @@ The replay recipes use the generated `debug-optimized` Cargo profile. It enables
 without losing Copper `debug!` structured logs, debug assertions, or debug information.
 
 Workspace recipes accept `app=<package>` and explicit paths, for example
-`just graph-view cu_example_app`.
+`just graph cu_example_app`.
 
 ## Replay Target Contract
 

@@ -36,8 +36,8 @@ Typical commands:
 - `just -f examples/cu_runtime_matrix/justfile test-async`
 - `just -f examples/cu_runtime_matrix/justfile test-parallel`
 - `just -f examples/cu_runtime_matrix/justfile test-both`
-- `just -f examples/cu_runtime_matrix/justfile graph-view`
-- `just -f examples/cu_runtime_matrix/justfile graph-view copperconfig.ron graph.svg ManyToMany`
+- `just -f examples/cu_runtime_matrix/justfile graph`
+- `just -f examples/cu_runtime_matrix/justfile graph copperconfig.ron graph.svg ManyToMany`
 
 For quick performance numbers:
 
@@ -65,4 +65,4 @@ Background mission numbers need care:
 - they can sample outputs instead of producing one output per input
 - compare background modes against the same background mission, not against the foreground mission
 
-`just graph-view` renders all missions on one page by default. Pass a mission name as the third argument to focus on one.
+`just graph` renders all missions on one page by default. Pass a mission name as the third argument to focus on one.

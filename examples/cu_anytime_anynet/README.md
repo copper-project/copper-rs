@@ -20,7 +20,7 @@ recompiling a different topology.
 Render the complete static graph, including both missions, from this directory:
 
 ```sh
-just graph-view
+just graph
 ```
 
 ## Quick start

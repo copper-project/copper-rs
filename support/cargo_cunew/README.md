@@ -19,7 +19,7 @@ It also supports:
 
 Interactive generation asks whether the project targets bare metal/no_std. For
 noninteractive generation, `--target host` is the default. Both templates offer
-`graph-view[-log]` and `schedule-view[-log]`; host templates also include the
+`graph[-log]` and `sched[-log]`; host templates also include the
 four-step `pgs-*` workflow.
 The target choice controls PGS scaffolding; embedded runtime and dependency setup
 still depends on the board and must be adapted separately.

@@ -589,8 +589,8 @@ mod tests {
         assert!(manifest.contains("[profile.debug-optimized]"));
         assert!(!manifest.contains("\n[workspace]\n"));
         assert!(justfile.contains("--profile debug-optimized"));
-        assert!(justfile.contains("graph-view config="));
-        assert!(justfile.contains("schedule-view-log config="));
+        assert!(justfile.contains("graph config="));
+        assert!(justfile.contains("sched-log config="));
         assert!(justfile.contains("pgs-optimize candidates="));
         assert!(viewer.contains("cu29-graph-view"));
         assert!(viewer.contains("cu29-schedule-view"));
@@ -639,9 +639,9 @@ mod tests {
         assert!(manifest.contains("[profile.debug-optimized]"));
         assert!(app_manifest.contains("edition = \"2024\""));
         assert!(justfile.contains("--profile debug-optimized"));
-        assert!(justfile.contains("graph-view app="));
-        assert!(justfile.contains("schedule-view app="));
-        assert!(justfile.contains("schedule-view-log app="));
+        assert!(justfile.contains("graph app="));
+        assert!(justfile.contains("sched app="));
+        assert!(justfile.contains("sched-log app="));
         assert!(justfile.contains("pgs-measure candidates="));
         assert!(viewer.contains("#[derive(Debug, Parser)]"));
         assert!(!viewer.contains("env ="));

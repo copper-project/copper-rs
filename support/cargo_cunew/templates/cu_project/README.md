@@ -10,7 +10,7 @@ This template bootstraps a single-crate Copper project for quick experiments.
 - `src/tasks.rs`: sample tasks.
 - `copperconfig.ron`: runtime configuration.
 - `src/view.rs`: Rust launcher for the graph and schedule viewers.
-- `justfile`: `log`, `cl`, `resim`, `resim-debug`, `graph-view[-log]`, and `schedule-view[-log]` recipes.
+- `justfile`: `log`, `cl`, `resim`, `resim-debug`, `graph[-log]`, and `sched[-log]` recipes; `dag` remains as a deprecated graph alias.
 {% if pgs_enabled %}
 - `schedule.ron`: starter scheduling contract for `src → sink`; tune its timing and CPU placement.
 - `src/pgs.rs` and `src/pgs_candidate.rs`: offline PGS workflow and compile-time selected candidate.

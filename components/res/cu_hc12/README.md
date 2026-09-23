@@ -67,7 +67,7 @@ board's delay and SET-pin resources. The driver and adapters support `no_std`.
 Bind a `RadioBridge` to `radio.serial`; its channels are `bytes_rx` and `bytes_tx`,
 with `cu_serial_bridge::ByteChunk` payloads. See the complete
 [echo configuration](examples/echo.ron) and [application](examples/echo.rs).
-From this directory, `just graph-view examples/echo.ron graph.svg` writes a diagram showing resource users and
+From this directory, `just graph examples/echo.ron graph.svg` writes a diagram showing resource users and
 provider-to-consumer arrows. `just echo` runs the hardware example after you edit
 its device and channel; run the echo application on only one end of a pair.
 Logs go into this component's `logs/` directory.

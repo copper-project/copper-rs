@@ -11,5 +11,5 @@ See the crate cu29 for more information about the Copper project.
 - `just logreader` — extract logs from `logs/caterpillar.copper` into `../../target/debug/cu29_log_index`.
 - `just resim` — rerun the logged mission from `logs/caterpillar.copper`.
 - `just resim-debug` — start the replay-backed remote debug server for `logs/caterpillar.copper`.
-- `just graph-view-log copperconfig.ron graph-log.svg logs/caterpillar.copper cu-caterpillar-logreader cu-caterpillar` — render the graph with observed timing.
-- `just schedule-view-log copperconfig.ron schedule-log.svg logs/caterpillar.copper cu-caterpillar-logreader cu-caterpillar` — append observed timing to the schedule SVG.
+- `just graph-log copperconfig.ron graph-log.svg logs/caterpillar.copper cu-caterpillar-logreader cu-caterpillar` — render the graph with observed timing.
+- `just sched-log copperconfig.ron schedule-log.svg logs/caterpillar.copper cu-caterpillar-logreader cu-caterpillar` — append observed timing to the schedule SVG.

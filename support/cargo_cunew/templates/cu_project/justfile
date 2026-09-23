@@ -12,16 +12,21 @@ resim log="logs/{{project-name|kebab_case}}.copper":
 resim-debug debug_base="copper/projects/{{project-name|snake_case}}/debug/v1" log="logs/{{project-name|kebab_case}}.copper" replay_log="logs/{{project-name|kebab_case}}_resim.copper":
   cargo run --profile debug-optimized --features sim-debug --bin {{project-name|kebab_case}}-resim -- --debug-base "{% raw %}{{debug_base}}{% endraw %}" --log-base "{% raw %}{{log}}{% endraw %}" --replay-log-base "{% raw %}{{replay_log}}{% endraw %}"
 
-graph-view config="copperconfig.ron" output="graph.svg":
+graph config="copperconfig.ron" output="graph.svg":
   cargo run --bin {{project-name|kebab_case}}-view -- graph --config "{% raw %}{{config}}{% endraw %}" --output "{% raw %}{{output}}{% endraw %}" --open
 
-graph-view-log config="copperconfig.ron" log="logs/{{project-name|kebab_case}}.copper" output="graph-log.svg":
+# Compatibility alias for the former graph recipe.
+dag config="copperconfig.ron" output="graph.svg":
+  @echo "just dag is deprecated; use just graph" >&2
+  just graph "{% raw %}{{config}}{% endraw %}" "{% raw %}{{output}}{% endraw %}"
+
+graph-log config="copperconfig.ron" log="logs/{{project-name|kebab_case}}.copper" output="graph-log.svg":
   cargo run --bin {{project-name|kebab_case}}-view -- graph --config "{% raw %}{{config}}{% endraw %}" --log "{% raw %}{{log}}{% endraw %}" --output "{% raw %}{{output}}{% endraw %}" --open
 
-schedule-view config="copperconfig.ron" output="schedule.svg":
+sched config="copperconfig.ron" output="schedule.svg":
   cargo run --bin {{project-name|kebab_case}}-view -- schedule --config "{% raw %}{{config}}{% endraw %}" --output "{% raw %}{{output}}{% endraw %}" --open
 
-schedule-view-log config="copperconfig.ron" log="logs/{{project-name|kebab_case}}.copper" output="schedule-log.svg":
+sched-log config="copperconfig.ron" log="logs/{{project-name|kebab_case}}.copper" output="schedule-log.svg":
   cargo run --bin {{project-name|kebab_case}}-view -- schedule --config "{% raw %}{{config}}{% endraw %}" --log "{% raw %}{{log}}{% endraw %}" --output "{% raw %}{{output}}{% endraw %}" --open
 
 {% if pgs_enabled %}

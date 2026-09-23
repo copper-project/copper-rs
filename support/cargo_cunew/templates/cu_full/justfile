@@ -12,16 +12,21 @@ resim app="cu_example_app" log="apps/cu_example_app/logs/cu_example_app.copper":
 resim-debug app="cu_example_app" log="apps/cu_example_app/logs/cu_example_app.copper" replay_log="apps/cu_example_app/logs/cu_example_app_resim.copper" debug_base="copper/apps/cu_example_app/debug/v1":
   cargo run --profile debug-optimized -p "{% raw %}{{app}}{% endraw %}" --features sim-debug --bin "{% raw %}{{app}}{% endraw %}-resim" -- --debug-base "{% raw %}{{debug_base}}{% endraw %}" --log-base "{% raw %}{{log}}{% endraw %}" --replay-log-base "{% raw %}{{replay_log}}{% endraw %}"
 
-graph-view app="cu_example_app" config="" output="":
+graph app="cu_example_app" config="" output="":
   cargo run -p cu29-view-helper -- graph --app "{% raw %}{{app}}{% endraw %}" --config "{% raw %}{{config}}{% endraw %}" --output "{% raw %}{{output}}{% endraw %}" --open
 
-graph-view-log app="cu_example_app" config="" log="apps/cu_example_app/logs/cu_example_app.copper" output="":
+# Compatibility alias for the former graph recipe.
+dag app="cu_example_app" config="" output="":
+  @echo "just dag is deprecated; use just graph" >&2
+  just graph "{% raw %}{{app}}{% endraw %}" "{% raw %}{{config}}{% endraw %}" "{% raw %}{{output}}{% endraw %}"
+
+graph-log app="cu_example_app" config="" log="apps/cu_example_app/logs/cu_example_app.copper" output="":
   cargo run -p cu29-view-helper -- graph --app "{% raw %}{{app}}{% endraw %}" --config "{% raw %}{{config}}{% endraw %}" --log "{% raw %}{{log}}{% endraw %}" --output "{% raw %}{{output}}{% endraw %}" --open
 
-schedule-view app="cu_example_app" config="" output="":
+sched app="cu_example_app" config="" output="":
   cargo run -p cu29-view-helper -- schedule --app "{% raw %}{{app}}{% endraw %}" --config "{% raw %}{{config}}{% endraw %}" --output "{% raw %}{{output}}{% endraw %}" --open
 
-schedule-view-log app="cu_example_app" config="" log="apps/cu_example_app/logs/cu_example_app.copper" output="":
+sched-log app="cu_example_app" config="" log="apps/cu_example_app/logs/cu_example_app.copper" output="":
   cargo run -p cu29-view-helper -- schedule --app "{% raw %}{{app}}{% endraw %}" --config "{% raw %}{{config}}{% endraw %}" --log "{% raw %}{{log}}{% endraw %}" --output "{% raw %}{{output}}{% endraw %}" --open
 
 {% if pgs_enabled %}

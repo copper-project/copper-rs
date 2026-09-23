@@ -84,12 +84,12 @@ RC Input -> RC Mapper -------------------------------> mode supervisor -> attitu
 ### Task graph
 
 ```bash
-just graph-view flight_controller.ron graph.svg default sim
+just graph flight_controller.ron graph.svg default sim
 ```
 
 This renders the complete simulated deployment using the `default` mission.
 The recipe accepts `config`, `output`, `mission`, and `features` in that order;
-for example, `just graph-view flight_controller.ron graph.svg flow end2end`.
+for example, `just graph flight_controller.ron graph.svg flow end2end`.
 
 ### Distributed subsystem compile check
 
