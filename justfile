@@ -172,6 +172,8 @@ test:
 	#!/usr/bin/env bash
 	set -euo pipefail
 
+	# cargo-generate needs an author identity even when generated projects omit authors.
+	export CARGO_NAME="Copper Tests"
 	cargo +stable nextest run --all-targets --workspace {{WORKSPACE_EXCLUDES}}
 	cargo +stable nextest run --no-default-features
 
@@ -334,6 +336,7 @@ nostd-ci toolchain="stable":
 std-ci mode="debug" toolchain="stable":
 	#!/usr/bin/env bash
 	set -euo pipefail
+	export CARGO_NAME="Copper Tests"
 	just fmt-check
 	just typos
 
