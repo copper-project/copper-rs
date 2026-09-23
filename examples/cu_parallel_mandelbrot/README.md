@@ -25,16 +25,16 @@ The example also enables Copper's terminal monitor. When you run it in a real te
 
 If you want to change parameters, start here:
 
-- [copperconfig.ron](/home/gbin/projects/copper/copper-rs.checkpoints/examples/cu_parallel_mandelbrot/copperconfig.ron)
+- [copperconfig.ron](copperconfig.ron)
   This is the main control surface: image size, `stripe_rows`, frame count, zoom step, number of iteration bands, per-band work split, logging, monitor, and `copperlist_count`.
-- [tasks.rs](/home/gbin/projects/copper/copper-rs.checkpoints/examples/cu_parallel_mandelbrot/src/tasks.rs)
+- [tasks.rs](src/tasks.rs)
   Source, compute bands, frame assembler, viewer sink, and the TUI status text all live here.
-- [payloads.rs](/home/gbin/projects/copper/copper-rs.checkpoints/examples/cu_parallel_mandelbrot/src/payloads.rs)
+- [payloads.rs](src/payloads.rs)
   The handle-backed in-flight stripe payload lives here.
-- [lib.rs](/home/gbin/projects/copper/copper-rs.checkpoints/examples/cu_parallel_mandelbrot/src/lib.rs)
+- [lib.rs](src/lib.rs)
   Mission runners, logger setup, and run summaries live here.
-- [justfile](/home/gbin/projects/copper/copper-rs.checkpoints/examples/cu_parallel_mandelbrot/justfile)
-  Entry points for serial, parallel, monitor, viewer, logreader, and DAG rendering live here.
+- [justfile](justfile)
+  Entry points for serial, parallel, monitor, viewer, logreader, and graph rendering live here.
 
 The most important knobs for packing more CPU are:
 - the number of `band_*` tasks
@@ -47,13 +47,13 @@ Those values need to move together. More in-flight CopperLists without a wider g
 
 ## Running It
 
-Run these from [examples/cu_parallel_mandelbrot](/home/gbin/projects/copper/copper-rs.checkpoints/examples/cu_parallel_mandelbrot):
+Run these from this example directory:
 
 - `just parallel`
 - `just monitor-parallel`
 - `just serial`
 - `just viewer-parallel`
-- `just dag`
+- `just graph-view copperconfig.ron graph.svg log_only`
 - `just logreader`
 - `just fsck`
 
@@ -68,11 +68,12 @@ intended as representative robot performance evidence.
 Run the complete naive-to-measured workflow from this directory:
 
 1. `just pgs-baseline` records the existing serial placement.
-2. `just pgs-optimize` writes ranked plans, prepared configs, predictions, and a
-   report under `pgs/`.
-3. `just pgs-candidate` rebuilds against `pgs/plan-1.config.ron` and records it.
-4. `just pgs-measure` compares the prediction with both measured runs and writes
-   the selected plan.
+2. `just pgs-optimize candidates=3` writes ranked plans, prepared configs,
+   predictions, and SVGs under `target/pgs/`.
+3. `just pgs-candidate candidate=1` rebuilds against
+   `target/pgs/selected.config.ron`, records it, and renders observed SVGs.
+4. `just pgs-measure candidates=1` compares predicted and measured runs and
+   renders the measured schedule SVGs.
 
 Every PGS input is an explicit CLI argument or file. The four Just recipes are
 one-line aliases for the Rust executables.
@@ -84,4 +85,4 @@ one-line aliases for the Rust executables.
 - Monitor feedback: the DAG view shows per-stage status text while the latency view shows per-stage timing
 - Logs: only completed frame images are logged; intermediate stripe traffic is intentionally not logged
 
-Logs are written under [logs](/home/gbin/projects/copper/copper-rs.checkpoints/examples/cu_parallel_mandelbrot/logs).
+Logs are written under [logs](logs/).

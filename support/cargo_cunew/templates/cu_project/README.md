@@ -9,7 +9,12 @@ This template bootstraps a single-crate Copper project for quick experiments.
 - `src/resim.rs`: replay binary with one-shot replay and remote-debug server modes.
 - `src/tasks.rs`: sample tasks.
 - `copperconfig.ron`: runtime configuration.
-- `justfile`: automation helpers like `just log`, `just cl`, `just resim`, `just resim-debug`, `just dag` for topology, and `just plan` for generated or log-observed process timing (`just rcfg` remains as a compatibility alias).
+- `src/view.rs`: Rust launcher for the graph and schedule viewers.
+- `justfile`: `log`, `cl`, `resim`, `resim-debug`, `graph-view[-log]`, and `schedule-view[-log]` recipes.
+{% if pgs_enabled %}
+- `schedule.ron`: starter scheduling contract for `src → sink`; tune its timing and CPU placement.
+- `src/pgs.rs` and `src/pgs_candidate.rs`: offline PGS workflow and compile-time selected candidate.
+{% endif %}
 
 ## Quick start
 
@@ -33,6 +38,17 @@ just resim-debug
 
 Both replay recipes use the `debug-optimized` Cargo profile so replay stays fast while
 preserving Copper `debug!` structured logs and debug information.
+
+{% if pgs_enabled %}
+## Profile-guided scheduling
+
+Record a representative run with `just pgs-baseline`, then run
+`just pgs-optimize candidates=3`. Inspect `target/pgs/report.txt` and the
+generated graph and schedule SVGs. Run `just pgs-candidate candidate=1` to
+compile and record one candidate, then `just pgs-measure candidates="1"` to
+compare measured runs. Candidate numbers are explicit; the selected config is
+tracked under `target/pgs/selected.config.ron` for rebuilds.
+{% endif %}
 
 ## Monitors
 

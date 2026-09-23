@@ -1,0 +1,15 @@
+// Starter PGS contract for the src -> sink chain. Tune the deadline and CPU set.
+(
+    chains: [
+        (
+            id: "starter_chain",
+            source: "src",
+            sink: "sink",
+            deadline_ms: 1000,
+        ),
+    ],
+    cpus: [0],
+    max_in_flight: 1,
+    headroom: 0.2,
+    worker_policy: Fair,
+)

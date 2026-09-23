@@ -30,7 +30,6 @@ use svg::node::element::{
     Circle, Definitions, Element as SvgElement, Group, Image, Line, Marker, Path as SvgPath,
     Polygon, Rectangle, Text, TextPath, Title,
 };
-use tempfile::Builder;
 
 // Typography and text formatting.
 const FONT_FAMILY: &str = "'Noto Sans', sans-serif";
@@ -50,30 +49,30 @@ const COPPER_LOGO_SVG: &str = include_str!("../assets/cu29.svg");
 const LOGSTATS_SCHEMA_VERSION: u32 = 2;
 
 // Color palette and fills.
-const BORDER_COLOR: &str = "#999999";
-const BACKGROUND_COLOR: &str = "#ffffff";
-const HEADER_BG: &str = "#f4f4f4";
-const DIM_GRAY: &str = "dimgray";
-const LIGHT_GRAY: &str = "lightgray";
-const CLUSTER_COLOR: &str = "#bbbbbb";
-const BRIDGE_HEADER_BG: &str = "#f7d7e4";
-const SOURCE_HEADER_BG: &str = "#ddefc7";
-const SINK_HEADER_BG: &str = "#cce0ff";
-const TASK_HEADER_BG: &str = "#fde7c2";
+const BORDER_COLOR: &str = "#6c7086";
+const BACKGROUND_COLOR: &str = "#1e1e2e";
+const HEADER_BG: &str = "#313244";
+const DIM_GRAY: &str = "#a6adc8";
+const LIGHT_GRAY: &str = "#45475a";
+const CLUSTER_COLOR: &str = "#6c7086";
+const BRIDGE_HEADER_BG: &str = "#f5c2e7";
+const SOURCE_HEADER_BG: &str = "#a6e3a1";
+const SINK_HEADER_BG: &str = "#89b4fa";
+const TASK_HEADER_BG: &str = "#b4befe";
 const STATELESS_TASK_HEADER_BG: &str = "#cba6f7";
-const ANYTIME_BORDER_COLOR: &str = "#7c3aed";
+const ANYTIME_BORDER_COLOR: &str = "#cba6f7";
 const ANYTIME_BORDER_DASH: &str = "4,3";
-const RESOURCE_TITLE_BG: &str = "#eef1f6";
-const RESOURCE_EXCLUSIVE_BG: &str = "#e3f4e7";
-const RESOURCE_SHARED_BG: &str = "#fff0d9";
-const RESOURCE_UNUSED_BG: &str = "#f1f1f1";
-const RESOURCE_UNUSED_TEXT: &str = "#8d8d8d";
-const PERF_TITLE_BG: &str = "#eaf2ff";
-const COPPER_LINK_COLOR: &str = "#0000E0";
-const INTERCONNECT_EDGE_COLOR: &str = "#6b7280";
+const RESOURCE_TITLE_BG: &str = "#313244";
+const RESOURCE_EXCLUSIVE_BG: &str = "#313244";
+const RESOURCE_SHARED_BG: &str = "#313244";
+const RESOURCE_UNUSED_BG: &str = "#313244";
+const RESOURCE_UNUSED_TEXT: &str = "#6c7086";
+const PERF_TITLE_BG: &str = "#313244";
+const COPPER_LINK_COLOR: &str = "#89b4fa";
+const INTERCONNECT_EDGE_COLOR: &str = "#6c7086";
 const EDGE_COLOR_PALETTE: [&str; 10] = [
-    "#1F77B4", "#FF7F0E", "#2CA02C", "#D62728", "#9467BD", "#8C564B", "#E377C2", "#7F7F7F",
-    "#BCBD22", "#17BECF",
+    "#89b4fa", "#f38ba8", "#a6e3a1", "#f38ba8", "#cba6f7", "#eba0ac", "#f5c2e7", "#a6adc8",
+    "#b4befe", "#eba0ac",
 ];
 const EDGE_COLOR_ORDER: [usize; 10] = [0, 2, 1, 9, 7, 8, 3, 5, 6, 4];
 
@@ -134,9 +133,9 @@ const TOOLTIP_RADIUS: f64 = 3.0;
 const TOOLTIP_OFFSET_X: f64 = 12.0;
 const TOOLTIP_OFFSET_Y: f64 = 12.0;
 const TOOLTIP_BORDER_WIDTH: f64 = 1.0;
-const TOOLTIP_BG: &str = "#fff7d1";
-const TOOLTIP_BORDER: &str = "#d9c37f";
-const TOOLTIP_TEXT: &str = "#111111";
+const TOOLTIP_BG: &str = "#313244";
+const TOOLTIP_BORDER: &str = "#cba6f7";
+const TOOLTIP_TEXT: &str = "#cdd6f4";
 const PORT_DOT_RADIUS: f64 = 2.6;
 const PORT_LINE_GAP: f64 = 2.8;
 const LEGEND_TITLE_SIZE: usize = 11;
@@ -197,9 +196,24 @@ struct Args {
     /// Config file name
     #[clap(value_parser)]
     config: PathBuf,
+    /// Resolve relative config, log, and output paths from this directory.
+    #[clap(long)]
+    base_dir: Option<PathBuf>,
     /// Log statistics JSON file to enrich the DAG
     #[clap(long)]
     logstats: Option<PathBuf>,
+    /// Copper log base path to convert to viewer statistics.
+    #[clap(long, requires = "logreader", conflicts_with = "logstats")]
+    log: Option<PathBuf>,
+    /// Application logreader binary used with --log.
+    #[clap(long)]
+    logreader: Option<String>,
+    /// Cargo package containing the logreader; defaults to the binary name.
+    #[clap(long)]
+    logreader_package: Option<String>,
+    /// Comma-separated Cargo features needed to build the logreader.
+    #[clap(long, value_delimiter = ',')]
+    logreader_features: Vec<String>,
     /// Mission id to render (omit to render every mission in a single-Copper config)
     #[clap(long)]
     mission: Option<String>,
@@ -212,6 +226,9 @@ struct Args {
     /// Open the SVG in the default system viewer
     #[clap(long)]
     open: bool,
+    /// Output SVG path.
+    #[clap(long, default_value = "graph.svg")]
+    output: PathBuf,
 }
 
 enum RenderInput {
@@ -233,8 +250,25 @@ struct InterconnectRender {
 /// CLI entrypoint that parses args, renders SVG, and optionally opens it.
 fn main() -> std::io::Result<()> {
     // Parse command line arguments
-    let args = Args::parse();
-    let active_features = args.features.iter().map(String::as_str).collect::<Vec<_>>();
+    let mut args = Args::parse();
+    if let Some(base) = &args.base_dir {
+        args.config = resolve_path(base, &args.config);
+        args.output = resolve_path(base, &args.output);
+        args.log = args.log.take().map(|path| resolve_path(base, &path));
+        args.logstats = args.logstats.take().map(|path| resolve_path(base, &path));
+    }
+    let mission = args.mission.clone().filter(|mission| !mission.is_empty());
+    let features = args
+        .features
+        .iter()
+        .filter(|feature| !feature.is_empty())
+        .cloned()
+        .collect::<Vec<_>>();
+    let active_features = features.iter().map(String::as_str).collect::<Vec<_>>();
+    let generated_logstats = prepare_logstats(&args, mission.as_deref(), &active_features)?;
+    if let Some(tempdir) = &generated_logstats {
+        args.logstats = Some(tempdir.path().join("logstats.json"));
+    }
     let input = match load_render_input(&args.config, &active_features) {
         Ok(input) => input,
         Err(err) => {
@@ -250,7 +284,7 @@ fn main() -> std::io::Result<()> {
                 return Ok(());
             }
 
-            let mission = match validate_mission_arg(&config, args.mission.as_deref()) {
+            let mission = match validate_mission_arg(&config, mission.as_deref()) {
                 Ok(mission) => mission,
                 Err(err) => {
                     eprintln!("{err}");
@@ -259,7 +293,7 @@ fn main() -> std::io::Result<()> {
             };
 
             let logstats = match args.logstats.as_deref() {
-                Some(path) => match load_logstats(path, &config, args.mission.as_deref()) {
+                Some(path) => match load_logstats(path, &config, mission.as_deref()) {
                     Ok(stats) => Some(stats),
                     Err(err) => {
                         eprintln!("{err}");
@@ -287,7 +321,7 @@ fn main() -> std::io::Result<()> {
                 std::process::exit(1);
             }
 
-            match render_multi_config_svg(&config, args.mission.as_deref()) {
+            match render_multi_config_svg(&config, mission.as_deref()) {
                 Ok(svg) => svg,
                 Err(err) => {
                     eprintln!("{err}");
@@ -297,22 +331,78 @@ fn main() -> std::io::Result<()> {
         }
     };
 
+    if let Some(parent) = args
+        .output
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        fs::create_dir_all(parent)?;
+    }
+    let mut svg_file = std::fs::File::create(&args.output)?;
+    svg_file.write_all(graph_svg.as_slice())?;
     if args.open {
-        // Create a temporary file to store the SVG
-        let mut temp_file = Builder::new().suffix(".svg").tempfile()?;
-        temp_file.write_all(graph_svg.as_slice())?;
-        let temp_path = temp_file
-            .into_temp_path()
-            .keep()
-            .map_err(std::io::Error::other)?;
-
-        open_svg(&temp_path)?;
-    } else {
-        // Write the SVG content to a file
-        let mut svg_file = std::fs::File::create("output.svg")?;
-        svg_file.write_all(graph_svg.as_slice())?;
+        open_svg(&args.output)?;
     }
     Ok(())
+}
+
+fn resolve_path(base: &Path, path: &Path) -> PathBuf {
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        base.join(path)
+    }
+}
+
+fn prepare_logstats(
+    args: &Args,
+    mission: Option<&str>,
+    features: &[&str],
+) -> std::io::Result<Option<tempfile::TempDir>> {
+    let Some(log) = &args.log else {
+        return Ok(None);
+    };
+    let logreader = args.logreader.as_deref().unwrap_or_default();
+    let tempdir = tempfile::tempdir()?;
+    let output = tempdir.path().join("logstats.json");
+    let mut command = Command::new("cargo");
+    if let Some(base) = &args.base_dir {
+        command.current_dir(base);
+    }
+    command.arg("run");
+    if let Some(package) = args
+        .logreader_package
+        .as_deref()
+        .filter(|name| !name.is_empty())
+    {
+        command.args(["--package", package]);
+    }
+    let logreader_features = args
+        .logreader_features
+        .iter()
+        .filter(|feature| !feature.is_empty())
+        .cloned()
+        .collect::<Vec<_>>();
+    if !logreader_features.is_empty() {
+        command.args(["--features", &logreader_features.join(",")]);
+    }
+    command.args(["--bin", logreader, "--"]);
+    command.arg(log).args(["log-stats", "--config"]);
+    command.arg(&args.config).args(["--output"]);
+    command.arg(&output);
+    if let Some(mission) = mission {
+        command.args(["--mission", mission]);
+    }
+    if !features.is_empty() {
+        command.args(["--features", &features.join(",")]);
+    }
+    let status = command.status()?;
+    if !status.success() {
+        return Err(std::io::Error::other(format!(
+            "logreader exited with {status}"
+        )));
+    }
+    Ok(Some(tempdir))
 }
 
 fn load_render_input(path: &Path, active_features: &[&str]) -> CuResult<RenderInput> {
@@ -616,7 +706,7 @@ fn build_section_layout(
         let look = StyleAttr::new(
             Color::fast(BORDER_COLOR),
             1,
-            Some(Color::fast("white")),
+            Some(Color::fast("#1e1e2e")),
             0,
             FONT_SIZE,
         );
@@ -636,7 +726,7 @@ fn build_section_layout(
     let mut edges = Vec::new();
     let mut edge_groups: HashMap<EdgeGroupKey, usize> = HashMap::new();
     let mut next_color_slot = 0usize;
-    let edge_look = StyleAttr::new(Color::fast("black"), 1, None, 0, EDGE_FONT_SIZE);
+    let edge_look = StyleAttr::new(Color::fast("#cdd6f4"), 1, None, 0, EDGE_FONT_SIZE);
     for cnx in &topology.connections {
         let src_handle = node_handles
             .get(&cnx.src)
@@ -895,7 +985,7 @@ fn build_resource_table(
         TYPE_WRAP_WIDTH,
     );
     let header_lines = vec![
-        CellLine::new(format!("Bundle: {}", bundle.id), "black", true, FONT_SIZE),
+        CellLine::new(format!("Bundle: {}", bundle.id), "#cdd6f4", true, FONT_SIZE),
         CellLine::code(provider_label, DIM_GRAY, false, TYPE_FONT_SIZE),
     ];
     rows.push(TableNode::Cell(
@@ -907,12 +997,12 @@ fn build_resource_table(
     let mut resource_column = Vec::new();
     let mut users_column = Vec::new();
     resource_column.push(TableNode::Cell(
-        TableCell::single_line_sized("Resource", "black", false, PORT_HEADER_FONT_SIZE)
+        TableCell::single_line_sized("Resource", "#cdd6f4", false, PORT_HEADER_FONT_SIZE)
             .with_background(HEADER_BG)
             .with_align(TextAlign::Left),
     ));
     users_column.push(TableNode::Cell(
-        TableCell::single_line_sized("Used by", "black", false, PORT_HEADER_FONT_SIZE)
+        TableCell::single_line_sized("Used by", "#cdd6f4", false, PORT_HEADER_FONT_SIZE)
             .with_background(HEADER_BG)
             .with_align(TextAlign::Left),
     ));
@@ -943,7 +1033,7 @@ fn build_resource_table(
             let resource_label = format!("{}.{}", bundle.id, resource);
             let resource_cell = TableCell::new(vec![CellLine::code(
                 resource_label,
-                "black",
+                "#cdd6f4",
                 false,
                 PORT_VALUE_FONT_SIZE,
             )])
@@ -967,7 +1057,7 @@ fn build_resource_table(
 }
 
 fn build_perf_table(perf: &PerfStats) -> ResourceTable {
-    let header_lines = vec![CellLine::new("Log Performance", "black", true, FONT_SIZE)];
+    let header_lines = vec![CellLine::new("Log Performance", "#cdd6f4", true, FONT_SIZE)];
     let mut rows = Vec::new();
     rows.push(TableNode::Cell(
         TableCell::new(header_lines)
@@ -978,12 +1068,12 @@ fn build_perf_table(perf: &PerfStats) -> ResourceTable {
     let mut metric_column = Vec::new();
     let mut value_column = Vec::new();
     metric_column.push(TableNode::Cell(
-        TableCell::single_line_sized("Metric", "black", false, PORT_HEADER_FONT_SIZE)
+        TableCell::single_line_sized("Metric", "#cdd6f4", false, PORT_HEADER_FONT_SIZE)
             .with_background(HEADER_BG)
             .with_align(TextAlign::Left),
     ));
     value_column.push(TableNode::Cell(
-        TableCell::single_line_sized("Value", "black", false, PORT_HEADER_FONT_SIZE)
+        TableCell::single_line_sized("Value", "#cdd6f4", false, PORT_HEADER_FONT_SIZE)
             .with_background(HEADER_BG)
             .with_align(TextAlign::Left),
     ));
@@ -1016,12 +1106,12 @@ fn build_perf_table(perf: &PerfStats) -> ResourceTable {
 
     for (label, value) in metrics {
         metric_column.push(TableNode::Cell(
-            TableCell::single_line_sized(label, "black", false, PORT_VALUE_FONT_SIZE)
+            TableCell::single_line_sized(label, "#cdd6f4", false, PORT_VALUE_FONT_SIZE)
                 .with_border_width(VALUE_BORDER_WIDTH)
                 .with_align(TextAlign::Left),
         ));
         value_column.push(TableNode::Cell(
-            TableCell::single_line_sized(&value, "black", false, PORT_VALUE_FONT_SIZE)
+            TableCell::single_line_sized(&value, "#cdd6f4", false, PORT_VALUE_FONT_SIZE)
                 .with_border_width(VALUE_BORDER_WIDTH)
                 .with_align(TextAlign::Left),
         ));
@@ -1128,10 +1218,10 @@ fn format_resource_owners(owners: &[ResourceOwner], usage: ResourceUsage) -> Vec
         .iter()
         .map(|owner| {
             let (label, color) = match owner.kind {
-                ResourceOwnerKind::Task => (format!("task: {}", owner.name), "black"),
+                ResourceOwnerKind::Task => (format!("task: {}", owner.name), "#cdd6f4"),
                 ResourceOwnerKind::Bridge => (format!("bridge: {}", owner.name), DIM_GRAY),
-                ResourceOwnerKind::System => (format!("system: {}", owner.name), "black"),
-                ResourceOwnerKind::Bundle => (format!("resource: {}", owner.name), "black"),
+                ResourceOwnerKind::System => (format!("system: {}", owner.name), "#cdd6f4"),
+                ResourceOwnerKind::Bundle => (format!("resource: {}", owner.name), "#cdd6f4"),
             };
             CellLine::code(label, color, false, PORT_VALUE_FONT_SIZE)
         })
@@ -1173,7 +1263,7 @@ fn build_node_table(
     let mut rows = Vec::new();
 
     let header_lines = vec![
-        CellLine::new(node.id.clone(), "black", true, FONT_SIZE),
+        CellLine::new(node.id.clone(), "#cdd6f4", true, FONT_SIZE),
         CellLine::code(
             wrap_type_label(&strip_type_params(&node.type_name), TYPE_WRAP_WIDTH),
             DIM_GRAY,
@@ -1231,7 +1321,7 @@ fn build_port_column(
 ) -> TableNode {
     let mut rows = Vec::new();
     rows.push(TableNode::Cell(
-        TableCell::single_line_sized(title, "black", false, PORT_HEADER_FONT_SIZE)
+        TableCell::single_line_sized(title, "#cdd6f4", false, PORT_HEADER_FONT_SIZE)
             .with_background(HEADER_BG)
             .with_align(align),
     ));
@@ -1245,7 +1335,7 @@ fn build_port_column(
                 *default_port = Some(port_id.clone());
             }
             rows.push(TableNode::Cell(
-                TableCell::single_line_sized(name, "black", false, PORT_VALUE_FONT_SIZE)
+                TableCell::single_line_sized(name, "#cdd6f4", false, PORT_VALUE_FONT_SIZE)
                     .with_port(port_id)
                     .with_border_width(VALUE_BORDER_WIDTH)
                     .with_align(align),
@@ -1277,7 +1367,7 @@ fn build_config_rows(config: &config::ComponentConfig) -> Vec<TableNode> {
     entries.sort_by(|a, b| a.0.cmp(b.0));
 
     let header = TableNode::Cell(
-        TableCell::single_line_sized("Config", "black", false, PORT_HEADER_FONT_SIZE)
+        TableCell::single_line_sized("Config", "#cdd6f4", false, PORT_HEADER_FONT_SIZE)
             .with_background(HEADER_BG),
     );
 
@@ -1942,7 +2032,7 @@ fn draw_node_table(svg: &mut SvgWriter, node: &NodeRender, element: &Element, of
     let size = pos.size(false);
     let top_left = Point::new(center.x - size.x / 2.0, center.y - size.y / 2.0);
 
-    svg.draw_rect(top_left, size, None, 0.0, Some("white"), 0.0);
+    svg.draw_rect(top_left, size, None, 0.0, Some("#1e1e2e"), 0.0);
 
     let mut renderer = TableRenderer {
         svg,
@@ -2052,7 +2142,7 @@ fn resource_header_midpoint(table: &ResourceTable) -> f64 {
 fn draw_resource_table(svg: &mut SvgWriter, table: &ResourceTable, top_left: Point) {
     let size = table.size;
     let center = Point::new(top_left.x + size.x / 2.0, top_left.y + size.y / 2.0);
-    svg.draw_rect(top_left, size, None, 0.0, Some("white"), 0.0);
+    svg.draw_rect(top_left, size, None, 0.0, Some("#1e1e2e"), 0.0);
 
     let mut renderer = TableRenderer {
         svg,
@@ -2105,7 +2195,7 @@ fn draw_legend(svg: &mut SvgWriter, top_y: f64, content_right: f64) -> f64 {
         Point::new(metrics.width, metrics.height),
         Some(BORDER_COLOR),
         0.6,
-        Some("white"),
+        Some("#1e1e2e"),
         LEGEND_CORNER_RADIUS,
     );
 
@@ -2161,7 +2251,7 @@ fn draw_legend(svg: &mut SvgWriter, top_y: f64, content_right: f64) -> f64 {
             Point::new(text_x, center_y),
             item.label,
             LEGEND_FONT_SIZE,
-            "black",
+            "#cdd6f4",
             false,
             "start",
             FontFamily::Sans,
@@ -2200,7 +2290,7 @@ fn draw_legend(svg: &mut SvgWriter, top_y: f64, content_right: f64) -> f64 {
                 Point::new(text_x, center_y),
                 label,
                 LEGEND_FONT_SIZE,
-                "black",
+                "#cdd6f4",
                 false,
                 "start",
                 FontFamily::Sans,
@@ -2214,7 +2304,7 @@ fn draw_legend(svg: &mut SvgWriter, top_y: f64, content_right: f64) -> f64 {
     svg.draw_line(
         Point::new(top_left.x + LEGEND_PADDING, divider_y),
         Point::new(top_left.x + metrics.width - LEGEND_PADDING, divider_y),
-        "#e0e0e0",
+        "#45475a",
         0.5,
     );
 
@@ -3163,7 +3253,7 @@ impl SvgWriter {
             .set("font-size", format!("{font_size}px"))
             .set("fill", color)
             .set("font-weight", weight)
-            .set("stroke", "white")
+            .set("stroke", "#1e1e2e")
             .set("stroke-width", EDGE_LABEL_HALO_WIDTH)
             .set("paint-order", "stroke")
             .set("stroke-linejoin", "round");
@@ -3253,7 +3343,7 @@ impl SvgWriter {
                     .set("font-size", format!("{}px", label.font_size))
                     .set("fill", label.color.clone())
                     .set("font-weight", weight)
-                    .set("stroke", "white")
+                    .set("stroke", "#1e1e2e")
                     .set("stroke-width", EDGE_LABEL_HALO_WIDTH)
                     .set("paint-order", "stroke")
                     .set("stroke-linejoin", "round");
@@ -4865,6 +4955,27 @@ mod tests {
     use super::*;
     use std::fs;
     use tempfile::tempdir;
+
+    #[test]
+    fn cli_accepts_arbitrary_config_log_and_output_paths() {
+        let args = Args::try_parse_from([
+            "cu29-graph-view",
+            "configs/robot.ron",
+            "--base-dir",
+            "robot",
+            "--log",
+            "logs/run.copper",
+            "--logreader",
+            "robot-logreader",
+            "--output",
+            "artifacts/graph.svg",
+        ])
+        .unwrap();
+        assert_eq!(args.config, PathBuf::from("configs/robot.ron"));
+        assert_eq!(args.base_dir, Some(PathBuf::from("robot")));
+        assert_eq!(args.log, Some(PathBuf::from("logs/run.copper")));
+        assert_eq!(args.output, PathBuf::from("artifacts/graph.svg"));
+    }
 
     #[test]
     fn tooltip_formats_missing_values() {

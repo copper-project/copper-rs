@@ -52,6 +52,10 @@ name = "cu-parallel-mandelbrot-pgs-candidate"
 path = "src/bin/pgs_candidate.rs"
 required-features = ["parallel-rt", "pgs-candidate"]
 
+[[bin]]
+name = "cu-parallel-mandelbrot-pgs"
+path = "src/bin/pgs.rs"
+
 [package.metadata.cargo-shear]
 ignored = ["bincode", "serde"]
 

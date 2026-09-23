@@ -2,7 +2,7 @@
 members = [
     "apps/cu_example_app",
     "components/bridges/cu_example_shared_bridge",
-    "tools/cu29_plan_helper",
+    "tools/cu29_view_helper",
 ]
 resolver = "2"
 

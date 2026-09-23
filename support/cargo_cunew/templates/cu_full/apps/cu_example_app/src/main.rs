@@ -1,6 +1,7 @@
 mod messages;
 mod tasks;
 
+use clap::Parser;
 use cu29::prelude::*;
 use std::path::Path;
 use std::thread::sleep;
@@ -9,13 +10,20 @@ use std::time::Duration;
 const PREALLOCATED_STORAGE_SIZE: Option<usize> = Some(1024 * 1024 * 100);
 const APP_NAME: &str = env!("CARGO_PKG_NAME");
 
+#[derive(Parser)]
+struct Args {
+    /// Unified log base path.
+    #[arg(long)]
+    log: Option<std::path::PathBuf>,
+}
+
 #[copper_runtime(config = "copperconfig.ron")]
 struct CuExampleAppApplication {}
 
 fn main() {
-    let logger_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+    let logger_path = Args::parse().log.unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("logs")
-        .join(format!("{APP_NAME}.copper"));
+        .join(format!("{APP_NAME}.copper")));
     if let Some(parent) = logger_path.parent() {
         if !parent.exists() {
             std::fs::create_dir_all(parent).expect("Failed to create logs directory");

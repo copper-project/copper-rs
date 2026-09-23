@@ -25,7 +25,7 @@ can miss frames without interrupting archival. See the
 From this directory:
 
 ```sh
-just dag             # Show the task graph
+just graph-view      # Show the task graph
 just                 # Clean run, archive comparison, fsck, and offline replay
 just run loss        # Repair a dropped CopperList
 just run outage      # Resume after a longer interruption

@@ -84,11 +84,12 @@ RC Input -> RC Mapper -------------------------------> mode supervisor -> attitu
 ### Task graph
 
 ```bash
-just dag
+just graph-view flight_controller.ron graph.svg default sim
 ```
 
-This renders the complete simulated deployment using the `default` mission. Both selectors remain
-overridable, for example with `just dag mission=flow` or `just dag features=end2end`.
+This renders the complete simulated deployment using the `default` mission.
+The recipe accepts `config`, `output`, `mission`, and `features` in that order;
+for example, `just graph-view flight_controller.ron graph.svg flow end2end`.
 
 ### Distributed subsystem compile check
 

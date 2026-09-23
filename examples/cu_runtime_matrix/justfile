@@ -1,4 +1,4 @@
-import "../../support/just/plan.just"
+import "../../support/just/viewers.just"
 
 ROOT := shell('cd "$1/../.." && pwd', justfile_directory())
 
@@ -100,19 +100,6 @@ default warmup="128" iterations="256" spin="0" words="2048" rounds="16" seconds=
 	print_table("Throughput Hz (higher is better; delta vs serial)", "throughput_hz", False)
 	print_table("P99 Latency us (lower is better; delta vs serial)", "p99_us", True)
 	PY
-
-# Render the DAG from the checked-in config.
-# With no mission argument, cu29-rendercfg renders every mission on one page.
-dag mission="":
-	#!/usr/bin/env bash
-	set -euo pipefail
-	cd "{{ROOT}}"
-	mission_value="{{mission}}"
-	if [[ -n "$mission_value" ]]; then
-		cargo run -p cu29-rendercfg -- --mission "$mission_value" --open examples/cu_runtime_matrix/copperconfig.ron
-	else
-		cargo run -p cu29-rendercfg -- --open examples/cu_runtime_matrix/copperconfig.ron
-	fi
 
 test-serial:
 	cargo test -p cu-runtime-matrix -- --test-threads=1

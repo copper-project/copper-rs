@@ -1,4 +1,4 @@
-import "../../support/just/plan.just"
+import "../../support/just/viewers.just"
 
 package := "cu-remote-debug-session"
 debug_base := "copper/examples/cu_remote_debug_session/debug/v1"

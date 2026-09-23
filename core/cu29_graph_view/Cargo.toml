@@ -1,7 +1,7 @@
 [package]
-name = "cu29-plan"
-description = "Render Copper runtime execution plans as SVG diagrams."
-documentation = "https://docs.rs/cu29-plan"
+name = "cu29-graph-view"
+description = "Render Copper runtime configurations as SVG diagrams."
+documentation = "https://docs.rs/cu29-graph-view"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -17,8 +17,9 @@ cu29-runtime = { workspace = true, features = ["std"] }
 cu29-traits = { workspace = true }
 
 clap = { workspace = true }
+hashbrown = { workspace = true }
+layout = { package = "layout-rs", version = "0.1.3" }
 serde = { workspace = true }
 serde_json = { workspace = true, features = ["std"] }
-
-[dev-dependencies]
+svg = "0.18"
 tempfile = { workspace = true }

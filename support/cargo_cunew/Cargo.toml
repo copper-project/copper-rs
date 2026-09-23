@@ -21,7 +21,6 @@ cargo-generate = "0.23.9"
 rhai_codegen = "=3.2.0"
 clap = { workspace = true }
 include_dir = "0.7.4"
-libc = { workspace = true }
 pathdiff = "0.2.3"
 reqwest = { version = "0.13", default-features = false, features = [
   "blocking",

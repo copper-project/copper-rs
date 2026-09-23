@@ -10,7 +10,7 @@ struct Args {
     log: PathBuf,
 }
 
-#[copper_runtime(config = "pgs/plan-1.config.ron")]
+#[copper_runtime(config = "target/pgs/selected.config.ron")]
 struct CandidateApp {}
 
 fn main() -> CuResult<()> {

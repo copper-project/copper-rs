@@ -7,3 +7,8 @@ file::rename(
     "components/bridges/cu_example_shared_bridge/Cargo.toml.template",
     "components/bridges/cu_example_shared_bridge/Cargo.toml",
 );
+if !variable::get("pgs_enabled") {
+    file::delete("apps/cu_example_app/schedule.ron");
+    file::delete("apps/cu_example_app/src/pgs_candidate.rs");
+    file::delete("apps/cu_example_app/src/pgs.rs");
+}
