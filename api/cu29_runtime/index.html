@@ -69,9 +69,13 @@ cargo run</code></pre></div>
 <p>In about 30 seconds, you have a typed <code>source → task → sink</code> graph that prints its
 first messages and records <code>logs/hello-copper.copper</code>. Start with
 <code>copperconfig.ron</code>, <code>src/main.rs</code>, and <code>src/tasks.rs</code>; the generated <code>justfile</code>
-also provides helpers for logs, CopperLists, topology (<code>just dag</code>), the exact
-generated process schedule (<code>just plan</code>), post-execution timing from the default
-Copper log (<code>just plan-log</code>), and replay.</p>
+also provides helpers for logs, CopperLists, topology (<code>just graph</code>), the exact
+generated process schedule (<code>just sched</code>), post-execution timing from the default
+Copper log (<code>just sched-log</code>), and replay. Host projects also include
+<code>just pgs-baseline</code>, <code>just pgs-optimize</code>, <code>just pgs-candidate</code>, and
+<code>just pgs-measure</code>; the starter <code>schedule.ron</code> is a conservative placeholder to tune
+for the real workload. Project creation asks whether the target is bare metal/no_std
+and omits PGS scaffolding for that choice.</p>
 <h3 id="how-copper-fits-together"><a class="doc-anchor" href="#how-copper-fits-together">§</a>How Copper Fits Together</h3><div><table><thead><tr><th>Stage</th><th>What happens</th></tr></thead><tbody>
 <tr><td><strong>Declare</strong></td><td>Define the static task graph in <code>copperconfig.ron</code>.</td></tr>
 <tr><td><strong>Generate</strong></td><td><code>#[copper_runtime]</code> wires the graph at compile time.</td></tr>

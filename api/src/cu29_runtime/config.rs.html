@@ -88,7 +88,7 @@
 <a href=#88 id=88 data-nosnippet>88</a><span class="kw">impl </span>HandleContent {
 <a href=#89 id=89 data-nosnippet>89</a>    <span class="doccomment">/// Reconstruct a [`HandleContent`] from its `AtomicU8` representation. Unknown
 <a href=#90 id=90 data-nosnippet>90</a>    /// values fall back to `All` so corrupt state never silently drops payload bytes.
-<a href=#91 id=91 data-nosnippet>91</a>    </span><span class="attr">#[allow(dead_code)] </span><span class="comment">// Only the lib's pool module calls this; the rendercfg bin doesn't.
+<a href=#91 id=91 data-nosnippet>91</a>    </span><span class="attr">#[allow(dead_code)] </span><span class="comment">// Only the lib's pool module calls this; the graph viewer doesn't.
 <a href=#92 id=92 data-nosnippet>92</a>    </span><span class="kw">pub fn </span>from_u8(v: u8) -&gt; <span class="self">Self </span>{
 <a href=#93 id=93 data-nosnippet>93</a>        <span class="kw">match </span>v {
 <a href=#94 id=94 data-nosnippet>94</a>            <span class="number">1 </span>=&gt; HandleContent::TouchedOnly,
