@@ -1,73 +1,49 @@
-# Project automation helpers.
+# Application, replay, and visualization helpers.
 
-# Extract the structured log via the log reader.
-log:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  RUST_BACKTRACE=1 cargo run --features=logreader --bin {{project-name|kebab_case}}-logreader logs/{{project-name|kebab_case}}.copper extract-text-log target/debug/cu29_log_index
+log log="logs/{{project-name|kebab_case}}.copper":
+  cargo run --features logreader --bin {{project-name|kebab_case}}-logreader -- "{% raw %}{{log}}{% endraw %}" extract-text-log target/debug/cu29_log_index
 
-# Extract CopperLists from the log output.
-cl:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  RUST_BACKTRACE=1 cargo run --features=logreader --bin {{project-name|kebab_case}}-logreader logs/{{project-name|kebab_case}}.copper extract-copperlists
+cl log="logs/{{project-name|kebab_case}}.copper":
+  cargo run --features logreader --bin {{project-name|kebab_case}}-logreader -- "{% raw %}{{log}}{% endraw %}" extract-copperlists
 
-resim:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  RUST_BACKTRACE=1 cargo run --profile debug-optimized --features=sim-debug --bin {{project-name|kebab_case}}-resim -- \
-    --log-base logs/{{project-name|kebab_case}}.copper
+resim log="logs/{{project-name|kebab_case}}.copper":
+  cargo run --profile debug-optimized --features sim-debug --bin {{project-name|kebab_case}}-resim -- --log-base "{% raw %}{{log}}{% endraw %}"
 
 resim-debug debug_base="copper/projects/{{project-name|snake_case}}/debug/v1" log="logs/{{project-name|kebab_case}}.copper" replay_log="logs/{{project-name|kebab_case}}_resim.copper":
-  #!/usr/bin/env bash
-  set -euo pipefail
-  invocation_dir="{% raw %}{{invocation_directory()}}{% endraw %}"
-  log="{% raw %}{{log}}{% endraw %}"
-  replay_log="{% raw %}{{replay_log}}{% endraw %}"
-  if [[ "$log" != /* ]]; then
-    log="${invocation_dir}/${log}"
-  fi
-  if [[ "$replay_log" != /* ]]; then
-    replay_log="${invocation_dir}/${replay_log}"
-  fi
-  RUST_BACKTRACE=1 cargo run --profile debug-optimized --features=sim-debug --bin {{project-name|kebab_case}}-resim -- \
-    --debug-base "{% raw %}{{debug_base}}{% endraw %}" \
-    --log-base "$log" \
-    --replay-log-base "$replay_log"
+  cargo run --profile debug-optimized --features sim-debug --bin {{project-name|kebab_case}}-resim -- --debug-base "{% raw %}{{debug_base}}{% endraw %}" --log-base "{% raw %}{{log}}{% endraw %}" --replay-log-base "{% raw %}{{replay_log}}{% endraw %}"
 
-# Render the execution DAG from the app config.
-dag:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  {% if copper_source == "local" %}
-  cargo run --manifest-path "{{copper_root_path}}/Cargo.toml" -p cu29-rendercfg -- \
-    copperconfig.ron --open
-  {% else %}
-  renderer="$(command -v cu29-rendercfg || true)"
-  if [[ -z "$renderer" ]]; then
-    echo "cu29-rendercfg not found on PATH; installing it now..." >&2
-    {% if copper_source == "crates.io" %}
-    cargo install --locked cu29-rendercfg --version "{{copper_version}}" --bin cu29-rendercfg
-    {% elsif copper_source == "git" %}
-    cargo install --locked --git "{{copper_git_url}}" {% if copper_git_branch != "__none__" %}--branch "{{copper_git_branch}}" {% elsif copper_git_tag != "__none__" %}--tag "{{copper_git_tag}}" {% elsif copper_git_rev != "__none__" %}--rev "{{copper_git_rev}}" {% endif %} --bin cu29-rendercfg cu29-rendercfg
-    {% endif %}
-    renderer="$(command -v cu29-rendercfg || true)"
-    if [[ -z "$renderer" ]]; then
-      renderer="${CARGO_HOME:-$HOME/.cargo}/bin/cu29-rendercfg"
-    fi
-  fi
-  [[ -x "$renderer" ]] || { echo "Failed to find cu29-rendercfg after installation." >&2; exit 1; }
-  "$renderer" copperconfig.ron --open
-  {% endif %}
+graph config="copperconfig.ron" output="graph.svg":
+  cargo run --bin {{project-name|kebab_case}}-view -- graph --config "{% raw %}{{config}}{% endraw %}" --output "{% raw %}{{output}}{% endraw %}" --open
 
-# Compatibility alias for older template docs.
-rcfg: dag
+# Compatibility alias for the former graph recipe.
+dag config="copperconfig.ron" output="graph.svg":
+  @echo "just dag is deprecated; use just graph" >&2
+  just graph "{% raw %}{{config}}{% endraw %}" "{% raw %}{{output}}{% endraw %}"
 
-# Render the exact generated per-CopperList process schedule.
-[positional-arguments]
-plan *options:
-  cargo run --quiet --bin {{project-name|kebab_case}}-plan -- "$@"
+graph-log config="copperconfig.ron" log="logs/{{project-name|kebab_case}}.copper" output="graph-log.svg":
+  cargo run --bin {{project-name|kebab_case}}-view -- graph --config "{% raw %}{{config}}{% endraw %}" --log "{% raw %}{{log}}{% endraw %}" --output "{% raw %}{{output}}{% endraw %}" --open
 
-# Render observed timing from the project's default Copper log.
-plan-log:
-  just plan --log logs/{{project-name|kebab_case}}.copper --features logreader
+sched config="copperconfig.ron" output="schedule.svg":
+  cargo run --bin {{project-name|kebab_case}}-view -- schedule --config "{% raw %}{{config}}{% endraw %}" --output "{% raw %}{{output}}{% endraw %}" --open
+
+sched-log config="copperconfig.ron" log="logs/{{project-name|kebab_case}}.copper" output="schedule-log.svg":
+  cargo run --bin {{project-name|kebab_case}}-view -- schedule --config "{% raw %}{{config}}{% endraw %}" --log "{% raw %}{{log}}{% endraw %}" --output "{% raw %}{{output}}{% endraw %}" --open
+
+{% if pgs_enabled %}
+pgs-baseline log="logs/pgs-baseline.copper":
+  cargo run --release --bin {{project-name|kebab_case}} -- --log "{% raw %}{{log}}{% endraw %}"
+  cargo run --bin {{project-name|kebab_case}}-view -- graph --config copperconfig.ron --log "{% raw %}{{log}}{% endraw %}" --output target/pgs/baseline.graph.svg
+  cargo run --bin {{project-name|kebab_case}}-view -- schedule --config copperconfig.ron --log "{% raw %}{{log}}{% endraw %}" --output target/pgs/baseline.schedule.svg
+
+pgs-optimize candidates="3" baseline="logs/pgs-baseline.copper":
+  cargo run --features logreader --bin {{project-name|kebab_case}}-logreader -- "{% raw %}{{baseline}}{% endraw %}" optimize-schedule --contract schedule.ron --output target/pgs --candidates "{% raw %}{{replace(candidates, "candidates=", "")}}{% endraw %}"
+  cargo run --bin {{project-name|kebab_case}}-pgs -- render-predictions --candidates "{% raw %}{{replace(candidates, "candidates=", "")}}{% endraw %}"
+
+pgs-candidate candidate="1":
+  cargo run --bin {{project-name|kebab_case}}-pgs -- select --candidate "{% raw %}{{replace(candidate, "candidate=", "")}}{% endraw %}"
+  cargo run --release --features parallel-rt,pgs-candidate --bin {{project-name|kebab_case}}-pgs-candidate -- --log "logs/pgs-candidate-{% raw %}{{replace(candidate, "candidate=", "")}}{% endraw %}.copper"
+  cargo run --bin {{project-name|kebab_case}}-pgs -- render-candidate --candidate "{% raw %}{{replace(candidate, "candidate=", "")}}{% endraw %}"
+
+pgs-measure candidates="1" baseline="logs/pgs-baseline.copper":
+  cargo run --bin {{project-name|kebab_case}}-pgs -- measure --candidates "{% raw %}{{replace(candidates, "candidates=", "")}}{% endraw %}" --baseline "{% raw %}{{baseline}}{% endraw %}"
+{% endif %}

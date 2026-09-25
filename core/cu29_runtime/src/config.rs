@@ -88,7 +88,7 @@ pub enum HandleContent {
 impl HandleContent {
     /// Reconstruct a [`HandleContent`] from its `AtomicU8` representation. Unknown
     /// values fall back to `All` so corrupt state never silently drops payload bytes.
-    #[allow(dead_code)] // Only the lib's pool module calls this; the rendercfg bin doesn't.
+    #[allow(dead_code)] // Only the lib's pool module calls this; the graph viewer doesn't.
     pub fn from_u8(v: u8) -> Self {
         match v {
             1 => HandleContent::TouchedOnly,

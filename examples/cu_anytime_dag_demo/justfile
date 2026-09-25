@@ -1,10 +1,3 @@
-ROOT := shell('cd "$1/../.." && pwd', justfile_directory())
+import "../../support/just/viewers.just"
 
-default: dag
-
-# Render and open the anytime-task DAG for manual inspection.
-dag:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  cd "{{ROOT}}"
-  cargo run -p cu29-rendercfg -- --open examples/cu_anytime_dag_demo/copperconfig.ron
+default: graph

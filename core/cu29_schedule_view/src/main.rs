@@ -5,8 +5,8 @@ use cu29_runtime::config::{
 };
 use cu29_runtime::curuntime::{CuExecutionStep, CuExecutionUnit, CuStepPhase, CuTaskType};
 use cu29_runtime::planner::{
-    AssembledPlan, DEFAULT_COPPERLIST_COUNT, PlanEntity, PlanEntityKind,
-    assemble_runtime_plan_for_mission, mission_graphs, step_key,
+    AssembledPlan, CuPrediction, CuScoreTable, DEFAULT_COPPERLIST_COUNT, PlanEntity,
+    PlanEntityKind, assemble_runtime_plan_for_mission, mission_graphs, step_key,
 };
 use cu29_traits::{CuError, CuResult};
 use serde::Deserialize;
@@ -19,11 +19,11 @@ use std::process::Command;
 const LABEL_WIDTH: f64 = 108.0;
 const MARGIN: f64 = 28.0;
 const SECTION_GAP: f64 = 44.0;
-const SOURCE_COLOR: &str = "#ddefc7";
-const TASK_COLOR: &str = "#fde7c2";
-const SINK_COLOR: &str = "#cce0ff";
-const BRIDGE_COLOR: &str = "#f7d7e4";
-const BACKGROUND_GATEWAY_COLOR: &str = "#eeeafe";
+const SOURCE_COLOR: &str = "#a6e3a1";
+const TASK_COLOR: &str = "#b4befe";
+const SINK_COLOR: &str = "#89b4fa";
+const BRIDGE_COLOR: &str = "#f5c2e7";
+const BACKGROUND_GATEWAY_COLOR: &str = "#313244";
 const WAVE_COLUMNS: usize = 8;
 const WAVE_CELL_WIDTH: f64 = 124.0;
 const WAVE_CELL_HEIGHT: f64 = 70.0;
@@ -41,6 +41,9 @@ const PARALLEL_WIDTH: f64 =
 struct Args {
     /// Copper RON configuration file.
     config: PathBuf,
+    /// Resolve relative config, log, and output paths from this directory.
+    #[arg(long)]
+    base_dir: Option<PathBuf>,
     /// Render only this mission; omit to stack every mission.
     #[arg(long)]
     mission: Option<String>,
@@ -54,11 +57,32 @@ struct Args {
     #[arg(long)]
     open: bool,
     /// Output SVG path.
-    #[arg(long, default_value = "plan.svg")]
+    #[arg(long, default_value = "schedule.svg")]
     output: PathBuf,
     /// Log-derived statistics produced by an application logreader.
     #[arg(long)]
     logstats: Option<PathBuf>,
+    /// Copper log base path to convert to viewer statistics.
+    #[arg(long, requires = "logreader", conflicts_with = "logstats")]
+    log: Option<PathBuf>,
+    /// Application logreader binary used with --log.
+    #[arg(long)]
+    logreader: Option<String>,
+    /// Cargo package containing the logreader; defaults to the binary name.
+    #[arg(long)]
+    logreader_package: Option<String>,
+    /// Comma-separated Cargo features needed to build the logreader.
+    #[arg(long, value_delimiter = ',')]
+    logreader_features: Vec<String>,
+    /// PGS predictions.ron to annotate for --candidate.
+    #[arg(long, requires = "candidate")]
+    predictions: Option<PathBuf>,
+    /// PGS measurements.ron to annotate for --candidate.
+    #[arg(long, requires = "candidate")]
+    measurements: Option<PathBuf>,
+    /// PGS candidate name, such as plan-1.
+    #[arg(long)]
+    candidate: Option<String>,
 }
 
 fn main() {
@@ -68,8 +92,33 @@ fn main() {
     }
 }
 
-fn run(args: Args) -> CuResult<()> {
-    let feature_refs = args.features.iter().map(String::as_str).collect::<Vec<_>>();
+fn run(mut args: Args) -> CuResult<()> {
+    if let Some(base) = &args.base_dir {
+        args.config = resolve_path(base, &args.config);
+        args.output = resolve_path(base, &args.output);
+        args.log = args.log.take().map(|path| resolve_path(base, &path));
+        args.logstats = args.logstats.take().map(|path| resolve_path(base, &path));
+        args.predictions = args
+            .predictions
+            .take()
+            .map(|path| resolve_path(base, &path));
+        args.measurements = args
+            .measurements
+            .take()
+            .map(|path| resolve_path(base, &path));
+    }
+    let mission = args.mission.clone().filter(|mission| !mission.is_empty());
+    let features = args
+        .features
+        .iter()
+        .filter(|feature| !feature.is_empty())
+        .cloned()
+        .collect::<Vec<_>>();
+    let feature_refs = features.iter().map(String::as_str).collect::<Vec<_>>();
+    let generated_logstats = prepare_logstats(&args, mission.as_deref(), &feature_refs)?;
+    if let Some(tempdir) = &generated_logstats {
+        args.logstats = Some(tempdir.path().join("logstats.json"));
+    }
     let config = load_single_config(&args.config, &feature_refs)?;
     if args.list_missions {
         for (mission, _) in mission_graphs(&config) {
@@ -86,27 +135,103 @@ fn run(args: Args) -> CuResult<()> {
     let selected_mission = args
         .mission
         .as_deref()
+        .filter(|mission| !mission.is_empty())
         .or_else(|| logstats.as_ref().and_then(|stats| stats.mission.as_deref()));
     let sections = selected_graphs(&config, selected_mission)?;
     if let Some(logstats) = &logstats {
         validate_observed_logstats(logstats, &config, selected_mission);
     }
-    let svg = render_document(&config, &sections, logstats.as_ref())?;
+    let pgs = load_pgs_context(
+        args.candidate.as_deref(),
+        args.predictions.as_deref(),
+        args.measurements.as_deref(),
+    )?;
+    let svg = render_document(&config, &sections, logstats.as_ref(), pgs.as_ref())?;
+    if let Some(parent) = args
+        .output
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        fs::create_dir_all(parent).map_err(|error| {
+            CuError::new_with_cause("Failed to create schedule output directory", error)
+        })?;
+    }
     fs::write(&args.output, svg).map_err(|error| {
         CuError::new_with_cause(
-            &format!("Failed to write plan SVG '{}'.", args.output.display()),
+            &format!("Failed to write schedule SVG '{}'.", args.output.display()),
             error,
         )
     })?;
     if args.open {
         open_svg(&args.output).map_err(|error| {
             CuError::new_with_cause(
-                &format!("Failed to open plan SVG '{}'.", args.output.display()),
+                &format!("Failed to open schedule SVG '{}'.", args.output.display()),
                 error,
             )
         })?;
     }
     Ok(())
+}
+
+fn resolve_path(base: &Path, path: &Path) -> PathBuf {
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        base.join(path)
+    }
+}
+
+fn prepare_logstats(
+    args: &Args,
+    mission: Option<&str>,
+    features: &[&str],
+) -> CuResult<Option<tempfile::TempDir>> {
+    let Some(log) = &args.log else {
+        return Ok(None);
+    };
+    let logreader = args.logreader.as_deref().unwrap_or_default();
+    let tempdir = tempfile::tempdir().map_err(|error| {
+        CuError::new_with_cause("Failed to create temporary log statistics directory", error)
+    })?;
+    let output = tempdir.path().join("logstats.json");
+    let mut command = Command::new("cargo");
+    if let Some(base) = &args.base_dir {
+        command.current_dir(base);
+    }
+    command.arg("run");
+    if let Some(package) = args
+        .logreader_package
+        .as_deref()
+        .filter(|name| !name.is_empty())
+    {
+        command.args(["--package", package]);
+    }
+    let logreader_features = args
+        .logreader_features
+        .iter()
+        .filter(|feature| !feature.is_empty())
+        .cloned()
+        .collect::<Vec<_>>();
+    if !logreader_features.is_empty() {
+        command.args(["--features", &logreader_features.join(",")]);
+    }
+    command.args(["--bin", logreader, "--"]);
+    command.arg(log).args(["log-stats", "--config"]);
+    command.arg(&args.config).args(["--output"]);
+    command.arg(&output);
+    if let Some(mission) = mission {
+        command.args(["--mission", mission]);
+    }
+    if !features.is_empty() {
+        command.args(["--features", &features.join(",")]);
+    }
+    let status = command
+        .status()
+        .map_err(|error| CuError::new_with_cause("Failed to start application logreader", error))?;
+    if !status.success() {
+        return Err(CuError::from(format!("logreader exited with {status}")));
+    }
+    Ok(Some(tempdir))
 }
 
 fn load_single_config(path: &Path, features: &[&str]) -> CuResult<CuConfig> {
@@ -157,9 +282,11 @@ fn render_document(
     config: &CuConfig,
     sections: &[(String, &CuGraph)],
     logstats: Option<&ObservedLogStats>,
+    pgs: Option<&PgsContext>,
 ) -> CuResult<String> {
     let mut rendered = Vec::new();
-    let mut total_height = MARGIN;
+    let pgs_height = pgs.map_or(0.0, |context| 48.0 + context.lines.len() as f64 * 18.0);
+    let mut total_height = MARGIN + pgs_height;
     for (mission, graph) in sections {
         let plan = assemble_runtime_plan_for_mission(config, graph, mission).map_err(|error| {
             CuError::from(format!(
@@ -183,35 +310,54 @@ fn render_document(
     svg.push_str(
         r##"<defs>
 <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-  <path d="M 0 0 L 10 5 L 0 10 z" fill="#667085"/>
+  <path d="M 0 0 L 10 5 L 0 10 z" fill="#6c7086"/>
 </marker>
 </defs>
 <style>
-text { font-family: 'Noto Sans', sans-serif; fill: #18212b; }
+text { font-family: 'Noto Sans', sans-serif; fill: #cdd6f4; }
 .mono { font-family: 'Noto Sans Mono', monospace; }
 .title { font-size: 21px; font-weight: 700; }
 .subtitle { font-size: 14px; font-weight: 700; }
-.meta { font-size: 11px; fill: #4b5563; }
-.ordinal { font-size: 10px; font-weight: 700; fill: #667085; }
+.meta { font-size: 11px; fill: #a6adc8; }
+.ordinal { font-size: 10px; font-weight: 700; fill: #6c7086; }
 .card-title { font-size: 12px; font-weight: 700; }
 .card-line { font-size: 9px; }
-.lane { font-size: 10px; font-weight: 700; fill: #475467; }
-.grid { stroke: #d7dce2; stroke-width: 1; stroke-dasharray: 3 3; }
-.flow { fill: none; stroke: #667085; stroke-width: 2; marker-end: url(#arrow); }
-.queue { fill: #f2f4f7; stroke: #98a2b3; stroke-width: 1; }
-.system { fill: #f8fafc; stroke: #667085; stroke-width: 1.5; }
-.blocking { font-size: 10px; fill: #344054; }
-.gateway { fill: #eeeafe; stroke: #7f56d9; stroke-width: 2; stroke-dasharray: 4 2; }
-.pool { fill: #f8fafc; stroke: #667085; stroke-width: 1.5; }
-.job { fill: #eef4ff; stroke: #528bcd; stroke-width: 1; }
-.job-flow { fill: none; stroke: #528bcd; stroke-width: 3; stroke-dasharray: 7 4; marker-end: url(#arrow); }
-.bg-trigger { fill: none; stroke: #7f56d9; stroke-width: 2; stroke-dasharray: 4 3; opacity: 0.55; marker-end: url(#arrow); }
+.lane { font-size: 10px; font-weight: 700; fill: #a6adc8; }
+.grid { stroke: #45475a; stroke-width: 1; stroke-dasharray: 3 3; }
+.flow { fill: none; stroke: #6c7086; stroke-width: 2; marker-end: url(#arrow); }
+.queue { fill: #313244; stroke: #6c7086; stroke-width: 1; }
+.system { fill: #313244; stroke: #6c7086; stroke-width: 1.5; }
+.blocking { font-size: 10px; fill: #cdd6f4; }
+.gateway { fill: #313244; stroke: #cba6f7; stroke-width: 2; stroke-dasharray: 4 2; }
+.pool { fill: #313244; stroke: #6c7086; stroke-width: 1.5; }
+.job { fill: #313244; stroke: #89b4fa; stroke-width: 1; }
+.job-flow { fill: none; stroke: #89b4fa; stroke-width: 3; stroke-dasharray: 7 4; marker-end: url(#arrow); }
+.bg-trigger { fill: none; stroke: #cba6f7; stroke-width: 2; stroke-dasharray: 4 3; opacity: 0.55; marker-end: url(#arrow); }
 .observed-segment { cursor: help; }
 </style>
-<rect width="100%" height="100%" fill="#ffffff"/>
+<rect width="100%" height="100%" fill="#1e1e2e"/>
 "##,
     );
-    let mut y = MARGIN;
+    if let Some(context) = pgs {
+        writeln!(
+            svg,
+            r##"<g transform="translate({MARGIN},{MARGIN})"><rect width="{PARALLEL_WIDTH}" height="{}" rx="8" fill="#313244" stroke="#cba6f7"/><text class="subtitle" x="12" y="24">{}</text>"##,
+            pgs_height - 12.0,
+            escape_xml(&context.title),
+        )
+        .unwrap();
+        for (index, line) in context.lines.iter().enumerate() {
+            writeln!(
+                svg,
+                r#"<text class="meta mono" x="12" y="{}">{}</text>"#,
+                44 + index * 18,
+                escape_xml(line),
+            )
+            .unwrap();
+        }
+        svg.push_str("</g>\n");
+    }
+    let mut y = MARGIN + pgs_height;
     for section in rendered {
         writeln!(svg, r#"<g transform="translate({MARGIN},{y})">"#).unwrap();
         svg.push_str(&section.svg);
@@ -220,6 +366,114 @@ text { font-family: 'Noto Sans', sans-serif; fill: #18212b; }
     }
     svg.push_str("</svg>\n");
     Ok(svg)
+}
+
+struct PgsContext {
+    title: String,
+    lines: Vec<String>,
+}
+
+fn load_pgs_context(
+    candidate: Option<&str>,
+    predictions_path: Option<&Path>,
+    measurements_path: Option<&Path>,
+) -> CuResult<Option<PgsContext>> {
+    let Some(candidate) = candidate else {
+        return Ok(None);
+    };
+    let mut lines = Vec::new();
+    if let Some(path) = predictions_path {
+        let contents = fs::read_to_string(path).map_err(|error| {
+            CuError::new_with_cause(
+                &format!("Failed to read PGS predictions '{}'.", path.display()),
+                error,
+            )
+        })?;
+        let predictions: BTreeMap<String, CuPrediction> =
+            ron::from_str(&contents).map_err(|error| {
+                CuError::new_with_cause(
+                    &format!("Failed to parse PGS predictions '{}'.", path.display()),
+                    error,
+                )
+            })?;
+        let prediction = predictions.get(candidate).ok_or_else(|| {
+            CuError::from(format!(
+                "PGS candidate '{candidate}' is absent from '{}'.",
+                path.display()
+            ))
+        })?;
+        let rank = predictions
+            .values()
+            .filter(|other| other.score < prediction.score)
+            .count()
+            + 1;
+        lines.push(format!(
+            "predicted rank {rank}/{} · score {:?}",
+            predictions.len(),
+            prediction.score
+        ));
+        for (chain, timing) in &prediction.chains {
+            lines.push(format!(
+                "{chain}: predicted {:.2} ms / {} ms deadline ({:.1}%)",
+                timing.latency_ns as f64 / 1e6,
+                timing.deadline_ns / 1_000_000,
+                timing.ratio * 100.0,
+            ));
+        }
+    }
+    if let Some(path) = measurements_path {
+        let contents = fs::read_to_string(path).map_err(|error| {
+            CuError::new_with_cause(
+                &format!("Failed to read PGS measurements '{}'.", path.display()),
+                error,
+            )
+        })?;
+        let measurements: CuScoreTable = ron::from_str(&contents).map_err(|error| {
+            CuError::new_with_cause(
+                &format!("Failed to parse PGS measurements '{}'.", path.display()),
+                error,
+            )
+        })?;
+        let (index, row) = measurements
+            .rows
+            .iter()
+            .enumerate()
+            .find(|(_, row)| row.candidate == candidate)
+            .ok_or_else(|| {
+                CuError::from(format!(
+                    "PGS candidate '{candidate}' is absent from '{}'.",
+                    path.display()
+                ))
+            })?;
+        lines.push(format!(
+            "measured rank {}/{} · score {:?}",
+            index + 1,
+            measurements.rows.len(),
+            row.score,
+        ));
+        for (chain, timing) in &row.chains {
+            lines.push(format!(
+                "{chain}: measured p50 {:.2} ms · p99 {:.2} ms · max {:.2} ms · {} misses / {}",
+                timing.p50_ns as f64 / 1e6,
+                timing.p99_ns as f64 / 1e6,
+                timing.max_ns as f64 / 1e6,
+                timing.misses,
+                timing.samples,
+            ));
+        }
+    }
+    Ok(Some(PgsContext {
+        title: format!("Profile-guided scheduling · {candidate}"),
+        lines,
+    }))
+}
+
+fn escape_xml(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
 }
 
 struct RenderedSection {
@@ -635,7 +889,7 @@ fn render_serial(
                 column + 1,
                 if is_background { r#" data-background-gateway="true""# } else { "" },
                 xml(&tooltip),
-                if is_background { "#7f56d9" } else { "#98a2b3" },
+                if is_background { "#cba6f7" } else { "#6c7086" },
                 if is_background { r#" stroke-width="2" stroke-dasharray="4 2""# } else { "" },
                 x + 7.0,
                 row_y + 13.0,
@@ -785,7 +1039,7 @@ fn render_observed(
     if observed.traces.is_empty() {
         writeln!(
             svg,
-            r##"<rect x="0" y="{y}" width="{PARALLEL_WIDTH}" height="44" rx="8" fill="#fff7e6" stroke="#f0a04b"/><text class="blocking" x="12" y="{}">No complete process intervals were found in the CopperList log.</text>"##,
+            r##"<rect x="0" y="{y}" width="{PARALLEL_WIDTH}" height="44" rx="8" fill="#313244" stroke="#f5c2e7"/><text class="blocking" x="12" y="{}">No complete process intervals were found in the CopperList log.</text>"##,
             y + 27.0
         )
         .unwrap();
@@ -928,7 +1182,7 @@ fn render_observed(
                 r##"<g class="observed-segment" data-observed-origin="{}"><title>{}</title><rect x="{x}" y="{y}" width="{width}" height="30" rx="3" fill="{fill}" stroke="{}" stroke-width="{}"/>{inside_label}</g>"##,
                 xml_attr(&interval.origin),
                 xml(&tooltip),
-                if collision_resources.is_some() { "#d92d20" } else { "#475467" },
+                if collision_resources.is_some() { "#f38ba8" } else { "#a6adc8" },
                 if collision_resources.is_some() { 2 } else { 1 },
             )
             .unwrap();
@@ -938,7 +1192,7 @@ fn render_observed(
         if let Some(residual) = trace.residual_before_ns {
             writeln!(
                 svg,
-                r##"<text class="lane mono" x="0" y="{}">between CLs</text><rect x="{LABEL_WIDTH}" y="{y}" width="120" height="13" rx="3" fill="#d7dce2"/><text class="meta mono" x="{}" y="{}">{} before this CL · unclassified, not on the process scale</text>"##,
+                r##"<text class="lane mono" x="0" y="{}">between CLs</text><rect x="{LABEL_WIDTH}" y="{y}" width="120" height="13" rx="3" fill="#45475a"/><text class="meta mono" x="{}" y="{}">{} before this CL · unclassified, not on the process scale</text>"##,
                 y + 11.0,
                 LABEL_WIDTH + 127.0,
                 y + 11.0,
@@ -959,7 +1213,7 @@ fn render_observed(
     if observed.resource_overlaps.is_empty() {
         writeln!(
             svg,
-            r##"<rect x="0" y="{y}" width="{PARALLEL_WIDTH}" height="38" rx="8" fill="#ecfdf3" stroke="#75c58f"/><text class="blocking" x="12" y="{}">No simultaneous recorded process intervals shared a declared resource target.</text>"##,
+            r##"<rect x="0" y="{y}" width="{PARALLEL_WIDTH}" height="38" rx="8" fill="#313244" stroke="#a6e3a1"/><text class="blocking" x="12" y="{}">No simultaneous recorded process intervals shared a declared resource target.</text>"##,
             y + 24.0
         )
         .unwrap();
@@ -968,7 +1222,7 @@ fn render_observed(
         let panel_height = 34.0 + observed.resource_overlaps.len() as f64 * 18.0;
         writeln!(
             svg,
-            r##"<rect x="0" y="{y}" width="{PARALLEL_WIDTH}" height="{panel_height}" rx="8" fill="#fff1f0" stroke="#d92d20"/><text class="blocking" x="12" y="{}">Overlap is a contention risk signal, not proof that either task waited.</text>"##,
+            r##"<rect x="0" y="{y}" width="{PARALLEL_WIDTH}" height="{panel_height}" rx="8" fill="#313244" stroke="#f38ba8"/><text class="blocking" x="12" y="{}">Overlap is a contention risk signal, not proof that either task waited.</text>"##,
             y + 20.0
         )
         .unwrap();
@@ -998,7 +1252,7 @@ fn render_observed(
     );
     writeln!(
         svg,
-        r##"<rect x="0" y="{y}" width="{PARALLEL_WIDTH}" height="58" rx="8" fill="#f8fafc" stroke="#98a2b3"/><text class="blocking" x="12" y="{}">Recorded process intervals exclude queueing, keyframes, logging overhead, and serialization.</text><text class="meta" x="12" y="{}">Residual gaps may include serialization, rate limiting, scheduling, and I/O; est. p50 {}, est. p95 {}. Anytime bars span base through final refine.</text>"##,
+        r##"<rect x="0" y="{y}" width="{PARALLEL_WIDTH}" height="58" rx="8" fill="#313244" stroke="#6c7086"/><text class="blocking" x="12" y="{}">Recorded process intervals exclude queueing, keyframes, logging overhead, and serialization.</text><text class="meta" x="12" y="{}">Residual gaps may include serialization, rate limiting, scheduling, and I/O; est. p50 {}, est. p95 {}. Anytime bars span base through final refine.</text>"##,
         y + 22.0,
         y + 43.0,
         xml(&residual_p50),
@@ -1024,8 +1278,8 @@ fn observed_origin(entity: &PlanEntity) -> String {
 
 fn observed_interval_fill(origin: &str) -> &'static str {
     const COLORS: [&str; 12] = [
-        "#bde3ff", "#ffd6a5", "#cdeac0", "#e2cfea", "#ffcad4", "#b8f2e6", "#f1e3a4", "#cddafd",
-        "#d8f3dc", "#f7c6c7", "#c9e4de", "#dec9e9",
+        "#89b4fa", "#f38ba8", "#a6e3a1", "#cba6f7", "#f5c2e7", "#eba0ac", "#b4befe", "#89b4fa",
+        "#a6e3a1", "#f38ba8", "#eba0ac", "#cba6f7",
     ];
     COLORS[(fnv1a64(origin.as_bytes()) as usize) % COLORS.len()]
 }
@@ -1128,7 +1382,7 @@ fn render_staggered_wavefront(
                 if collisions.is_empty() {
                     ""
                 } else {
-                    r##" fill="#b42318""##
+                    r##" fill="#f38ba8""##
                 },
                 formation + 1,
                 if collisions.is_empty() { "" } else { " ⚠" }
@@ -1183,7 +1437,7 @@ fn render_staggered_wavefront(
                 let Some(stage_index) = formation.checked_sub(lane) else {
                     writeln!(
                         svg,
-                        r##"<rect x="{x}" y="{row_y}" width="{WAVE_CELL_WIDTH}" height="{WAVE_CELL_HEIGHT}" rx="6" fill="#fafafa" stroke="#e4e7ec" stroke-dasharray="3 3"/>"##
+                        r##"<rect x="{x}" y="{row_y}" width="{WAVE_CELL_WIDTH}" height="{WAVE_CELL_HEIGHT}" rx="6" fill="#313244" stroke="#45475a" stroke-dasharray="3 3"/>"##
                     )
                     .unwrap();
                     continue;
@@ -1191,7 +1445,7 @@ fn render_staggered_wavefront(
                 let Some(step) = stages.get(stage_index) else {
                     writeln!(
                         svg,
-                        r##"<rect x="{x}" y="{row_y}" width="{WAVE_CELL_WIDTH}" height="{WAVE_CELL_HEIGHT}" rx="6" fill="#fafafa" stroke="#e4e7ec" stroke-dasharray="3 3"/>"##
+                        r##"<rect x="{x}" y="{row_y}" width="{WAVE_CELL_WIDTH}" height="{WAVE_CELL_HEIGHT}" rx="6" fill="#313244" stroke="#45475a" stroke-dasharray="3 3"/>"##
                     )
                     .unwrap();
                     continue;
@@ -1208,9 +1462,9 @@ fn render_staggered_wavefront(
                     formation_collisions(config, stages, entities, visible_lanes, formation);
                 let collision_targets = collisions.get(&lane).cloned().unwrap_or_default();
                 let stroke = if collision_targets.is_empty() {
-                    "#98a2b3"
+                    "#6c7086"
                 } else {
-                    "#d92d20"
+                    "#f38ba8"
                 };
                 let stroke_width = if collision_targets.is_empty() {
                     1.0
@@ -1357,7 +1611,7 @@ fn render_staggered_wavefront(
     if in_flight_limit < 2 && !has_background {
         writeln!(
             svg,
-            r##"<rect x="0" y="{y}" width="{PARALLEL_WIDTH}" height="50" rx="8" fill="#ecfdf3" stroke="#75c58f"/><text class="blocking" x="12" y="{}">Configured depth is 1, so foreground stages cannot overlap across CopperLists.</text><text class="meta" x="12" y="{}">Repeated bindings still execute serially inside that single CopperList.</text>"##,
+            r##"<rect x="0" y="{y}" width="{PARALLEL_WIDTH}" height="50" rx="8" fill="#313244" stroke="#a6e3a1"/><text class="blocking" x="12" y="{}">Configured depth is 1, so foreground stages cannot overlap across CopperLists.</text><text class="meta" x="12" y="{}">Repeated bindings still execute serially inside that single CopperList.</text>"##,
             y + 21.0,
             y + 39.0,
         )
@@ -1366,7 +1620,7 @@ fn render_staggered_wavefront(
     } else if overlap_groups.is_empty() {
         writeln!(
             svg,
-            r##"<rect x="0" y="{y}" width="{PARALLEL_WIDTH}" height="50" rx="8" fill="#ecfdf3" stroke="#75c58f"/><text class="blocking" x="12" y="{}">No resource target is bound by more than one potentially overlapping stage or background job.</text><text class="meta" x="12" y="{}">This cannot detect GPU/device use that tasks do not declare as a Copper resource binding.</text>"##,
+            r##"<rect x="0" y="{y}" width="{PARALLEL_WIDTH}" height="50" rx="8" fill="#313244" stroke="#a6e3a1"/><text class="blocking" x="12" y="{}">No resource target is bound by more than one potentially overlapping stage or background job.</text><text class="meta" x="12" y="{}">This cannot detect GPU/device use that tasks do not declare as a Copper resource binding.</text>"##,
             y + 21.0,
             y + 39.0,
         )
@@ -1376,7 +1630,7 @@ fn render_staggered_wavefront(
         let panel_height = 42.0 + overlap_groups.len() as f64 * 20.0;
         writeln!(
             svg,
-            r##"<rect x="0" y="{y}" width="{PARALLEL_WIDTH}" height="{panel_height}" rx="8" fill="#fff1f0" stroke="#d92d20"/><text class="blocking" x="12" y="{}">These executions can overlap across CopperLists or while a background job remains active; bindings are not scheduler reservations.</text>"##,
+            r##"<rect x="0" y="{y}" width="{PARALLEL_WIDTH}" height="{panel_height}" rx="8" fill="#313244" stroke="#f38ba8"/><text class="blocking" x="12" y="{}">These executions can overlap across CopperLists or while a background job remains active; bindings are not scheduler reservations.</text>"##,
             y + 20.0,
         )
         .unwrap();
@@ -1557,7 +1811,7 @@ fn render_background_lanes(
             let queue_y = pool_y + 20.0 + threads as f64 * 39.0;
             writeln!(
                 svg,
-                r##"<text class="lane mono" x="0" y="{}" fill="#b42318">FIFO queue</text><rect x="{LABEL_WIDTH}" y="{queue_y}" width="{block_width}" height="31" rx="5" fill="#fff1f0" stroke="#d92d20"/><text class="card-line mono" x="{}" y="{}">⚠ {} task jobs share {} workers · excess jobs can wait here</text>"##,
+                r##"<text class="lane mono" x="0" y="{}" fill="#f38ba8">FIFO queue</text><rect x="{LABEL_WIDTH}" y="{queue_y}" width="{block_width}" height="31" rx="5" fill="#313244" stroke="#f38ba8"/><text class="card-line mono" x="{}" y="{}">⚠ {} task jobs share {} workers · excess jobs can wait here</text>"##,
                 queue_y + 20.0,
                 LABEL_WIDTH + 7.0,
                 queue_y + 20.0,
@@ -1587,7 +1841,7 @@ fn render_background_lanes(
         );
         writeln!(
             svg,
-            r##"<g data-background-trigger="{}"><title>{}</title><path class="bg-trigger" d="M {source_x} {source_y} L {target_x} {} L {target_x} {target_y}"/><circle cx="{target_x}" cy="{target_y}" r="3" fill="#7f56d9"/></g>"##,
+            r##"<g data-background-trigger="{}"><title>{}</title><path class="bg-trigger" d="M {source_x} {source_y} L {target_x} {} L {target_x} {target_y}"/><circle cx="{target_x}" cy="{target_y}" r="3" fill="#cba6f7"/></g>"##,
             trigger.stage_index + 1,
             xml(&tooltip),
             source_y + 6.0,
@@ -1865,8 +2119,8 @@ mod tests {
             )"#,
         );
         let sections = selected_graphs(&config, None).unwrap();
-        let first = render_document(&config, &sections, None).unwrap();
-        let second = render_document(&config, &sections, None).unwrap();
+        let first = render_document(&config, &sections, None, None).unwrap();
+        let second = render_document(&config, &sections, None, None).unwrap();
         assert_eq!(first, second);
         assert!(first.contains("Serial projection"));
         assert!(first.contains("Pipeline lanes"));
@@ -1895,7 +2149,13 @@ mod tests {
                 ],
             )"#,
         );
-        let svg = render_document(&config, &selected_graphs(&config, None).unwrap(), None).unwrap();
+        let svg = render_document(
+            &config,
+            &selected_graphs(&config, None).unwrap(),
+            None,
+            None,
+        )
+        .unwrap();
         assert!(svg.contains("refine 1/3"));
         assert!(svg.contains("refine 3/3"));
         assert!(svg.contains("base + 3 refine"));
@@ -1920,9 +2180,9 @@ mod tests {
     }
 
     #[test]
-    fn cli_defaults_to_plan_svg_and_parses_features() {
+    fn cli_defaults_to_schedule_svg_and_parses_features() {
         let args = Args::try_parse_from([
-            "cu29-plan",
+            "cu29-schedule-view",
             "copperconfig.ron",
             "--features",
             "camera,mock",
@@ -1930,9 +2190,78 @@ mod tests {
             "stats.json",
         ])
         .unwrap();
-        assert_eq!(args.output, PathBuf::from("plan.svg"));
+        assert_eq!(args.output, PathBuf::from("schedule.svg"));
         assert_eq!(args.features, ["camera", "mock"]);
         assert_eq!(args.logstats, Some(PathBuf::from("stats.json")));
+    }
+
+    #[test]
+    fn pgs_artifact_renders_rank_and_timing_context() {
+        use cu29_runtime::planner::{CuChainPrediction, CuChainScore, CuScoreRow};
+
+        let directory = tempfile::tempdir().unwrap();
+        let predictions_path = directory.path().join("predictions.ron");
+        let measurements_path = directory.path().join("measurements.ron");
+        let prediction = CuPrediction {
+            score: vec![0.5],
+            chains: BTreeMap::from([(
+                "chain".into(),
+                CuChainPrediction {
+                    latency_ns: 2_000_000,
+                    deadline_ns: 4_000_000,
+                    ratio: 0.5,
+                },
+            )]),
+            workers: BTreeMap::new(),
+            sources: BTreeMap::new(),
+        };
+        fs::write(
+            &predictions_path,
+            ron::to_string(&BTreeMap::from([("plan-1", prediction)])).unwrap(),
+        )
+        .unwrap();
+        let scores = CuScoreTable {
+            rows: vec![CuScoreRow {
+                candidate: "plan-1".into(),
+                score: vec![0.4],
+                chains: BTreeMap::from([(
+                    "chain".into(),
+                    CuChainScore {
+                        deadline_ms: 4,
+                        samples: 10,
+                        p50_ns: 1_000_000,
+                        p99_ns: 2_000_000,
+                        max_ns: 3_000_000,
+                        misses: 1,
+                        predicted_ns: Some(2_000_000),
+                    },
+                )]),
+                sources: BTreeMap::new(),
+                predicted: None,
+            }],
+        };
+        fs::write(&measurements_path, ron::to_string(&scores).unwrap()).unwrap();
+        let context = load_pgs_context(
+            Some("plan-1"),
+            Some(&predictions_path),
+            Some(&measurements_path),
+        )
+        .unwrap()
+        .unwrap();
+        let config = config(
+            r#"(tasks: [(id: "src", type: "demo::Src", kind: source)], cnx: [(src: "src", dst: "__nc__", msg: "demo::A")])"#,
+        );
+        let svg = render_document(
+            &config,
+            &selected_graphs(&config, None).unwrap(),
+            None,
+            Some(&context),
+        )
+        .unwrap();
+        assert!(svg.contains("predicted rank 1/1"));
+        assert!(svg.contains("predicted 2.00 ms"));
+        assert!(svg.contains("measured rank 1/1"));
+        assert!(svg.contains("measured p50 1.00 ms"));
     }
 
     #[test]
@@ -1956,7 +2285,13 @@ mod tests {
                 ],
             )"#,
         );
-        let svg = render_document(&config, &selected_graphs(&config, None).unwrap(), None).unwrap();
+        let svg = render_document(
+            &config,
+            &selected_graphs(&config, None).unwrap(),
+            None,
+            None,
+        )
+        .unwrap();
         assert!(svg.contains("POLL / DISPATCH?"));
         assert!(svg.contains("BACKGROUND POOL WORKER THREADS"));
         assert!(svg.contains("RT GATEWAY ONLY"));
@@ -1998,7 +2333,13 @@ mod tests {
                 ],
             )"#,
         );
-        let svg = render_document(&config, &selected_graphs(&config, None).unwrap(), None).unwrap();
+        let svg = render_document(
+            &config,
+            &selected_graphs(&config, None).unwrap(),
+            None,
+            None,
+        )
+        .unwrap();
         assert!(svg.contains("FIFO queue"));
         assert!(svg.contains("2 task jobs share 1 workers"));
         assert!(svg.contains("excess jobs can wait here"));
@@ -2030,7 +2371,13 @@ mod tests {
                 ],
             )"#,
         );
-        let svg = render_document(&config, &selected_graphs(&config, None).unwrap(), None).unwrap();
+        let svg = render_document(
+            &config,
+            &selected_graphs(&config, None).unwrap(),
+            None,
+            None,
+        )
+        .unwrap();
         assert!(svg.contains("Configured in-flight depth: 6"));
         assert!(svg.contains("CL n+5"));
         assert!(svg.contains(r#"data-cl-offset="5""#));
@@ -2062,7 +2409,13 @@ mod tests {
                 ],
             )"#,
         );
-        let svg = render_document(&config, &selected_graphs(&config, None).unwrap(), None).unwrap();
+        let svg = render_document(
+            &config,
+            &selected_graphs(&config, None).unwrap(),
+            None,
+            None,
+        )
+        .unwrap();
         assert!(svg.contains("Showing CL n through CL n+5 (6 of 7 active pipeline positions)"));
         assert!(svg.contains(r#"data-cl-offset="5""#));
         assert!(!svg.contains(r#"data-cl-offset="6""#));
@@ -2087,11 +2440,17 @@ mod tests {
                 ],
             )"#,
         );
-        let svg = render_document(&config, &selected_graphs(&config, None).unwrap(), None).unwrap();
+        let svg = render_document(
+            &config,
+            &selected_graphs(&config, None).unwrap(),
+            None,
+            None,
+        )
+        .unwrap();
         assert!(svg.contains("Staggered concurrency formations"));
         assert!(svg.contains("POTENTIAL CONTENTION in this formation: gpu0"));
         assert!(svg.contains("⚠ gpu0: S02 detect ↔ S03 refine"));
-        assert!(svg.contains(r##"stroke="#d92d20" stroke-width="3""##));
+        assert!(svg.contains(r##"stroke="#f38ba8" stroke-width="3""##));
     }
 
     #[test]
@@ -2160,6 +2519,7 @@ mod tests {
             &config,
             &selected_graphs(&config, None).unwrap(),
             Some(&stats),
+            None,
         )
         .unwrap();
         assert!(svg.contains("Observed execution"));
@@ -2188,12 +2548,20 @@ mod tests {
         .unwrap();
         run(Args {
             config: config_path,
+            base_dir: None,
             mission: None,
             features: Vec::new(),
             list_missions: false,
             open: false,
             output: output_path.clone(),
             logstats: None,
+            log: None,
+            logreader: None,
+            logreader_package: None,
+            logreader_features: Vec::new(),
+            predictions: None,
+            measurements: None,
+            candidate: None,
         })
         .unwrap();
         assert!(output_path.is_file());
@@ -2205,12 +2573,20 @@ mod tests {
 
         let missing = run(Args {
             config: temp.path().join("missing.ron"),
+            base_dir: None,
             mission: None,
             features: Vec::new(),
             list_missions: false,
             open: false,
             output: temp.path().join("missing.svg"),
             logstats: None,
+            log: None,
+            logreader: None,
+            logreader_package: None,
+            logreader_features: Vec::new(),
+            predictions: None,
+            measurements: None,
+            candidate: None,
         });
         assert!(missing.is_err());
     }
@@ -2243,12 +2619,20 @@ mod tests {
 
         run(Args {
             config: config_path,
+            base_dir: None,
             mission: None,
             features: Vec::new(),
             list_missions: false,
             open: false,
             output: output_path.clone(),
             logstats: Some(logstats_path),
+            log: None,
+            logreader: None,
+            logreader_package: None,
+            logreader_features: Vec::new(),
+            predictions: None,
+            measurements: None,
+            candidate: None,
         })
         .unwrap();
 

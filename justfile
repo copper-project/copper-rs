@@ -1,5 +1,5 @@
 # CI-aligned helpers mirroring .github/workflows/general.yml
-import "support/just/plan.just"
+import "support/just/viewers.just"
 
 # Keep first-party messages checked against the reflect-enabled CuMsgPayload contract.
 BASE_FEATURES := "cu29/reflect,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug"
@@ -172,13 +172,15 @@ test:
 	#!/usr/bin/env bash
 	set -euo pipefail
 
+	# cargo-generate needs an author identity even when generated projects omit authors.
+	export CARGO_NAME="Copper Tests"
 	cargo +stable nextest run --all-targets --workspace {{WORKSPACE_EXCLUDES}}
 	cargo +stable nextest run --no-default-features
 
-# DAG/plan rendering, resource usage labels, and config parsing regressions.
-dag-check:
-	cargo +stable clippy -p cu29-rendercfg -p cu29-plan -- --deny warnings
-	cargo +stable test -p cu29-rendercfg -p cu29-plan
+# Graph/schedule rendering, resource usage labels, and config parsing regressions.
+graph-view-check:
+	cargo +stable clippy -p cu29-graph-view -p cu29-schedule-view -- --deny warnings
+	cargo +stable test -p cu29-graph-view -p cu29-schedule-view
 
 # UDP carrier contracts and generated sender/session-router localhost integration.
 logstream-udp-check:
@@ -194,10 +196,10 @@ logstream-receiver-check:
 
 # Compile-time resource composition and DAG dependency rendering.
 resource-stack-check:
-	cargo +stable clippy -p cu29-rendercfg -p cu29-derive --lib -- --deny warnings
+	cargo +stable clippy -p cu29-graph-view -p cu29-derive --lib -- --deny warnings
 	cargo +stable test -p cu29 --test resource_stack
 	cargo +stable test -p cu29-derive --lib resource
-	cargo +stable test -p cu29-rendercfg
+	cargo +stable test -p cu29-graph-view
 	cargo +stable check -p cu29 --no-default-features --target thumbv7em-none-eabihf
 
 # Resource stacking, HC-12 startup, serial bridge/framing, and DAG ownership.
@@ -208,7 +210,7 @@ hc12-check:
 	cargo +stable test -p cu-hc12 -p cu-serial -p cu-serial-bridge -p cu29-logstream-serial -p cu-linux-resources --features cu29/reflect
 	cargo +stable test -p cu29 --test resource_stack
 	cargo +stable test -p cu29-derive --lib resource
-	cargo +stable test -p cu29-rendercfg
+	cargo +stable test -p cu29-graph-view
 	cargo +stable test -p cu29-logstream --test pacing
 	cargo +stable check -p cu-hc12 -p cu-serial -p cu-serial-bridge -p cu29-logstream-serial --no-default-features
 
@@ -334,6 +336,7 @@ nostd-ci toolchain="stable":
 std-ci mode="debug" toolchain="stable":
 	#!/usr/bin/env bash
 	set -euo pipefail
+	export CARGO_NAME="Copper Tests"
 	just fmt-check
 	just typos
 
@@ -557,12 +560,12 @@ extract-log dev out="logs/embedded_0.copper":
 	echo "Reading Cu29 partition $PART -> $OUT"
 	sudo dd if="$PART" of="$OUT" bs=4M status=progress conv=fsync
 
-# Render the current Copper config from the working directory.
-# Prefers `copperconfig.ron`, and falls back to `multi_copper.ron` for distributed demos.
+# Compatibility alias for rendering the current Copper config from the working directory.
 dag mission="":
 	#!/usr/bin/env bash
 	set -euo pipefail
 
+	echo "just dag is deprecated; use just graph <config>" >&2
 	invocation_dir="{{invocation_directory()}}"
 	cfg_path="${invocation_dir}/copperconfig.ron"
 	if [[ ! -f "$cfg_path" ]]; then
@@ -573,13 +576,7 @@ dag mission="":
 		fi
 	fi
 
-	cd "{{ROOT}}"
-	mission_value="{{mission}}"
-	if [[ -n "$mission_value" ]]; then
-		cargo run -p cu29-rendercfg -- --mission "$mission_value" --open "$cfg_path"
-	else
-		cargo run -p cu29-rendercfg -- --open "$cfg_path"
-	fi
+	just graph "$cfg_path" graph.svg "{{mission}}"
 
 # Helpers for managing git worktrees for different branches.
 wt branch:

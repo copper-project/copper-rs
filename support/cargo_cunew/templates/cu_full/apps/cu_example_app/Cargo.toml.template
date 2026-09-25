@@ -19,10 +19,25 @@ name = "cu_example_app-resim"
 path = "src/resim.rs"
 required-features = ["sim-debug"]
 
+{% if pgs_enabled %}
+[[bin]]
+name = "cu_example_app-pgs-candidate"
+path = "src/pgs_candidate.rs"
+required-features = ["parallel-rt", "pgs-candidate"]
+
+[[bin]]
+name = "cu_example_app-pgs"
+path = "src/pgs.rs"
+{% endif %}
+
 [features]
 default = []
 logreader = ["dep:cu29-export"]
 sim-debug = ["logreader", "cu29/reflect", "cu29/remote-debug"]
+{% if pgs_enabled %}
+parallel-rt = ["cu29/parallel-rt"]
+pgs-candidate = []
+{% endif %}
 # Per-task heap-allocation monitor. To enable, uncomment the `cu-memmon`
 # dependency (here and in the workspace Cargo.toml) and add the matching
 # `monitor:` entry to copperconfig.ron — see the workspace README.
@@ -33,6 +48,7 @@ cu29 = { workspace = true }
 cu29-export = { workspace = true, optional = true }
 bincode = { workspace = true }
 serde = { workspace = true }
+clap = { workspace = true }
 # cu-memmon = { workspace = true, optional = true }
 
 [build-dependencies]

@@ -38,6 +38,10 @@ Use a git dependency instead of crates.io:
 cargo cunew --source git --git-url https://github.com/copper-project/copper-rs.git my_robot
 ```
 
+Interactive creation asks whether the target is bare metal/no_std. Choose it to
+omit PGS files and commands. In a script, pass `--target bare-metal`; omitted
+`--target` defaults to `host` when input is noninteractive.
+
 The available templates are:
 
 - `project`: single-crate Copper app (`cu_project`)
@@ -62,7 +66,8 @@ cargo +stable generate \
     --name test_project \
     --destination . \
     --define copper_source=local \
-    --define copper_root_path=/absolute/path/to/copper-rs
+    --define copper_root_path=/absolute/path/to/copper-rs \
+    --define pgs_enabled=true
 
 # Workspace template from a repo checkout
 cargo +stable generate \
@@ -70,7 +75,8 @@ cargo +stable generate \
     --name test_workspace \
     --destination . \
     --define copper_source=local \
-    --define copper_root_path=/absolute/path/to/copper-rs
+    --define copper_root_path=/absolute/path/to/copper-rs \
+    --define pgs_enabled=true
 ```
 
 The template-local `justfile` remains useful for repo development:
@@ -89,14 +95,21 @@ The generated project includes helper commands in its `justfile`:
 * `just cl`: Extract CopperLists (sequences of operations) from the application's log output.
 * `just resim`: Replay the recorded log once into a fresh replay log.
 * `just resim-debug`: Start the replay-backed remote debug server manually.
-* `just dag`: Render the application's execution Directed Acyclic Graph (DAG). Local-checkout templates run the tool from the Copper repo; crates.io and git templates use `cu29-rendercfg` from `PATH` or install the matching `cu29-rendercfg` on demand. `just rcfg` remains as a compatibility alias.
-* `just plan`: Render the exact generated per-CopperList process order as `plan.svg`, including Pipeline lanes when `runtime.planner.kind` is `Pipeline`. Pass `--log logs/<app>.copper` to append packed typical/slowest timelines whose back-to-back segments remain proportional to recorded task duration, or `--mission <id>` / `--features <a,b>` when needed. A small Rust helper handles the workflow with `clap`, using the local `cu29-plan` binary or installing the matching `cu29-plan` on demand.
-* `just plan-log`: Render the same SVG with observed timing from the project's default Copper log.
+* `just graph`: Render the graph to `graph.svg`; `just graph-log` adds observed timing from a Copper log.
+* `just dag`: Compatibility alias for `graph`; prints a deprecation notice.
+* `just sched`: Render the exact generated per-CopperList process order to `schedule.svg`; `just sched-log` adds observed timing.
+* `just pgs-baseline`, `pgs-optimize`, `pgs-candidate`, `pgs-measure`: host-project PGS loop. `schedule.ron` starts with the template's `src → sink` chain, CPU 0, `Fair`, and a placeholder deadline that must be tuned. Artifacts and ranked SVGs live under `target/pgs`.
+
+Viewer recipes accept explicit config, output, and log paths. The generated Rust
+launcher selects the matching `cu29-graph-view` or `cu29-schedule-view` version;
+local source uses the checkout, while crates.io and git source install into the
+generated project's `target/viewer-tools` directory.
 
 The replay recipes use the generated `debug-optimized` Cargo profile. It enables optimization
 without losing Copper `debug!` structured logs, debug assertions, or debug information.
 
-Set `APP_NAME=test-workspace-demo APP_DIR=test_workspace-demo` to target the demo app (for example, `APP_NAME=test-workspace-demo APP_DIR=test_workspace-demo just log`).
+Workspace recipes accept `app=<package>` and explicit paths, for example
+`just graph cu_example_app`.
 
 ## Replay Target Contract
 

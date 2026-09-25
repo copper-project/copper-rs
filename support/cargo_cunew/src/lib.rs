@@ -1,5 +1,6 @@
 use std::env;
 use std::fs;
+use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -68,6 +69,10 @@ pub struct Cli {
     /// Increase cargo-generate verbosity.
     #[arg(long)]
     pub verbose: bool,
+
+    /// Deployment target. Bare-metal projects omit host-only PGS scaffolding.
+    #[arg(long, value_enum)]
+    pub target: Option<TargetKind>,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
@@ -92,6 +97,13 @@ pub enum SourceKind {
     CratesIo,
     Git,
     Local,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
+pub enum TargetKind {
+    Host,
+    #[value(name = "bare-metal", alias = "nostd", alias = "no-std")]
+    BareMetal,
 }
 
 impl SourceKind {
@@ -124,9 +136,8 @@ pub fn run(cli: Cli) -> Result<PathBuf> {
 
 fn run_with_versions(cli: Cli, versions_override: Option<CopperVersions>) -> Result<PathBuf> {
     validate_git_options(&cli)?;
-    ensure_generator_identity_env()?;
-
-    let resolved = resolve_options(&cli, versions_override)?;
+    let target = resolve_target(&cli)?;
+    let resolved = resolve_options(&cli, target, versions_override)?;
     let bundled = materialize_bundled_templates()?;
 
     let args = GenerateArgs {
@@ -154,70 +165,9 @@ fn run_with_versions(cli: Cli, versions_override: Option<CopperVersions>) -> Res
     generate(args).context("failed to generate Copper project")
 }
 
-fn ensure_generator_identity_env() -> Result<()> {
-    let user = env::var("USER")
-        .ok()
-        .filter(|value| !value.trim().is_empty());
-    let username = env::var("USERNAME")
-        .ok()
-        .filter(|value| !value.trim().is_empty());
-
-    let identity = user
-        .clone()
-        .or(username.clone())
-        .or(detect_current_username()?);
-
-    let Some(identity) = identity else {
-        return Ok(());
-    };
-
-    // cargo-generate reads process environment to synthesize its built-in
-    // `authors`/`username` variables. Set the missing variables once up front.
-    unsafe {
-        if user.is_none() {
-            env::set_var("USER", &identity);
-        }
-        if username.is_none() {
-            env::set_var("USERNAME", &identity);
-        }
-    }
-
-    Ok(())
-}
-
-#[cfg(unix)]
-fn detect_current_username() -> Result<Option<String>> {
-    use std::ffi::CStr;
-
-    // This runs before cargo-generate starts and before we spawn worker
-    // threads, so using the libc account lookup here is acceptable.
-    unsafe {
-        let passwd = libc::getpwuid(libc::geteuid());
-        if passwd.is_null() || (*passwd).pw_name.is_null() {
-            return Ok(None);
-        }
-
-        let username = CStr::from_ptr((*passwd).pw_name)
-            .to_str()
-            .context("current username is not valid UTF-8")?
-            .trim()
-            .to_owned();
-
-        if username.is_empty() {
-            return Ok(None);
-        }
-
-        Ok(Some(username))
-    }
-}
-
-#[cfg(not(unix))]
-fn detect_current_username() -> Result<Option<String>> {
-    Ok(None)
-}
-
 fn resolve_options(
     cli: &Cli,
+    target: TargetKind,
     versions_override: Option<CopperVersions>,
 ) -> Result<ResolvedOptions> {
     let project_path = cli.path.clone();
@@ -259,7 +209,13 @@ fn resolve_options(
         _ => None,
     };
 
-    let defines = build_defines(cli, &versions, copper_root.as_deref(), &generated_root)?;
+    let defines = build_defines(
+        cli,
+        target,
+        &versions,
+        copper_root.as_deref(),
+        &generated_root,
+    )?;
 
     Ok(ResolvedOptions {
         project_name,
@@ -267,6 +223,29 @@ fn resolve_options(
         vcs: if cli.no_vcs { Vcs::None } else { Vcs::Git },
         defines,
     })
+}
+
+fn resolve_target(cli: &Cli) -> Result<TargetKind> {
+    if let Some(target) = cli.target {
+        return Ok(target);
+    }
+    if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
+        return Ok(TargetKind::Host);
+    }
+
+    print!("Is this project targeting bare metal/no_std? [y/N] ");
+    io::stdout()
+        .flush()
+        .context("failed to write target prompt")?;
+    let mut answer = String::new();
+    io::stdin()
+        .read_line(&mut answer)
+        .context("failed to read target selection")?;
+    match answer.trim().to_ascii_lowercase().as_str() {
+        "" | "n" | "no" => Ok(TargetKind::Host),
+        "y" | "yes" => Ok(TargetKind::BareMetal),
+        _ => bail!("answer yes or no, or pass --target host|bare-metal"),
+    }
 }
 
 fn validate_git_options(cli: &Cli) -> Result<()> {
@@ -292,11 +271,13 @@ fn validate_git_options(cli: &Cli) -> Result<()> {
 
 fn build_defines(
     cli: &Cli,
+    target: TargetKind,
     versions: &CopperVersions,
     copper_root: Option<&Path>,
     generated_root: &Path,
 ) -> Result<Vec<String>> {
     let mut defines = vec![
+        format!("pgs_enabled={}", target == TargetKind::Host),
         format!("copper_source={}", cli.source.as_template_value()),
         format!("copper_version={}", versions.cu29),
         format!("copper_export_version={}", versions.cu29_export),
@@ -585,6 +566,7 @@ mod tests {
             git_rev: None,
             no_vcs: true,
             verbose: false,
+            target: Some(TargetKind::Host),
         };
 
         run_with_versions(
@@ -598,7 +580,7 @@ mod tests {
 
         let manifest = fs::read_to_string(project.join("Cargo.toml")).expect("manifest");
         let justfile = fs::read_to_string(project.join("justfile")).expect("justfile");
-        let plan = fs::read_to_string(project.join("src/plan.rs")).expect("plan helper");
+        let viewer = fs::read_to_string(project.join("src/view.rs")).expect("viewer helper");
 
         assert!(manifest.contains("edition = \"2024\""));
         assert!(manifest.contains("version = \"9.9.9\""));
@@ -607,15 +589,14 @@ mod tests {
         assert!(manifest.contains("[profile.debug-optimized]"));
         assert!(!manifest.contains("\n[workspace]\n"));
         assert!(justfile.contains("--profile debug-optimized"));
-        assert!(justfile.contains("cargo install --locked cu29-rendercfg --version \"9.9.9\""));
-        assert!(justfile.contains("dag:"));
-        assert!(justfile.contains("[positional-arguments]"));
-        assert!(justfile.contains("plan *options:"));
-        assert!(justfile.contains("plan-log:"));
-        assert!(justfile.contains("cargo run --quiet --bin hello-copper-plan"));
-        assert!(plan.contains("#[derive(Debug, Parser)]"));
-        assert!(plan.contains("\"9.9.9\""));
-        assert!(plan.contains("\"log-stats\""));
+        assert!(justfile.contains("graph config="));
+        assert!(justfile.contains("sched-log config="));
+        assert!(justfile.contains("pgs-optimize candidates="));
+        assert!(viewer.contains("cu29-graph-view"));
+        assert!(viewer.contains("cu29-schedule-view"));
+        assert!(viewer.contains("\"9.9.9\""));
+        assert!(project.join("schedule.ron").is_file());
+        assert!(project.join("src/pgs_candidate.rs").is_file());
     }
 
     #[test]
@@ -634,6 +615,7 @@ mod tests {
             git_rev: None,
             no_vcs: true,
             verbose: false,
+            target: Some(TargetKind::Host),
         };
 
         run_with_versions(
@@ -649,20 +631,21 @@ mod tests {
         let app_manifest = fs::read_to_string(project.join("apps/cu_example_app/Cargo.toml"))
             .expect("app manifest");
         let justfile = fs::read_to_string(project.join("justfile")).expect("justfile");
-        let plan = fs::read_to_string(project.join("tools/cu29_plan_helper/src/main.rs"))
-            .expect("plan helper");
+        let viewer = fs::read_to_string(project.join("tools/cu29_view_helper/src/main.rs"))
+            .expect("viewer helper");
 
         assert!(manifest.contains("core/cu29"));
         assert!(manifest.contains("core/cu29_export"));
         assert!(manifest.contains("[profile.debug-optimized]"));
         assert!(app_manifest.contains("edition = \"2024\""));
         assert!(justfile.contains("--profile debug-optimized"));
-        assert!(justfile.contains("cu29-rendercfg"));
-        assert!(justfile.contains("cu29-plan"));
-        assert!(justfile.contains("plan-log:"));
-        assert!(justfile.contains("cargo run --quiet -p cu29-plan-helper"));
-        assert!(plan.contains("#[derive(Debug, Parser)]"));
-        assert!(plan.contains("\"log-stats\""));
+        assert!(justfile.contains("graph app="));
+        assert!(justfile.contains("sched app="));
+        assert!(justfile.contains("sched-log app="));
+        assert!(justfile.contains("pgs-measure candidates="));
+        assert!(viewer.contains("#[derive(Debug, Parser)]"));
+        assert!(!viewer.contains("env ="));
+        assert!(project.join("apps/cu_example_app/schedule.ron").is_file());
         assert!(!project.join(".git").exists());
     }
 
@@ -682,6 +665,7 @@ mod tests {
             git_rev: None,
             no_vcs: true,
             verbose: false,
+            target: Some(TargetKind::Host),
         };
 
         run_with_versions(
@@ -695,12 +679,56 @@ mod tests {
 
         let manifest = fs::read_to_string(project.join("Cargo.toml")).expect("manifest");
         let justfile = fs::read_to_string(project.join("justfile")).expect("justfile");
-        let plan = fs::read_to_string(project.join("src/plan.rs")).expect("plan helper");
+        let viewer = fs::read_to_string(project.join("src/view.rs")).expect("viewer helper");
 
         assert!(manifest.contains("git = \"https://github.com/copper-project/copper-rs.git\""));
         assert!(manifest.contains("branch = \"main\""));
-        assert!(plan.contains("https://github.com/copper-project/copper-rs.git"));
-        assert!(plan.contains("command.args([\"--branch\", r#\"main\"#])"));
-        assert!(!justfile.contains("--bin cu29-plan cu29-plan"));
+        assert!(viewer.contains("https://github.com/copper-project/copper-rs.git"));
+        assert!(viewer.contains("command.args([\"--branch\", r#\"main\"#])"));
+        assert!(!justfile.contains("plan-log"));
+    }
+
+    #[test]
+    fn bare_metal_target_omits_pgs_in_both_templates() {
+        for template in [TemplateKind::Project, TemplateKind::Workspace] {
+            let tempdir = tempfile::tempdir().expect("tempdir");
+            let project = tempdir.path().join("bare-copper");
+            let cli = Cli {
+                path: project.clone(),
+                template,
+                source: SourceKind::Local,
+                name: None,
+                copper_root: Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")),
+                git_url: DEFAULT_GIT_URL.to_owned(),
+                git_branch: None,
+                git_tag: None,
+                git_rev: None,
+                no_vcs: true,
+                verbose: false,
+                target: Some(TargetKind::BareMetal),
+            };
+            run_with_versions(cli, None).expect("generation should succeed");
+            let justfile = fs::read_to_string(project.join("justfile")).expect("justfile");
+            assert!(!justfile.contains("pgs-"));
+            match template {
+                TemplateKind::Project => {
+                    let manifest = fs::read_to_string(project.join("Cargo.toml")).unwrap();
+                    assert!(!manifest.contains("pgs-candidate"));
+                    assert!(!project.join("schedule.ron").exists());
+                    assert!(!project.join("src/pgs_candidate.rs").exists());
+                }
+                TemplateKind::Workspace => {
+                    let manifest =
+                        fs::read_to_string(project.join("apps/cu_example_app/Cargo.toml")).unwrap();
+                    assert!(!manifest.contains("pgs-candidate"));
+                    assert!(!project.join("apps/cu_example_app/schedule.ron").exists());
+                    assert!(
+                        !project
+                            .join("apps/cu_example_app/src/pgs_candidate.rs")
+                            .exists()
+                    );
+                }
+            }
+        }
     }
 }

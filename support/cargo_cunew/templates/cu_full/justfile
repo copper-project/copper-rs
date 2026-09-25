@@ -1,79 +1,49 @@
-# Workspace automation helpers.
+# Workspace application, replay, and visualization helpers.
 
-# Render the execution DAG from the app config.
-dag:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  APP_DIR="${APP_DIR:-cu_example_app}"
-  {% if copper_source == "local" %}
-  cargo run --manifest-path "{{copper_root_path}}/Cargo.toml" -p cu29-rendercfg -- \
-    apps/"${APP_DIR}"/copperconfig.ron --open
-  {% else %}
-  renderer="$(command -v cu29-rendercfg || true)"
-  if [[ -z "$renderer" ]]; then
-    echo "cu29-rendercfg not found on PATH; installing it now..." >&2
-    {% if copper_source == "crates.io" %}
-    cargo install --locked cu29-rendercfg --version "{{copper_version}}" --bin cu29-rendercfg
-    {% elsif copper_source == "git" %}
-    cargo install --locked --git "{{copper_git_url}}" {% if copper_git_branch != "__none__" %}--branch "{{copper_git_branch}}" {% elsif copper_git_tag != "__none__" %}--tag "{{copper_git_tag}}" {% elsif copper_git_rev != "__none__" %}--rev "{{copper_git_rev}}" {% endif %} --bin cu29-rendercfg cu29-rendercfg
-    {% endif %}
-    renderer="$(command -v cu29-rendercfg || true)"
-    if [[ -z "$renderer" ]]; then
-      renderer="${CARGO_HOME:-$HOME/.cargo}/bin/cu29-rendercfg"
-    fi
-  fi
-  [[ -x "$renderer" ]] || { echo "Failed to find cu29-rendercfg after installation." >&2; exit 1; }
-  "$renderer" apps/"${APP_DIR}"/copperconfig.ron --open
-  {% endif %}
+log app="cu_example_app" log="apps/cu_example_app/logs/cu_example_app.copper":
+  cargo run -p "{% raw %}{{app}}{% endraw %}" --features logreader --bin "{% raw %}{{app}}{% endraw %}-logreader" -- "{% raw %}{{log}}{% endraw %}" extract-text-log target/debug/cu29_log_index
 
-# Compatibility alias for older template docs.
-rcfg: dag
+cl app="cu_example_app" log="apps/cu_example_app/logs/cu_example_app.copper":
+  cargo run -p "{% raw %}{{app}}{% endraw %}" --features logreader --bin "{% raw %}{{app}}{% endraw %}-logreader" -- "{% raw %}{{log}}{% endraw %}" extract-copperlists
 
-# Render the exact generated per-CopperList process schedule.
-[positional-arguments]
-plan *options:
-  cargo run --quiet -p cu29-plan-helper -- "$@"
+resim app="cu_example_app" log="apps/cu_example_app/logs/cu_example_app.copper":
+  cargo run --profile debug-optimized -p "{% raw %}{{app}}{% endraw %}" --features sim-debug --bin "{% raw %}{{app}}{% endraw %}-resim" -- --log-base "{% raw %}{{log}}{% endraw %}"
 
-# Render observed timing from the selected app's default Copper log.
-plan-log:
-  just plan --default-log --features logreader
+resim-debug app="cu_example_app" log="apps/cu_example_app/logs/cu_example_app.copper" replay_log="apps/cu_example_app/logs/cu_example_app_resim.copper" debug_base="copper/apps/cu_example_app/debug/v1":
+  cargo run --profile debug-optimized -p "{% raw %}{{app}}{% endraw %}" --features sim-debug --bin "{% raw %}{{app}}{% endraw %}-resim" -- --debug-base "{% raw %}{{debug_base}}{% endraw %}" --log-base "{% raw %}{{log}}{% endraw %}" --replay-log-base "{% raw %}{{replay_log}}{% endraw %}"
 
-# Extract the structured log via the log reader.
-log:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  APP_DIR="${APP_DIR:-cu_example_app}"
-  APP_NAME="${APP_NAME:-${APP_DIR}}"
-  RUST_BACKTRACE=1 cargo run -p "${APP_NAME}" --features=logreader --bin "${APP_NAME}-logreader" \
-    apps/"${APP_DIR}"/logs/"${APP_NAME}".copper extract-text-log target/debug/cu29_log_index
+graph app="cu_example_app" config="" output="":
+  cargo run -p cu29-view-helper -- graph --app "{% raw %}{{app}}{% endraw %}" --config "{% raw %}{{config}}{% endraw %}" --output "{% raw %}{{output}}{% endraw %}" --open
 
-# Extract CopperLists from the log output.
-cl:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  APP_DIR="${APP_DIR:-cu_example_app}"
-  APP_NAME="${APP_NAME:-${APP_DIR}}"
-  RUST_BACKTRACE=1 cargo run -p "${APP_NAME}" --features=logreader --bin "${APP_NAME}-logreader" \
-    apps/"${APP_DIR}"/logs/"${APP_NAME}".copper extract-copperlists
+# Compatibility alias for the former graph recipe.
+dag app="cu_example_app" config="" output="":
+  @echo "just dag is deprecated; use just graph" >&2
+  just graph "{% raw %}{{app}}{% endraw %}" "{% raw %}{{config}}{% endraw %}" "{% raw %}{{output}}{% endraw %}"
 
-resim:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  APP_DIR="${APP_DIR:-cu_example_app}"
-  APP_NAME="${APP_NAME:-${APP_DIR}}"
-  RUST_BACKTRACE=1 cargo run --profile debug-optimized -p "${APP_NAME}" --features=sim-debug --bin "${APP_NAME}-resim" -- \
-    --log-base "apps/${APP_DIR}/logs/${APP_NAME}.copper"
+graph-log app="cu_example_app" config="" log="apps/cu_example_app/logs/cu_example_app.copper" output="":
+  cargo run -p cu29-view-helper -- graph --app "{% raw %}{{app}}{% endraw %}" --config "{% raw %}{{config}}{% endraw %}" --log "{% raw %}{{log}}{% endraw %}" --output "{% raw %}{{output}}{% endraw %}" --open
 
-resim-debug debug_base="":
-  #!/usr/bin/env bash
-  set -euo pipefail
-  APP_DIR="${APP_DIR:-cu_example_app}"
-  APP_NAME="${APP_NAME:-${APP_DIR}}"
-  DEBUG_BASE="{% raw %}{{debug_base}}{% endraw %}"
-  if [[ -z "$DEBUG_BASE" ]]; then
-    DEBUG_BASE="copper/apps/${APP_NAME}/debug/v1"
-  fi
-  RUST_BACKTRACE=1 cargo run --profile debug-optimized -p "${APP_NAME}" --features=sim-debug --bin "${APP_NAME}-resim" -- \
-    --debug-base "$DEBUG_BASE" \
-    --log-base "apps/${APP_DIR}/logs/${APP_NAME}.copper" \
-    --replay-log-base "apps/${APP_DIR}/logs/${APP_NAME}_resim.copper"
+sched app="cu_example_app" config="" output="":
+  cargo run -p cu29-view-helper -- schedule --app "{% raw %}{{app}}{% endraw %}" --config "{% raw %}{{config}}{% endraw %}" --output "{% raw %}{{output}}{% endraw %}" --open
+
+sched-log app="cu_example_app" config="" log="apps/cu_example_app/logs/cu_example_app.copper" output="":
+  cargo run -p cu29-view-helper -- schedule --app "{% raw %}{{app}}{% endraw %}" --config "{% raw %}{{config}}{% endraw %}" --log "{% raw %}{{log}}{% endraw %}" --output "{% raw %}{{output}}{% endraw %}" --open
+
+{% if pgs_enabled %}
+pgs-baseline log="apps/cu_example_app/logs/pgs-baseline.copper":
+  cargo run --release -p cu_example_app --bin cu_example_app -- --log "{% raw %}{{log}}{% endraw %}"
+  cargo run -p cu29-view-helper -- graph --log "{% raw %}{{log}}{% endraw %}" --output apps/cu_example_app/target/pgs/baseline.graph.svg
+  cargo run -p cu29-view-helper -- schedule --log "{% raw %}{{log}}{% endraw %}" --output apps/cu_example_app/target/pgs/baseline.schedule.svg
+
+pgs-optimize candidates="3" baseline="apps/cu_example_app/logs/pgs-baseline.copper":
+  cargo run -p cu_example_app --features logreader --bin cu_example_app-logreader -- "{% raw %}{{baseline}}{% endraw %}" optimize-schedule --contract apps/cu_example_app/schedule.ron --output apps/cu_example_app/target/pgs --candidates "{% raw %}{{replace(candidates, "candidates=", "")}}{% endraw %}"
+  cargo run -p cu_example_app --bin cu_example_app-pgs -- render-predictions --candidates "{% raw %}{{replace(candidates, "candidates=", "")}}{% endraw %}"
+
+pgs-candidate candidate="1":
+  cargo run -p cu_example_app --bin cu_example_app-pgs -- select --candidate "{% raw %}{{replace(candidate, "candidate=", "")}}{% endraw %}"
+  cargo run --release -p cu_example_app --features parallel-rt,pgs-candidate --bin cu_example_app-pgs-candidate -- --log "apps/cu_example_app/logs/pgs-candidate-{% raw %}{{replace(candidate, "candidate=", "")}}{% endraw %}.copper"
+  cargo run -p cu_example_app --bin cu_example_app-pgs -- render-candidate --candidate "{% raw %}{{replace(candidate, "candidate=", "")}}{% endraw %}"
+
+pgs-measure candidates="1" baseline="apps/cu_example_app/logs/pgs-baseline.copper":
+  cargo run -p cu_example_app --bin cu_example_app-pgs -- measure --candidates "{% raw %}{{replace(candidates, "candidates=", "")}}{% endraw %}" --baseline "{% raw %}{{baseline}}{% endraw %}"
+{% endif %}

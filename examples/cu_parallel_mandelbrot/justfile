@@ -1,4 +1,4 @@
-import "../../support/just/plan.just"
+import "../../support/just/viewers.just"
 
 ROOT := shell('cd "$1/../.." && pwd', justfile_directory())
 
@@ -6,27 +6,26 @@ ROOT := shell('cd "$1/../.." && pwd', justfile_directory())
 default: parallel
 
 # Record the naive schedule used as the PGS baseline.
-pgs-baseline:
-  cargo run --release --bin cu-parallel-mandelbrot -- --log logs/pgs-baseline.copper
+pgs-baseline log="logs/pgs-baseline.copper":
+  cargo run --release --bin cu-parallel-mandelbrot -- --log "{{log}}"
+  cargo run -p cu29-graph-view -- copperconfig.ron --mission log_only --log "{{log}}" --logreader cu-parallel-mandelbrot-logreader --logreader-package cu-parallel-mandelbrot --output target/pgs/baseline.graph.svg
+  cargo run -p cu29-schedule-view -- copperconfig.ron --mission log_only --log "{{log}}" --logreader cu-parallel-mandelbrot-logreader --logreader-package cu-parallel-mandelbrot --output target/pgs/baseline.schedule.svg
 
 # Profile the baseline and emit ranked candidate configurations.
-pgs-optimize:
-  cargo run --release --bin cu-parallel-mandelbrot-logreader -- logs/pgs-baseline.copper optimize-schedule --contract schedule.ron --output pgs
+pgs-optimize candidates="3" baseline="logs/pgs-baseline.copper":
+  cargo run --release --bin cu-parallel-mandelbrot-logreader -- "{{baseline}}" optimize-schedule --contract schedule.ron --output target/pgs --candidates "{{replace(candidates, "candidates=", "")}}"
+  cargo run --bin cu-parallel-mandelbrot-pgs -- render-predictions --candidates "{{replace(candidates, "candidates=", "")}}"
 
 # Build and run the first emitted candidate.
-pgs-candidate:
-  cargo run --release --features 'parallel-rt pgs-candidate' --bin cu-parallel-mandelbrot-pgs-candidate -- --log logs/parallel_mandelbrot_pgs_plan_1.copper
+pgs-candidate candidate="1":
+  cargo run --bin cu-parallel-mandelbrot-pgs -- select --candidate "{{replace(candidate, "candidate=", "")}}"
+  cargo run --release --features parallel-rt,pgs-candidate --bin cu-parallel-mandelbrot-pgs-candidate -- --log "logs/pgs-candidate-{{replace(candidate, "candidate=", "")}}.copper"
+  cargo run --bin cu-parallel-mandelbrot-pgs -- render-candidate --candidate "{{replace(candidate, "candidate=", "")}}"
 
 # Compare the predicted candidate with its measured run.
-pgs-measure:
-  cargo run --release --bin cu-parallel-mandelbrot-logreader -- logs/pgs-baseline.copper optimize-schedule --contract schedule.ron --output pgs --measure plan-1=logs/parallel_mandelbrot_pgs_plan_1.copper
+pgs-measure candidates="1" baseline="logs/pgs-baseline.copper":
+  cargo run --bin cu-parallel-mandelbrot-pgs -- measure --candidates "{{replace(candidates, "candidates=", "")}}" --baseline "{{baseline}}"
 
-# Render the benchmark graph for the selected mission.
-dag mission="log_only":
-  #!/usr/bin/env bash
-  set -euo pipefail
-  cd "{{ROOT}}"
-  cargo run -p cu29-rendercfg -- --mission "{{mission}}" --open examples/cu_parallel_mandelbrot/copperconfig.ron
 
 # Run the log-only mission without parallel-rt from the compiled release binary.
 serial:

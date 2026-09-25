@@ -53,6 +53,8 @@ on:
 
 env:
   CARGO_NET_RETRY: "10"
+  # cargo-generate resolves an author even though cargo-cunew templates omit it.
+  CARGO_NAME: "Copper Tests"
 
 jobs:
   unit-linux-container:

@@ -31,7 +31,7 @@ This example also includes `multi_copper.ron`, a strict umbrella config that mod
 pong apps as two explicit Copper subsystems connected through bridge channels.
 
 ```bash
-just dag
+just graph multi_copper.ron graph.svg
 cargo run -p cu-zenoh-bridge-demo --bin validate-multi-config
 ```
 
