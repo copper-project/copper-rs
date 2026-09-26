@@ -20,29 +20,16 @@
         (
             id: "ranges",
             type: "cu_ryuw122::Ryuw122InitiatorSource",
-            resources: {
-                "serial": "linux.serial0",
-            },
+            resources: {"serial": "linux.serial0"},
             config: {
-                "anchor_ids": [
-                    "ANCH0001",
-                ],
+                "anchor_ids": ["ANCH0001"],
                 "poll_payload": "PING",
                 "response_timeout_ms": 250,
                 "read_buffer_bytes": 512,
                 "max_pending_observations": 32,
             },
         ),
-        (
-            id: "sink",
-            type: "tasks::RangeCaptureSink",
-        ),
+        (id: "sink", type: "tasks::RangeCaptureSink"),
     ],
-    cnx: [
-        (
-            src: "ranges",
-            dst: "sink",
-            msg: "cu_sensor_payloads::PeerRangeObservation",
-        ),
-    ],
+    cnx: [(src: "ranges", dst: "sink", msg: "cu_sensor_payloads::PeerRangeObservation")],
 )

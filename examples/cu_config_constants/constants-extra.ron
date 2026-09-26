@@ -7,13 +7,7 @@
             unit: millimeter,
             value: [180.0, 0.0, 310.0],
         ),
-        (
-            id: "CONTROL_PERIOD",
-            module: "control",
-            quantity: time,
-            storage: f64,
-            value: 0.005,
-        ),
+        (id: "CONTROL_PERIOD", module: "control", quantity: time, storage: f64, value: 0.005),
         (
             id: "YAW_LIMIT",
             module: "control",

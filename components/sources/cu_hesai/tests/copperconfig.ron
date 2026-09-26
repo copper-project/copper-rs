@@ -1,19 +1,4 @@
 (
-    tasks: [
-        (
-            id: "src",
-            type: "cu_hesai::Xt32",
-        ),
-        (
-            id: "tester",
-            type: "HesaiTestSink",
-        ),
-    ],
-    cnx: [
-        (
-            src: "src",
-            dst: "tester",
-            msg: "cu_hesai::LidarCuMsgPayload",
-        ),
-    ],
+    tasks: [(id: "src", type: "cu_hesai::Xt32"), (id: "tester", type: "HesaiTestSink")],
+    cnx: [(src: "src", dst: "tester", msg: "cu_hesai::LidarCuMsgPayload")],
 )

@@ -1,10 +1,6 @@
 (
     tasks: [
-        (
-            id: "vitfly_context",
-            type: "tasks::VitFlyContextAdapter",
-            logging: (enabled: true),
-        ),
+        (id: "vitfly_context", type: "tasks::VitFlyContextAdapter", logging: (enabled: true)),
         (
             id: "vitfly_depth_rate",
             type: "cu_ratelimit::CuRateLimit<cu_zed::ZedDepthMap>",
@@ -14,17 +10,10 @@
         (
             id: "vitfly",
             type: "cu_vitfly::VitFlyTask",
-            config: {
-                "max_depth_m": 12.5,
-                "invalid_depth": 0.8,
-            },
+            config: {"max_depth_m": 12.5, "invalid_depth": 0.8},
             logging: (enabled: true),
         ),
-        (
-            id: "vitfly_command",
-            type: "tasks::VitFlyCommandAdapter",
-            logging: (enabled: true),
-        ),
+        (id: "vitfly_command", type: "tasks::VitFlyCommandAdapter", logging: (enabled: true)),
     ],
     bridges: [
         (
@@ -42,68 +31,26 @@
                 "#,
             },
             channels: [
-                Rx(
-                    id: "context",
-                    route: "flight/autonomy/context",
-                ),
-                Tx(
-                    id: "command",
-                    route: "flight/autonomy/command",
-                ),
+                Rx(id: "context", route: "flight/autonomy/context"),
+                Tx(id: "command", route: "flight/autonomy/command"),
             ],
         ),
     ],
     cnx: [
-        (
-            src: "zed",
-            dst: "__nc__",
-            msg: "cu_zed::ZedStereoImages",
-        ),
-        (
-            src: "autonomy/context",
-            dst: "vitfly_context",
-            msg: "crate::messages::AutonomyContext",
-        ),
-        (
-            src: "autonomy/context",
-            dst: "vitfly_command",
-            msg: "crate::messages::AutonomyContext",
-        ),
-        (
-            src: "zed",
-            dst: "vitfly_depth_rate",
-            msg: "cu_zed::ZedDepthMap",
-        ),
-        (
-            src: "vitfly_depth_rate",
-            dst: "vitfly",
-            msg: "cu_zed::ZedDepthMap",
-        ),
-        (
-            src: "vitfly_context",
-            dst: "vitfly",
-            msg: "cu_ahrs::AhrsPose",
-        ),
-        (
-            src: "vitfly_context",
-            dst: "vitfly",
-            msg: "cu29::units::si::f32::Velocity",
-        ),
-        (
-            src: "vitfly",
-            dst: "vitfly_command",
-            msg: "cu_vitfly::VitFlyVelocity",
-        ),
+        (src: "zed", dst: "__nc__", msg: "cu_zed::ZedStereoImages"),
+        (src: "autonomy/context", dst: "vitfly_context", msg: "crate::messages::AutonomyContext"),
+        (src: "autonomy/context", dst: "vitfly_command", msg: "crate::messages::AutonomyContext"),
+        (src: "zed", dst: "vitfly_depth_rate", msg: "cu_zed::ZedDepthMap"),
+        (src: "vitfly_depth_rate", dst: "vitfly", msg: "cu_zed::ZedDepthMap"),
+        (src: "vitfly_context", dst: "vitfly", msg: "cu_ahrs::AhrsPose"),
+        (src: "vitfly_context", dst: "vitfly", msg: "cu29::units::si::f32::Velocity"),
+        (src: "vitfly", dst: "vitfly_command", msg: "cu_vitfly::VitFlyVelocity"),
         (
             src: "vitfly_command",
             dst: "autonomy/command",
             msg: "crate::messages::AutonomyVelocityCommand",
         ),
-        (
-            src: "zed",
-            dst: "__nc__",
-            msg: "cu_zed::ZedConfidenceMap<Vec<f32>>",
-        ),
+        (src: "zed", dst: "__nc__", msg: "cu_zed::ZedConfidenceMap<Vec<f32>>"),
         (
             src: "zed",
             dst: "__nc__",
@@ -114,30 +61,10 @@
             dst: "__nc__",
             msg: "cu29::prelude::CuLatchedStateUpdate<cu_zed::ZedRigTransforms>",
         ),
-        (
-            src: "zed",
-            dst: "__nc__",
-            msg: "cu_sensor_payloads::ImuPayload",
-        ),
-        (
-            src: "zed",
-            dst: "__nc__",
-            msg: "cu_sensor_payloads::MagnetometerPayload",
-        ),
-        (
-            src: "zed",
-            dst: "__nc__",
-            msg: "cu_sensor_payloads::BarometerPayload",
-        ),
-        (
-            src: "zed",
-            dst: "__nc__",
-            msg: "cu_zed::ZedFrameMeta",
-        ),
+        (src: "zed", dst: "__nc__", msg: "cu_sensor_payloads::ImuPayload"),
+        (src: "zed", dst: "__nc__", msg: "cu_sensor_payloads::MagnetometerPayload"),
+        (src: "zed", dst: "__nc__", msg: "cu_sensor_payloads::BarometerPayload"),
+        (src: "zed", dst: "__nc__", msg: "cu_zed::ZedFrameMeta"),
     ],
-    logging: (
-        enable_task_logging: true,
-        slab_size_mib: 64,
-        section_size_mib: 8,
-    ),
+    logging: (enable_task_logging: true, slab_size_mib: 64, section_size_mib: 8),
 )
