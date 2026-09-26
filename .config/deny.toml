@@ -11,4 +11,6 @@ ignore = [
   "RUSTSEC-2026-0249", # smartstring is unmaintained; cargo-cunew -> cargo-generate -> rhai still requires it and no safe upgrade is available.
   "RUSTSEC-2026-0173", # proc-macro-error2 is unmaintained; pio 0.3.0 still depends on it and no safe upgrade is available.
   "RUSTSEC-2026-0192", # ttf-parser is unmaintained; current UI dependencies still require it and no safe upgrade is available.
+  "RUSTSEC-2026-0291", # Zenoh shared memory -> lockfree -> owned-alloc; no fixed release. Track eclipse-zenoh/zenoh#2811.
+  "RUSTSEC-2026-0299", # owned-alloc is unmaintained on the same Zenoh path; remove both ignores when Zenoh drops lockfree.
 ]
