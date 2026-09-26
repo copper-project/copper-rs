@@ -123,7 +123,7 @@
             name: "cu-kornia-vio",
             source: GitHub(
                 repo: Some(
-                    "kornia/cufx-vio",
+                    "kornia/cu-kornia-vio",
                 ),
                 rev: Some(
                     "main",
@@ -261,7 +261,7 @@
             name: "cu-stereo-payloads",
             source: GitHub(
                 repo: Some(
-                    "kornia/cufx-vio",
+                    "kornia/cu-kornia-vio",
                 ),
                 rev: Some(
                     "main",
