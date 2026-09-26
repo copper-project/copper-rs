@@ -27,27 +27,13 @@
         (
             id: "aligner",
             type: "tasks::ImageAlignerTask",
-            config: {
-                "target_alignment_window_ms": 50,
-                "stale_data_horizon_ms": 500,
-            },
+            config: {"target_alignment_window_ms": 50, "stale_data_horizon_ms": 500},
         ),
-        (
-            id: "sink",
-            type: "tasks::AlignedImageSink",
-        ),
+        (id: "sink", type: "tasks::AlignedImageSink"),
     ],
     cnx: [
-        (
-            src: "src_a",
-            dst: "aligner",
-            msg: "cu_sensor_payloads::CuImage<Vec<u8>>",
-        ),
-        (
-            src: "src_b",
-            dst: "aligner",
-            msg: "cu_sensor_payloads::CuImage<Vec<u8>>",
-        ),
+        (src: "src_a", dst: "aligner", msg: "cu_sensor_payloads::CuImage<Vec<u8>>"),
+        (src: "src_b", dst: "aligner", msg: "cu_sensor_payloads::CuImage<Vec<u8>>"),
         (
             src: "aligner",
             dst: "sink",

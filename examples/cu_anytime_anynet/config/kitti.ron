@@ -4,9 +4,7 @@
             id: "stereo_kitti",
             type: "cu_anytime_anynet::tasks::StereoSrc",
             missions: ["kitti"],
-            config: {
-                "data_dir": "../kitti/training",
-            },
+            config: {"data_dir": "../kitti/training"},
         ),
         (
             id: "anynet_kitti",
@@ -20,21 +18,13 @@
                 "weights": "target/cu_anytime_anynet/anynet-kitti.safetensors",
                 "normalization": "raw",
             },
-            anytime: (
-                max_refines: 2,
-                time_budget_ms: 800.0,
-                max_age_ms: 2000.0,
-            ),
+            anytime: (max_refines: 2, time_budget_ms: 800.0, max_age_ms: 2000.0),
         ),
         (
             id: "viewer_kitti",
             type: "cu_anytime_anynet::tasks::DepthViewer",
             missions: ["kitti"],
-            config: {
-                "data_dir": "../kitti/training",
-                "focal_px": 371.7,
-                "time_dilation": 20.0,
-            },
+            config: {"data_dir": "../kitti/training", "focal_px": 371.7, "time_dilation": 20.0},
         ),
     ],
     cnx: [
