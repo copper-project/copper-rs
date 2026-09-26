@@ -384,7 +384,10 @@ fn resolve_git_source(
     let local_manifest_path = resolver
         .local_root
         .map(|local_root| local_root.join(path).join("Cargo.toml"));
+    // Only the default repo lives in the local checkout: an external repo's `path` resolved
+    // against it would read an unrelated manifest (for a root-level crate, Copper's own).
     let use_local_checkout = matches!(host, GitHost::GitHub)
+        && resolver.defaults.github_repo.as_deref() == Some(repo.as_str())
         && local_manifest_path
             .as_ref()
             .is_some_and(|manifest_path| manifest_path.is_file());
