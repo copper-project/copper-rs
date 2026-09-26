@@ -1,19 +1,4 @@
 (
-    tasks: [
-        (
-            id: "src",
-            type: "FlippingSource",
-        ),
-        (
-            id: "gpio",
-            type: "FlippingSourceTwo",
-        ),
-    ],
-    cnx: [
-        (
-            src: "unknown_src",
-            dst: "gpio",
-            msg: "MyMsg",
-        ),
-    ],
+    tasks: [(id: "src", type: "FlippingSource"), (id: "gpio", type: "FlippingSourceTwo")],
+    cnx: [(src: "unknown_src", dst: "gpio", msg: "MyMsg")],
 )

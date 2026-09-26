@@ -1,10 +1,1 @@
-(
-    tasks: [
-        (
-            id: "source",
-            type: "FlippingSource",
-            config: {"rate": 10},
-        ),
-    ],
-    cnx: [],
-)
+(tasks: [(id: "source", type: "FlippingSource", config: {"rate": 10})], cnx: [])

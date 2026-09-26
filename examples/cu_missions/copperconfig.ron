@@ -1,51 +1,14 @@
 (
     missions: [(id: "A"), (id: "B")],
     tasks: [
-        (
-            id: "src",
-            type: "tasks::ExampleSrc",
-        ),
-        (
-            id: "taskA",
-            type: "tasks::ExampleTask",
-            config: {
-                "label": "Mission A",
-            },
-            missions: ["A"],
-        ),
-        (
-            id: "taskB",
-            type: "tasks::ExampleTask",
-            config: {
-                "label": "Mission B",
-            },
-            missions: ["B"],
-        ),
+        (id: "src", type: "tasks::ExampleSrc"),
+        (id: "taskA", type: "tasks::ExampleTask", config: {"label": "Mission A"}, missions: ["A"]),
+        (id: "taskB", type: "tasks::ExampleTask", config: {"label": "Mission B"}, missions: ["B"]),
     ],
     cnx: [
-        (
-            src: "src",
-            dst: "taskA",
-            msg: "i32",
-            missions: ["A"],
-        ),
-        (
-            src: "src",
-            dst: "taskB",
-            msg: "i32",
-            missions: ["B"],
-        ),
-        (
-            src: "taskA",
-            dst: "__nc__",
-            msg: "i32",
-            missions: ["A"],
-        ),
-        (
-            src: "taskB",
-            dst: "__nc__",
-            msg: "i32",
-            missions: ["B"],
-        ),
+        (src: "src", dst: "taskA", msg: "i32", missions: ["A"]),
+        (src: "src", dst: "taskB", msg: "i32", missions: ["B"]),
+        (src: "taskA", dst: "__nc__", msg: "i32", missions: ["A"]),
+        (src: "taskB", dst: "__nc__", msg: "i32", missions: ["B"]),
     ],
 )

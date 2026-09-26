@@ -15,53 +15,21 @@
         (
             id: "gst_to_image",
             type: "tasks::GstToCuImage",
-            config: {
-                "width": 640,
-                "height": 360,
-                "fourcc": "NV12",
-            },
+            config: {"width": 640, "height": 360, "fourcc": "NV12"},
         ),
         (
             id: "yolo",
             type: "tasks::YoloPose",
-            config: {
-                "variant": "yolov8n-pose",
-                "conf_threshold": 0.25,
-                "iou_threshold": 0.7,
-            },
+            config: {"variant": "yolov8n-pose", "conf_threshold": 0.25, "iou_threshold": 0.7},
         ),
-        (
-            id: "viz",
-            type: "tasks::RerunPoseViz",
-        ),
+        (id: "viz", type: "tasks::RerunPoseViz"),
     ],
     cnx: [
-        (
-            src: "camera",
-            dst: "gst_to_image",
-            msg: "cu_gstreamer::CuGstBuffer",
-        ),
-        (
-            src: "gst_to_image",
-            dst: "yolo",
-            msg: "cu_sensor_payloads::CuImage<Vec<u8>>",
-        ),
-        (
-            src: "gst_to_image",
-            dst: "viz",
-            msg: "cu_sensor_payloads::CuImage<Vec<u8>>",
-        ),
-        (
-            src: "yolo",
-            dst: "viz",
-            msg: "payloads::CuPoses",
-        ),
+        (src: "camera", dst: "gst_to_image", msg: "cu_gstreamer::CuGstBuffer"),
+        (src: "gst_to_image", dst: "yolo", msg: "cu_sensor_payloads::CuImage<Vec<u8>>"),
+        (src: "gst_to_image", dst: "viz", msg: "cu_sensor_payloads::CuImage<Vec<u8>>"),
+        (src: "yolo", dst: "viz", msg: "payloads::CuPoses"),
     ],
-    logging: (
-        keyframe_interval: 10000,
-        section_size_mib: 32,
-    ),
-    monitor: (
-        type: "cu_logmon::CuLogMon",
-    ),
+    logging: (keyframe_interval: 10000, section_size_mib: 32),
+    monitor: (type: "cu_logmon::CuLogMon"),
 )
