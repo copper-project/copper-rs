@@ -21,6 +21,10 @@
         (name: "cu-hesai", source: GitHub(path: "components/sources/cu_hesai")),
         (name: "cu-iceoryx2-bridge", source: GitHub(path: "components/bridges/cu_iceoryx2_bridge")),
         (name: "cu-ist8310", source: GitHub(path: "components/sources/cu_ist8310")),
+        (
+            name: "cu-kornia-vio",
+            source: GitHub(repo: Some("kornia/cufx-vio"), rev: Some("main"), path: "."),
+        ),
         (name: "cu-lewansoul", source: GitHub(path: "components/sinks/cu_lewansoul")),
         (name: "cu-linux-resources", source: GitHub(path: "components/res/cu_linux_resources")),
         (name: "cu-livox", source: GitHub(path: "components/sources/cu_livox")),
@@ -47,6 +51,14 @@
         (
             name: "cu-spatial-payloads",
             source: GitHub(path: "components/payloads/cu_spatial_payloads"),
+        ),
+        (
+            name: "cu-stereo-payloads",
+            source: GitHub(
+                repo: Some("kornia/cufx-vio"),
+                rev: Some("main"),
+                path: "crates/cu-stereo-payloads",
+            ),
         ),
         (name: "cu-transform", source: GitHub(path: "components/libs/cu_transform")),
         (name: "cu-tuimon", source: GitHub(path: "components/libs/cu_tuimon")),
