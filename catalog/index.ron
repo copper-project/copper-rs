@@ -125,9 +125,7 @@
                 repo: Some(
                     "kornia/cu-kornia-vio",
                 ),
-                rev: Some(
-                    "main",
-                ),
+                rev: Some("main"),
                 path: ".",
             ),
         ),
@@ -263,9 +261,7 @@
                 repo: Some(
                     "kornia/cu-kornia-vio",
                 ),
-                rev: Some(
-                    "main",
-                ),
+                rev: Some("main"),
                 path: "crates/cu-stereo-payloads",
             ),
         ),

@@ -401,7 +401,7 @@ fn resolve_git_source(
     } else {
         fetch_text(
             &resolver.client,
-            &git_raw_url(host, &repo, &rev, &repo_file(path, "Cargo.toml")),
+            &git_raw_url(host, &repo, &rev, &format!("{path}/Cargo.toml")),
         )?
     };
 
@@ -443,7 +443,7 @@ fn resolve_git_source(
             host,
             &repo,
             &rev,
-            &repo_file(path, &readme_path),
+            &format!("{path}/{readme_path}"),
         ))
     } else if use_local_checkout
         && resolver
@@ -454,7 +454,7 @@ fn resolve_git_source(
             host,
             &repo,
             &rev,
-            &repo_file(path, "README.md"),
+            &format!("{path}/README.md"),
         ))
     } else {
         None
@@ -480,12 +480,12 @@ fn resolve_git_source(
             path: Some(path.to_owned()),
             crate_name: None,
             version: Some(rev.clone()),
-            source_url: git_tree_url(host, &repo, &rev, &repo_file(path, "")),
+            source_url: git_tree_url(host, &repo, &rev, path),
             manifest_url: Some(git_blob_url(
                 host,
                 &repo,
                 &rev,
-                &repo_file(path, "Cargo.toml"),
+                &format!("{path}/Cargo.toml"),
             )),
             readme_url,
         },
@@ -937,17 +937,6 @@ fn markdown_link(label: &str, url: &str) -> String {
 
 fn escape_markdown_cell(value: &str) -> String {
     value.replace('|', "\\|").replace('\n', " ")
-}
-
-/// Joins a file onto an entry's `path`, where `"."` or `""` is the repo root (a satellite repo
-/// whose crate sits at the top level).
-fn repo_file(path: &str, file: &str) -> String {
-    let dir = path.trim_matches('/');
-    match (dir, file) {
-        ("" | ".", _) => file.to_owned(),
-        (_, "") => dir.to_owned(),
-        _ => format!("{dir}/{file}"),
-    }
 }
 
 fn git_raw_url(host: GitHost, repo: &str, rev: &str, path: &str) -> String {
@@ -1693,20 +1682,3 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
   </body>
 </html>
 "##;
-
-#[cfg(test)]
-mod tests {
-    use super::repo_file;
-
-    #[test]
-    fn repo_file_joins_onto_the_root_and_subdirectories() {
-        assert_eq!(repo_file(".", "Cargo.toml"), "Cargo.toml");
-        assert_eq!(repo_file("", "Cargo.toml"), "Cargo.toml");
-        assert_eq!(repo_file(".", ""), "");
-        assert_eq!(
-            repo_file("components/sources/cu_v4l", "Cargo.toml"),
-            "components/sources/cu_v4l/Cargo.toml"
-        );
-        assert_eq!(repo_file("crates/x/", ""), "crates/x");
-    }
-}
