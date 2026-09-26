@@ -23,7 +23,7 @@
         (name: "cu-ist8310", source: GitHub(path: "components/sources/cu_ist8310")),
         (
             name: "cu-kornia-vio",
-            source: GitHub(repo: Some("kornia/cufx-vio"), rev: Some("main"), path: "."),
+            source: GitHub(repo: Some("kornia/cu-kornia-vio"), rev: Some("main"), path: "."),
         ),
         (name: "cu-lewansoul", source: GitHub(path: "components/sinks/cu_lewansoul")),
         (name: "cu-linux-resources", source: GitHub(path: "components/res/cu_linux_resources")),
@@ -55,7 +55,7 @@
         (
             name: "cu-stereo-payloads",
             source: GitHub(
-                repo: Some("kornia/cufx-vio"),
+                repo: Some("kornia/cu-kornia-vio"),
                 rev: Some("main"),
                 path: "crates/cu-stereo-payloads",
             ),
