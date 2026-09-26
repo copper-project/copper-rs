@@ -27,7 +27,8 @@ cu29 = { path = "../../../core/cu29", version = "1.3.0-dev", default-features = 
 ] }
 rerun = { workspace = true, optional = true }
 image = { workspace = true, default-features = false, optional = true }
-kornia-image = { version = "0.1.10", optional = true }
+kornia-image = { version = "0.1.15", optional = true }
+kornia-tensor = { version = "0.1.15", optional = true }
 serde = { workspace = true }
 
 [dev-dependencies]
@@ -38,6 +39,6 @@ default = ["std"]
 std = ["cu29/std", "cu29-clock/std"]
 textlogs = ["cu29/textlogs"]
 image = ["std", "dep:image"]
-kornia = ["std", "dep:kornia-image"]
+kornia = ["std", "dep:kornia-image", "dep:kornia-tensor"]
 rerun = ["std", "dep:rerun"]
 reflect = ["cu29/reflect"]
