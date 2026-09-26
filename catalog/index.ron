@@ -120,6 +120,18 @@
             ),
         ),
         (
+            name: "cu-kornia-vio",
+            source: GitHub(
+                repo: Some(
+                    "kornia/cufx-vio",
+                ),
+                rev: Some(
+                    "main",
+                ),
+                path: ".",
+            ),
+        ),
+        (
             name: "cu-lewansoul",
             source: GitHub(
                 path: "components/sinks/cu_lewansoul",
@@ -243,6 +255,18 @@
             name: "cu-spatial-payloads",
             source: GitHub(
                 path: "components/payloads/cu_spatial_payloads",
+            ),
+        ),
+        (
+            name: "cu-stereo-payloads",
+            source: GitHub(
+                repo: Some(
+                    "kornia/cufx-vio",
+                ),
+                rev: Some(
+                    "main",
+                ),
+                path: "crates/cu-stereo-payloads",
             ),
         ),
         (

@@ -384,7 +384,10 @@ fn resolve_git_source(
     let local_manifest_path = resolver
         .local_root
         .map(|local_root| local_root.join(path).join("Cargo.toml"));
+    // Only the default repo lives in the local checkout: an external repo's `path` resolved
+    // against it would read an unrelated manifest (for a root-level crate, Copper's own).
     let use_local_checkout = matches!(host, GitHost::GitHub)
+        && resolver.defaults.github_repo.as_deref() == Some(repo.as_str())
         && local_manifest_path
             .as_ref()
             .is_some_and(|manifest_path| manifest_path.is_file());
@@ -398,7 +401,7 @@ fn resolve_git_source(
     } else {
         fetch_text(
             &resolver.client,
-            &git_raw_url(host, &repo, &rev, &format!("{path}/Cargo.toml")),
+            &git_raw_url(host, &repo, &rev, &repo_file(path, "Cargo.toml")),
         )?
     };
 
@@ -440,7 +443,7 @@ fn resolve_git_source(
             host,
             &repo,
             &rev,
-            &format!("{path}/{readme_path}"),
+            &repo_file(path, &readme_path),
         ))
     } else if use_local_checkout
         && resolver
@@ -451,7 +454,7 @@ fn resolve_git_source(
             host,
             &repo,
             &rev,
-            &format!("{path}/README.md"),
+            &repo_file(path, "README.md"),
         ))
     } else {
         None
@@ -477,12 +480,12 @@ fn resolve_git_source(
             path: Some(path.to_owned()),
             crate_name: None,
             version: Some(rev.clone()),
-            source_url: git_tree_url(host, &repo, &rev, path),
+            source_url: git_tree_url(host, &repo, &rev, &repo_file(path, "")),
             manifest_url: Some(git_blob_url(
                 host,
                 &repo,
                 &rev,
-                &format!("{path}/Cargo.toml"),
+                &repo_file(path, "Cargo.toml"),
             )),
             readme_url,
         },
@@ -934,6 +937,17 @@ fn markdown_link(label: &str, url: &str) -> String {
 
 fn escape_markdown_cell(value: &str) -> String {
     value.replace('|', "\\|").replace('\n', " ")
+}
+
+/// Joins a file onto an entry's `path`, where `"."` or `""` is the repo root (a satellite repo
+/// whose crate sits at the top level).
+fn repo_file(path: &str, file: &str) -> String {
+    let dir = path.trim_matches('/');
+    match (dir, file) {
+        ("" | ".", _) => file.to_owned(),
+        (_, "") => dir.to_owned(),
+        _ => format!("{dir}/{file}"),
+    }
 }
 
 fn git_raw_url(host: GitHost, repo: &str, rev: &str, path: &str) -> String {
@@ -1679,3 +1693,20 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
   </body>
 </html>
 "##;
+
+#[cfg(test)]
+mod tests {
+    use super::repo_file;
+
+    #[test]
+    fn repo_file_joins_onto_the_root_and_subdirectories() {
+        assert_eq!(repo_file(".", "Cargo.toml"), "Cargo.toml");
+        assert_eq!(repo_file("", "Cargo.toml"), "Cargo.toml");
+        assert_eq!(repo_file(".", ""), "");
+        assert_eq!(
+            repo_file("components/sources/cu_v4l", "Cargo.toml"),
+            "components/sources/cu_v4l/Cargo.toml"
+        );
+        assert_eq!(repo_file("crates/x/", ""), "crates/x");
+    }
+}
