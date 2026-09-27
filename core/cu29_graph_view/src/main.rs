@@ -50,8 +50,11 @@ const LOGSTATS_SCHEMA_VERSION: u32 = 2;
 
 // Color palette and fills.
 const BORDER_COLOR: &str = "#6c7086";
-const BACKGROUND_COLOR: &str = "#1e1e2e";
+const BACKGROUND_COLOR: &str = "#000000";
+const NODE_BG: &str = "#1e1e2e";
 const HEADER_BG: &str = "#313244";
+const HEADER_TEXT: &str = "#11111b";
+const HEADER_TYPE_TEXT: &str = "#313244";
 const DIM_GRAY: &str = "#a6adc8";
 const LIGHT_GRAY: &str = "#45475a";
 const CLUSTER_COLOR: &str = "#6c7086";
@@ -706,7 +709,7 @@ fn build_section_layout(
         let look = StyleAttr::new(
             Color::fast(BORDER_COLOR),
             1,
-            Some(Color::fast("#1e1e2e")),
+            Some(Color::fast(NODE_BG)),
             0,
             FONT_SIZE,
         );
@@ -1263,10 +1266,10 @@ fn build_node_table(
     let mut rows = Vec::new();
 
     let header_lines = vec![
-        CellLine::new(node.id.clone(), "#cdd6f4", true, FONT_SIZE),
+        CellLine::new(node.id.clone(), HEADER_TEXT, true, FONT_SIZE),
         CellLine::code(
             wrap_type_label(&strip_type_params(&node.type_name), TYPE_WRAP_WIDTH),
-            DIM_GRAY,
+            HEADER_TYPE_TEXT,
             false,
             TYPE_FONT_SIZE,
         ),
@@ -2032,7 +2035,7 @@ fn draw_node_table(svg: &mut SvgWriter, node: &NodeRender, element: &Element, of
     let size = pos.size(false);
     let top_left = Point::new(center.x - size.x / 2.0, center.y - size.y / 2.0);
 
-    svg.draw_rect(top_left, size, None, 0.0, Some("#1e1e2e"), 0.0);
+    svg.draw_rect(top_left, size, None, 0.0, Some(NODE_BG), 0.0);
 
     let mut renderer = TableRenderer {
         svg,
@@ -2142,7 +2145,7 @@ fn resource_header_midpoint(table: &ResourceTable) -> f64 {
 fn draw_resource_table(svg: &mut SvgWriter, table: &ResourceTable, top_left: Point) {
     let size = table.size;
     let center = Point::new(top_left.x + size.x / 2.0, top_left.y + size.y / 2.0);
-    svg.draw_rect(top_left, size, None, 0.0, Some("#1e1e2e"), 0.0);
+    svg.draw_rect(top_left, size, None, 0.0, Some(NODE_BG), 0.0);
 
     let mut renderer = TableRenderer {
         svg,
@@ -2195,7 +2198,7 @@ fn draw_legend(svg: &mut SvgWriter, top_y: f64, content_right: f64) -> f64 {
         Point::new(metrics.width, metrics.height),
         Some(BORDER_COLOR),
         0.6,
-        Some("#1e1e2e"),
+        Some(NODE_BG),
         LEGEND_CORNER_RADIUS,
     );
 
@@ -3253,7 +3256,7 @@ impl SvgWriter {
             .set("font-size", format!("{font_size}px"))
             .set("fill", color)
             .set("font-weight", weight)
-            .set("stroke", "#1e1e2e")
+            .set("stroke", BACKGROUND_COLOR)
             .set("stroke-width", EDGE_LABEL_HALO_WIDTH)
             .set("paint-order", "stroke")
             .set("stroke-linejoin", "round");
@@ -3343,7 +3346,7 @@ impl SvgWriter {
                     .set("font-size", format!("{}px", label.font_size))
                     .set("fill", label.color.clone())
                     .set("font-weight", weight)
-                    .set("stroke", "#1e1e2e")
+                    .set("stroke", BACKGROUND_COLOR)
                     .set("stroke-width", EDGE_LABEL_HALO_WIDTH)
                     .set("paint-order", "stroke")
                     .set("stroke-linejoin", "round");
