@@ -1,11 +1,1 @@
-(
-    constants: [
-        (
-            id: "BAD_TYPE",
-            type: "crate::Pair<",
-            expression: "0",
-        ),
-    ],
-    tasks: [],
-    cnx: [],
-)
+(constants: [(id: "BAD_TYPE", type: "crate::Pair<", expression: "0")], tasks: [], cnx: [])

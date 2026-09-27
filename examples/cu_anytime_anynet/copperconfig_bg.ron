@@ -1,13 +1,8 @@
 (
     runtime: (rate_target_hz: 5),
-    logging: (
-        enable_task_logging: false,
-    ),
+    logging: (enable_task_logging: false),
     tasks: [
-        (
-            id: "stereo",
-            type: "cu_anytime_anynet::tasks::StereoSrc",
-        ),
+        (id: "stereo", type: "cu_anytime_anynet::tasks::StereoSrc"),
         (
             id: "anynet",
             type: "cu_anynet::AnyNetStereo",
@@ -20,31 +15,13 @@
                 "normalization": "raw",
             },
             background: true,
-            anytime: (
-                time_budget_ms: 1500.0,
-                max_age_ms: 3000.0,
-            ),
+            anytime: (time_budget_ms: 1500.0, max_age_ms: 3000.0),
         ),
-        (
-            id: "viewer",
-            type: "cu_anytime_anynet::tasks::DepthViewer",
-        ),
+        (id: "viewer", type: "cu_anytime_anynet::tasks::DepthViewer"),
     ],
     cnx: [
-        (
-            src: "stereo",
-            dst: "anynet",
-            msg: "cu_anynet::StereoPair",
-        ),
-        (
-            src: "stereo",
-            dst: "viewer",
-            msg: "cu_anynet::StereoPair",
-        ),
-        (
-            src: "anynet",
-            dst: "viewer",
-            msg: "cu_anynet::StereoDepth",
-        ),
+        (src: "stereo", dst: "anynet", msg: "cu_anynet::StereoPair"),
+        (src: "stereo", dst: "viewer", msg: "cu_anynet::StereoPair"),
+        (src: "anynet", dst: "viewer", msg: "cu_anynet::StereoDepth"),
     ],
 )

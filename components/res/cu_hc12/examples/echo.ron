@@ -1,9 +1,6 @@
 (
     runtime: (rate_target_hz: 100),
-    logging: (
-        slab_size_mib: 1,
-        section_size_mib: 1,
-    ),
+    logging: (slab_size_mib: 1, section_size_mib: 1),
     resources: [
         (
             id: "board",
@@ -15,10 +12,7 @@
                 "serial0_rts": true,
             },
         ),
-        (
-            id: "timing",
-            provider: "cu_hc12::host::DelayResources",
-        ),
+        (id: "timing", provider: "cu_hc12::host::DelayResources"),
         (
             id: "radio",
             provider: "RadioResources",
@@ -34,21 +28,10 @@
         (
             id: "bytes",
             type: "RadioBridge",
-            resources: {
-                "serial": "radio.serial",
-            },
-            channels: [
-                Rx(id: "bytes_rx"),
-                Tx(id: "bytes_tx"),
-            ],
+            resources: {"serial": "radio.serial"},
+            channels: [Rx(id: "bytes_rx"), Tx(id: "bytes_tx")],
         ),
     ],
     tasks: [],
-    cnx: [
-        (
-            src: "bytes/bytes_rx",
-            dst: "bytes/bytes_tx",
-            msg: "cu_serial_bridge::ByteChunk",
-        ),
-    ],
+    cnx: [(src: "bytes/bytes_rx", dst: "bytes/bytes_tx", msg: "cu_serial_bridge::ByteChunk")],
 )

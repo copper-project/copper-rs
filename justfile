@@ -69,8 +69,7 @@ fmt-check: check-format-tools
 fmt: check-format-tools
 	@cargo +stable fmt --all
 	@git ls-files -z '*.toml' | xargs -0 -r env RUST_LOG=warn taplo format >/dev/null
-	@git ls-files -z '*.ron' ':!examples/modular_config_example/motors.ron' ':!examples/cu_flight_controller/mcu_graph.ron' | xargs -0 -r -n 1 sh -c 'test ! -f "$1" || fmtron --input "$1"' _ >/dev/null
-	@find . -type f -name '*.ron.bak' -delete
+	@git ls-files -z '*.ron' ':!examples/modular_config_example/motors.ron' ':!examples/cu_flight_controller/mcu_graph.ron' | xargs -0 -r -n 1 sh -c 'test ! -f "$1" || fmtron "$1"' _ >/dev/null
 	@bash -lc 'set -euo pipefail; prek run --all-files {{PREK_FMT_FIX_HOOKS}} || prek run --all-files {{PREK_FMT_FIX_HOOKS}}'
 	@prek run --all-files {{PREK_FMT_CI_HOOKS}}
 
@@ -84,8 +83,8 @@ check-format-tools:
 		echo "Missing taplo (taplo-cli). Install with: cargo install --locked taplo-cli"
 		missing=1
 	fi
-	if ! command -v fmtron >/dev/null 2>&1; then
-		echo "Missing fmtron. Install with: cargo install --locked fmtron"
+	if [[ "$(fmtron --version 2>/dev/null || true)" != "fmtron 0.10.0" ]]; then
+		echo "fmtron 0.10.0 required. Install with: cargo install --locked --force fmtron --version 0.10.0"
 		missing=1
 	fi
 	if ! command -v prek >/dev/null 2>&1; then
