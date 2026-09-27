@@ -1,19 +1,52 @@
 (
-    resources: [(id: "board", provider: "crate::firmware::resources::Rp2350ImuBundle")],
+    resources: [
+        (
+            id: "board",
+            provider: "crate::firmware::resources::Rp2350ImuBundle",
+        ),
+    ],
     tasks: [
         (
             id: "mpu",
             type: "crate::firmware::resources::RpMpu9250Source",
-            config: {"gyro_cal_ms": 3000, "gyro_sample_delay_ms": 10},
-            resources: {"spi": "board.spi", "cs": "board.cs", "delay": "board.delay"},
+            config: {
+                "gyro_cal_ms": 3000,
+                "gyro_sample_delay_ms": 10,
+            },
+            resources: {
+                "spi": "board.spi",
+                "cs": "board.cs",
+                "delay": "board.delay",
+            },
         ),
-        (id: "ahrs", type: "cu_ahrs::CuAhrs"),
-        (id: "mag", type: "crate::firmware::tasks::NullMagSource"),
-        (id: "sink", type: "crate::firmware::tasks::RpySink"),
+        (
+            id: "ahrs",
+            type: "cu_ahrs::CuAhrs",
+        ),
+        (
+            id: "mag",
+            type: "crate::firmware::tasks::NullMagSource",
+        ),
+        (
+            id: "sink",
+            type: "crate::firmware::tasks::RpySink",
+        ),
     ],
     cnx: [
-        (src: "mpu", dst: "ahrs", msg: "cu_sensor_payloads::ImuPayload"),
-        (src: "ahrs", dst: "sink", msg: "cu_ahrs::AhrsPose"),
-        (src: "mag", dst: "ahrs", msg: "cu_sensor_payloads::MagnetometerPayload"),
+        (
+            src: "mpu",
+            dst: "ahrs",
+            msg: "cu_sensor_payloads::ImuPayload",
+        ),
+        (
+            src: "ahrs",
+            dst: "sink",
+            msg: "cu_ahrs::AhrsPose",
+        ),
+        (
+            src: "mag",
+            dst: "ahrs",
+            msg: "cu_sensor_payloads::MagnetometerPayload",
+        ),
     ],
 )

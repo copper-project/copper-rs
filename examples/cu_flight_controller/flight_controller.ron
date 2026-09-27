@@ -1,20 +1,36 @@
 (
     subsystems: [
-        (id: "compute", config: "compute_config.ron"),
-        (id: "mcu", config: "mcu_config.ron"),
+        (
+            id: "compute",
+            config: "compute_config.ron",
+        ),
+        (
+            id: "mcu",
+            config: "mcu_config.ron",
+        ),
     ],
     interconnects: [
         (
             from: "mcu/autonomy/context",
             to: "compute/autonomy/context",
             msg: "crate::messages::AutonomyContext",
-            when: Any([Feature("sim"), Feature("end2end")]),
+            when: Any(
+                [
+                    Feature("sim"),
+                    Feature("end2end"),
+                ],
+            ),
         ),
         (
             from: "compute/autonomy/command",
             to: "mcu/autonomy/command",
             msg: "crate::messages::AutonomyVelocityCommand",
-            when: Any([Feature("sim"), Feature("end2end")]),
+            when: Any(
+                [
+                    Feature("sim"),
+                    Feature("end2end"),
+                ],
+            ),
         ),
     ],
 )

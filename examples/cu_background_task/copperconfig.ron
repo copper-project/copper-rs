@@ -1,26 +1,55 @@
 (
-    runtime: (thread_pools: [(id: "background", threads: 1), (id: "slow", threads: 1)]),
+    runtime: (
+        thread_pools: [
+            (
+                id: "background",
+                threads: 1,
+            ),
+            (id: "slow", threads: 1),
+        ],
+    ),
     // Background jobs can be active at every CopperList boundary. This example records
     // CopperLists but deliberately compiles out task-state snapshots.
-    logging: (enable_keyframe_logging: false),
+    logging: (
+        enable_keyframe_logging: false,
+    ),
     tasks: [
-        (id: "task0", type: "tasks::ExampleSrc"),
+        (
+            id: "task0",
+            type: "tasks::ExampleSrc",
+        ),
         (
             id: "task1",
             type: "tasks::ExampleTask",
             background: true,
-            config: {"sleep_duration_ms": 1000},
+            config: {
+                "sleep_duration_ms": 1000,
+            },
         ),
         (
             id: "task2",
             type: "tasks::ExampleTask",
             background: (pool: "slow"),
-            config: {"sleep_duration_ms": 250},
+            config: {
+                "sleep_duration_ms": 250,
+            },
         ),
     ],
     cnx: [
-        (src: "task0", dst: "task1", msg: "i32"),
-        (src: "task1", dst: "task2", msg: "i32"),
-        (src: "task2", dst: "__nc__", msg: "i32"),
+        (
+            src: "task0",
+            dst: "task1",
+            msg: "i32",
+        ),
+        (
+            src: "task1",
+            dst: "task2",
+            msg: "i32",
+        ),
+        (
+            src: "task2",
+            dst: "__nc__",
+            msg: "i32",
+        ),
     ],
 )

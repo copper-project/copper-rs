@@ -1,1 +1,11 @@
-(constants: [(id: "BAD_EXPRESSION", type: "u32", expression: "crate::make(")], tasks: [], cnx: [])
+(
+    constants: [
+        (
+            id: "BAD_EXPRESSION",
+            type: "u32",
+            expression: "crate::make(",
+        ),
+    ],
+    tasks: [],
+    cnx: [],
+)

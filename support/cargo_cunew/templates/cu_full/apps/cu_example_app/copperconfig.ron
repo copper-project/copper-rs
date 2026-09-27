@@ -1,11 +1,28 @@
 (
     tasks: [
-        (id: "src", type: "tasks::MySource"),
-        (id: "t-0", type: "tasks::MyTask"),
-        (id: "sink", type: "tasks::MySink"),
+        (
+            id: "src",
+            type: "tasks::MySource",
+        ),
+        (
+            id: "t-0",
+            type: "tasks::MyTask",
+        ),
+        (
+            id: "sink",
+            type: "tasks::MySink",
+        ),
     ],
     cnx: [
-        (src: "src", dst: "t-0", msg: "crate::messages::MyPayload"),
-        (src: "t-0", dst: "sink", msg: "crate::messages::MyPayload"),
+        (
+            src: "src",
+            dst: "t-0",
+            msg: "crate::messages::MyPayload",
+        ),
+        (
+            src: "t-0",
+            dst: "sink",
+            msg: "crate::messages::MyPayload",
+        ),
     ],
 )

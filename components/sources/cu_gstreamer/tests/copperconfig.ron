@@ -8,8 +8,19 @@
                 "caps": "video/x-raw, format=NV12, width=1920, height=1080",
             },
         ),
-        (id: "tester", type: "GStreamerTester"),
+        (
+            id: "tester",
+            type: "GStreamerTester",
+        ),
     ],
-    cnx: [(src: "src", dst: "tester", msg: "cu_gstreamer::CuGstBuffer")],
-    logging: (enable_task_logging: false),
+    cnx: [
+        (
+            src: "src",
+            dst: "tester",
+            msg: "cu_gstreamer::CuGstBuffer",
+        ),
+    ],
+    logging: (
+        enable_task_logging: false,
+    ),
 )
