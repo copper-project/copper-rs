@@ -1,22 +1,7 @@
 (
     tasks: [
-        (
-            id: "src",
-            type: "SingleSource",
-            run_in_sim: true,
-        ),
-        (
-            id: "regular",
-            type: "PassthroughTask",
-            kind: task,
-            run_in_sim: true,
-        ),
+        (id: "src", type: "SingleSource", run_in_sim: true),
+        (id: "regular", type: "PassthroughTask", kind: task, run_in_sim: true),
     ],
-    cnx: [
-        (
-            src: "src",
-            dst: "regular",
-            msg: "i32",
-        ),
-    ],
+    cnx: [(src: "src", dst: "regular", msg: "i32")],
 )

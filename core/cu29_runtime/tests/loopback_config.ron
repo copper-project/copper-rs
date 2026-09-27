@@ -1,24 +1,7 @@
 (
-    tasks: [
-        (
-            id: "src",
-            type: "tasks::Source",
-        ),
-        (
-            id: "loopback",
-            type: "tasks::Loopback",
-        ),
-    ],
+    tasks: [(id: "src", type: "tasks::Source"), (id: "loopback", type: "tasks::Loopback")],
     cnx: [
-        (
-            src: "src",
-            dst: "loopback",
-            msg: "i32",
-        ),
-        (
-            src: "loopback",
-            dst: "loopback",
-            msg: "i32",
-        ),
+        (src: "src", dst: "loopback", msg: "i32"),
+        (src: "loopback", dst: "loopback", msg: "i32"),
     ],
 )

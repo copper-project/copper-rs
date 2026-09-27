@@ -1,22 +1,7 @@
 (
     tasks: [
-        (
-            id: "task0",
-            type: "tasks::ExampleSrc",
-        ),
-        (
-            id: "task1",
-            type: "cu_zenoh::ExampleSink",
-            config: {
-                "topic": "copper/output",
-            },
-        ),
+        (id: "task0", type: "tasks::ExampleSrc"),
+        (id: "task1", type: "cu_zenoh::ExampleSink", config: {"topic": "copper/output"}),
     ],
-    cnx: [
-        (
-            src: "task0",
-            dst: "task1",
-            msg: "i32",
-        ),
-    ],
+    cnx: [(src: "task0", dst: "task1", msg: "i32")],
 )

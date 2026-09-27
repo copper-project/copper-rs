@@ -1,19 +1,7 @@
 (
     tasks: [
-        (
-            id: "heartbeat",
-            type: "tasks::HeartbeatSource",
-        ),
-        (
-            id: "heartbeat_sink",
-            type: "tasks::HeartbeatSink",
-        ),
+        (id: "heartbeat", type: "tasks::HeartbeatSource"),
+        (id: "heartbeat_sink", type: "tasks::HeartbeatSink"),
     ],
-    cnx: [
-        (
-            src: "heartbeat",
-            dst: "heartbeat_sink",
-            msg: "u64",
-        ),
-    ],
+    cnx: [(src: "heartbeat", dst: "heartbeat_sink", msg: "u64")],
 )

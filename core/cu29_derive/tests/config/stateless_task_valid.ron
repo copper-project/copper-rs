@@ -1,21 +1,7 @@
 (
     tasks: [
-        (
-            id: "src",
-            type: "StatelessSource",
-            run_in_sim: true,
-        ),
-        (
-            id: "transform",
-            type: "StatelessTransform",
-            kind: stateless_task,
-        ),
+        (id: "src", type: "StatelessSource", run_in_sim: true),
+        (id: "transform", type: "StatelessTransform", kind: stateless_task),
     ],
-    cnx: [
-        (
-            src: "src",
-            dst: "transform",
-            msg: "u32",
-        ),
-    ],
+    cnx: [(src: "src", dst: "transform", msg: "u32")],
 )

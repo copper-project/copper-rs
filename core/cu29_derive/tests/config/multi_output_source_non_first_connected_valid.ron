@@ -1,26 +1,7 @@
 (
     tasks: [
-        (
-            id: "src",
-            type: "MultiSource",
-            run_in_sim: true,
-        ),
-        (
-            id: "sink",
-            type: "BoolSink",
-            run_in_sim: true,
-        ),
+        (id: "src", type: "MultiSource", run_in_sim: true),
+        (id: "sink", type: "BoolSink", run_in_sim: true),
     ],
-    cnx: [
-        (
-            src: "src",
-            dst: "__nc__",
-            msg: "i32",
-        ),
-        (
-            src: "src",
-            dst: "sink",
-            msg: "bool",
-        ),
-    ],
+    cnx: [(src: "src", dst: "__nc__", msg: "i32"), (src: "src", dst: "sink", msg: "bool")],
 )

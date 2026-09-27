@@ -1,19 +1,6 @@
 (
-    subsystems: [
-        (
-            id: "tx",
-            config: "tx_config.ron",
-        ),
-        (
-            id: "rx",
-            config: "rx_config.ron",
-        ),
-    ],
+    subsystems: [(id: "tx", config: "tx_config.ron"), (id: "rx", config: "rx_config.ron")],
     interconnects: [
-        (
-            from: "tx/zenoh/latency",
-            to: "rx/zenoh/latency",
-            msg: "messages::LatencySample",
-        ),
+        (from: "tx/zenoh/latency", to: "rx/zenoh/latency", msg: "messages::LatencySample"),
     ],
 )
