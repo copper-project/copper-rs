@@ -477,10 +477,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - name: Install taplo-cli
+      - name: Install formatting tools
         uses: taiki-e/install-action@v2.87.18
         with:
-          tool: taplo-cli, fmtron, typos
+          tool: taplo-cli, fmtron@0.10.0, typos
       - name: Check Rust, TOML, RON formatting
         uses: j178/prek-action@v2
         with:
