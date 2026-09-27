@@ -20,9 +20,9 @@ repos:
     hooks:
       - id: typos
         name: check typos (with typos-cli)
-        entry: typos -c .config/_typos.toml
+        entry: typos -c .config/_typos.toml --force-exclude
         language: system
-        pass_filenames: false
+        types: [text]
       - id: check-rust
         name: check rust format
         entry: cargo fmt --all
