@@ -2,21 +2,65 @@
     includes: [
         (
             path: "mcu_graph.ron",
-            params: {"control_source": "mapper", "attitude_kp": 1.0},
-            when: Not(Any([Feature("sim"), Feature("end2end"), Feature("logreader")])),
+            params: {
+                "control_source": "mapper",
+                "attitude_kp": 1.0,
+            },
+            when: Not(
+                Any(
+                    [
+                        Feature("sim"),
+                        Feature(
+                            "end2end",
+                        ),
+                        Feature(
+                            "logreader",
+                        ),
+                    ],
+                ),
+            ),
         ),
         (
             path: "mcu_graph.ron",
-            params: {"control_source": "mode_supervisor", "attitude_kp": 10.0},
-            when: Any([Feature("sim"), Feature("end2end"), Feature("logreader")]),
+            params: {
+                "control_source": "mode_supervisor",
+                "attitude_kp": 10.0,
+            },
+            when: Any(
+                [
+                    Feature("sim"),
+                    Feature("end2end"),
+                    Feature(
+                        "logreader",
+                    ),
+                ],
+            ),
         ),
         (
             path: "mcu_autonomy.ron",
-            when: Any([Feature("sim"), Feature("end2end"), Feature("logreader")]),
+            when: Any(
+                [
+                    Feature("sim"),
+                    Feature("end2end"),
+                    Feature(
+                        "logreader",
+                    ),
+                ],
+            ),
         ),
     ],
-    missions: [(id: "default"), (id: "flow"), (id: "gnss")],
-    resources: [(id: "fc", provider: "cu_micoairh743::MicoAirH743", config: {"i2c2_hz": 400000})],
+    missions: [
+        (id: "default"),
+        (id: "flow"),
+        (id: "gnss"),
+    ],
+    resources: [
+        (
+            id: "fc",
+            provider: "cu_micoairh743::MicoAirH743",
+            config: {"i2c2_hz": 400000},
+        ),
+    ],
     tasks: [
         (
             id: "bmi088",
@@ -35,28 +79,36 @@
             type: "tasks::Dps310Source",
             run_in_sim: true,
             logging: (enabled: true),
-            resources: {"i2c": "fc.i2c2_dps310"},
+            resources: {
+                "i2c": "fc.i2c2_dps310",
+            },
         ),
         (
             id: "ist8310",
             type: "tasks::Ist8310Source",
             run_in_sim: true,
             logging: (enabled: true),
-            resources: {"i2c": "fc.i2c2_ist8310"},
+            resources: {
+                "i2c": "fc.i2c2_ist8310",
+            },
         ),
         (
             id: "mag_heading",
             type: "tasks::MagneticTrueHeading",
             run_in_sim: true,
             logging: (enabled: true),
-            config: {"declination_deg": 4.7},
+            config: {
+                "declination_deg": 4.7,
+            },
         ),
         (
             id: "battery_adc",
             type: "tasks::battery::BatteryAdcSource",
             run_in_sim: true,
             logging: (enabled: true),
-            resources: {"battery_adc": "fc.battery_adc"},
+            resources: {
+                "battery_adc": "fc.battery_adc",
+            },
             config: {
                 "vref_mv": 3300,
                 "vbat_scale": 210,
@@ -70,7 +122,11 @@
             logging: (enabled: false),
             config: {"cal_ms": 500},
         ),
-        (id: "ahrs", type: "cu_ahrs::CuAhrs", logging: (enabled: true)),
+        (
+            id: "ahrs",
+            type: "cu_ahrs::CuAhrs",
+            logging: (enabled: true),
+        ),
         (
             id: "rate",
             type: "tasks::RateController",
@@ -90,25 +146,41 @@
             id: "mixer0",
             type: "tasks::QuadXMixer",
             logging: (enabled: true),
-            config: {"motor_index": 0, "props_out": true, "airmode_idle_percent": 10.0},
+            config: {
+                "motor_index": 0,
+                "props_out": true,
+                "airmode_idle_percent": 10.0,
+            },
         ),
         (
             id: "mixer1",
             type: "tasks::QuadXMixer",
             logging: (enabled: true),
-            config: {"motor_index": 1, "props_out": true, "airmode_idle_percent": 10.0},
+            config: {
+                "motor_index": 1,
+                "props_out": true,
+                "airmode_idle_percent": 10.0,
+            },
         ),
         (
             id: "mixer2",
             type: "tasks::QuadXMixer",
             logging: (enabled: true),
-            config: {"motor_index": 2, "props_out": true, "airmode_idle_percent": 10.0},
+            config: {
+                "motor_index": 2,
+                "props_out": true,
+                "airmode_idle_percent": 10.0,
+            },
         ),
         (
             id: "mixer3",
             type: "tasks::QuadXMixer",
             logging: (enabled: true),
-            config: {"motor_index": 3, "props_out": true, "airmode_idle_percent": 10.0},
+            config: {
+                "motor_index": 3,
+                "props_out": true,
+                "airmode_idle_percent": 10.0,
+            },
         ),
         (
             id: "mapper",
@@ -131,7 +203,9 @@
             type: "tasks::activity_led::ActivityLed",
             run_in_sim: true,
             logging: (enabled: false),
-            resources: {"led": "fc.green_led"},
+            resources: {
+                "led": "fc.green_led",
+            },
         ),
         (
             id: "vtx_osd",
@@ -163,7 +237,9 @@
             type: "tasks::gnss::GnssSource",
             run_in_sim: true,
             logging: (enabled: true),
-            resources: {"serial": "fc.uart3"},
+            resources: {
+                "serial": "fc.uart3",
+            },
             config: {
                 "poll_nav_pvt_ms": 200,
                 "poll_nav_sat_ms": 1000,
@@ -186,16 +262,27 @@
             type: "cu_crsf::CrsfBridge<cu_micoairh743::Uart6Port, cu_micoairh743::SerialPortError>",
             run_in_sim: false,
             logging: (enabled: true),
-            resources: {"serial": "fc.uart6"},
-            channels: [Rx(id: "rc_rx"), Tx(id: "lq_tx")],
+            resources: {
+                "serial": "fc.uart6",
+            },
+            channels: [
+                Rx(id: "rc_rx"),
+                Tx(id: "lq_tx"),
+            ],
         ),
         (
             id: "vtx_msp",
             type: "cu_msp_bridge::CuMspBridge<cu_micoairh743::Uart2Port, cu_micoairh743::SerialPortError>",
             run_in_sim: false,
             logging: (enabled: false),
-            resources: {"serial": "fc.uart2"},
-            channels: [Tx(id: "requests"), Rx(id: "responses"), Rx(id: "incoming")],
+            resources: {
+                "serial": "fc.uart2",
+            },
+            channels: [
+                Tx(id: "requests"),
+                Rx(id: "responses"),
+                Rx(id: "incoming"),
+            ],
         ),
         (
             id: "flow_msp",
@@ -203,8 +290,14 @@
             missions: ["flow"],
             run_in_sim: false,
             logging: (enabled: false),
-            resources: {"serial": "fc.uart4"},
-            channels: [Tx(id: "requests"), Rx(id: "responses"), Rx(id: "incoming")],
+            resources: {
+                "serial": "fc.uart4",
+            },
+            channels: [
+                Tx(id: "requests"),
+                Rx(id: "responses"),
+                Rx(id: "incoming"),
+            ],
         ),
         (
             id: "bdshot",
@@ -224,20 +317,76 @@
         ),
     ],
     cnx: [
-        (src: "bmi088", dst: "imu_cal", msg: "cu_sensor_payloads::ImuPayload"),
-        (src: "mapper", dst: "imu_cal", msg: "crate::messages::ControlInputs"),
-        (src: "imu_cal", dst: "ahrs", msg: "cu_sensor_payloads::ImuPayload"),
-        (src: "ist8310", dst: "ahrs", msg: "cu_sensor_payloads::MagnetometerPayload"),
-        (src: "ahrs", dst: "mag_heading", msg: "cu_ahrs::AhrsPose"),
-        (src: "ahrs", dst: "attitude", msg: "cu_ahrs::AhrsPose"),
-        (src: "attitude", dst: "rate", msg: "crate::messages::BodyRateSetpoint"),
-        (src: "imu_cal", dst: "rate", msg: "cu_sensor_payloads::ImuPayload"),
-        (src: "rc/rc_rx", dst: "mapper", msg: "cu_crsf::messages::RcChannelsPayload"),
-        (src: "mixer0", dst: "bdshot/esc0_tx", msg: "cu_bdshot::EscCommand"),
-        (src: "mixer1", dst: "bdshot/esc1_tx", msg: "cu_bdshot::EscCommand"),
-        (src: "mixer2", dst: "bdshot/esc2_tx", msg: "cu_bdshot::EscCommand"),
-        (src: "mixer3", dst: "bdshot/esc3_tx", msg: "cu_bdshot::EscCommand"),
-        (src: "vtx_osd", dst: "vtx_msp/requests", msg: "cu_msp_bridge::MspRequestBatch"),
+        (
+            src: "bmi088",
+            dst: "imu_cal",
+            msg: "cu_sensor_payloads::ImuPayload",
+        ),
+        (
+            src: "mapper",
+            dst: "imu_cal",
+            msg: "crate::messages::ControlInputs",
+        ),
+        (
+            src: "imu_cal",
+            dst: "ahrs",
+            msg: "cu_sensor_payloads::ImuPayload",
+        ),
+        (
+            src: "ist8310",
+            dst: "ahrs",
+            msg: "cu_sensor_payloads::MagnetometerPayload",
+        ),
+        (
+            src: "ahrs",
+            dst: "mag_heading",
+            msg: "cu_ahrs::AhrsPose",
+        ),
+        (
+            src: "ahrs",
+            dst: "attitude",
+            msg: "cu_ahrs::AhrsPose",
+        ),
+        (
+            src: "attitude",
+            dst: "rate",
+            msg: "crate::messages::BodyRateSetpoint",
+        ),
+        (
+            src: "imu_cal",
+            dst: "rate",
+            msg: "cu_sensor_payloads::ImuPayload",
+        ),
+        (
+            src: "rc/rc_rx",
+            dst: "mapper",
+            msg: "cu_crsf::messages::RcChannelsPayload",
+        ),
+        (
+            src: "mixer0",
+            dst: "bdshot/esc0_tx",
+            msg: "cu_bdshot::EscCommand",
+        ),
+        (
+            src: "mixer1",
+            dst: "bdshot/esc1_tx",
+            msg: "cu_bdshot::EscCommand",
+        ),
+        (
+            src: "mixer2",
+            dst: "bdshot/esc2_tx",
+            msg: "cu_bdshot::EscCommand",
+        ),
+        (
+            src: "mixer3",
+            dst: "bdshot/esc3_tx",
+            msg: "cu_bdshot::EscCommand",
+        ),
+        (
+            src: "vtx_osd",
+            dst: "vtx_msp/requests",
+            msg: "cu_msp_bridge::MspRequestBatch",
+        ),
         (
             src: "flow_msp/incoming",
             dst: "flow_logger",
@@ -245,6 +394,12 @@
             missions: ["flow"],
         ),
     ],
-    monitor: (type: "tasks::monitor::FlightMonitor"),
-    logging: (slab_size_mib: 200, section_size_mib: 20, enable_task_logging: true),
+    monitor: (
+        type: "tasks::monitor::FlightMonitor",
+    ),
+    logging: (
+        slab_size_mib: 200,
+        section_size_mib: 20,
+        enable_task_logging: true,
+    ),
 )

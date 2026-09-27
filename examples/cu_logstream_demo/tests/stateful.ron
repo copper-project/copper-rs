@@ -6,13 +6,40 @@
         copperlist_count: 8,
     ),
     tasks: [
-        (id: "counter", type: "crate::stateful::tasks::Counter"),
-        (id: "sum", type: "crate::stateful::tasks::Accumulator", streaming: (replay: reconstruct)),
-        (id: "derived", type: "crate::stateful::tasks::Derived", streaming: (replay: reconstruct)),
+        (
+            id: "counter",
+            type: "crate::stateful::tasks::Counter",
+        ),
+        (
+            id: "sum",
+            type: "crate::stateful::tasks::Accumulator",
+            streaming: (
+                replay: reconstruct,
+            ),
+        ),
+        (
+            id: "derived",
+            type: "crate::stateful::tasks::Derived",
+            streaming: (
+                replay: reconstruct,
+            ),
+        ),
     ],
     cnx: [
-        (src: "counter", dst: "sum", msg: "crate::stateful::tasks::Sample"),
-        (src: "sum", dst: "derived", msg: "crate::stateful::tasks::Sample"),
-        (src: "derived", dst: "__nc__", msg: "crate::stateful::tasks::Sample"),
+        (
+            src: "counter",
+            dst: "sum",
+            msg: "crate::stateful::tasks::Sample",
+        ),
+        (
+            src: "sum",
+            dst: "derived",
+            msg: "crate::stateful::tasks::Sample",
+        ),
+        (
+            src: "derived",
+            dst: "__nc__",
+            msg: "crate::stateful::tasks::Sample",
+        ),
     ],
 )

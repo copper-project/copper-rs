@@ -1,1 +1,6 @@
-(includes: [(path: "../feedbackconfig.ron")], monitor: (type: "StreamProbe"))
+(
+    includes: [
+        (path: "../feedbackconfig.ron"),
+    ],
+    monitor: (type: "StreamProbe"),
+)

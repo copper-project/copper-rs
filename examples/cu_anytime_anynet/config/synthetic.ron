@@ -17,13 +17,19 @@
                 "weights": "target/cu_anytime_anynet/anynet-kitti.safetensors",
                 "normalization": "raw",
             },
-            anytime: (max_refines: 2, time_budget_ms: 800.0, max_age_ms: 2000.0),
+            anytime: (
+                max_refines: 2,
+                time_budget_ms: 800.0,
+                max_age_ms: 2000.0,
+            ),
         ),
         (
             id: "viewer_synthetic",
             type: "cu_anytime_anynet::tasks::DepthViewer",
             missions: ["synthetic"],
-            config: {"time_dilation": 20.0},
+            config: {
+                "time_dilation": 20.0,
+            },
         ),
     ],
     cnx: [

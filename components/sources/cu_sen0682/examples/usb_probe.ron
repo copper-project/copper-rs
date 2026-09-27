@@ -1,5 +1,9 @@
 (
-    logging: (enable_task_logging: false, slab_size_mib: 32, keyframe_interval: 16),
+    logging: (
+        enable_task_logging: false,
+        slab_size_mib: 32,
+        keyframe_interval: 16,
+    ),
     runtime: (rate_target_hz: 15),
     resources: [
         (
@@ -17,7 +21,9 @@
             id: "sen0682",
             type: "cu_sen0682::Sen0682SerialSource",
             logging: (enabled: false),
-            resources: {"serial": "linux.serial0"},
+            resources: {
+                "serial": "linux.serial0",
+            },
             config: {
                 "configure_device": true,
                 "row_id": 0,
@@ -26,7 +32,17 @@
                 "min_range_m": 0.05,
             },
         ),
-        (id: "probe", type: "probe::CeilingProbeSink", logging: (enabled: false)),
+        (
+            id: "probe",
+            type: "probe::CeilingProbeSink",
+            logging: (enabled: false),
+        ),
     ],
-    cnx: [(src: "sen0682", dst: "probe", msg: "cu_sensor_payloads::PointCloudSoa<512>")],
+    cnx: [
+        (
+            src: "sen0682",
+            dst: "probe",
+            msg: "cu_sensor_payloads::PointCloudSoa<512>",
+        ),
+    ],
 )

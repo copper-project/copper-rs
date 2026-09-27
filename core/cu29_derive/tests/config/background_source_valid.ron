@@ -1,5 +1,24 @@
 (
-    runtime: (thread_pools: [(id: "background", threads: 1)]),
-    tasks: [(id: "src", type: "BackgroundSrc", background: true)],
-    cnx: [(src: "src", dst: "__nc__", msg: "u32")],
+    runtime: (
+        thread_pools: [
+            (
+                id: "background",
+                threads: 1,
+            ),
+        ],
+    ),
+    tasks: [
+        (
+            id: "src",
+            type: "BackgroundSrc",
+            background: true,
+        ),
+    ],
+    cnx: [
+        (
+            src: "src",
+            dst: "__nc__",
+            msg: "u32",
+        ),
+    ],
 )

@@ -1,9 +1,14 @@
 import "../../support/just/viewers.just"
+set allow-duplicate-recipes
 
 ROOT := shell('cd "$1/../.." && pwd', justfile_directory())
 
 # Run the Bevy + Copper simulation loop.
 default: sim
+
+# Render the complete simulated deployment graph.
+graph config="flight_controller.ron" output="graph.svg" mission="default" features="sim":
+  cargo run --manifest-path "{{ROOT}}/Cargo.toml" -p cu29-graph-view -- "{{config}}" --base-dir "{{justfile_directory()}}" --output "{{output}}" --mission "{{mission}}" --features "{{features}}" --open
 
 # Compile both independent multi-Copper subsystem targets.
 subsystems-check: end2end-check

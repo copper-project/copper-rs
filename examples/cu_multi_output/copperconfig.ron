@@ -1,21 +1,89 @@
 (
-    missions: [(id: "default"), (id: "both_inputs"), (id: "open_output"), (id: "loopback")],
+    missions: [
+        (id: "default"),
+        (id: "both_inputs"),
+        (id: "open_output"),
+        (id: "loopback"),
+    ],
     tasks: [
-        (id: "src", type: "tasks::MultiOutSrc"),
-        (id: "int_sink", type: "tasks::IntSink", missions: ["default", "open_output", "loopback"]),
-        (id: "bool_sink", type: "tasks::BoolSink", missions: ["default", "loopback"]),
-        (id: "loopback", type: "tasks::LoopbackTask", missions: ["loopback"]),
+        (
+            id: "src",
+            type: "tasks::MultiOutSrc",
+        ),
+        (
+            id: "int_sink",
+            type: "tasks::IntSink",
+            missions: [
+                "default",
+                "open_output",
+                "loopback",
+            ],
+        ),
+        (
+            id: "bool_sink",
+            type: "tasks::BoolSink",
+            missions: [
+                "default",
+                "loopback",
+            ],
+        ),
+        (
+            id: "loopback",
+            type: "tasks::LoopbackTask",
+            missions: ["loopback"],
+        ),
     ],
     cnx: [
-        (src: "src", dst: "int_sink", msg: "i32", missions: ["default"]),
-        (src: "src", dst: "bool_sink", msg: "bool", missions: ["default"]),
-        (src: "src", dst: "int_sink", msg: "i32", missions: ["open_output"]),
-        (src: "src", dst: "__nc__", msg: "bool", missions: ["open_output"]),
-        (src: "src", dst: "loopback", msg: "i32", missions: ["loopback"]),
-        (src: "loopback", dst: "int_sink", msg: "i32", missions: ["loopback"]),
-        (src: "src", dst: "bool_sink", msg: "bool", missions: ["loopback"]),
+        (
+            src: "src",
+            dst: "int_sink",
+            msg: "i32",
+            missions: ["default"],
+        ),
+        (
+            src: "src",
+            dst: "bool_sink",
+            msg: "bool",
+            missions: ["default"],
+        ),
+        (
+            src: "src",
+            dst: "int_sink",
+            msg: "i32",
+            missions: ["open_output"],
+        ),
+        (
+            src: "src",
+            dst: "__nc__",
+            msg: "bool",
+            missions: ["open_output"],
+        ),
+        (
+            src: "src",
+            dst: "loopback",
+            msg: "i32",
+            missions: ["loopback"],
+        ),
+        (
+            src: "loopback",
+            dst: "int_sink",
+            msg: "i32",
+            missions: ["loopback"],
+        ),
+        (
+            src: "src",
+            dst: "bool_sink",
+            msg: "bool",
+            missions: ["loopback"],
+        ),
     ],
     includes: [
-        (path: "multi_input_sink.ron", params: {"id": "both_sink", "mission": "both_inputs"}),
+        (
+            path: "multi_input_sink.ron",
+            params: {
+                "id": "both_sink",
+                "mission": "both_inputs",
+            },
+        ),
     ],
 )

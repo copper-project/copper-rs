@@ -1,20 +1,34 @@
 (
     constants: [
-        (id: "MAX_DETECTIONS", storage: usize, value: 64),
+        (
+            id: "MAX_DETECTIONS",
+            storage: usize,
+            value: 64,
+        ),
         (
             id: "CAMERA_TRANSLATION",
             module: "frames::camera",
             quantity: length,
             value: [0.18, 0.0, 0.31],
         ),
-        (id: "CAMERA_ROTATION", module: "frames::camera", quantity: angle, value: [0.0, -0.2, 0.0]),
+        (
+            id: "CAMERA_ROTATION",
+            module: "frames::camera",
+            quantity: angle,
+            value: [0.0, -0.2, 0.0],
+        ),
         (
             id: "ROBOT_TRANSLATION",
             module: "frames::robot",
             quantity: length,
             value: [1.0, 2.0, 0.0],
         ),
-        (id: "ROBOT_ROTATION", module: "frames::robot", quantity: angle, value: [0.0, 0.0, 0.5]),
+        (
+            id: "ROBOT_ROTATION",
+            module: "frames::robot",
+            quantity: angle,
+            value: [0.0, 0.0, 0.5],
+        ),
         (
             id: "WORLD_TO_ROBOT",
             module: "transforms",
@@ -34,7 +48,21 @@
             expression: "crate::transforms::WORLD_TO_ROBOT.then(crate::transforms::ROBOT_TO_CAMERA)",
         ),
     ],
-    tasks: [(id: "constants_demo", type: "ConstantsDemo", kind: source)],
-    cnx: [(src: "constants_demo", dst: "__nc__", msg: "()")],
-    includes: [(path: "constants-extra.ron")],
+    tasks: [
+        (
+            id: "constants_demo",
+            type: "ConstantsDemo",
+            kind: source,
+        ),
+    ],
+    cnx: [
+        (
+            src: "constants_demo",
+            dst: "__nc__",
+            msg: "()",
+        ),
+    ],
+    includes: [
+        (path: "constants-extra.ron"),
+    ],
 )
