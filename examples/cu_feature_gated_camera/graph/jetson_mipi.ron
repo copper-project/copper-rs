@@ -8,16 +8,7 @@
                 "caps": "video/x-raw(memory:NVMM),format=NV12,width=1920,height=1080",
             },
         ),
-        (
-            id: "camera_sink",
-            type: "tasks::JetsonFrameSink",
-        ),
+        (id: "camera_sink", type: "tasks::JetsonFrameSink"),
     ],
-    cnx: [
-        (
-            src: "mipi_camera",
-            dst: "camera_sink",
-            msg: "cu_gstreamer::CuGstBuffer",
-        ),
-    ],
+    cnx: [(src: "mipi_camera", dst: "camera_sink", msg: "cu_gstreamer::CuGstBuffer")],
 )

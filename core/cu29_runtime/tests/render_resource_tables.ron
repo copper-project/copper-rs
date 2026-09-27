@@ -1,86 +1,38 @@
 (
-    missions: [
-        (id: "Alpha"),
-        (id: "Beta"),
-    ],
+    missions: [(id: "Alpha"), (id: "Beta")],
     resources: [
-        (
-            id: "board",
-            provider: "demo::BoardBundle",
-        ),
-        (
-            id: "memory",
-            provider: "demo::MemoryBundle",
-        ),
-        (
-            id: "radio",
-            provider: "demo::RadioBundle",
-            missions: ["Beta"],
-        ),
-        (
-            id: "unused",
-            provider: "demo::UnusedBundle",
-        ),
+        (id: "board", provider: "demo::BoardBundle"),
+        (id: "memory", provider: "demo::MemoryBundle"),
+        (id: "radio", provider: "demo::RadioBundle", missions: ["Beta"]),
+        (id: "unused", provider: "demo::UnusedBundle"),
     ],
     tasks: [
         (
             id: "sensor",
             type: "tasks::Sensor",
             missions: ["Alpha", "Beta"],
-            resources: {
-                "spi": "board.spi1",
-                "adc": "board.adc1",
-            },
+            resources: {"spi": "board.spi1", "adc": "board.adc1"},
         ),
         (
             id: "control",
             type: "tasks::Control",
             missions: ["Alpha"],
-            resources: {
-                "spi": "board.spi1",
-            },
+            resources: {"spi": "board.spi1"},
         ),
-        (
-            id: "logger",
-            type: "tasks::Logger",
-            missions: ["Beta"],
-            resources: {
-                "cfg": "memory.cfg",
-            },
-        ),
+        (id: "logger", type: "tasks::Logger", missions: ["Beta"], resources: {"cfg": "memory.cfg"}),
     ],
     bridges: [
         (
             id: "telemetry",
             type: "bridges::Telemetry",
             missions: ["Beta"],
-            resources: {
-                "serial": "radio.uart1",
-            },
-            channels: [
-                Tx(id: "tx"),
-                Rx(id: "rx"),
-            ],
+            resources: {"serial": "radio.uart1"},
+            channels: [Tx(id: "tx"), Rx(id: "rx")],
         ),
     ],
     cnx: [
-        (
-            src: "sensor",
-            dst: "control",
-            msg: "messages::Sensor",
-            missions: ["Alpha"],
-        ),
-        (
-            src: "sensor",
-            dst: "logger",
-            msg: "messages::Sensor",
-            missions: ["Beta"],
-        ),
-        (
-            src: "logger",
-            dst: "telemetry/tx",
-            msg: "messages::Log",
-            missions: ["Beta"],
-        ),
+        (src: "sensor", dst: "control", msg: "messages::Sensor", missions: ["Alpha"]),
+        (src: "sensor", dst: "logger", msg: "messages::Sensor", missions: ["Beta"]),
+        (src: "logger", dst: "telemetry/tx", msg: "messages::Log", missions: ["Beta"]),
     ],
 )

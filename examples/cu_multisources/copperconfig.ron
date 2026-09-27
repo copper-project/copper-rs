@@ -1,51 +1,16 @@
 (
     tasks: [
-        (
-            id: "i",
-            type: "tasks::IntegerSrcTask",
-        ),
-        (
-            id: "f",
-            type: "tasks::FloatSrcTask",
-        ),
-        (
-            id: "merger",
-            type: "tasks::MergerTask",
-        ),
-        (
-            id: "merger_sink",
-            type: "tasks::MergingSinkTask",
-        ),
-        (
-            id: "merged_sink",
-            type: "tasks::MergedSinkTask",
-        ),
+        (id: "i", type: "tasks::IntegerSrcTask"),
+        (id: "f", type: "tasks::FloatSrcTask"),
+        (id: "merger", type: "tasks::MergerTask"),
+        (id: "merger_sink", type: "tasks::MergingSinkTask"),
+        (id: "merged_sink", type: "tasks::MergedSinkTask"),
     ],
     cnx: [
-        (
-            src: "i",
-            dst: "merger_sink",
-            msg: "i32",
-        ),
-        (
-            src: "f",
-            dst: "merger_sink",
-            msg: "f32",
-        ),
-        (
-            src: "i",
-            dst: "merger",
-            msg: "i32",
-        ),
-        (
-            src: "f",
-            dst: "merger",
-            msg: "f32",
-        ),
-        (
-            src: "merger",
-            dst: "merged_sink",
-            msg: "(i32, f32)",
-        ),
+        (src: "i", dst: "merger_sink", msg: "i32"),
+        (src: "f", dst: "merger_sink", msg: "f32"),
+        (src: "i", dst: "merger", msg: "i32"),
+        (src: "f", dst: "merger", msg: "f32"),
+        (src: "merger", dst: "merged_sink", msg: "(i32, f32)"),
     ],
 )

@@ -1,23 +1,7 @@
 (
-    tasks: [
-        (
-            id: "{{id}}",
-            type: "tasks::BothSink",
-            missions: ["{{mission}}"],
-        ),
-    ],
+    tasks: [(id: "{{id}}", type: "tasks::BothSink", missions: ["{{mission}}"])],
     cnx: [
-        (
-            src: "src",
-            dst: "{{id}}",
-            msg: "i32",
-            missions: ["{{mission}}"],
-        ),
-        (
-            src: "src",
-            dst: "{{id}}",
-            msg: "bool",
-            missions: ["{{mission}}"],
-        ),
+        (src: "src", dst: "{{id}}", msg: "i32", missions: ["{{mission}}"]),
+        (src: "src", dst: "{{id}}", msg: "bool", missions: ["{{mission}}"]),
     ],
 )

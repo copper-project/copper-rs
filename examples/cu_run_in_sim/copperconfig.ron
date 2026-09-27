@@ -1,27 +1,8 @@
 (
     tasks: [
-        (
-            id: "src",
-            type: "MySource",
-            run_in_sim: false,
-        ),
+        (id: "src", type: "MySource", run_in_sim: false),
         (id: "proc", type: "Doubler"),
-        (
-            id: "sink",
-            type: "MySink",
-            run_in_sim: true,
-        ),
+        (id: "sink", type: "MySink", run_in_sim: true),
     ],
-    cnx: [
-        (
-            src: "src",
-            dst: "proc",
-            msg: "MyMsg",
-        ),
-        (
-            src: "proc",
-            dst: "sink",
-            msg: "MyMsg",
-        ),
-    ],
+    cnx: [(src: "src", dst: "proc", msg: "MyMsg"), (src: "proc", dst: "sink", msg: "MyMsg")],
 )
