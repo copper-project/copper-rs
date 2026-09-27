@@ -1,1 +1,11 @@
-(tasks: [(id: "src", type: "SingleSource", kind: source, run_in_sim: true)], cnx: [])
+(
+    tasks: [
+        (
+            id: "src",
+            type: "SingleSource",
+            kind: source,
+            run_in_sim: true,
+        ),
+    ],
+    cnx: [],
+)

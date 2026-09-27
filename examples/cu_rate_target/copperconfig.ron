@@ -1,8 +1,26 @@
 (
     runtime: (rate_target_hz: 1000),
     tasks: [
-        (id: "task0", type: "tasks::ExampleSrc"),
-        (id: "task1", type: "tasks::ExampleTask", logging: (enabled: false)),
+        (
+            id: "task0",
+            type: "tasks::ExampleSrc",
+        ),
+        (
+            id: "task1",
+            type: "tasks::ExampleTask",
+            logging: (enabled: false),
+        ),
     ],
-    cnx: [(src: "task0", dst: "task1", msg: "i32"), (src: "task1", dst: "__nc__", msg: "i32")],
+    cnx: [
+        (
+            src: "task0",
+            dst: "task1",
+            msg: "i32",
+        ),
+        (
+            src: "task1",
+            dst: "__nc__",
+            msg: "i32",
+        ),
+    ],
 )

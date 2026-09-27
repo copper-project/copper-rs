@@ -5,9 +5,22 @@
             type: "FrameSource",
             kind: source,
             run_in_sim: true,
-            logging: (handle_content: touched_only),
+            logging: (
+                handle_content: touched_only,
+            ),
         ),
-        (id: "sink", type: "FrameSink", kind: sink, run_in_sim: true),
+        (
+            id: "sink",
+            type: "FrameSink",
+            kind: sink,
+            run_in_sim: true,
+        ),
     ],
-    cnx: [(src: "cam", dst: "sink", msg: "AwareFrame")],
+    cnx: [
+        (
+            src: "cam",
+            dst: "sink",
+            msg: "AwareFrame",
+        ),
+    ],
 )

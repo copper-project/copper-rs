@@ -1,7 +1,26 @@
 (
     tasks: [
-        (id: "src", type: "Source", run_in_sim: true),
-        (id: "proc", type: "Proc", run_in_sim: true),
+        (
+            id: "src",
+            type: "Source",
+            run_in_sim: true,
+        ),
+        (
+            id: "proc",
+            type: "Proc",
+            run_in_sim: true,
+        ),
     ],
-    cnx: [(src: "src", dst: "proc", msg: "i32"), (src: "proc", dst: "__nc__", msg: "i32")],
+    cnx: [
+        (
+            src: "src",
+            dst: "proc",
+            msg: "i32",
+        ),
+        (
+            src: "proc",
+            dst: "__nc__",
+            msg: "i32",
+        ),
+    ],
 )

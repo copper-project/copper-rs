@@ -1,1 +1,9 @@
-(includes: [(path: "../copperconfig.ron", params: {})], logging: (keyframe_interval: 32))
+(
+    includes: [
+        (
+            path: "../copperconfig.ron",
+            params: {},
+        ),
+    ],
+    logging: (keyframe_interval: 32),
+)

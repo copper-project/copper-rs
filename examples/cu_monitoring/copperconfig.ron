@@ -1,5 +1,25 @@
 (
-    tasks: [(id: "task0", type: "tasks::ExampleSrc"), (id: "task1", type: "tasks::ExampleTask")],
-    cnx: [(src: "task0", dst: "task1", msg: "i32"), (src: "task1", dst: "__nc__", msg: "i32")],
+    tasks: [
+        (
+            id: "task0",
+            type: "tasks::ExampleSrc",
+        ),
+        (
+            id: "task1",
+            type: "tasks::ExampleTask",
+        ),
+    ],
+    cnx: [
+        (
+            src: "task0",
+            dst: "task1",
+            msg: "i32",
+        ),
+        (
+            src: "task1",
+            dst: "__nc__",
+            msg: "i32",
+        ),
+    ],
     monitor: (type: "ExampleMonitor"),
 )

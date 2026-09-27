@@ -1,5 +1,28 @@
 (
-    tasks: [(id: "task0", type: "tasks::ExampleSrc"), (id: "task1", type: "tasks::ExampleTask")],
-    cnx: [(src: "task0", dst: "task1", msg: "i32"), (src: "task1", dst: "__nc__", msg: "i32")],
-    logging: (slab_size_mib: 1024, section_size_mib: 100),
+    tasks: [
+        (
+            id: "task0",
+            type: "tasks::ExampleSrc",
+        ),
+        (
+            id: "task1",
+            type: "tasks::ExampleTask",
+        ),
+    ],
+    cnx: [
+        (
+            src: "task0",
+            dst: "task1",
+            msg: "i32",
+        ),
+        (
+            src: "task1",
+            dst: "__nc__",
+            msg: "i32",
+        ),
+    ],
+    logging: (
+        slab_size_mib: 1024,
+        section_size_mib: 100,
+    ),
 )
