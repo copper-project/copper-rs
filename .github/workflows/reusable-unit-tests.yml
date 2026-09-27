@@ -458,7 +458,7 @@ jobs:
         run: sccache --show-stats || true
   windows-component-smoke:
     if: inputs.run_other
-    name: Component Smoke (Windows, debug)
+    name: Component Checks (Windows, debug)
     runs-on: ${{ inputs.windows_runner_label }}
 
     defaults:
@@ -480,7 +480,7 @@ jobs:
           linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
           cache_prefix: debug
           cache_shared_key: rust-windows
-          install_nextest: "false"
+          install_nextest: "true"
           sccache_write: "true"
       - name: Check selected Windows components
         run: >
@@ -500,6 +500,16 @@ jobs:
           -p cu-bridge-test
           -p cu-resources-test
           -p cu-monitoring
+      - name: Test portable Windows components
+        run: >
+          cargo +${{ inputs.toolchain }} nextest run
+          -p cu-sensor-payloads
+          -p cu-spatial-payloads
+          -p cu-gnss-payloads
+          -p cu-transform
+          -p cu-pid
+          -p cu-ahrs
+          -p cu-ratelimit
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
