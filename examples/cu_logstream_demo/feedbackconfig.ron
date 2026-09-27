@@ -1,15 +1,10 @@
 (
-    includes: [
-        (path: "copperconfig.ron"),
-    ],
+    includes: [(path: "copperconfig.ron")],
     log_streaming: (
         destinations: [
             (
                 id: "ground",
-                transport: (
-                    type: "cu29_logstream_udp::CuUdpLogStreamTx",
-                    resource: "network.tx",
-                ),
+                transport: (type: "cu29_logstream_udp::CuUdpLogStreamTx", resource: "network.tx"),
                 feedback: (
                     transport: (
                         type: "cu29_logstream_udp::CuUdpLogStreamRx",
@@ -36,10 +31,7 @@
                         repair_every_source_symbols: 4,
                         repair_density: Full,
                     ),
-                    objects: (
-                        max_object_bytes: 65536,
-                        repair_symbols_per_block: 2,
-                    ),
+                    objects: (max_object_bytes: 65536, repair_symbols_per_block: 2),
                 ),
                 recovery_interval: 16,
                 max_record_bytes: 4096,

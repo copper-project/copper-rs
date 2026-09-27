@@ -23,10 +23,7 @@
         destinations: [
             (
                 id: "ground",
-                transport: (
-                    type: "cu29_logstream_udp::CuUdpLogStreamTx",
-                    resource: "network.tx",
-                ),
+                transport: (type: "cu29_logstream_udp::CuUdpLogStreamTx", resource: "network.tx"),
                 link: (
                     mtu_bytes: 1200,
                     bitrate_bps: 2000000,
@@ -41,10 +38,7 @@
                         repair_every_source_symbols: 4,
                         repair_density: Full,
                     ),
-                    objects: (
-                        max_object_bytes: 65536,
-                        repair_symbols_per_block: 2,
-                    ),
+                    objects: (max_object_bytes: 65536, repair_symbols_per_block: 2),
                 ),
                 recovery_interval: 16,
                 max_record_bytes: 4096,
@@ -52,28 +46,15 @@
         ],
     ),
     tasks: [
-        (
-            id: "encoders",
-            type: "cu_logstream_demo::tasks::Encoders",
-        ),
+        (id: "encoders", type: "cu_logstream_demo::tasks::Encoders"),
         (
             id: "kinematics",
             type: "cu_logstream_demo::tasks::Kinematics",
-            streaming: (
-                replay: reconstruct,
-            ),
+            streaming: (replay: reconstruct),
         ),
     ],
     cnx: [
-        (
-            src: "encoders",
-            dst: "kinematics",
-            msg: "cu_logstream_demo::tasks::JointAngles",
-        ),
-        (
-            src: "kinematics",
-            dst: "__nc__",
-            msg: "cu_logstream_demo::tasks::ArmPose",
-        ),
+        (src: "encoders", dst: "kinematics", msg: "cu_logstream_demo::tasks::JointAngles"),
+        (src: "kinematics", dst: "__nc__", msg: "cu_logstream_demo::tasks::ArmPose"),
     ],
 )

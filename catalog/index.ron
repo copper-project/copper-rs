@@ -1,314 +1,74 @@
 (
     version: 1,
-    defaults: (
-        github_repo: "copper-project/copper-rs",
-        github_rev: "master",
-    ),
+    defaults: (github_repo: "copper-project/copper-rs", github_rev: "master"),
     entries: [
-        (
-            name: "cu-ads7883-new",
-            source: GitHub(
-                path: "components/sources/cu_ads7883",
-            ),
-        ),
-        (
-            name: "cu-ahrs",
-            source: GitHub(
-                path: "components/tasks/cu_ahrs",
-            ),
-        ),
-        (
-            name: "cu-aligner",
-            source: GitHub(
-                path: "components/tasks/cu_aligner",
-            ),
-        ),
-        (
-            name: "cu-apriltag",
-            source: GitHub(
-                path: "components/tasks/cu_apriltag",
-            ),
-        ),
-        (
-            name: "cu-bdshot",
-            source: GitHub(
-                path: "components/bridges/cu_bdshot",
-            ),
-        ),
-        (
-            name: "cu-bevymon",
-            source: GitHub(
-                path: "components/monitors/cu_bevymon",
-            ),
-        ),
-        (
-            name: "cu-bmi088",
-            source: GitHub(
-                path: "components/sources/cu_bmi088",
-            ),
-        ),
-        (
-            name: "cu-consolemon",
-            source: GitHub(
-                path: "components/monitors/cu_consolemon",
-            ),
-        ),
-        (
-            name: "cu-crsf",
-            source: GitHub(
-                path: "components/bridges/cu_crsf",
-            ),
-        ),
-        (
-            name: "cu-dps310",
-            source: GitHub(
-                path: "components/sources/cu_dps310",
-            ),
-        ),
-        (
-            name: "cu-dynthreshold",
-            source: GitHub(
-                path: "components/tasks/cu_dynthreshold",
-            ),
-        ),
-        (
-            name: "cu-feetech",
-            source: GitHub(
-                path: "components/bridges/cu_feetech",
-            ),
-        ),
-        (
-            name: "cu-ffv1-codec",
-            source: GitHub(
-                path: "components/codecs/cu_ffv1_codec",
-            ),
-        ),
-        (
-            name: "cu-gnss-payloads",
-            source: GitHub(
-                path: "components/payloads/cu_gnss_payloads",
-            ),
-        ),
-        (
-            name: "cu-gnss-ublox",
-            source: GitHub(
-                path: "components/sources/cu_gnss_ublox",
-            ),
-        ),
-        (
-            name: "cu-gstreamer",
-            source: GitHub(
-                path: "components/sources/cu_gstreamer",
-            ),
-        ),
-        (
-            name: "cu-hesai",
-            source: GitHub(
-                path: "components/sources/cu_hesai",
-            ),
-        ),
-        (
-            name: "cu-iceoryx2-bridge",
-            source: GitHub(
-                path: "components/bridges/cu_iceoryx2_bridge",
-            ),
-        ),
-        (
-            name: "cu-ist8310",
-            source: GitHub(
-                path: "components/sources/cu_ist8310",
-            ),
-        ),
+        (name: "cu-ads7883-new", source: GitHub(path: "components/sources/cu_ads7883")),
+        (name: "cu-ahrs", source: GitHub(path: "components/tasks/cu_ahrs")),
+        (name: "cu-aligner", source: GitHub(path: "components/tasks/cu_aligner")),
+        (name: "cu-apriltag", source: GitHub(path: "components/tasks/cu_apriltag")),
+        (name: "cu-bdshot", source: GitHub(path: "components/bridges/cu_bdshot")),
+        (name: "cu-bevymon", source: GitHub(path: "components/monitors/cu_bevymon")),
+        (name: "cu-bmi088", source: GitHub(path: "components/sources/cu_bmi088")),
+        (name: "cu-consolemon", source: GitHub(path: "components/monitors/cu_consolemon")),
+        (name: "cu-crsf", source: GitHub(path: "components/bridges/cu_crsf")),
+        (name: "cu-dps310", source: GitHub(path: "components/sources/cu_dps310")),
+        (name: "cu-dynthreshold", source: GitHub(path: "components/tasks/cu_dynthreshold")),
+        (name: "cu-feetech", source: GitHub(path: "components/bridges/cu_feetech")),
+        (name: "cu-ffv1-codec", source: GitHub(path: "components/codecs/cu_ffv1_codec")),
+        (name: "cu-gnss-payloads", source: GitHub(path: "components/payloads/cu_gnss_payloads")),
+        (name: "cu-gnss-ublox", source: GitHub(path: "components/sources/cu_gnss_ublox")),
+        (name: "cu-gstreamer", source: GitHub(path: "components/sources/cu_gstreamer")),
+        (name: "cu-hesai", source: GitHub(path: "components/sources/cu_hesai")),
+        (name: "cu-iceoryx2-bridge", source: GitHub(path: "components/bridges/cu_iceoryx2_bridge")),
+        (name: "cu-ist8310", source: GitHub(path: "components/sources/cu_ist8310")),
         (
             name: "cu-kornia-vio",
-            source: GitHub(
-                repo: Some(
-                    "kornia/cu-kornia-vio",
-                ),
-                rev: Some("main"),
-                path: ".",
-            ),
+            source: GitHub(repo: Some("kornia/cu-kornia-vio"), rev: Some("main"), path: "."),
         ),
-        (
-            name: "cu-lewansoul",
-            source: GitHub(
-                path: "components/sinks/cu_lewansoul",
-            ),
-        ),
-        (
-            name: "cu-linux-resources",
-            source: GitHub(
-                path: "components/res/cu_linux_resources",
-            ),
-        ),
-        (
-            name: "cu-livox",
-            source: GitHub(
-                path: "components/sources/cu_livox",
-            ),
-        ),
-        (
-            name: "cu-logmon",
-            source: GitHub(
-                path: "components/monitors/cu_logmon",
-            ),
-        ),
-        (
-            name: "cu-micoairh743",
-            source: GitHub(
-                path: "components/res/cu_micoairh743",
-            ),
-        ),
-        (
-            name: "cu-mpu9250",
-            source: GitHub(
-                path: "components/sources/cu_mpu9250",
-            ),
-        ),
-        (
-            name: "cu-msp-bridge",
-            source: GitHub(
-                path: "components/bridges/cu_msp_bridge",
-            ),
-        ),
-        (
-            name: "cu-msp-lib",
-            source: GitHub(
-                path: "components/libs/cu_msp_lib",
-            ),
-        ),
-        (
-            name: "cu-pid",
-            source: GitHub(
-                path: "components/tasks/cu_pid",
-            ),
-        ),
-        (
-            name: "cu-png-codec",
-            source: GitHub(
-                path: "components/codecs/cu_png_codec",
-            ),
-        ),
-        (
-            name: "cu-python-task",
-            source: GitHub(
-                path: "components/tasks/cu_python_task",
-            ),
-        ),
-        (
-            name: "cu-ratelimit",
-            source: GitHub(
-                path: "components/tasks/cu_ratelimit",
-            ),
-        ),
-        (
-            name: "cu-ros2-bridge",
-            source: GitHub(
-                path: "components/bridges/cu_ros2_bridge",
-            ),
-        ),
-        (
-            name: "cu-ros2-payloads",
-            source: GitHub(
-                path: "components/payloads/cu_ros2_payloads",
-            ),
-        ),
-        (
-            name: "cu-rp-encoder",
-            source: GitHub(
-                path: "components/sources/cu_rp_encoder",
-            ),
-        ),
-        (
-            name: "cu-rp-gpio",
-            source: GitHub(
-                path: "components/sinks/cu_rp_gpio",
-            ),
-        ),
-        (
-            name: "cu-rp-sn754410-new",
-            source: GitHub(
-                path: "components/sinks/cu_rp_sn754410",
-            ),
-        ),
-        (
-            name: "cu-safetymon",
-            source: GitHub(
-                path: "components/monitors/cu_safetymon",
-            ),
-        ),
-        (
-            name: "cu-sdlogger",
-            source: GitHub(
-                path: "components/libs/cu_sdlogger",
-            ),
-        ),
+        (name: "cu-lewansoul", source: GitHub(path: "components/sinks/cu_lewansoul")),
+        (name: "cu-linux-resources", source: GitHub(path: "components/res/cu_linux_resources")),
+        (name: "cu-livox", source: GitHub(path: "components/sources/cu_livox")),
+        (name: "cu-logmon", source: GitHub(path: "components/monitors/cu_logmon")),
+        (name: "cu-micoairh743", source: GitHub(path: "components/res/cu_micoairh743")),
+        (name: "cu-mpu9250", source: GitHub(path: "components/sources/cu_mpu9250")),
+        (name: "cu-msp-bridge", source: GitHub(path: "components/bridges/cu_msp_bridge")),
+        (name: "cu-msp-lib", source: GitHub(path: "components/libs/cu_msp_lib")),
+        (name: "cu-pid", source: GitHub(path: "components/tasks/cu_pid")),
+        (name: "cu-png-codec", source: GitHub(path: "components/codecs/cu_png_codec")),
+        (name: "cu-python-task", source: GitHub(path: "components/tasks/cu_python_task")),
+        (name: "cu-ratelimit", source: GitHub(path: "components/tasks/cu_ratelimit")),
+        (name: "cu-ros2-bridge", source: GitHub(path: "components/bridges/cu_ros2_bridge")),
+        (name: "cu-ros2-payloads", source: GitHub(path: "components/payloads/cu_ros2_payloads")),
+        (name: "cu-rp-encoder", source: GitHub(path: "components/sources/cu_rp_encoder")),
+        (name: "cu-rp-gpio", source: GitHub(path: "components/sinks/cu_rp_gpio")),
+        (name: "cu-rp-sn754410-new", source: GitHub(path: "components/sinks/cu_rp_sn754410")),
+        (name: "cu-safetymon", source: GitHub(path: "components/monitors/cu_safetymon")),
+        (name: "cu-sdlogger", source: GitHub(path: "components/libs/cu_sdlogger")),
         (
             name: "cu-sensor-payloads",
-            source: GitHub(
-                path: "components/payloads/cu_sensor_payloads",
-            ),
+            source: GitHub(path: "components/payloads/cu_sensor_payloads"),
         ),
         (
             name: "cu-spatial-payloads",
-            source: GitHub(
-                path: "components/payloads/cu_spatial_payloads",
-            ),
+            source: GitHub(path: "components/payloads/cu_spatial_payloads"),
         ),
         (
             name: "cu-stereo-payloads",
             source: GitHub(
-                repo: Some(
-                    "kornia/cu-kornia-vio",
-                ),
+                repo: Some("kornia/cu-kornia-vio"),
                 rev: Some("main"),
                 path: "crates/cu-stereo-payloads",
             ),
         ),
-        (
-            name: "cu-transform",
-            source: GitHub(
-                path: "components/libs/cu_transform",
-            ),
-        ),
-        (
-            name: "cu-tuimon",
-            source: GitHub(
-                path: "components/libs/cu_tuimon",
-            ),
-        ),
-        (
-            name: "cu-udp-inject",
-            source: GitHub(
-                path: "components/testing/cu_udp_inject",
-            ),
-        ),
-        (
-            name: "cu-v4l",
-            source: GitHub(
-                path: "components/sources/cu_v4l",
-            ),
-        ),
-        (
-            name: "cu-vlp16",
-            source: GitHub(
-                path: "components/sources/cu_vlp16",
-            ),
-        ),
-        (
-            name: "cu-wt901",
-            source: GitHub(
-                path: "components/sources/cu_wt901",
-            ),
-        ),
+        (name: "cu-transform", source: GitHub(path: "components/libs/cu_transform")),
+        (name: "cu-tuimon", source: GitHub(path: "components/libs/cu_tuimon")),
+        (name: "cu-udp-inject", source: GitHub(path: "components/testing/cu_udp_inject")),
+        (name: "cu-v4l", source: GitHub(path: "components/sources/cu_v4l")),
+        (name: "cu-vlp16", source: GitHub(path: "components/sources/cu_vlp16")),
+        (name: "cu-wt901", source: GitHub(path: "components/sources/cu_wt901")),
         (
             name: "cu-zed",
-            source: GitHub(
-                repo: Some(
-                    "copper-project/zed",
-                ),
-                path: "components/sources/cu_zed",
-            ),
+            source: GitHub(repo: Some("copper-project/zed"), path: "components/sources/cu_zed"),
         ),
         (
             name: "cu-zed-f9r",
@@ -319,14 +79,7 @@
             ),
             overrides: (
                 description: "Copper GPS/RTK positioning source for the SparkFun ZED-F9R with NTRIP corrections and dead reckoning",
-                keywords: [
-                    "gps",
-                    "rtk",
-                    "positioning",
-                    "ntrip",
-                    "gnss",
-                    "zed-f9r",
-                ],
+                keywords: ["gps", "rtk", "positioning", "ntrip", "gnss", "zed-f9r"],
                 repository: "https://gitlab.com/rdynamics/cu-zed-f9r",
                 host_os: ["linux"],
             ),
@@ -337,17 +90,7 @@
                 license_url: "https://creativecommons.org/licenses/by-nc-sa/3.0/",
             ),
         ),
-        (
-            name: "cu-zenoh-bridge",
-            source: GitHub(
-                path: "components/bridges/cu_zenoh_bridge",
-            ),
-        ),
-        (
-            name: "cu-zenoh-sink",
-            source: GitHub(
-                path: "components/sinks/cu_zenoh_sink",
-            ),
-        ),
+        (name: "cu-zenoh-bridge", source: GitHub(path: "components/bridges/cu_zenoh_bridge")),
+        (name: "cu-zenoh-sink", source: GitHub(path: "components/sinks/cu_zenoh_sink")),
     ],
 )
