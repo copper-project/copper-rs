@@ -96,6 +96,9 @@ This file defines the Copper V1 public contract. Anything not listed as stable i
 
 ## Experimental
 
+- Background empty-input dispatch policy: `background_skip_empty` and the defaulted
+  `CuAsyncTask<T, O, const SKIP_EMPTY: bool = false>` parameter.
+
 - `remote-debug` feature and `cu29::remote_debug`.
 - `parallel-rt` feature and parallel executor APIs.
 - `async-cl-io` feature and async CopperList I/O internals.
