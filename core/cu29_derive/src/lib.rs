@@ -1695,7 +1695,9 @@ impl CuTaskSpecSet {
             .zip(background_flags.iter())
             .zip(output_types.iter())
             .zip(async_inner_task_types.iter())
-            .map(|(((((name_type, name), cutype), &background), output_type), inner_type)| {
+            .zip(all_id_nodes.iter())
+            .map(|((((((name_type, name), cutype), &background), output_type), inner_type), (_, node))| {
+                let skip_empty = node.background_skip_empty();
                 if background {
                     if let Some(output_type) = output_type {
                         match cutype {
@@ -1703,7 +1705,7 @@ impl CuTaskSpecSet {
                                 parse_quote!(CuAsyncSrcTask<#inner_type, #output_type>)
                             }
                             CuTaskType::Regular => {
-                                parse_quote!(CuAsyncTask<#inner_type, #output_type>)
+                                parse_quote!(CuAsyncTask<#inner_type, #output_type, #skip_empty>)
                             }
                             CuTaskType::Sink => {
                                 panic!("CuSinkTask {name} cannot be a background task, it should be a regular task.");
@@ -1728,7 +1730,9 @@ impl CuTaskSpecSet {
             .zip(background_flags.iter())
             .zip(output_types.iter())
             .zip(async_inner_task_types.iter())
-            .map(|(((((name_type, name), cutype), &background), output_type), inner_type)| {
+            .zip(all_id_nodes.iter())
+            .map(|((((((name_type, name), cutype), &background), output_type), inner_type), (_, node))| {
+                let skip_empty = node.background_skip_empty();
                 if background {
                     if let Some(output_type) = output_type {
                         match cutype {
@@ -1736,7 +1740,7 @@ impl CuTaskSpecSet {
                                 parse_quote!(CuAsyncSrcTask::<#inner_type, #output_type>)
                             }
                             CuTaskType::Regular => {
-                                parse_quote!(CuAsyncTask::<#inner_type, #output_type>)
+                                parse_quote!(CuAsyncTask::<#inner_type, #output_type, #skip_empty>)
                             }
                             CuTaskType::Sink => {
                                 panic!("CuSinkTask {name} cannot be a background task, it should be a regular task.");
@@ -6272,9 +6276,8 @@ fn runtime_task_type_for_index(
         }
         CuTaskType::Regular => {
             if background {
-                if let Some(out_ty) = output_type {
-                    let inner = &task_specs.async_inner_task_types[index];
-                    parse_quote!(CuAsyncTask<#inner, #out_ty>)
+                if output_type.is_some() {
+                    task_specs.task_types[index].clone()
                 } else {
                     panic!("{task_id}: If a task is background, it has to have an output");
                 }

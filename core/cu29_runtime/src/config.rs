@@ -394,6 +394,11 @@ pub struct Node {
     #[serde(skip_serializing_if = "Option::is_none")]
     background: Option<BackgroundConfig>,
 
+    /// Skip dispatching empty inputs while still collecting completed background results.
+    /// Requires a regular background task; defaults to false.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    background_skip_empty: Option<bool>,
+
     /// Anytime refinement policy for this task (base + bounded refinements).
     ///
     /// Only supported on regular tasks. Orthogonal to `background:`, which adds
@@ -438,6 +443,7 @@ impl Node {
             resources: None,
             missions: None,
             background: None,
+            background_skip_empty: None,
             anytime: None,
             run_in_sim: None,
             logging: None,
@@ -496,6 +502,13 @@ impl Node {
             Some(BackgroundConfig::Pool { .. }) => true,
             None => false,
         }
+    }
+
+    /// Compile-time empty-input policy consumed by runtime generation.
+    #[doc(hidden)]
+    #[allow(dead_code)]
+    pub fn background_skip_empty(&self) -> bool {
+        self.background_skip_empty.unwrap_or(false)
     }
 
     /// Name of the thread pool this task should run on when backgrounded.
@@ -3257,6 +3270,32 @@ impl CuConfig {
         Ok(())
     }
 
+    fn validate_background_input_configs(&self) -> CuResult<()> {
+        let validate = |graph: &CuGraph| -> CuResult<()> {
+            for (node_id, node) in graph.get_all_nodes() {
+                if node.background_skip_empty()
+                    && (!node.is_background()
+                        || resolve_task_kind_for_id(graph, node_id)? != TaskKind::Regular)
+                {
+                    return Err(CuError::from(format!(
+                        "Task '{}': background_skip_empty requires a regular background task",
+                        node.id
+                    )));
+                }
+            }
+            Ok(())
+        };
+        match &self.graphs {
+            Simple(graph) => validate(graph),
+            Missions(graphs) => {
+                for graph in graphs.values() {
+                    validate(graph)?;
+                }
+                Ok(())
+            }
+        }
+    }
+
     fn validate_stateless_configs(&self) -> CuResult<()> {
         match &self.graphs {
             Simple(graph) => validate_stateless_graph(graph),
@@ -4757,6 +4796,7 @@ fn config_representation_to_config(representation: CuConfigRepresentation) -> Cu
     cuconfig.validate_logging_config()?;
     cuconfig.validate_runtime_config()?;
     cuconfig.validate_stateless_configs()?;
+    cuconfig.validate_background_input_configs()?;
     cuconfig.validate_anytime_configs()?;
     cuconfig.validate_constants()?;
     cuconfig.validate_log_streaming_config()?;

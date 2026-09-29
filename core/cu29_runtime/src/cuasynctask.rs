@@ -246,9 +246,11 @@ fn record_async_error<O: CuMsgPayload>(
     completion.notify_all();
 }
 
+/// Background task wrapper. `SKIP_EMPTY` suppresses jobs without an input payload
+/// while collecting each completed result once, including on empty ticks.
 #[derive(Reflect)]
 #[reflect(no_field_bounds, from_reflect = false, type_path = false)]
-pub struct CuAsyncTask<T, O>
+pub struct CuAsyncTask<T, O, const SKIP_EMPTY: bool = false>
 where
     T: for<'m> CuTask<Output<'m> = CuMsg<O>> + Send + 'static,
     O: CuMsgPayload + Send + 'static,
@@ -265,7 +267,7 @@ where
     tp: Arc<ThreadPool>,
 }
 
-impl<T, O> TypePath for CuAsyncTask<T, O>
+impl<T, O, const SKIP_EMPTY: bool> TypePath for CuAsyncTask<T, O, SKIP_EMPTY>
 where
     T: for<'m> CuTask<Output<'m> = CuMsg<O>> + Send + 'static,
     O: CuMsgPayload + Send + 'static,
@@ -297,7 +299,7 @@ pub struct CuAsyncTaskResources<'r, T: CuTask> {
     pub threadpool: Arc<ThreadPool>,
 }
 
-impl<T, O> CuAsyncTask<T, O>
+impl<T, O, const SKIP_EMPTY: bool> CuAsyncTask<T, O, SKIP_EMPTY>
 where
     T: for<'m> CuTask<Output<'m> = CuMsg<O>> + Send + 'static,
     O: CuMsgPayload + Send + 'static,
@@ -342,7 +344,7 @@ where
     }
 }
 
-impl<T, O> Freezable for CuAsyncTask<T, O>
+impl<T, O, const SKIP_EMPTY: bool> Freezable for CuAsyncTask<T, O, SKIP_EMPTY>
 where
     T: for<'m> CuTask<Output<'m> = CuMsg<O>> + Send + 'static,
     O: CuMsgPayload + Send + 'static,
@@ -393,7 +395,7 @@ where
     }
 }
 
-impl<T, I, O> CuTask for CuAsyncTask<T, O>
+impl<T, I, O, const SKIP_EMPTY: bool> CuTask for CuAsyncTask<T, O, SKIP_EMPTY>
 where
     T: for<'i, 'o> CuTask<Input<'i> = CuMsg<I>, Output<'o> = CuMsg<O>> + Send + 'static,
     I: CuMsgPayload + Send + Sync + 'static,
@@ -458,6 +460,21 @@ where
                 return Ok(());
             }
 
+            if SKIP_EMPTY {
+                *real_output = if matches!(state.status, AsyncStatus::Waiting(_)) {
+                    state.status = AsyncStatus::Idle;
+                    state.committed_output.clone()
+                } else {
+                    CuMsg::default()
+                };
+                // A restored pending job owns its saved input and must still run.
+                if input.payload().is_none()
+                    && !matches!(state.status, AsyncStatus::ReplayPending(_))
+                {
+                    return Ok(());
+                }
+            }
+
             let dispatch = self
                 .dispatch
                 .as_ref()
@@ -474,7 +491,9 @@ where
             } else {
                 typed_dispatch.replace((*input).clone())
             };
-            *real_output = state.committed_output.clone();
+            if !SKIP_EMPTY {
+                *real_output = state.committed_output.clone();
+            }
             state.status = AsyncStatus::Running(dispatch_cl_id);
             (
                 dispatch.clone(),
@@ -955,8 +974,9 @@ mod tests {
         }
     }
 
-    fn wait_until_async_idle<T, O>(async_task: &CuAsyncTask<T, O>)
-    where
+    fn wait_until_async_idle<T, O, const SKIP_EMPTY: bool>(
+        async_task: &CuAsyncTask<T, O, SKIP_EMPTY>,
+    ) where
         T: for<'m> CuTask<Output<'m> = CuMsg<O>> + Send + 'static,
         O: CuMsgPayload + Send + 'static,
     {
@@ -1126,6 +1146,62 @@ mod tests {
             let _ = self.done.send(());
             Ok(())
         }
+    }
+
+    #[test]
+    fn background_skip_empty_collects_once_and_restores_consumed_state() {
+        let tp = Arc::new(ThreadPoolBuilder::new().num_threads(1).build().unwrap());
+        let (context, clock) = CuContext::new_mock_clock();
+        let (resources, release, observed) = replay_task_resources();
+        let mut task: CuAsyncTask<ReplayTask, u32, true> =
+            CuAsyncTask::new(None, resources, tp).unwrap();
+        task.start(&context).unwrap();
+        let empty = CuMsg::default();
+        let mut output = CuMsg::new(Some(999));
+        task.process(&context, &empty, &mut output).unwrap();
+        assert!(output.payload().is_none());
+        assert!(matches!(
+            task.state.lock().unwrap().status,
+            AsyncStatus::Idle
+        ));
+
+        task.process(&context, &CuMsg::new(Some(41)), &mut output)
+            .unwrap();
+        task.process(&context, &empty, &mut output).unwrap();
+        assert!(output.payload().is_none());
+        clock.set_value(30);
+        release.send(()).unwrap();
+        observed.recv_timeout(Duration::from_secs(1)).unwrap();
+        wait_until_async_idle(&task);
+
+        // Completion remains pending until its recorded ready time.
+        clock.set_value(20);
+        task.process(&context, &empty, &mut output).unwrap();
+        assert!(output.payload().is_none());
+        let waiting = bincode::encode_to_vec(BincodeAdapter(&task), standard()).unwrap();
+        thaw_from(&mut task, &waiting).unwrap();
+        clock.set_value(30);
+        task.process(&context, &empty, &mut output).unwrap();
+        assert_eq!(output.payload(), Some(&52));
+        assert!(matches!(
+            task.state.lock().unwrap().status,
+            AsyncStatus::Idle
+        ));
+
+        let consumed = bincode::encode_to_vec(BincodeAdapter(&task), standard()).unwrap();
+        thaw_from(&mut task, &consumed).unwrap();
+        task.process(&context, &empty, &mut output).unwrap();
+        assert!(output.payload().is_none());
+
+        // New input starts another job without re-emitting the consumed result.
+        task.process(&context, &CuMsg::new(Some(50)), &mut output)
+            .unwrap();
+        assert!(output.payload().is_none());
+        release.send(()).unwrap();
+        observed.recv_timeout(Duration::from_secs(1)).unwrap();
+        wait_until_async_idle(&task);
+        task.process(&context, &empty, &mut output).unwrap();
+        assert_eq!(output.payload(), Some(&62));
     }
 
     #[test]
@@ -1589,6 +1665,11 @@ mod tests {
 
     #[test]
     fn background_freeze_mid_run_replays_original_dispatch_from_committed_state() {
+        background_replay_pending::<false>();
+        background_replay_pending::<true>();
+    }
+
+    fn background_replay_pending<const SKIP_EMPTY: bool>() {
         let tp = Arc::new(ThreadPoolBuilder::new().num_threads(1).build().unwrap());
         let (resources, release_tx, observed_rx) = replay_task_resources();
         let (base_context, _) = CuContext::new_mock_clock();
@@ -1598,7 +1679,7 @@ mod tests {
             .task_ids(&["replay"])
             .build();
         dispatch_context.set_current_task(0);
-        let mut original: CuAsyncTask<ReplayTask, u32> =
+        let mut original: CuAsyncTask<ReplayTask, u32, SKIP_EMPTY> =
             CuAsyncTask::new(Some(&ComponentConfig::default()), resources, tp).unwrap();
         original.start(&dispatch_context).unwrap();
         let original_input = CuMsg::new(Some(41u32));
@@ -1640,7 +1721,7 @@ mod tests {
 
         let replay_tp = Arc::new(ThreadPoolBuilder::new().num_threads(1).build().unwrap());
         let (replay_resources, replay_release_tx, replay_observed_rx) = replay_task_resources();
-        let mut restored: CuAsyncTask<ReplayTask, u32> = CuAsyncTask::new(
+        let mut restored: CuAsyncTask<ReplayTask, u32, SKIP_EMPTY> = CuAsyncTask::new(
             Some(&ComponentConfig::default()),
             replay_resources,
             replay_tp,
@@ -1661,7 +1742,7 @@ mod tests {
             .task_ids(&["replay"])
             .build();
         current_context.set_current_task(0);
-        let current_input = CuMsg::new(Some(999u32));
+        let current_input = CuMsg::new(if SKIP_EMPTY { None } else { Some(999u32) });
         restored
             .process(&current_context, &current_input, &mut output)
             .unwrap();
@@ -1679,8 +1760,12 @@ mod tests {
             .process(&current_context, &current_input, &mut output)
             .unwrap();
         assert_eq!(output.payload(), Some(&52));
-        replay_release_tx.send(()).unwrap();
-        let _ = replay_observed_rx.recv_timeout(Duration::from_secs(1));
+        if !SKIP_EMPTY {
+            replay_release_tx.send(()).unwrap();
+            replay_observed_rx
+                .recv_timeout(Duration::from_secs(1))
+                .unwrap();
+        }
     }
 
     #[cfg(feature = "memory_monitoring")]

@@ -101,6 +101,9 @@ option select recorded runs identified by `Instantiated` lifecycle records.
 
 ## Experimental
 
+- Background empty-input dispatch policy: `background_skip_empty` and the defaulted
+  `CuAsyncTask<T, O, const SKIP_EMPTY: bool = false>` parameter.
+
 - LogStream session manifests and `ReceiverRequirements` decoder geometry/bounds.
 - `remote-debug` feature and `cu29::remote_debug`.
 - `parallel-rt` feature and parallel executor APIs.
