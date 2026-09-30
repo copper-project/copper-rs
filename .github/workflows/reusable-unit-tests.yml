@@ -138,7 +138,7 @@ jobs:
           cargo +${{ inputs.toolchain }} test -p cu29 --features logstream --test logstream_runtime
           cargo +${{ inputs.toolchain }} clippy -p cu-logstream-demo --all-targets --features replay -- --deny warnings
           cargo +${{ inputs.toolchain }} build -p cu-logstream-demo --features replay --bins
-          python3 examples/cu_logstream_demo/run.py all --binary target/debug/cu-logstream-demo
+          python3 examples/cu_logstream_demo/run.py all --binary "${CARGO_TARGET_DIR:-target}/debug/cu-logstream-demo"
       - name: Run cu29-derive trybuild tests on (ubuntu-26.04 | debug)
         if: matrix.task == 'trybuild'
         run: cargo +${{ inputs.toolchain }} test -p cu29-derive test_compile_fail -- --nocapture
@@ -228,7 +228,7 @@ jobs:
           cargo +${{ inputs.toolchain }} test -p cu29 --features logstream --test logstream_runtime
           cargo +${{ inputs.toolchain }} clippy -p cu-logstream-demo --all-targets --features replay -- --deny warnings
           cargo +${{ inputs.toolchain }} build -p cu-logstream-demo --features replay --bins
-          python3 examples/cu_logstream_demo/run.py all --binary target/debug/cu-logstream-demo
+          python3 examples/cu_logstream_demo/run.py all --binary "${CARGO_TARGET_DIR:-target}/debug/cu-logstream-demo"
       - name: Run cu29-derive trybuild tests on (${{ inputs.linux_runner_label }} | debug)
         if: matrix.task == 'trybuild'
         run: cargo +${{ inputs.toolchain }} test -p cu29-derive test_compile_fail -- --nocapture
@@ -440,7 +440,7 @@ jobs:
           cargo +${{ inputs.toolchain }} test -p cu29 --features logstream --test logstream_runtime
           cargo +${{ inputs.toolchain }} clippy -p cu-logstream-demo --all-targets --features replay -- --deny warnings
           cargo +${{ inputs.toolchain }} build -p cu-logstream-demo --features replay --bins
-          python3 examples/cu_logstream_demo/run.py all --binary target/debug/cu-logstream-demo
+          python3 examples/cu_logstream_demo/run.py all --binary "${CARGO_TARGET_DIR:-target}/debug/cu-logstream-demo"
       - name: Run cu29-derive trybuild tests on (${{ matrix.target_os == 'windows' && inputs.windows_runner_label || 'macos-latest' }} | debug)
         if: matrix.task == 'trybuild'
         run: cargo +${{ inputs.toolchain }} test -p cu29-derive test_compile_fail -- --nocapture
