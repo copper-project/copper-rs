@@ -510,7 +510,7 @@ where
         Ok(())
     }
 }
-/// Encodes the payload according to the specified wire format. 
+/// Encodes the payload according to the specified wire format.
 fn encode_payload<Payload: CuMsgPayload>(
     wire_format: WireFormat,
     payload: &Payload,
