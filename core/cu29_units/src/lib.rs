@@ -12,6 +12,26 @@ extern crate alloc;
 
 pub use uom;
 
+// Dimensionless quantities retain their coherent named storage units.
+#[cfg(feature = "self-describing")]
+macro_rules! storage_unit {
+    (angle) => {
+        alloc::string::String::from("rad")
+    };
+    (solid_angle) => {
+        alloc::string::String::from("sr")
+    };
+    (information) => {
+        alloc::string::String::from("bit")
+    };
+    (information_rate) => {
+        alloc::string::String::from("bit s^-1")
+    };
+    ($quantity:ident) => {
+        crate::coherent_storage_unit::<uom::si::$quantity::Dimension>()
+    };
+}
+
 macro_rules! define_storage_wrappers {
     ($storage_mod:ident, $storage_ty:ty, [$(($unit_mod:ident, $quantity:ident),)+]) => {
         pub mod $storage_mod {
@@ -184,6 +204,11 @@ macro_rules! define_storage_wrappers {
                         }
                     }
 
+                    #[cfg(feature = "self-describing")]
+                    impl bincode::ValueDecode for $quantity_name {
+                        const DECODE: &'static bincode::ValueDecodeSpec = <$storage_ty as bincode::ValueDecode>::DECODE;
+                    }
+
                     impl bincode::Encode for $quantity_name {
                         fn encode<E: bincode::enc::Encoder>(
                             &self,
@@ -228,6 +253,15 @@ macro_rules! define_storage_wrappers {
             }
 
             $(define_quantity!($unit_mod, $quantity);)+
+
+            #[cfg(feature = "self-describing")]
+            pub(crate) fn value_decode_quantities() -> alloc::vec::Vec<crate::ValueDecodeQuantity> {
+                alloc::vec![$(crate::ValueDecodeQuantity {
+                    type_id: core::any::TypeId::of::<$quantity>(),
+                    quantity: stringify!($unit_mod),
+                    storage_unit: storage_unit!($unit_mod),
+                }),+]
+            }
         }
     };
 }
@@ -858,4 +892,57 @@ mod tests {
         assert_eq!(speed.value, 10.0);
         assert_eq!(speed.get::<meter_per_second>(), 10.0);
     }
+}
+
+/// Typed storage metadata for offline self-description packaging.
+#[cfg(feature = "self-describing")]
+pub struct ValueDecodeQuantity {
+    /// Original quantity type, including scalar width.
+    pub type_id: core::any::TypeId,
+    /// Quantity identity.
+    pub quantity: &'static str,
+    /// Coherent SI storage unit, expressed in base units.
+    pub storage_unit: alloc::string::String,
+}
+
+/// Register every supported quantity in both scalar widths.
+#[cfg(feature = "self-describing")]
+pub fn value_decode_quantities() -> Vec<ValueDecodeQuantity> {
+    let mut quantities = si::f32::value_decode_quantities();
+    quantities.extend(si::f64::value_decode_quantities());
+    quantities
+}
+
+#[cfg(feature = "self-describing")]
+fn coherent_storage_unit<D: uom::si::Dimension + ?Sized>() -> alloc::string::String {
+    use uom::typenum::Integer;
+    let exponents = [
+        D::L::to_i32(),
+        D::M::to_i32(),
+        D::T::to_i32(),
+        D::I::to_i32(),
+        D::Th::to_i32(),
+        D::N::to_i32(),
+        D::J::to_i32(),
+    ];
+    let mut result = alloc::string::String::new();
+    for (symbol, exponent) in ["m", "kg", "s", "A", "K", "mol", "cd"]
+        .into_iter()
+        .zip(exponents)
+    {
+        if exponent == 0 {
+            continue;
+        }
+        if !result.is_empty() {
+            result.push(' ');
+        }
+        result.push_str(symbol);
+        if exponent != 1 {
+            result.push_str(&alloc::format!("^{exponent}"));
+        }
+    }
+    if result.is_empty() {
+        result.push('1');
+    }
+    result
 }
