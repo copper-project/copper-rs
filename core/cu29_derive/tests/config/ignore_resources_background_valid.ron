@@ -1,7 +1,7 @@
 (
     tasks: [
         (id: "src", type: "Source"),
-        (id: "worker", type: "Worker", background: true, background_skip_empty: true),
+        (id: "worker", type: "Worker", background: true, background_process_empty: false),
         (id: "sink", type: "Sink"),
     ],
     cnx: [(src: "src", dst: "worker", msg: "i32"), (src: "worker", dst: "sink", msg: "i32")],

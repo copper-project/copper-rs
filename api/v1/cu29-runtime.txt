@@ -761,31 +761,31 @@ pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::type_path() -> &'static 
 pub struct cu29_runtime::cuasynctask::CuAsyncSrcTaskResources<'r, T: cu29_runtime::cutask::CuSrcTask>
 pub cu29_runtime::cuasynctask::CuAsyncSrcTaskResources::inner: <T as cu29_runtime::cutask::CuSrcTask>::Resources
 pub cu29_runtime::cuasynctask::CuAsyncSrcTaskResources::threadpool: alloc::sync::Arc<rayon_core::thread_pool::ThreadPool>
-pub struct cu29_runtime::cuasynctask::CuAsyncTask<T, O, const SKIP_EMPTY: bool> where T: for<'m> cu29_runtime::cutask::CuTask<Output<'m> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
-impl<T, O, const SKIP_EMPTY: bool> cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY> where T: for<'m> cu29_runtime::cutask::CuTask<Output<'m> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::new(config: core::option::Option<&cu29_runtime::config::ComponentConfig>, resources: <T as cu29_runtime::cutask::CuTask>::Resources, tp: alloc::sync::Arc<rayon_core::thread_pool::ThreadPool>) -> cu29_traits::CuResult<Self>
-impl<T, I, O, const SKIP_EMPTY: bool> cu29_runtime::cutask::CuTask for cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY> where T: for<'i, 'o> cu29_runtime::cutask::CuTask<Input<'i> = cu29_runtime::cutask::CuMsg<I>, Output<'o> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, I: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + core::marker::Sync + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
-pub type cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::Input<'m> = <T as cu29_runtime::cutask::CuTask>::Input
-pub type cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::Output<'m> = <T as cu29_runtime::cutask::CuTask>::Output
-pub type cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::Resources<'r> = cu29_runtime::cuasynctask::CuAsyncTaskResources<'r, T>
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::debug_state_type_path() -> &'static str where Self: cu29_runtime::reflect::TypePath + core::marker::Sized
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::new(config: core::option::Option<&cu29_runtime::config::ComponentConfig>, resources: Self::Resources) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::postprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::preprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::process<'i, 'o>(&mut self, ctx: &cu29_runtime::context::CuContext, input: &Self::Input, real_output: &mut Self::Output) -> cu29_traits::CuResult<()>
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::register_debug_state_types(registry: &mut cu29_runtime::reflect::TypeRegistry) where Self: cu29_runtime::reflect::GetTypeRegistration + core::marker::Sized
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::start(&mut self, ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::stop(&mut self, ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::with_debug_state<R>(&self, f: impl core::ops::function::FnOnce(&dyn cu29_runtime::reflect::Reflect) -> R) -> R where Self: core::marker::Sized
-impl<T, O, const SKIP_EMPTY: bool> cu29_runtime::cutask::Freezable for cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY> where T: for<'m> cu29_runtime::cutask::CuTask<Output<'m> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::freeze<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::thaw<D: cu_bincode::de::Decoder>(&mut self, decoder: &mut D) -> core::result::Result<(), cu_bincode::error::DecodeError>
-impl<T, O, const SKIP_EMPTY: bool> cu29_runtime::reflect::TypePath for cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY> where T: for<'m> cu29_runtime::cutask::CuTask<Output<'m> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::crate_name() -> core::option::Option<&'static str>
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::module_path() -> core::option::Option<&'static str>
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::short_type_path() -> &'static str
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::type_ident() -> core::option::Option<&'static str>
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::type_path() -> &'static str
+pub struct cu29_runtime::cuasynctask::CuAsyncTask<T, O, const PROCESS_EMPTY: bool> where T: for<'m> cu29_runtime::cutask::CuTask<Output<'m> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
+impl<T, O, const PROCESS_EMPTY: bool> cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY> where T: for<'m> cu29_runtime::cutask::CuTask<Output<'m> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::new(config: core::option::Option<&cu29_runtime::config::ComponentConfig>, resources: <T as cu29_runtime::cutask::CuTask>::Resources, tp: alloc::sync::Arc<rayon_core::thread_pool::ThreadPool>) -> cu29_traits::CuResult<Self>
+impl<T, I, O, const PROCESS_EMPTY: bool> cu29_runtime::cutask::CuTask for cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY> where T: for<'i, 'o> cu29_runtime::cutask::CuTask<Input<'i> = cu29_runtime::cutask::CuMsg<I>, Output<'o> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, I: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + core::marker::Sync + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
+pub type cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::Input<'m> = <T as cu29_runtime::cutask::CuTask>::Input
+pub type cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::Output<'m> = <T as cu29_runtime::cutask::CuTask>::Output
+pub type cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::Resources<'r> = cu29_runtime::cuasynctask::CuAsyncTaskResources<'r, T>
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::debug_state_type_path() -> &'static str where Self: cu29_runtime::reflect::TypePath + core::marker::Sized
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::new(config: core::option::Option<&cu29_runtime::config::ComponentConfig>, resources: Self::Resources) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::postprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::preprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::process<'i, 'o>(&mut self, ctx: &cu29_runtime::context::CuContext, input: &Self::Input, real_output: &mut Self::Output) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::register_debug_state_types(registry: &mut cu29_runtime::reflect::TypeRegistry) where Self: cu29_runtime::reflect::GetTypeRegistration + core::marker::Sized
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::start(&mut self, ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::stop(&mut self, ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::with_debug_state<R>(&self, f: impl core::ops::function::FnOnce(&dyn cu29_runtime::reflect::Reflect) -> R) -> R where Self: core::marker::Sized
+impl<T, O, const PROCESS_EMPTY: bool> cu29_runtime::cutask::Freezable for cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY> where T: for<'m> cu29_runtime::cutask::CuTask<Output<'m> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::freeze<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::thaw<D: cu_bincode::de::Decoder>(&mut self, decoder: &mut D) -> core::result::Result<(), cu_bincode::error::DecodeError>
+impl<T, O, const PROCESS_EMPTY: bool> cu29_runtime::reflect::TypePath for cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY> where T: for<'m> cu29_runtime::cutask::CuTask<Output<'m> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::crate_name() -> core::option::Option<&'static str>
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::module_path() -> core::option::Option<&'static str>
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::short_type_path() -> &'static str
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::type_ident() -> core::option::Option<&'static str>
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::type_path() -> &'static str
 pub struct cu29_runtime::cuasynctask::CuAsyncTaskResources<'r, T: cu29_runtime::cutask::CuTask>
 pub cu29_runtime::cuasynctask::CuAsyncTaskResources::inner: <T as cu29_runtime::cutask::CuTask>::Resources
 pub cu29_runtime::cuasynctask::CuAsyncTaskResources::threadpool: alloc::sync::Arc<rayon_core::thread_pool::ThreadPool>
@@ -1183,19 +1183,19 @@ pub fn cu29_runtime::cutask::CuTask::register_debug_state_types(registry: &mut c
 pub fn cu29_runtime::cutask::CuTask::start(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cutask::CuTask::stop(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cutask::CuTask::with_debug_state<R>(&self, f: impl core::ops::function::FnOnce(&dyn cu29_runtime::reflect::Reflect) -> R) -> R where Self: core::marker::Sized
-impl<T, I, O, const SKIP_EMPTY: bool> cu29_runtime::cutask::CuTask for cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY> where T: for<'i, 'o> cu29_runtime::cutask::CuTask<Input<'i> = cu29_runtime::cutask::CuMsg<I>, Output<'o> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, I: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + core::marker::Sync + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
-pub type cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::Input<'m> = <T as cu29_runtime::cutask::CuTask>::Input
-pub type cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::Output<'m> = <T as cu29_runtime::cutask::CuTask>::Output
-pub type cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::Resources<'r> = cu29_runtime::cuasynctask::CuAsyncTaskResources<'r, T>
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::debug_state_type_path() -> &'static str where Self: cu29_runtime::reflect::TypePath + core::marker::Sized
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::new(config: core::option::Option<&cu29_runtime::config::ComponentConfig>, resources: Self::Resources) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::postprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::preprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::process<'i, 'o>(&mut self, ctx: &cu29_runtime::context::CuContext, input: &Self::Input, real_output: &mut Self::Output) -> cu29_traits::CuResult<()>
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::register_debug_state_types(registry: &mut cu29_runtime::reflect::TypeRegistry) where Self: cu29_runtime::reflect::GetTypeRegistration + core::marker::Sized
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::start(&mut self, ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::stop(&mut self, ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::with_debug_state<R>(&self, f: impl core::ops::function::FnOnce(&dyn cu29_runtime::reflect::Reflect) -> R) -> R where Self: core::marker::Sized
+impl<T, I, O, const PROCESS_EMPTY: bool> cu29_runtime::cutask::CuTask for cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY> where T: for<'i, 'o> cu29_runtime::cutask::CuTask<Input<'i> = cu29_runtime::cutask::CuMsg<I>, Output<'o> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, I: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + core::marker::Sync + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
+pub type cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::Input<'m> = <T as cu29_runtime::cutask::CuTask>::Input
+pub type cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::Output<'m> = <T as cu29_runtime::cutask::CuTask>::Output
+pub type cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::Resources<'r> = cu29_runtime::cuasynctask::CuAsyncTaskResources<'r, T>
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::debug_state_type_path() -> &'static str where Self: cu29_runtime::reflect::TypePath + core::marker::Sized
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::new(config: core::option::Option<&cu29_runtime::config::ComponentConfig>, resources: Self::Resources) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::postprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::preprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::process<'i, 'o>(&mut self, ctx: &cu29_runtime::context::CuContext, input: &Self::Input, real_output: &mut Self::Output) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::register_debug_state_types(registry: &mut cu29_runtime::reflect::TypeRegistry) where Self: cu29_runtime::reflect::GetTypeRegistration + core::marker::Sized
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::start(&mut self, ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::stop(&mut self, ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::with_debug_state<R>(&self, f: impl core::ops::function::FnOnce(&dyn cu29_runtime::reflect::Reflect) -> R) -> R where Self: core::marker::Sized
 pub trait cu29_runtime::cutask::Freezable
 pub fn cu29_runtime::cutask::Freezable::freeze<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
 pub fn cu29_runtime::cutask::Freezable::thaw<D: cu_bincode::de::Decoder>(&mut self, _decoder: &mut D) -> core::result::Result<(), cu_bincode::error::DecodeError>
@@ -1205,9 +1205,9 @@ pub fn cu29_runtime::simulation::CuSimSinkTask<I>::thaw<D: cu_bincode::de::Decod
 impl<O> cu29_runtime::cutask::Freezable for cu29_runtime::simulation::CuSimSrcTaskPack<O>
 pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::freeze<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
 pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::thaw<D: cu_bincode::de::Decoder>(&mut self, decoder: &mut D) -> core::result::Result<(), cu_bincode::error::DecodeError>
-impl<T, O, const SKIP_EMPTY: bool> cu29_runtime::cutask::Freezable for cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY> where T: for<'m> cu29_runtime::cutask::CuTask<Output<'m> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::freeze<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::thaw<D: cu_bincode::de::Decoder>(&mut self, decoder: &mut D) -> core::result::Result<(), cu_bincode::error::DecodeError>
+impl<T, O, const PROCESS_EMPTY: bool> cu29_runtime::cutask::Freezable for cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY> where T: for<'m> cu29_runtime::cutask::CuTask<Output<'m> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::freeze<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::thaw<D: cu_bincode::de::Decoder>(&mut self, decoder: &mut D) -> core::result::Result<(), cu_bincode::error::DecodeError>
 impl<T, O> cu29_runtime::cutask::Freezable for cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O> where T: for<'m> cu29_runtime::cutask::CuSrcTask<Output<'m> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
 pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::freeze<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
 pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::thaw<D: cu_bincode::de::Decoder>(&mut self, decoder: &mut D) -> core::result::Result<(), cu_bincode::error::DecodeError>
@@ -2243,12 +2243,12 @@ pub fn cu29_runtime::cutask::CuStampedData<T, M>::module_path() -> core::option:
 pub fn cu29_runtime::cutask::CuStampedData<T, M>::short_type_path() -> &'static str
 pub fn cu29_runtime::cutask::CuStampedData<T, M>::type_ident() -> core::option::Option<&'static str>
 pub fn cu29_runtime::cutask::CuStampedData<T, M>::type_path() -> &'static str
-impl<T, O, const SKIP_EMPTY: bool> cu29_runtime::reflect::TypePath for cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY> where T: for<'m> cu29_runtime::cutask::CuTask<Output<'m> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::crate_name() -> core::option::Option<&'static str>
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::module_path() -> core::option::Option<&'static str>
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::short_type_path() -> &'static str
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::type_ident() -> core::option::Option<&'static str>
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, SKIP_EMPTY>::type_path() -> &'static str
+impl<T, O, const PROCESS_EMPTY: bool> cu29_runtime::reflect::TypePath for cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY> where T: for<'m> cu29_runtime::cutask::CuTask<Output<'m> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::crate_name() -> core::option::Option<&'static str>
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::module_path() -> core::option::Option<&'static str>
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::short_type_path() -> &'static str
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::type_ident() -> core::option::Option<&'static str>
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O, PROCESS_EMPTY>::type_path() -> &'static str
 impl<T, O> cu29_runtime::reflect::TypePath for cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O> where T: for<'m> cu29_runtime::cutask::CuSrcTask<Output<'m> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
 pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::crate_name() -> core::option::Option<&'static str>
 pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::module_path() -> core::option::Option<&'static str>

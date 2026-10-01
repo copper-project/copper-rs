@@ -394,10 +394,10 @@ pub struct Node {
     #[serde(skip_serializing_if = "Option::is_none")]
     background: Option<BackgroundConfig>,
 
-    /// Skip dispatching empty inputs while still collecting completed background results.
-    /// Requires a regular background task; defaults to false.
+    /// Dispatch empty inputs as background jobs. Completed results are collected on empty ticks.
+    /// Requires a regular background task; defaults to false (empty inputs are skipped).
     #[serde(skip_serializing_if = "Option::is_none")]
-    background_skip_empty: Option<bool>,
+    background_process_empty: Option<bool>,
 
     /// Anytime refinement policy for this task (base + bounded refinements).
     ///
@@ -443,7 +443,7 @@ impl Node {
             resources: None,
             missions: None,
             background: None,
-            background_skip_empty: None,
+            background_process_empty: None,
             anytime: None,
             run_in_sim: None,
             logging: None,
@@ -507,8 +507,8 @@ impl Node {
     /// Compile-time empty-input policy consumed by runtime generation.
     #[doc(hidden)]
     #[allow(dead_code)]
-    pub fn background_skip_empty(&self) -> bool {
-        self.background_skip_empty.unwrap_or(false)
+    pub fn background_process_empty(&self) -> bool {
+        self.background_process_empty.unwrap_or(false)
     }
 
     /// Name of the thread pool this task should run on when backgrounded.
@@ -3273,12 +3273,12 @@ impl CuConfig {
     fn validate_background_input_configs(&self) -> CuResult<()> {
         let validate = |graph: &CuGraph| -> CuResult<()> {
             for (node_id, node) in graph.get_all_nodes() {
-                if node.background_skip_empty()
+                if node.background_process_empty()
                     && (!node.is_background()
                         || resolve_task_kind_for_id(graph, node_id)? != TaskKind::Regular)
                 {
                     return Err(CuError::from(format!(
-                        "Task '{}': background_skip_empty requires a regular background task",
+                        "Task '{}': background_process_empty requires a regular background task",
                         node.id
                     )));
                 }
