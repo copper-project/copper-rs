@@ -1142,10 +1142,10 @@ pub struct Node {
     #[serde(skip_serializing_if = "Option::is_none")]
     background: Option<BackgroundConfig>,
 
-    /// Skip dispatching empty inputs while still collecting completed background results.
-    /// Requires a regular background task; defaults to false.
+    /// Dispatch empty inputs as background jobs. Completed results are collected on empty ticks.
+    /// Requires a regular background task; defaults to false (empty inputs are skipped).
     #[serde(skip_serializing_if = "Option::is_none")]
-    background_skip_empty: Option<bool>,
+    background_process_empty: Option<bool>,
 
     /// Anytime refinement policy for this task (base + bounded refinements).
     ///
@@ -1188,7 +1188,7 @@ impl Node {
             resources: None,
             missions: None,
             background: None,
-            background_skip_empty: None,
+            background_process_empty: None,
             anytime: None,
             run_in_sim: None,
             logging: None,
@@ -1251,8 +1251,8 @@ impl Node {
     /// Compile-time empty-input policy consumed by runtime generation.
     #[doc(hidden)]
     #[allow(dead_code)]
-    pub fn background_skip_empty(&self) -> bool {
-        self.background_skip_empty.unwrap_or(false)
+    pub fn background_process_empty(&self) -> bool {
+        self.background_process_empty.unwrap_or(false)
     }
 
     /// Name of the thread pool this task should run on when backgrounded.
@@ -3526,12 +3526,12 @@ impl CuConfig {
     fn validate_background_input_configs(&self) -> CuResult<()> {
         let validate = |graph: &CuGraph| -> CuResult<()> {
             for (node_id, node) in graph.get_all_nodes() {
-                if node.background_skip_empty()
+                if node.background_process_empty()
                     && (!node.is_background()
                         || resolve_task_kind_for_id(graph, node_id)? != TaskKind::Regular)
                 {
                     return Err(CuError::from(format!(
-                        "Task '{}': background_skip_empty requires a regular background task",
+                        "Task '{}': background_process_empty requires a regular background task",
                         node.id
                     )));
                 }
@@ -7408,49 +7408,49 @@ mod tests {
         // synthetic "threadpool" bundle should be injected.
         assert!(!config.resources.iter().any(|b| b.id == "threadpool"));
     }
-#[test]
-fn test_background_skip_empty_validation_and_roundtrip() {
-    for missions in ["", "missions: [(id: \"a\"), (id: \"b\")],"] {
-        for (target, background, skip, valid) in [
-            ("worker", "true", "true", true),
-            ("worker", "(pool: \"vision\")", "true", true),
-            ("worker", "true", "false", true),
-            ("worker", "false", "true", false),
-            ("src", "true", "true", false),
-            ("sink", "true", "true", false),
-        ] {
-            let tasks = ["src", "worker", "sink"].map(|id| {
+    #[test]
+    fn test_background_process_empty_validation_and_roundtrip() {
+        for missions in ["", "missions: [(id: \"a\"), (id: \"b\")],"] {
+            for (target, background, process_empty, valid) in [
+                ("worker", "true", "true", true),
+                ("worker", "(pool: \"vision\")", "true", true),
+                ("worker", "true", "false", true),
+                ("worker", "false", "true", false),
+                ("src", "true", "true", false),
+                ("sink", "true", "true", false),
+            ] {
+                let tasks = ["src", "worker", "sink"].map(|id| {
                 if id == target {
-                    format!("(id: \"{id}\", type: \"Task\", background: {background}, background_skip_empty: {skip})")
+                    format!("(id: \"{id}\", type: \"Task\", background: {background}, background_process_empty: {process_empty})")
                 } else {
                     format!("(id: \"{id}\", type: \"Task\")")
                 }
             }).join(",");
-            let ron = format!(
-                r#"(
+                let ron = format!(
+                    r#"(
                 {missions}
                 tasks: [{tasks}],
                 cnx: [(src: "src", dst: "worker", msg: "u32"),
                       (src: "worker", dst: "sink", msg: "u32")],
             )"#
-            );
-            let result = read_configuration_str(ron, None);
-            if valid {
-                let config = result.unwrap();
-                let serialized = config.serialize_ron().unwrap();
-                assert!(serialized.contains(&format!("background_skip_empty: {skip}")));
-                read_configuration_str(serialized, None).unwrap();
-            } else {
-                assert!(
-                    result
-                        .unwrap_err()
-                        .to_string()
-                        .contains("background_skip_empty requires a regular background task")
                 );
+                let result = read_configuration_str(ron, None);
+                if valid {
+                    let config = result.unwrap();
+                    let serialized = config.serialize_ron().unwrap();
+                    assert!(
+                        serialized.contains(&format!("background_process_empty: {process_empty}"))
+                    );
+                    read_configuration_str(serialized, None).unwrap();
+                } else {
+                    assert!(
+                        result.unwrap_err().to_string().contains(
+                            "background_process_empty requires a regular background task"
+                        )
+                    );
+                }
             }
         }
+        assert!(!Node::new("worker", "Task").background_process_empty());
     }
-    assert!(!Node::new("worker", "Task").background_skip_empty());
-}
-
 }

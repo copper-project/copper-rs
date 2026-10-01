@@ -6763,7 +6763,7 @@ impl CuTaskSpecSet {
             .zip(async_inner_task_types.iter())
             .zip(all_id_nodes.iter())
             .map(|((((((name_type, name), cutype), &background), output_type), inner_type), (_, node))| {
-                let skip_empty = node.background_skip_empty();
+                let process_empty = node.background_process_empty();
                 if background {
                     if let Some(output_type) = output_type {
                         match cutype {
@@ -6771,7 +6771,7 @@ impl CuTaskSpecSet {
                                 parse_quote!(CuAsyncSrcTask<#inner_type, #output_type>)
                             }
                             CuTaskType::Regular => {
-                                parse_quote!(CuAsyncTask<#inner_type, #output_type, #skip_empty>)
+                                parse_quote!(CuAsyncTask<#inner_type, #output_type, #process_empty>)
                             }
                             CuTaskType::Sink => {
                                 panic!("CuSinkTask {name} cannot be a background task, it should be a regular task.");
@@ -6798,7 +6798,7 @@ impl CuTaskSpecSet {
             .zip(async_inner_task_types.iter())
             .zip(all_id_nodes.iter())
             .map(|((((((name_type, name), cutype), &background), output_type), inner_type), (_, node))| {
-                let skip_empty = node.background_skip_empty();
+                let process_empty = node.background_process_empty();
                 if background {
                     if let Some(output_type) = output_type {
                         match cutype {
@@ -6806,7 +6806,7 @@ impl CuTaskSpecSet {
                                 parse_quote!(CuAsyncSrcTask::<#inner_type, #output_type>)
                             }
                             CuTaskType::Regular => {
-                                parse_quote!(CuAsyncTask::<#inner_type, #output_type, #skip_empty>)
+                                parse_quote!(CuAsyncTask::<#inner_type, #output_type, #process_empty>)
                             }
                             CuTaskType::Sink => {
                                 panic!("CuSinkTask {name} cannot be a background task, it should be a regular task.");
