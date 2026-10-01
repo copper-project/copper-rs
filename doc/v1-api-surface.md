@@ -96,8 +96,11 @@ This file defines the Copper V1 public contract. Anything not listed as stable i
 
 ## Experimental
 
-- Background empty-input dispatch policy: `background_skip_empty` and the defaulted
-  `CuAsyncTask<T, O, const SKIP_EMPTY: bool = false>` parameter.
+- Background empty-input dispatch policy: `background_process_empty` and the defaulted
+  `CuAsyncTask<T, O, const PROCESS_EMPTY: bool = false>` parameter.
+  Empty inputs are now skipped by default while completed results are collected once.
+  This corrects a specification bug to match the intended behavior. Set
+  `background_process_empty: true` to opt into dispatching empty inputs.
 
 - LogStream session manifests and `ReceiverRequirements` decoder geometry/bounds.
 - `remote-debug` feature and `cu29::remote_debug`.

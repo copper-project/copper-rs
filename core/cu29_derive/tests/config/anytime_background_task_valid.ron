@@ -19,7 +19,7 @@
             id: "refiner",
             type: "AnytimeRefiner",
             background: true,
-            background_skip_empty: true,
+            background_process_empty: false,
             anytime: (
                 time_budget_ms: 5.0,
                 max_age_ms: 100.0,
