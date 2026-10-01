@@ -30,11 +30,11 @@ tuimon-check:
 	cargo test -p cu-consolemon
 
 # Verify the experimental native-bytes-to-value API and its user-facing payload examples.
-self-describing-check:
-	cargo test -p cu29-value --features self-describing
-	cargo test -p cu29 --features self-describing --test value_decode
-	cargo clippy -p cu29-value -p cu29-units --all-targets --features cu29-value/self-describing -- --deny warnings
-	cargo clippy -p cu29 --lib --test value_decode --features self-describing -- --deny warnings
+self-describing-logs-check:
+	cargo test -p cu29-value --features self-describing-logs
+	cargo test -p cu29 --features self-describing-logs --test value_decode
+	cargo clippy -p cu29-value -p cu29-units --all-targets --features cu29-value/self-describing-logs -- --deny warnings
+	cargo clippy -p cu29 --lib --test value_decode --features self-describing-logs -- --deny warnings
 	cargo check -p cu29 -p cu29-value --no-default-features
 
 # Replace logs/vit-extracted with replayable VitFly tensors and UI-style previews.

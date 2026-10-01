@@ -4,12 +4,12 @@ Status: API prototype implemented, 2026-09-30. Build packaging and recorder/expo
 integration remain planned.
 
 The first implementation exposes `ValueDecodeDescription::from_type::<T>()` and
-`description.decode(bytes, codec_config, limits)` through `self-describing`.
+`description.decode(bytes, codec_config, limits)` through `self-describing-logs`.
 Descriptions can be bincode-serialized and transported independently of payload
 types. `Encode` generates static companion recipes in the linked `cu-bincode`
 checkout, using its existing parser and attribute handling. Copper supplies
 quantity storage registrations, time/string recipes, and fixed-capacity container
-recipes. `just self-describing-check` verifies native byte/value agreement.
+recipes. `just self-describing-logs-check` verifies native byte/value agreement.
 
 This PR's owned wire/schema graph is an experimental packaging input. Its bincode
 serialization is finalized as a versioned `ValueDecodeCatalog` format in PR 2. Standard
@@ -54,7 +54,7 @@ Keep the companion trait named `ValueDecode`: it describes how an offline reader
 produces `Value` from the existing `Encode` bytes. The declaration is a wire recipe:
 
 ```rust
-// Available with self-describing. Re-exported through the Copper prelude.
+// Available with self-describing-logs. Re-exported through the Copper prelude.
 pub trait ValueDecode: 'static + Sized {
     const DECODE: &'static ValueDecodeSpec;
 }
@@ -116,7 +116,7 @@ wrapper, unit strings, or custom length type to describe standard quantities.
 
 ## Representative examples
 
-These examples use `self-describing`. The companion `Encode` recipe and offline
+These examples use `self-describing-logs`. The companion `Encode` recipe and offline
 value API are implemented; build packaging remains planned.
 
 ### Ordinary payload: nothing extra to implement
@@ -223,7 +223,7 @@ encoders. Supported ordinary derives require no additional user annotations.
 Packaging checks reflected bindings and standard-type metadata for every reachable
 type. Opaque reflection is sufficient when the recipe supplies the export shape.
 Other manual encoders/codecs need a supported explicit recipe or must be replaced
-or excluded from payload logging. Keep these bounds local to `self-describing`.
+or excluded from payload logging. Keep these bounds local to `self-describing-logs`.
 Trait checks establish availability; arbitrary handwritten encoder/recipe agreement
 requires validation. Recipes generated alongside encoders share the encoding logic.
 
@@ -278,7 +278,7 @@ for these rules rather than assuming the exporter's current metadata decoder.
 
 ## Recording constraints
 
-`self-describing` enables `std` and real `reflect` support for build-time schema
+`self-describing-logs` enables `std` and real `reflect` support for build-time schema
 extraction. Startup copies the prepared bundle; recording keeps the existing single
 encoding pass. V0 adds no CL offsets, lengths, patching,
 or recipe execution on the recording path. Decode presence/capture metadata first,
