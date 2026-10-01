@@ -191,7 +191,7 @@ impl CuSinkTask for AnytimeSink {
     }
 }
 
-#[copper_runtime(config = "config/anytime_task_valid.ron")]
+#[copper_runtime(config = "tests/config/anytime_task_valid.ron")]
 struct App {}
 
 fn main() {}

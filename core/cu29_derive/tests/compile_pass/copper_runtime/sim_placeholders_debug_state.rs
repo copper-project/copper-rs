@@ -38,7 +38,7 @@ impl CuSinkTask for Sink {
     }
 }
 
-#[copper_runtime(config = "config/sim_placeholders_debug_state_valid.ron", sim_mode = true)]
+#[copper_runtime(config = "tests/config/sim_placeholders_debug_state_valid.ron", sim_mode = true)]
 struct App {}
 
 fn main() {}

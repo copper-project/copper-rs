@@ -1,0 +1,20 @@
+[package]
+name = "cu29-derive-ui-dependencies"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+cu29 = { workspace = true }
+cu29-derive = { workspace = true }
+serde = { workspace = true }
+bincode = { workspace = true }
+
+[package.metadata.cargo-shear]
+# ui_test exposes these dependencies to the fixture files through --extern.
+ignored = ["cu29", "cu29-derive", "serde", "bincode"]

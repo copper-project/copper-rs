@@ -22,7 +22,7 @@ impl CuSrcTask for AngleSource {
     }
 }
 
-#[copper_runtime(config = "config/direct_unit_payload_valid.ron")]
+#[copper_runtime(config = "tests/config/direct_unit_payload_valid.ron")]
 struct App {}
 
 fn main() {}

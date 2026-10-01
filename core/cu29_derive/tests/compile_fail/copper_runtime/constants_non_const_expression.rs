@@ -24,7 +24,7 @@ fn non_const() -> u32 {
     1
 }
 
-#[copper_runtime(config = "config/constants_non_const_expression.ron")]
+#[copper_runtime(config = "tests/config/constants_non_const_expression.ron")] //~ E0015
 struct App {}
 
 fn main() {}

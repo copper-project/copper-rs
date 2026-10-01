@@ -92,6 +92,32 @@ hardware-in-the-loop. See
 [Supported Platforms](https://copper-project.github.io/copper-rs/Supported-Platforms)
 for the public platform matrix.
 
+## Compile Tests
+
+Run `just compile-tests` for the proc-macro and lifecycle compile fixtures, or
+`just compile-tests beta` to check the next compiler release. The harness
+uses `ui_test` to check structured diagnostics and combines the successful fixtures
+into one compile-pass application.
+
+For a Rust diagnostic, put its error code beside the failing statement:
+
+```rust
+let _ = app.start(); //~ E0382
+```
+
+For a Copper diagnostic without an error code, match a short, meaningful part of
+the message with `//~ ERROR: cannot be larger than slab size`. Use `//~^` to attach
+an assertion to the preceding line and `//~|` to attach additional assertions to
+the same location. Every error needs an assertion; warnings and contextual notes
+are allowed.
+
+Message assertions also accept regular expressions, such as
+`//~ ERROR: /cannot find (type|value)/`, when multiple compiler versions use different
+wording or error codes for the same failure. Prefer a code assertion when it is
+consistent across supported compilers. Keep patterns specific enough to identify
+the intended failure. The harness ignores rendered output and does not require
+stderr snapshots or blessing.
+
 ## Design Expectations
 
 Copper has a deliberately opinionated architecture. Contributions should preserve
