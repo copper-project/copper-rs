@@ -14,9 +14,9 @@ help: the trait `ValueDecode` is not implemented for `NativeOnly`
             &'static [T]
             &'static str
             ()
+            (A,)
             (A, B)
             (A, B, C)
             (A, B, C, D)
-            (A, B, C, D, E)
           and $N others
   = note: this error originates in the derive macro `Encode` (in Nightly builds, run with -Z macro-backtrace for more info)

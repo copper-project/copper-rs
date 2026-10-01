@@ -20,7 +20,7 @@ documentation = "https://docs.rs/cu29-value"
 [dependencies]
 bevy_reflect = { workspace = true, optional = true }
 cu29-units = { workspace = true, optional = true, features = [
-  "self-describing",
+  "self-describing-logs",
 ] }
 cu29-clock = { workspace = true }
 
@@ -34,10 +34,10 @@ trybuild = "1.0"
 serde_derive = { workspace = true }
 
 [features]
-self-describing = [
+self-describing-logs = [
   "std",
   "bincode/self-describing",
-  "cu29-clock/self-describing",
+  "cu29-clock/self-describing-logs",
   "dep:bevy_reflect",
   "dep:cu29-units",
 ]

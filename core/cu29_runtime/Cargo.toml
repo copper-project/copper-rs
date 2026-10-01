@@ -93,12 +93,12 @@ serde = { workspace = true }
 tempfile = { workspace = true }
 
 [features]
-self-describing = [
+self-describing-logs = [
   "bincode/self-describing",
-  "cu29-clock/self-describing",
-  "cu29-traits/self-describing",
-  "cu29-units/self-describing",
-  "cu29-value/self-describing",
+  "cu29-clock/self-describing-logs",
+  "cu29-traits/self-describing-logs",
+  "cu29-units/self-describing-logs",
+  "cu29-value/self-describing-logs",
 ]
 default = ["std"]
 # Optional worker handles; absent from monitoring contexts when streaming is disabled.

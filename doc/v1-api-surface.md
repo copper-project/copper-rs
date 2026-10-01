@@ -101,11 +101,11 @@ option select recorded runs identified by `Instantiated` lifecycle records.
 
 ## Experimental
 
-- `self-describing` feature, `cu29::value_decode`, and
+- `self-describing-logs` feature, `cu29::value_decode`, and
   `cu29_value::decode`: `ValueDecodeDescription` builds portable wire/schema
   descriptions and decodes native payload bytes to `Value` trees offline.
 - `cu29::prelude::{ValueDecode, ValueDecodeSpec, ValueDecodeDescription,
-  ValueDecodeLimits}` with `self-describing` enabled. The companion trait and
+  ValueDecodeLimits}` with `self-describing-logs` enabled. The companion trait and
   static wire recipes are supplied by `cu-bincode`.
 - Standard `ValueDecode` implementations for Copper time, compact strings,
   quantities, `CuArray`, and `CuArrayVec`.

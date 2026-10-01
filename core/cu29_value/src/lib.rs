@@ -33,7 +33,7 @@ use cu29_clock::CuTime;
 use ordered_float::OrderedFloat;
 use serde::Deserialize;
 
-#[cfg(feature = "self-describing")]
+#[cfg(feature = "self-describing-logs")]
 pub mod decode;
 
 mod bdec;
@@ -1255,5 +1255,5 @@ mod tests {
     }
 }
 
-#[cfg(all(test, feature = "self-describing"))]
+#[cfg(all(test, feature = "self-describing-logs"))]
 mod decode_tests;

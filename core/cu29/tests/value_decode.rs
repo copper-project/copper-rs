@@ -1,5 +1,5 @@
 //! User API agreement using payloads satisfying the native Copper message contract.
-#![cfg(feature = "self-describing")]
+#![cfg(feature = "self-describing-logs")]
 use cu29::bincode::Decode;
 use cu29::bincode::Encode;
 use cu29::prelude::*;

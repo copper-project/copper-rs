@@ -1,5 +1,5 @@
 //! A missing nested recipe must be reported at the encoded field.
-#![cfg(feature = "self-describing")]
+#![cfg(feature = "self-describing-logs")]
 #[test]
 fn test_missing_nested_recipe() {
     let tests = trybuild::TestCases::new();

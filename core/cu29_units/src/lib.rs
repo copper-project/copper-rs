@@ -13,7 +13,7 @@ extern crate alloc;
 pub use uom;
 
 // Dimensionless quantities retain their coherent named storage units.
-#[cfg(feature = "self-describing")]
+#[cfg(feature = "self-describing-logs")]
 macro_rules! storage_unit {
     (angle) => {
         alloc::string::String::from("rad")
@@ -204,7 +204,7 @@ macro_rules! define_storage_wrappers {
                         }
                     }
 
-                    #[cfg(feature = "self-describing")]
+                    #[cfg(feature = "self-describing-logs")]
                     impl bincode::ValueDecode for $quantity_name {
                         const DECODE: &'static bincode::ValueDecodeSpec = <$storage_ty as bincode::ValueDecode>::DECODE;
                     }
@@ -254,7 +254,7 @@ macro_rules! define_storage_wrappers {
 
             $(define_quantity!($unit_mod, $quantity);)+
 
-            #[cfg(feature = "self-describing")]
+            #[cfg(feature = "self-describing-logs")]
             pub(crate) fn value_decode_quantities() -> alloc::vec::Vec<crate::ValueDecodeQuantity> {
                 alloc::vec![$(crate::ValueDecodeQuantity {
                     type_id: core::any::TypeId::of::<$quantity>(),
@@ -895,7 +895,7 @@ mod tests {
 }
 
 /// Typed storage metadata for offline self-description packaging.
-#[cfg(feature = "self-describing")]
+#[cfg(feature = "self-describing-logs")]
 pub struct ValueDecodeQuantity {
     /// Original quantity type, including scalar width.
     pub type_id: core::any::TypeId,
@@ -906,14 +906,14 @@ pub struct ValueDecodeQuantity {
 }
 
 /// Register every supported quantity in both scalar widths.
-#[cfg(feature = "self-describing")]
+#[cfg(feature = "self-describing-logs")]
 pub fn value_decode_quantities() -> Vec<ValueDecodeQuantity> {
     let mut quantities = si::f32::value_decode_quantities();
     quantities.extend(si::f64::value_decode_quantities());
     quantities
 }
 
-#[cfg(feature = "self-describing")]
+#[cfg(feature = "self-describing-logs")]
 fn coherent_storage_unit<D: uom::si::Dimension + ?Sized>() -> alloc::string::String {
     use uom::typenum::Integer;
     let exponents = [

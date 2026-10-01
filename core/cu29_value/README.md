@@ -7,7 +7,7 @@ Customizations are made to enable a more compact representation for the structur
 
 ## Native payload descriptions
 
-Enable `cu29/self-describing` to describe native `Encode` bytes and decode them
+Enable `cu29/self-describing-logs` to describe native `Encode` bytes and decode them
 into a `Value` tree offline. The feature enables `std` and reflection. `Encode`
 derives supply the `ValueDecode` companion automatically; payload authors keep
 their usual `Reflect` derive.
@@ -57,12 +57,12 @@ Named encoded fields must be present in reflection with the same native type.
 Tuple fields require reflection to retain every declaration position. Hidden
 encoded fields and ambiguous tuple mappings return a description-building error.
 Skipped fields are excluded from the wire recipe. Missing nested recipes and
-custom codec recipes fail compilation with `self-describing` enabled.
+custom codec recipes fail compilation with `self-describing-logs` enabled.
 
 Description construction and value decoding allocate in offline tooling. Native
 message encoding keeps its existing byte layout and encoding pass. The portable
 IR is experimental; compression, build embedding, and unified-log catalogue
-integration follow in later PRs. Run `just self-describing-check` at the Copper
+integration follow in later PRs. Run `just self-describing-logs-check` at the Copper
 workspace root to verify this API.
 
 ## Python Feature
