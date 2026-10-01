@@ -2541,3 +2541,48 @@ fn test_default_background_pool_injected_for_background_tasks() {
     // synthetic "threadpool" bundle should be injected.
     assert!(!config.resources.iter().any(|b| b.id == "threadpool"));
 }
+
+#[test]
+fn test_background_process_empty_validation_and_roundtrip() {
+    for missions in ["", "missions: [(id: \"a\"), (id: \"b\")],"] {
+        for (target, background, process_empty, valid) in [
+            ("worker", "true", "true", true),
+            ("worker", "(pool: \"vision\")", "true", true),
+            ("worker", "true", "false", true),
+            ("worker", "false", "true", false),
+            ("src", "true", "true", false),
+            ("sink", "true", "true", false),
+        ] {
+            let tasks = ["src", "worker", "sink"].map(|id| {
+                if id == target {
+                    format!("(id: \"{id}\", type: \"Task\", background: {background}, background_process_empty: {process_empty})")
+                } else {
+                    format!("(id: \"{id}\", type: \"Task\")")
+                }
+            }).join(",");
+            let ron = format!(
+                r#"(
+                {missions}
+                tasks: [{tasks}],
+                cnx: [(src: "src", dst: "worker", msg: "u32"),
+                      (src: "worker", dst: "sink", msg: "u32")],
+            )"#
+            );
+            let result = read_configuration_str(ron, None);
+            if valid {
+                let config = result.unwrap();
+                let serialized = config.serialize_ron().unwrap();
+                assert!(serialized.contains(&format!("background_process_empty: {process_empty}")));
+                read_configuration_str(serialized, None).unwrap();
+            } else {
+                assert!(
+                    result
+                        .unwrap_err()
+                        .to_string()
+                        .contains("background_process_empty requires a regular background task")
+                );
+            }
+        }
+    }
+    assert!(!Node::new("worker", "Task").background_process_empty());
+}

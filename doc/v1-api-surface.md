@@ -101,6 +101,12 @@ option select recorded runs identified by `Instantiated` lifecycle records.
 
 ## Experimental
 
+- Background empty-input dispatch policy: `background_process_empty` and the defaulted
+  `CuAsyncTask<T, O, const PROCESS_EMPTY: bool = false>` parameter.
+  Empty inputs are now skipped by default while completed results are collected once.
+  This corrects a specification bug to match the intended behavior. Set
+  `background_process_empty: true` to opt into dispatching empty inputs.
+
 - LogStream session manifests and `ReceiverRequirements` decoder geometry/bounds.
 - `remote-debug` feature and `cu29::remote_debug`.
 - `parallel-rt` feature and parallel executor APIs.
