@@ -51,6 +51,10 @@ weekly-audit:
 publish:
 	cargo ws publish --publish-as-is --publish-interval 25
 
+# Compile fixtures: error codes/messages and successful downstream applications.
+compile-tests toolchain="stable":
+    cargo +{{toolchain}} test -p cu29-derive --lib test_compile_fail -- --nocapture
+
 # Formatting, typo, and clippy checks.
 lint:
 	just fmt-check

@@ -12,6 +12,7 @@ members = [
   "core/cu29_reflect_derive",
   "core/cu29_clock",
   "core/cu29_derive",
+  "core/cu29_derive/tests/dependencies",
   "core/cu29_export",
   "core/cu29_helpers",
   "core/cu29_intern_strs",

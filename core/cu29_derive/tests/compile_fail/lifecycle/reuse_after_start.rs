@@ -5,7 +5,7 @@ use cu29::prelude::*;
 
 fn reuse_after_start<A: CuStdApplication>(app: CuStdAppLifecycle<A>) {
     let _running = app.start();
-    let _ = app.start();
+    let _ = app.start(); //~ E0382
 }
 
 fn main() {}

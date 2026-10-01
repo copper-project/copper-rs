@@ -51,7 +51,7 @@ impl CuSinkTask for FrameSink {
 }
 
 #[copper_runtime(
-    config = "config/handle_content_touched_only_valid.ron",
+    config = "tests/config/handle_content_touched_only_valid.ron",
     sim_mode = true,
     ignore_resources = true
 )]

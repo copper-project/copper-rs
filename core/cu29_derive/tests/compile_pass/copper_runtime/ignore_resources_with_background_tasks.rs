@@ -52,7 +52,7 @@ impl CuSinkTask for Sink {
 }
 
 #[copper_runtime(
-    config = "config/ignore_resources_background_valid.ron",
+    config = "tests/config/ignore_resources_background_valid.ron",
     sim_mode = true,
     ignore_resources = true
 )]

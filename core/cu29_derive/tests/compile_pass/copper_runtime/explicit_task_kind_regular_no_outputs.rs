@@ -46,7 +46,7 @@ impl CuTask for PassthroughTask {
 }
 
 #[copper_runtime(
-    config = "config/explicit_task_kind_regular_no_outputs_valid.ron",
+    config = "tests/config/explicit_task_kind_regular_no_outputs_valid.ron",
     sim_mode = true,
     ignore_resources = true
 )]
