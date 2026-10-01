@@ -2,40 +2,13 @@
     includes: [
         (
             path: "compute_preview.ron",
-            when: Not(
-                Any(
-                    [
-                        Feature("sim"),
-                        Feature(
-                            "end2end",
-                        ),
-                        Feature(
-                            "compute-logreader",
-                        ),
-                    ],
-                ),
-            ),
+            when: Not(Any([Feature("sim"), Feature("end2end"), Feature("compute-logreader")])),
         ),
         (
             path: "compute_autonomy.ron",
-            when: Any(
-                [
-                    Feature("sim"),
-                    Feature("end2end"),
-                    Feature(
-                        "compute-logreader",
-                    ),
-                ],
-            ),
+            when: Any([Feature("sim"), Feature("end2end"), Feature("compute-logreader")]),
         ),
     ],
-    tasks: [
-        (
-            id: "zed",
-            type: "cu_zed::Zed",
-            run_in_sim: false,
-            logging: (enabled: true),
-        ),
-    ],
+    tasks: [(id: "zed", type: "cu_zed::Zed", run_in_sim: false, logging: (enabled: true))],
     runtime: (rate_target_hz: 30),
 )

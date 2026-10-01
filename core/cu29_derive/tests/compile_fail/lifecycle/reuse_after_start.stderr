@@ -8,7 +8,7 @@ error[E0382]: use of moved value: `app`
 8 |     let _ = app.start();
   |             ^^^ value used here after move
   |
-note: `CuAppLifecycle::<S, L, A, State>::start` takes ownership of the receiver `self`, which moves `app`
+note: `cu29::prelude::CuAppLifecycle::<S, L, A, State>::start` takes ownership of the receiver `self`, which moves `app`
  --> $WORKSPACE/core/cu29_runtime/src/app.rs
   |
   |     pub fn start(mut self) -> TransitionResult<S, L, A, Running> {

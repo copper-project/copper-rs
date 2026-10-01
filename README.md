@@ -13,6 +13,7 @@
   <a href="https://github.com/copper-project/copper-rs/actions/workflows/general.yml"><img src="https://img.shields.io/github/check-runs/copper-project/copper-rs/master?nameFilter=CI%20Status&amp;label=CI%2FCD" alt="CI/CD status" /></a>
   <a href="https://crates.io/crates/cu29"><img src="https://img.shields.io/crates/v/cu29.svg" alt="cu29 on crates.io" /></a>
   <img src="https://img.shields.io/badge/Rust-1.95+-orange.svg" alt="Rust 1.95 or newer" />
+  <a href="https://copper-project.github.io/copper-rs-book/"><img src="https://img.shields.io/badge/book-read-blue" alt="Read the Copper book" /></a>
   <a href="https://copper-project.github.io/copper-rs/"><img src="https://img.shields.io/badge/docs-read-blue" alt="Copper documentation" /></a>
   <a href="https://discord.gg/VkCG7Sb9Kw"><img src="https://img.shields.io/discord/1305916875741597826?logo=discord" alt="Copper Discord" /></a>
 </p>
@@ -21,8 +22,6 @@
   <strong><a href="https://cdn.copper-robotics.com/demo/balancebot/index.html">▶ Try Copper in your browser</a></strong>
   &nbsp;·&nbsp;
   <strong><a href="#build-your-first-copper-app">Build your first app</a></strong>
-  &nbsp;·&nbsp;
-  <strong><a href="https://copper-project.github.io/copper-rs-book/">Read the book</a></strong>
 </p>
 
 ## Why Copper

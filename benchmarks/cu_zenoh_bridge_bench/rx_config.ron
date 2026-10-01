@@ -1,13 +1,6 @@
 (
-    logging: (
-        enable_task_logging: false,
-    ),
-    tasks: [
-        (
-            id: "sink",
-            type: "tasks::LatencySink",
-        ),
-    ],
+    logging: (enable_task_logging: false),
+    tasks: [(id: "sink", type: "tasks::LatencySink")],
     bridges: [
         (
             id: "zenoh",
@@ -34,19 +27,8 @@
                     }
                 "#,
             },
-            channels: [
-                Rx(
-                    id: "latency",
-                    route: "benchmark/zenoh/latency",
-                ),
-            ],
+            channels: [Rx(id: "latency", route: "benchmark/zenoh/latency")],
         ),
     ],
-    cnx: [
-        (
-            src: "zenoh/latency",
-            dst: "sink",
-            msg: "messages::LatencySample",
-        ),
-    ],
+    cnx: [(src: "zenoh/latency", dst: "sink", msg: "messages::LatencySample")],
 )

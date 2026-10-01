@@ -1,41 +1,18 @@
 (
-    tasks: [
-        (
-            id: "controller",
-            type: "tasks::ControllerTask",
-        ),
-    ],
+    tasks: [(id: "controller", type: "tasks::ControllerTask")],
     bridges: [
         (
             id: "zenoh",
             type: "bridges::DemoZenohBridge",
             channels: [
-                Rx(
-                    id: "plan",
-                    route: "distributed_resim/plan",
-                ),
-                Tx(
-                    id: "feedback",
-                    route: "distributed_resim/feedback",
-                ),
+                Rx(id: "plan", route: "distributed_resim/plan"),
+                Tx(id: "feedback", route: "distributed_resim/feedback"),
             ],
         ),
     ],
     cnx: [
-        (
-            src: "zenoh/plan",
-            dst: "controller",
-            msg: "messages::Plan",
-        ),
-        (
-            src: "controller",
-            dst: "zenoh/feedback",
-            msg: "messages::Feedback",
-        ),
+        (src: "zenoh/plan", dst: "controller", msg: "messages::Plan"),
+        (src: "controller", dst: "zenoh/feedback", msg: "messages::Feedback"),
     ],
-    logging: (
-        keyframe_interval: 4,
-        slab_size_mib: 32,
-        section_size_mib: 8,
-    ),
+    logging: (keyframe_interval: 4, slab_size_mib: 32, section_size_mib: 8),
 )

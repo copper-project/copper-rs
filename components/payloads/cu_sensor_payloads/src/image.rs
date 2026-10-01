@@ -10,7 +10,7 @@ use image::{ImageBuffer, Pixel};
 #[cfg(feature = "kornia")]
 use kornia_image::Image;
 #[cfg(feature = "kornia")]
-use kornia_image::allocator::ImageAllocator;
+use kornia_tensor::MemoryDomain;
 use serde::{Deserialize, Serialize, Serializer};
 
 #[derive(Default, Debug, Encode, Decode, Clone, Copy, Serialize, Deserialize, Reflect)]
@@ -376,11 +376,13 @@ where
         })?
     }
 
+    /// Wraps plane 0 as a read-only kornia [`Image`] without copying.
+    ///
+    /// The image holds a clone of this `CuImage`'s handle, so the buffer stays alive (and a
+    /// pooled buffer is not recycled) for as long as the image does. Writing to the buffer
+    /// through another handle clone while the image is alive is a data race; don't.
     #[cfg(feature = "kornia")]
-    pub fn as_kornia_image<T: Clone, const C: usize, K: ImageAllocator>(
-        &self,
-        k: K,
-    ) -> CuResult<Image<T, C, K>> {
+    pub fn as_kornia_image<T: Clone, const C: usize>(&self) -> CuResult<Image<T, C>> {
         let width = self.format.width as usize;
         let height = self.format.height as usize;
         let plane = self
@@ -398,18 +400,32 @@ where
             ));
         }
 
-        let size = width * height * C;
-        self.with_plane_bytes(0, |data, _| {
-            let raw_pixels: &[T] = unsafe {
-                core::slice::from_raw_parts(
-                    data.as_ptr() as *const T,
-                    data.len() / core::mem::size_of::<T>(),
-                )
-            };
+        let len_bytes = width * height * C * core::mem::size_of::<T>();
+        let data = self.with_plane_bytes(0, |data, _| {
+            if data.len() < len_bytes {
+                return Err(CuError::from(
+                    "Image plane is smaller than the requested Kornia image.",
+                ));
+            }
+            if !(data.as_ptr() as usize).is_multiple_of(core::mem::align_of::<T>()) {
+                return Err(CuError::from(
+                    "Image plane is not aligned for the requested Kornia element type.",
+                ));
+            }
+            Ok(data.as_ptr() as *const T)
+        })??;
 
-            unsafe { Image::from_raw_parts([height, width].into(), raw_pixels.as_ptr(), size, k) }
-                .map_err(|e| CuError::new_with_cause("Could not create a Kornia Image", e))
-        })?
+        // SAFETY: `data` points at `len_bytes` readable, aligned bytes inside the handle's
+        // buffer, and the keepalive is a clone of that handle, so the buffer outlives the image.
+        unsafe {
+            Image::from_borrowed_readonly(
+                [height, width].into(),
+                data,
+                MemoryDomain::Host,
+                std::sync::Arc::new(self.buffer_handle.clone()),
+            )
+        }
+        .map_err(|e| CuError::new_with_cause("Could not create a Kornia Image", e))
     }
 }
 
@@ -553,6 +569,40 @@ mod tests {
     //
     // Running these tests against the real `encode_metadata_only` helper proves the
     // full chain end-to-end without needing to spin up a `copper_runtime!` graph.
+    #[cfg(feature = "kornia")]
+    mod kornia {
+        use super::super::{CuImage, CuImageBufferFormat};
+        use cu29::pool::CuHandle;
+
+        const RGB_2X2: CuImageBufferFormat = CuImageBufferFormat {
+            width: 2,
+            height: 2,
+            stride: 6,
+            pixel_format: *b"RGB3",
+        };
+
+        fn rgb_image() -> CuImage<Vec<u8>> {
+            CuImage::new(RGB_2X2, CuHandle::new_detached((0u8..12).collect()))
+        }
+
+        #[test]
+        fn as_kornia_image_wraps_the_plane() {
+            // The source is a temporary, dropped before the image is read: the image must keep
+            // the buffer alive on its own.
+            let image = rgb_image()
+                .as_kornia_image::<u8, 3>()
+                .expect("a packed RGB plane converts");
+            assert_eq!((image.width(), image.height()), (2, 2));
+            assert_eq!(image.as_slice(), (0u8..12).collect::<Vec<_>>().as_slice());
+        }
+
+        #[test]
+        fn as_kornia_image_refuses_a_plane_too_small_for_the_request() {
+            // 2x2x4 bytes requested from a 12-byte RGB plane.
+            assert!(rgb_image().as_kornia_image::<u8, 4>().is_err());
+        }
+    }
+
     mod only_log_what_you_use {
         use crate::CuImage;
         use bincode::config;

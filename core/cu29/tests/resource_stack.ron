@@ -1,22 +1,8 @@
 (
     resources: [
-        (
-            id: "wrapped",
-            provider: "Wrapped",
-            resources: {
-                "value": "base.value",
-            },
-        ),
+        (id: "wrapped", provider: "Wrapped", resources: {"value": "base.value"}),
         (id: "base", provider: "Base"),
     ],
-    tasks: [
-        (id: "source", type: "Source"),
-    ],
-    cnx: [
-        (
-            src: "source",
-            dst: "__nc__",
-            msg: "u32",
-        ),
-    ],
+    tasks: [(id: "source", type: "Source")],
+    cnx: [(src: "source", dst: "__nc__", msg: "u32")],
 )
