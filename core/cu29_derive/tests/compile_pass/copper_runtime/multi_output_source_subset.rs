@@ -40,7 +40,7 @@ impl CuSinkTask for IntSink {
 }
 
 #[copper_runtime(
-    config = "config/multi_output_source_subset_valid.ron",
+    config = "tests/config/multi_output_source_subset_valid.ron",
     sim_mode = true,
     ignore_resources = true
 )]

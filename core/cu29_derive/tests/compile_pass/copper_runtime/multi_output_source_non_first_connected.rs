@@ -40,7 +40,7 @@ impl CuSinkTask for BoolSink {
 }
 
 #[copper_runtime(
-    config = "config/multi_output_source_non_first_connected_valid.ron",
+    config = "tests/config/multi_output_source_non_first_connected_valid.ron",
     sim_mode = true,
     ignore_resources = true
 )]

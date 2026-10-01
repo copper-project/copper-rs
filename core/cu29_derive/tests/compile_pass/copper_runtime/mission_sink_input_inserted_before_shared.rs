@@ -79,7 +79,7 @@ impl CuSinkTask for CombinedSink {
     }
 }
 
-#[copper_runtime(config = "config/mission_sink_input_inserted_before_shared_valid.ron")]
+#[copper_runtime(config = "tests/config/mission_sink_input_inserted_before_shared_valid.ron")]
 struct App {}
 
 fn main() {

@@ -46,7 +46,7 @@ impl CuTask for NcOnlyRegular {
 }
 
 #[copper_runtime(
-    config = "config/explicit_task_kind_nc_only_regular_valid.ron",
+    config = "tests/config/explicit_task_kind_nc_only_regular_valid.ron",
     sim_mode = true,
     ignore_resources = true
 )]
