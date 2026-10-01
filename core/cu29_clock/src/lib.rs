@@ -984,6 +984,16 @@ pub trait ClockProvider {
     fn get_clock(&self) -> RobotClock;
 }
 
+#[cfg(feature = "self-describing")]
+impl bincode::ValueDecode for CuTime {
+    const DECODE: &'static bincode::ValueDecodeSpec = <u64 as bincode::ValueDecode>::DECODE;
+}
+
+#[cfg(feature = "self-describing")]
+impl bincode::ValueDecode for CuDuration {
+    const DECODE: &'static bincode::ValueDecodeSpec = <u64 as bincode::ValueDecode>::DECODE;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

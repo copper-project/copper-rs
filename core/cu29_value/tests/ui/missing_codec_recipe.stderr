@@ -1,0 +1,17 @@
+error[E0277]: the trait bound `Uleb128<u32>: ValueDecode` is not satisfied
+ --> tests/ui/missing_codec_recipe.rs:2:10
+  |
+2 | #[derive(Encode)]
+  |          ^^^^^^ the trait `ValueDecode` is not implemented for `Uleb128<u32>`
+  |
+  = help: the following other types implement trait `ValueDecode`:
+            &'static T
+            &'static [T]
+            &'static str
+            ()
+            (A, B)
+            (A, B, C)
+            (A, B, C, D)
+            (A, B, C, D, E)
+          and $N others
+  = note: this error originates in the derive macro `Encode` (in Nightly builds, run with -Z macro-backtrace for more info)

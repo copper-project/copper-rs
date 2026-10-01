@@ -33,6 +33,9 @@ use cu29_clock::CuTime;
 use ordered_float::OrderedFloat;
 use serde::Deserialize;
 
+#[cfg(feature = "self-describing")]
+pub mod decode;
+
 mod bdec;
 mod benc;
 mod de;
@@ -1251,3 +1254,6 @@ mod tests {
         assert!(huge.deserialize_into::<i64>().is_err());
     }
 }
+
+#[cfg(all(test, feature = "self-describing"))]
+mod decode_tests;

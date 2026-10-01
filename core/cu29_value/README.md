@@ -5,6 +5,66 @@
 `copper-value` provides a way to capture serialization value trees for later processing.
 Customizations are made to enable a more compact representation for the structured logging of copper.
 
+## Native payload descriptions
+
+Enable `cu29/self-describing` to describe native `Encode` bytes and decode them
+into a `Value` tree offline. The feature enables `std` and reflection. `Encode`
+derives supply the `ValueDecode` companion automatically; payload authors keep
+their usual `Reflect` derive.
+
+```rust
+use cu29::bincode::{Decode, Encode};
+use cu29::prelude::*;
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, Encode, Decode, Reflect)]
+struct Sample {
+    ticks: u32,
+    valid: bool,
+}
+
+let description = ValueDecodeDescription::from_type::<Sample>()?;
+let config = cu29::bincode::config::standard();
+let mut bytes = [0; 32];
+let len = cu29::bincode::encode_into_slice(
+    Sample { ticks: 42, valid: true }, &mut bytes, config,
+)?;
+let (tree, consumed) = description.decode(
+    &bytes[..len], config, ValueDecodeLimits::default(),
+)?;
+```
+
+A description implements native bincode `Encode` and `Decode`. After transporting
+it as bytes, an offline reader uses only the description, payload bytes, and the
+producer's codec configuration. Decoding returns the exact number of consumed
+bytes, allowing sequential values to be read from one buffer.
+
+Descriptions preserve field names, original type identities, scalar widths, and
+quantity storage units. All supported `cu29-units` quantities have typed storage
+registrations in both scalar widths. Coherent units use SI base-unit expressions:
+length is `m`, velocity is `m s^-1`, and mass is `kg`. Copper clock values
+retain their nanosecond (`ns`) storage unit.
+
+For a handwritten encoder, implement `ValueDecode` by delegating to the type
+actually written. An opaque reflected wrapper encoding `[f32; 4]` declares:
+
+```rust,ignore
+impl ValueDecode for Orientation {
+    const DECODE: &'static ValueDecodeSpec = <[f32; 4] as ValueDecode>::DECODE;
+}
+```
+
+Named encoded fields must be present in reflection with the same native type.
+Tuple fields require reflection to retain every declaration position. Hidden
+encoded fields and ambiguous tuple mappings return a description-building error.
+Skipped fields are excluded from the wire recipe. Missing nested recipes and
+custom codec recipes fail compilation with `self-describing` enabled.
+
+Description construction and value decoding allocate in offline tooling. Native
+message encoding keeps its existing byte layout and encoding pass. The portable
+IR is experimental; compression, build embedding, and unified-log catalogue
+integration follow in later PRs. Run `just self-describing-check` at the Copper
+workspace root to verify this API.
+
 ## Python Feature
 
 With the `python` feature enabled, this crate also provides conversion helpers between
