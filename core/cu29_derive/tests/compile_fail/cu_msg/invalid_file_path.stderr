@@ -1,7 +1,0 @@
-error: The configuration file `invalid/path/to/config.ron` does not exist. Please provide a valid path.
- --> tests/compile_fail/cu_msg/invalid_file_path.rs:3:1
-  |
-3 | gen_cumsgs!("invalid/path/to/config.ron");
-  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  |
-  = note: this error originates in the macro `gen_cumsgs` (in Nightly builds, run with -Z macro-backtrace for more info)

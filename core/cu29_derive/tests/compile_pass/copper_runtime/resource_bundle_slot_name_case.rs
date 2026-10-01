@@ -79,7 +79,7 @@ impl CuSinkTask for UsesNamedResourcesSink {
     }
 }
 
-#[copper_runtime(config = "config/resource_bundle_slot_name_case_valid.ron")]
+#[copper_runtime(config = "tests/config/resource_bundle_slot_name_case_valid.ron")]
 struct App {}
 
 fn main() {}

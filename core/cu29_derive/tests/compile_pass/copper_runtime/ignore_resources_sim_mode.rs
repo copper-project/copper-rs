@@ -48,7 +48,7 @@ impl CuTask for Proc {
 }
 
 #[copper_runtime(
-    config = "config/ignore_resources_sim_mode_valid.ron",
+    config = "tests/config/ignore_resources_sim_mode_valid.ron",
     sim_mode = true,
     ignore_resources = true
 )]

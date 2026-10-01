@@ -20,7 +20,7 @@ impl CuSrcTask for BackgroundSrc {
     }
 }
 
-#[copper_runtime(config = "config/background_source_valid.ron")]
+#[copper_runtime(config = "tests/config/background_source_valid.ron")]
 struct App {}
 
 fn main() {}

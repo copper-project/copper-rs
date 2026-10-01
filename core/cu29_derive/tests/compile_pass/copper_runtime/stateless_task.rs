@@ -54,7 +54,7 @@ impl CuStatelessTask for StatelessTransform {
 }
 
 #[copper_runtime(
-    config = "config/stateless_task_valid.ron",
+    config = "tests/config/stateless_task_valid.ron",
     sim_mode = true,
     ignore_resources = true
 )]

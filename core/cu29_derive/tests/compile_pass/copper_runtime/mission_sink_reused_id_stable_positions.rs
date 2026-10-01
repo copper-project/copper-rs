@@ -40,7 +40,7 @@ impl CuSinkTask for PairSink {
     }
 }
 
-#[copper_runtime(config = "config/mission_sink_reused_id_stable_positions_valid.ron")]
+#[copper_runtime(config = "tests/config/mission_sink_reused_id_stable_positions_valid.ron")]
 struct App {}
 
 fn main() {

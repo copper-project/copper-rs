@@ -33,7 +33,7 @@ impl CuSrcTask for ConstantSource {
 }
 
 #[copper_runtime(
-    config = "config/constants_valid.ron",
+    config = "tests/config/constants_valid.ron",
     sim_mode = true,
     ignore_resources = true
 )]
