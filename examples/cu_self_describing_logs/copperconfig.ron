@@ -1,0 +1,12 @@
+(
+    tasks: [
+        (id: "wheel", type: "crate::WheelSource"),
+        (id: "filter", type: "crate::WheelFilter"),
+        (id: "sink", type: "crate::WheelSink"),
+    ],
+    cnx: [
+        (src: "wheel", dst: "filter", msg: "crate::payloads::WheelSample"),
+        (src: "filter", dst: "sink", msg: "crate::payloads::WheelSample"),
+    ],
+    logging: (slab_size_mib: 1, section_size_mib: 1, enable_keyframe_logging: false),
+)

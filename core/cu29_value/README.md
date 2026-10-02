@@ -58,14 +58,17 @@ native type. Tuple fields require reflection to retain every declaration positio
 Hidden encoded fields and ambiguous tuple mappings return a description-building
 error. For opaque reflection, the static encoding recipe supplies the encoded
 field names, declaration positions, and enum variants.
-Skipped fields are excluded from the wire recipe. Missing nested recipes and
-custom codec recipes fail compilation with `self-describing-logs` enabled.
+Skipped fields are excluded from the wire description. Missing nested descriptions and
+custom codec descriptions fail compilation with `self-describing-logs` enabled.
 
 Description construction and value decoding allocate in offline tooling. Native
 message encoding keeps its existing byte layout and encoding pass. The portable
-IR is experimental; compression, build embedding, and unified-log catalogue
-integration follow in later PRs. Run `just self-describing-logs-check` at the Copper
-workspace root to verify this API.
+IR is experimental. Enable `cu29-value/decode-catalog` for the versioned compressed
+catalog reader and `cu29-build/self-describing-logs` for host packaging. The
+application builder's `with_value_decode_catalog(...)` records the embedded static
+blob during construction. See `examples/cu_self_describing_logs` and
+`doc/self-describing-logs.md` for the host workflow and catalog format.
+Run `just self-describing-logs-check` at the Copper workspace root to verify this API.
 
 ## Python Feature
 

@@ -33,6 +33,8 @@ use cu29_clock::CuTime;
 use ordered_float::OrderedFloat;
 use serde::Deserialize;
 
+#[cfg(feature = "decode-catalog")]
+pub mod catalog;
 #[cfg(feature = "self-describing-logs")]
 pub mod decode;
 

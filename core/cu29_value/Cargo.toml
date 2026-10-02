@@ -26,6 +26,10 @@ cu29-clock = { workspace = true }
 
 bincode = { workspace = true }
 serde = { workspace = true }
+brotli = { version = "8.0.4", optional = true, default-features = false, features = [
+  "std",
+] }
+
 ordered-float = { version = "5.1", default-features = false }
 pyo3 = { workspace = true, optional = true }
 
@@ -34,6 +38,8 @@ trybuild = "1.0"
 serde_derive = { workspace = true }
 
 [features]
+decode-catalog = ["self-describing-logs", "dep:brotli"]
+decode-catalog-build = ["decode-catalog"]
 self-describing-logs = [
   "std",
   "bincode/self-describing",
@@ -42,5 +48,5 @@ self-describing-logs = [
   "dep:cu29-units",
 ]
 default = ["std"]
-std = ["ordered-float/std", "cu29-clock/std"]
+std = ["ordered-float/std", "cu29-clock/std", "bincode/std"]
 python = ["std", "dep:pyo3"]

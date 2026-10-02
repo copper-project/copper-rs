@@ -4322,6 +4322,26 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! { None }
         };
 
+        let catalog_enabled = cfg!(feature = "self-describing-logs");
+        let builder_catalog_field = catalog_enabled.then(|| quote! { value_decode_catalog: Option<&'static [u8]>, });
+        let builder_catalog_init = catalog_enabled.then(|| quote! { value_decode_catalog: None, });
+        let builder_catalog_copy = catalog_enabled.then(|| quote! { value_decode_catalog: self.value_decode_catalog, });
+        let builder_with_catalog_method = catalog_enabled.then(|| quote! {
+            /// Record an embedded, build-host compressed payload catalog during construction.
+            #[allow(dead_code)]
+            pub fn with_value_decode_catalog(mut self, catalog: &'static [u8]) -> Self {
+                self.value_decode_catalog = Some(catalog);
+                self
+            }
+        });
+        let builder_record_catalog = catalog_enabled.then(|| quote! {
+            if let Some(catalog) = self.value_decode_catalog {
+                cu29::prelude::ValueDecodeCatalogHeader::read(catalog)
+                    .map_err(|error| CuError::new_with_cause("Invalid embedded ValueDecodeCatalog", error))?;
+                cu29::prelude::write_value_decode_catalog(self.unified_logger.clone(), catalog)?;
+            }
+        });
+
         let builder_logstream_field = logstream_enabled.then(|| {
             quote! {
                 logstream: Option<(
@@ -4379,6 +4399,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         resources_factory: R,
                         sim_callback: Option<&'a mut F>,
                         #builder_logstream_field
+                        #builder_catalog_field
                         _storage: core::marker::PhantomData<S>,
                     }
                 },
@@ -4404,6 +4425,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             resources_factory: #mission_mod::resources_instanciator as fn(&CuConfig) -> CuResult<ResourceManager>,
                             sim_callback: None,
                             #builder_logstream_init
+                            #builder_catalog_init
                             _storage: core::marker::PhantomData,
                         }
                     }
@@ -4437,6 +4459,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         config_override: Option<CuConfig>,
                         resources_factory: R,
                         #builder_logstream_field
+                        #builder_catalog_field
                         _storage: core::marker::PhantomData<S>,
                     }
                 },
@@ -4457,6 +4480,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             config_override: None,
                             resources_factory: #mission_mod::resources_instanciator as fn(&CuConfig) -> CuResult<ResourceManager>,
                             #builder_logstream_init
+                            #builder_catalog_init
                             _storage: core::marker::PhantomData,
                         }
                     }
@@ -4668,6 +4692,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         resources_factory: self.resources_factory,
                         #builder_sim_callback_field_copy
                         #builder_logstream_copy
+                        #builder_catalog_copy
                         _storage: core::marker::PhantomData,
                     }
                 }
@@ -4692,6 +4717,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         resources_factory,
                         #builder_sim_callback_field_copy
                         #builder_logstream_copy
+                        #builder_catalog_copy
                         _storage: core::marker::PhantomData,
                     }
                 }
@@ -4700,6 +4726,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #builder_with_log_path_method
                 #builder_sim_callback_method
                 #builder_with_logstream_method
+                #builder_with_catalog_method
 
                 /// Builds the application wrapped in its compile-time checked
                 /// lifecycle, in the `Initialized` state: start it with
@@ -4716,6 +4743,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         .clock
                         .ok_or(CuError::from("Clock missing from builder"))?;
                     let (config, config_source) = #builder_prepare_config_call;
+                    #builder_record_catalog
                     let resources = (self.resources_factory)(&config)?;
                     #builder_build_thread_pools_stmt
                     let app_resources = AppResources {
