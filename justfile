@@ -55,6 +55,12 @@ publish:
 compile-tests toolchain="stable":
     cargo +{{toolchain}} test -p cu29-derive --lib test_compile_fail -- --nocapture
 
+# Verify a patch release of the runtime, generator, and prelude crates.
+core-release-check toolchain="stable": fmt-check typos
+	cargo +{{toolchain}} clippy -p cu29-runtime -p cu29-derive -p cu29 --all-targets --features cu29/reflect -- --deny warnings
+	cargo +{{toolchain}} nextest run -p cu29-runtime -p cu29-derive -p cu29 --all-targets --features cu29/reflect
+	cargo +{{toolchain}} clippy -p cu29-runtime -p cu29 --no-default-features -- --deny warnings
+
 # Formatting, typo, and clippy checks.
 lint:
 	just fmt-check
