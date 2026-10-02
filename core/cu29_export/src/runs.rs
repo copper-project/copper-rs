@@ -268,6 +268,14 @@ impl RunReader {
     }
 
     fn read_next_section_type(&mut self, kind: UnifiedLogType) -> CuResult<Option<Vec<u8>>> {
+        self.read_next_section_type_at(kind)
+            .map(|section| section.map(|(_, bytes)| bytes))
+    }
+
+    pub(crate) fn read_next_section_type_at(
+        &mut self,
+        kind: UnifiedLogType,
+    ) -> CuResult<Option<(LogPosition, Vec<u8>)>> {
         while !self.at_end() {
             let position = self.inner.position();
             let header = self.inner.raw_skip_section()?;
@@ -275,11 +283,21 @@ impl RunReader {
                 return Ok(None);
             }
             if header.entry_type == kind {
+                #[cfg(feature = "self-describing-logs")]
+                if kind == UnifiedLogType::ValueDecodeCatalog
+                    && header.used as usize
+                        > cu29::value_decode_catalog::VALUE_DECODE_CATALOG_MAX_BYTES + 10
+                {
+                    return Err(CuError::from(format!(
+                        "Catalog section at slab {} offset {} exceeds 16 MiB",
+                        position.slab_index, position.offset
+                    )));
+                }
                 self.inner.seek(position)?;
                 return self
                     .inner
                     .raw_read_section()
-                    .map(|(_, content)| Some(content));
+                    .map(|(_, bytes)| Some((position, bytes)));
             }
         }
         Ok(None)

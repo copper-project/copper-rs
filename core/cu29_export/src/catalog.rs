@@ -56,39 +56,34 @@ pub fn read_value_decode_catalog(path: &Path, run: Option<usize>) -> CuResult<Va
 pub(crate) fn load_catalog(run: &runs::RecordedRun, path: &Path) -> CuResult<ValueDecodeCatalog> {
     let mut reader = run.reader(path)?;
     let mut found = None;
-    loop {
-        let position = reader.position();
-        let (header, bytes) = reader.raw_read_section()?;
-        match header.entry_type {
-            UnifiedLogType::LastEntry => break,
-            UnifiedLogType::ValueDecodeCatalog => {
-                if found.is_some() {
-                    return Err(CuError::from(format!(
-                        "Run {} contains multiple ValueDecodeCatalog sections",
-                        run.index
-                    )));
-                }
-                let catalog = ValueDecodeCatalog::from_blob(&bytes).map_err(|error| {
-                    CuError::from(format!(
-                        "Run {} catalog at slab {} offset {}: {error}",
-                        run.index, position.slab_index, position.offset
-                    ))
-                })?;
-                if catalog.slots.len() > MAX_SLOTS {
-                    return Err("Catalog exceeds offline slot limit".into());
-                }
-                if let Some(config) = &run.config
-                    && config != &catalog.config_ron
-                {
-                    return Err("Catalog configuration does not match the selected run".into());
-                }
-                if !run.missions.is_empty() && !run.missions.contains(&catalog.mission) {
-                    return Err("Catalog mission does not match the selected run".into());
-                }
-                found = Some(catalog);
-            }
-            _ => {}
+    while let Some((position, bytes)) = reader
+        .read_next_section_type_at(UnifiedLogType::ValueDecodeCatalog)
+        .map_err(|error| CuError::from(format!("Run {} catalog discovery: {error}", run.index)))?
+    {
+        if found.is_some() {
+            return Err(CuError::from(format!(
+                "Run {} contains multiple ValueDecodeCatalog sections",
+                run.index
+            )));
         }
+        let catalog = ValueDecodeCatalog::from_blob(&bytes).map_err(|error| {
+            CuError::from(format!(
+                "Run {} catalog at slab {} offset {}: {error}",
+                run.index, position.slab_index, position.offset
+            ))
+        })?;
+        if catalog.slots.len() > MAX_SLOTS {
+            return Err("Catalog exceeds offline slot limit".into());
+        }
+        if let Some(config) = &run.config
+            && config != &catalog.config_ron
+        {
+            return Err("Catalog configuration does not match the selected run".into());
+        }
+        if !run.missions.is_empty() && !run.missions.contains(&catalog.mission) {
+            return Err("Catalog mission does not match the selected run".into());
+        }
+        found = Some(catalog);
     }
     found.ok_or_else(|| CuError::from(format!("Run {} has no ValueDecodeCatalog; catalog decoding and deep validation require a catalog", run.index)))
 }
@@ -140,15 +135,14 @@ impl Iterator for CopperListValueReader {
         }
         let result = (|| {
             while self.offset == self.bytes.len() {
-                self.position = self.reader.position();
-                let (header, bytes) = self.reader.raw_read_section()?;
-                if header.entry_type == UnifiedLogType::LastEntry {
+                let Some((position, bytes)) = self
+                    .reader
+                    .read_next_section_type_at(UnifiedLogType::CopperList)?
+                else {
                     self.finished = true;
                     return Ok(None);
-                }
-                if header.entry_type != UnifiedLogType::CopperList {
-                    continue;
-                }
+                };
+                self.position = position;
                 self.bytes = bytes;
                 self.offset = 0;
             }
