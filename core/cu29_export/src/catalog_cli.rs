@@ -1,11 +1,14 @@
 //! Shared catalog inspection, extraction and deep-validation CLI operations.
 
-use crate::catalog::{copperlist_values_reader, decode_copperlist, load_catalog};
+use crate::catalog::{
+    copperlist_values_reader, decode_copperlist_with_payload_sizes, load_catalog,
+};
 use crate::fsck::{CheckedCopperList, check_with};
 use crate::runs;
 use crate::{CatalogFormat, CopperListDecoder, ExportFormat};
 use clap::{ColorChoice, Parser, Subcommand};
 use cu29::prelude::{CuError, CuResult, ValueDecodeCatalog};
+use num_format::{Locale, ToFormattedString};
 use serde::{Deserialize, Serialize};
 use std::io::{IsTerminal, Write};
 use std::path::{Path, PathBuf};
@@ -332,14 +335,17 @@ pub(crate) fn deep_check(
     let catalog = load_catalog(run, path)?;
     let mut lists = 0usize;
     let mut payloads = 0usize;
+    let mut payload_bytes = 0usize;
+    let mut smallest_payload = usize::MAX;
+    let mut largest_payload = 0usize;
     let mut decode = |bytes: &[u8]| {
-        let (entry, used) = decode_copperlist(&catalog, bytes)?;
+        let (entry, used) = decode_copperlist_with_payload_sizes(&catalog, bytes, |size| {
+            payloads += 1;
+            payload_bytes += size;
+            smallest_payload = smallest_payload.min(size);
+            largest_payload = largest_payload.max(size);
+        })?;
         lists += 1;
-        payloads += entry
-            .msgs
-            .iter()
-            .filter(|msg| msg.captured_payload_present)
-            .count();
         let (start, end) = crate::fsck::process_time_bounds(
             entry.msgs.iter().map(|msg| msg.metadata.process_time),
         );
@@ -357,9 +363,32 @@ pub(crate) fn deep_check(
         Some(&mut decode),
     )
     .map_err(|error| CuError::from(format!("Run {} deep validation: {error}", run.index)))?;
+    let locale = &Locale::en;
+    println!();
+    println!("  Deep validation        -> passed");
     println!(
-        "Deep validation: {lists} CopperLists, {payloads} captured payloads decoded completely; frozen task-state bytes are opaque."
+        "  # of CLs decoded       -> {}",
+        lists.to_formatted_string(locale)
     );
+    println!(
+        "  # of captured payloads -> {}",
+        payloads.to_formatted_string(locale)
+    );
+    println!(
+        "  Payload total size     -> {} bytes",
+        payload_bytes.to_formatted_string(locale)
+    );
+    if payloads > 0 {
+        println!(
+            "  Payload mean size      -> {:.2} bytes",
+            payload_bytes as f64 / payloads as f64
+        );
+        println!(
+            "  Payload size range     -> {}-{} bytes",
+            smallest_payload.to_formatted_string(locale),
+            largest_payload.to_formatted_string(locale)
+        );
+    }
     Ok(())
 }
 

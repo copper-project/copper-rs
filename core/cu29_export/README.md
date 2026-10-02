@@ -17,6 +17,13 @@ see
 - profile-guided scheduling from a recorded run
 - optional Python bindings for iterating logs without going through JSON first
 
+Opaque payloads use their static bincode encoding recipes for field and variant
+names. Host catalog generation can register additional reflected dependencies with
+`cumsgs::value_decode_catalog_with(|builder| builder.register::<Dependency>())`.
+Registration adds schema information while preserving the generated log-slot order.
+Catalog configuration checks compare mission declarations by identity and retain
+configured values, topology, and plain graph declaration order.
+
 ## Standalone catalog tools
 
 Build `cu29-logextract` with `self-describing-logs`, or use the workspace helper:
@@ -39,8 +46,10 @@ CSV. Machine output stays clean; diagnostics use stderr.
 
 Deep fsck requires a catalog and decodes every captured payload to exact section
 exhaustion. Invalid/truncated records return an error with their recorded location.
-Plain standalone fsck checks structure and common streams. Frozen task-state bytes
-remain opaque after their keyframe envelopes are checked.
+Plain standalone fsck checks structure and common streams and reports the number
+and compressed size of embedded catalogs. Deep validation adds decoded CopperList
+and captured-payload counts, encoded payload bytes, mean size, and size range.
+Payload sizes count native payload bytes, excluding CopperList metadata.
 
 App logreaders retain typed defaults; `extract-copperlists --decoder catalog` selects
 the standalone decoder when built with `self-describing-logs`. Read the
