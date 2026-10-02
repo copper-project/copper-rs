@@ -162,6 +162,11 @@ pub struct ValueDecodeCatalogBuilder {
 }
 
 impl ValueDecodeCatalogBuilder {
+    /// Register reflected dependencies of an opaque payload's custom encoding.
+    pub fn register<T: GetTypeRegistration>(&mut self) {
+        self.registry.register::<T>();
+    }
+
     /// Add a captured native payload in generated CopperList order.
     pub fn add<T: ValueDecode + GetTypeRegistration>(&mut self, task_id: &str, msg_type: &str) {
         self.registry.register::<T>();
@@ -301,5 +306,53 @@ mod tests {
         let mut catalog = catalog();
         catalog.slots[0].binding = Some(usize::MAX);
         assert!(ValueDecodeCatalog::from_blob(&catalog.to_blob().unwrap()).is_err());
+    }
+
+    #[test]
+    fn test_registered_opaque_dependencies_decode_without_adding_slots() {
+        #[derive(Clone, bincode::Encode, bevy_reflect::Reflect, serde::Serialize)]
+        struct Dependency {
+            channel: u16,
+        }
+        #[derive(Clone, bincode::Encode, bevy_reflect::Reflect, serde::Serialize)]
+        #[reflect(opaque)]
+        struct Batch {
+            requests: Vec<Dependency>,
+        }
+
+        let mut missing = ValueDecodeCatalogBuilder::default();
+        missing.add::<Batch>("source", "Batch");
+        assert!(
+            missing
+                .finish("()", "default", ValueDecodeCatalogLayout::Compact)
+                .is_err()
+        );
+
+        let mut builder = ValueDecodeCatalogBuilder::default();
+        builder.register::<Dependency>();
+        builder.add::<Batch>("source", "Batch");
+        builder.add_uncaptured("hidden", "Opaque");
+        let catalog = builder
+            .finish("()", "default", ValueDecodeCatalogLayout::Compact)
+            .unwrap();
+        let mut catalog = ValueDecodeCatalog::from_blob(&catalog.to_blob().unwrap()).unwrap();
+        assert_eq!(catalog.slots.len(), 2);
+        assert_eq!(catalog.slots[0].task_id, "source");
+        assert_eq!(catalog.slots[1].task_id, "hidden");
+        assert_eq!(catalog.slots[1].binding, None);
+
+        let sample = Batch {
+            requests: vec![Dependency { channel: 300 }],
+        };
+        let config = bincode::config::standard();
+        let bytes = bincode::encode_to_vec(&sample, config).unwrap();
+        catalog.description.root = catalog.slots[0].binding.unwrap();
+        assert_eq!(
+            catalog
+                .description
+                .decode(&bytes, config, ValueDecodeLimits::default())
+                .unwrap(),
+            (crate::to_value(&sample).unwrap(), bytes.len())
+        );
     }
 }

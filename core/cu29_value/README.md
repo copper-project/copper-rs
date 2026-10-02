@@ -64,7 +64,10 @@ custom codec descriptions fail compilation with `self-describing-logs` enabled.
 Description construction and value decoding allocate in offline tooling. Native
 message encoding keeps its existing byte layout and encoding pass. The portable
 IR is experimental. Enable `cu29-value/decode-catalog` for the versioned compressed
-catalog reader and `cu29-build/self-describing-logs` for host packaging. The
+catalog reader and `cu29-build/self-describing-logs` for host packaging.
+Host catalog generation can register reflected dependencies of opaque payloads
+with `cumsgs::value_decode_catalog_with(|builder| builder.register::<Dependency>())`.
+These registrations preserve the generated log-slot order. The
 application builder's `with_value_decode_catalog(...)` records the embedded static
 blob during construction. See `examples/cu_self_describing_logs` and
 `doc/self-describing-logs.md` for the host workflow and catalog format.

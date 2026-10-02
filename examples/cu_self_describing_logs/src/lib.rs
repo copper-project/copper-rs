@@ -77,6 +77,23 @@ mod tests {
     use cu29::bincode;
 
     #[test]
+    fn test_generated_catalog_registration_preserves_log_slots() {
+        let mut called = false;
+        let registered = default::value_decode_catalog_with(|builder| {
+            called = true;
+            builder.register::<WheelSample>();
+        })
+        .unwrap();
+        assert!(called);
+        let original = default::value_decode_catalog().unwrap();
+        let config = bincode::config::standard();
+        assert_eq!(
+            bincode::encode_to_vec(&registered, config).unwrap(),
+            bincode::encode_to_vec(&original, config).unwrap()
+        );
+    }
+
+    #[test]
     fn test_host_embedded_catalog_is_recorded_verbatim_once_at_startup() {
         let dir = tempfile::tempdir_in(env!("CARGO_MANIFEST_DIR")).unwrap();
         let path = dir.path().join("wheel.copper");

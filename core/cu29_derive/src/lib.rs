@@ -834,16 +834,12 @@ fn gen_culist_support(
         } else {
             quote! { cu29::prelude::ValueDecodeCatalogLayout::Compact }
         };
-        let builder_declaration = if registrations.is_empty() {
-            quote! { let builder = cu29::prelude::ValueDecodeCatalogBuilder::default(); }
-        } else {
-            quote! { let mut builder = cu29::prelude::ValueDecodeCatalogBuilder::default(); }
-        };
         let catalog_body = if let Some(error) = unsupported_codec {
             quote! { Err(cu29::prelude::CuError::from(#error)) }
         } else {
             quote! {
-                #builder_declaration
+                let mut builder = cu29::prelude::ValueDecodeCatalogBuilder::default();
+                register(&mut builder);
                 #(#registrations)*
                 builder.finish(#default_config_ron_lit, #mission, #layout)
                     .map_err(|error| cu29::prelude::CuError::new_with_cause("Could not describe captured payloads", error))
@@ -854,6 +850,14 @@ fn gen_culist_support(
             /// Build the payload catalog on the host, using generated slot order.
             #[allow(dead_code)]
             pub fn value_decode_catalog() -> cu29::prelude::CuResult<cu29::prelude::ValueDecodeCatalog> {
+                value_decode_catalog_with(|_| {})
+            }
+
+            /// Build a host catalog with extra reflected dependencies for opaque payloads.
+            #[allow(dead_code)]
+            pub fn value_decode_catalog_with(
+                #[allow(unused_variables)] register: impl FnOnce(&mut cu29::prelude::ValueDecodeCatalogBuilder),
+            ) -> cu29::prelude::CuResult<cu29::prelude::ValueDecodeCatalog> {
                 #catalog_body
             }
         }
