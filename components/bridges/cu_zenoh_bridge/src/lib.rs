@@ -125,11 +125,21 @@ struct ZenohContext<TxId: Copy, RxId: Copy> {
     rx_channels: Vec<ZenohRxChannel<RxId>>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, bincode::Encode, bincode::Decode)]
+/// Version of the attachment layout below. Bump it whenever a field is added, removed or reordered.
+const ATTACHMENT_VERSION: u8 = 1;
+
+/// Copper metadata shipped out of band in the Zenoh attachment, next to a sample body that holds
+/// only the payload. A sample without an attachment comes from a non-Copper publisher.
+#[derive(Debug, Clone, Copy, PartialEq, bincode::Encode, bincode::Decode)]
 struct CopperBridgeAttachment {
+    version: u8,
     subsystem_code: u16,
     instance_id: u32,
     cl_id: u64,
+    tov: Tov,
+    /// Explicit rather than inferred from an empty body: a zero-sized payload encodes to 0 bytes
+    /// under bincode.
+    has_payload: bool,
 }
 
 #[derive(Reflect)]
@@ -252,39 +262,6 @@ where
         Ok(default)
     }
 
-    fn encode_message<Payload: CuMsgPayload>(
-        wire_format: WireFormat,
-        msg: &CuMsg<Payload>,
-    ) -> CuResult<Vec<u8>> {
-        match wire_format {
-            WireFormat::Bincode => bincode::encode_to_vec(msg, bincode::config::standard())
-                .map_err(|e| CuError::new_with_cause("ZenohBridge: bincode encode failed", e)),
-            WireFormat::Json => serde_json::to_vec(msg)
-                .map_err(|e| CuError::new_with_cause("ZenohBridge: json encode failed", e)),
-            WireFormat::Cbor => minicbor_serde::to_vec(msg)
-                .map_err(|e| CuError::new_with_cause("ZenohBridge: cbor encode failed", e)),
-        }
-    }
-
-    fn decode_message<Payload: CuMsgPayload>(
-        wire_format: WireFormat,
-        bytes: &[u8],
-    ) -> CuResult<CuMsg<Payload>> {
-        match wire_format {
-            WireFormat::Bincode => {
-                let (decoded, _): (CuMsg<Payload>, usize) =
-                    bincode::decode_from_slice(bytes, bincode::config::standard()).map_err(
-                        |e| CuError::new_with_cause("ZenohBridge: bincode decode failed", e),
-                    )?;
-                Ok(decoded)
-            }
-            WireFormat::Json => serde_json::from_slice(bytes)
-                .map_err(|e| CuError::new_with_cause("ZenohBridge: json decode failed", e)),
-            WireFormat::Cbor => minicbor_serde::from_slice(bytes)
-                .map_err(|e| CuError::new_with_cause("ZenohBridge: cbor decode failed", e)),
-        }
-    }
-
     fn find_tx_channel_mut(
         channels: &mut [ZenohTxChannel<Tx::Id>],
         id: Tx::Id,
@@ -297,33 +274,6 @@ where
         id: Rx::Id,
     ) -> Option<&mut ZenohRxChannel<Rx::Id>> {
         channels.iter_mut().find(|channel| channel.id == id)
-    }
-
-    fn encode_attachment(ctx: &CuContext) -> CuResult<Vec<u8>> {
-        bincode::encode_to_vec(
-            CopperBridgeAttachment {
-                subsystem_code: ctx.subsystem_code(),
-                instance_id: ctx.instance_id(),
-                cl_id: ctx.cl_id(),
-            },
-            bincode::config::standard(),
-        )
-        .map_err(|e| CuError::new_with_cause("ZenohBridge: attachment encode failed", e))
-    }
-
-    fn decode_attachment(sample: &zenoh::sample::Sample) -> CuResult<Option<CuMsgOrigin>> {
-        let Some(attachment) = sample.attachment() else {
-            return Ok(None);
-        };
-        let attachment_bytes = attachment.to_bytes();
-        let (decoded, _): (CopperBridgeAttachment, usize) =
-            bincode::decode_from_slice(attachment_bytes.as_ref(), bincode::config::standard())
-                .map_err(|e| CuError::new_with_cause("ZenohBridge: attachment decode failed", e))?;
-        Ok(Some(CuMsgOrigin {
-            subsystem_code: decoded.subsystem_code,
-            instance_id: decoded.instance_id,
-            cl_id: decoded.cl_id,
-        }))
     }
 }
 
@@ -469,8 +419,11 @@ where
                 ))
             })?;
 
-        let encoded = Self::encode_message(tx_channel.wire_format, msg)?;
-        let attachment = Self::encode_attachment(ctx)?;
+        let encoded = match msg.payload() {
+            Some(payload) => encode_payload(tx_channel.wire_format, payload)?,
+            None => Vec::new(),
+        };
+        let attachment = encode_attachment(ctx, msg)?;
         zenoh::Wait::wait(
             tx_channel
                 .publisher
@@ -505,24 +458,26 @@ where
                 ))
             })?;
 
-        msg.tov = Tov::Time(ctx.now());
-
         let sample = match &rx_channel.subscriber {
             ZenohSubscriber::Fifo(s) => s.try_recv(),
             ZenohSubscriber::Ring(s) => s.try_recv(),
         }
         .map_err(|e| CuError::from(format!("ZenohBridge: receive failed: {e}")))?;
         if let Some(sample) = sample {
-            let origin = Self::decode_attachment(&sample)?;
+            let attachment = sample
+                .attachment()
+                .map(|attachment| decode_attachment(attachment.to_bytes().as_ref()))
+                .transpose()?;
             let payload = sample.payload().to_bytes();
-            let decoded = Self::decode_message(rx_channel.wire_format, payload.as_ref())?;
-            *msg = decoded;
-            if let Some(origin) = origin {
-                msg.metadata.set_origin(origin);
-            } else {
-                msg.metadata.clear_origin();
-            }
+            apply_sample(
+                msg,
+                rx_channel.wire_format,
+                payload.as_ref(),
+                attachment,
+                ctx.now(),
+            )?;
         } else {
+            msg.tov = Tov::Time(ctx.now());
             msg.clear_payload();
             msg.metadata.clear_origin();
         }
@@ -554,6 +509,111 @@ where
         }
         Ok(())
     }
+}
+/// Encodes the payload according to the specified wire format.
+fn encode_payload<Payload: CuMsgPayload>(
+    wire_format: WireFormat,
+    payload: &Payload,
+) -> CuResult<Vec<u8>> {
+    match wire_format {
+        WireFormat::Bincode => bincode::encode_to_vec(payload, bincode::config::standard())
+            .map_err(|e| CuError::new_with_cause("ZenohBridge: bincode encode failed", e)),
+        WireFormat::Json => serde_json::to_vec(payload)
+            .map_err(|e| CuError::new_with_cause("ZenohBridge: json encode failed", e)),
+        WireFormat::Cbor => minicbor_serde::to_vec(payload)
+            .map_err(|e| CuError::new_with_cause("ZenohBridge: cbor encode failed", e)),
+    }
+}
+/// Decodes the payload according to the specified wire format.
+fn decode_payload<Payload: CuMsgPayload>(
+    wire_format: WireFormat,
+    bytes: &[u8],
+) -> CuResult<Payload> {
+    match wire_format {
+        WireFormat::Bincode => {
+            let (decoded, _): (Payload, usize) =
+                bincode::decode_from_slice(bytes, bincode::config::standard()).map_err(|e| {
+                    CuError::new_with_cause("ZenohBridge: bincode decode failed", e)
+                })?;
+            Ok(decoded)
+        }
+        WireFormat::Json => serde_json::from_slice(bytes)
+            .map_err(|e| CuError::new_with_cause("ZenohBridge: json decode failed", e)),
+        WireFormat::Cbor => minicbor_serde::from_slice(bytes)
+            .map_err(|e| CuError::new_with_cause("ZenohBridge: cbor decode failed", e)),
+    }
+}
+
+/// Encodes the attachment for the given context and message.
+fn encode_attachment<Payload: CuMsgPayload>(
+    ctx: &CuContext,
+    msg: &CuMsg<Payload>,
+) -> CuResult<Vec<u8>> {
+    bincode::encode_to_vec(
+        CopperBridgeAttachment {
+            version: ATTACHMENT_VERSION,
+            subsystem_code: ctx.subsystem_code(),
+            instance_id: ctx.instance_id(),
+            cl_id: ctx.cl_id(),
+            tov: msg.tov,
+            has_payload: msg.payload().is_some(),
+        },
+        bincode::config::standard(),
+    )
+    .map_err(|e| CuError::new_with_cause("ZenohBridge: attachment encode failed", e))
+}
+
+/// Decodes the attachment from the given byte slice.
+fn decode_attachment(bytes: &[u8]) -> CuResult<CopperBridgeAttachment> {
+    // The version is the first field and a bincode `u8` is one raw byte, so it can be checked
+    // before decoding a layout that may not match.
+    match bytes.first() {
+        Some(&ATTACHMENT_VERSION) => {}
+        Some(other) => {
+            return Err(CuError::from(format!(
+                "ZenohBridge: attachment version {other} from the publisher, expected \
+                 {ATTACHMENT_VERSION}; all Copper peers on a Zenoh network must run the same \
+                 Copper version"
+            )));
+        }
+        None => return Err(CuError::from("ZenohBridge: empty attachment".to_string())),
+    }
+    let (decoded, _): (CopperBridgeAttachment, usize) =
+        bincode::decode_from_slice(bytes, bincode::config::standard())
+            .map_err(|e| CuError::new_with_cause("ZenohBridge: attachment decode failed", e))?;
+    Ok(decoded)
+}
+
+/// Fills `msg` from a received sample body and its decoded attachment. `process_time` is left
+/// alone: the runtime stamps it around `receive`.
+fn apply_sample<Payload: CuMsgPayload>(
+    msg: &mut CuMsg<Payload>,
+    wire_format: WireFormat,
+    body: &[u8],
+    attachment: Option<CopperBridgeAttachment>,
+    now: CuTime,
+) -> CuResult<()> {
+    match attachment {
+        Some(attachment) => {
+            if attachment.has_payload {
+                msg.set_payload(decode_payload(wire_format, body)?);
+            } else {
+                msg.clear_payload();
+            }
+            msg.tov = attachment.tov;
+            msg.metadata.set_origin(CuMsgOrigin {
+                subsystem_code: attachment.subsystem_code,
+                instance_id: attachment.instance_id,
+                cl_id: attachment.cl_id,
+            });
+        }
+        None => {
+            msg.set_payload(decode_payload(wire_format, body)?);
+            msg.tov = Tov::Time(now);
+            msg.metadata.clear_origin();
+        }
+    }
+    Ok(())
 }
 
 fn cu_error(msg: &str, error: ZenohError) -> CuError {
@@ -650,6 +710,133 @@ mod tests {
             err.to_string().contains("ring_size"),
             "the error must name the key the operator got wrong, got: {err}"
         );
+    }
+
+    #[derive(
+        Debug,
+        Default,
+        Clone,
+        PartialEq,
+        bincode::Encode,
+        bincode::Decode,
+        Serialize,
+        Deserialize,
+        Reflect,
+    )]
+    struct TestPayload {
+        seq: u64,
+        note: String,
+    }
+
+    fn test_payload() -> TestPayload {
+        TestPayload {
+            seq: 7,
+            note: "hi".to_string(),
+        }
+    }
+
+    fn copper_attachment(has_payload: bool) -> CopperBridgeAttachment {
+        CopperBridgeAttachment {
+            version: ATTACHMENT_VERSION,
+            subsystem_code: 3,
+            instance_id: 2,
+            cl_id: 41,
+            tov: Tov::Time(CuTime::from_nanos(1_000)),
+            has_payload,
+        }
+    }
+
+    #[test]
+    fn the_body_is_the_bare_payload_in_every_wire_format() {
+        for wire_format in [WireFormat::Bincode, WireFormat::Json, WireFormat::Cbor] {
+            let bytes = encode_payload(wire_format, &test_payload()).unwrap();
+            let decoded: TestPayload = decode_payload(wire_format, &bytes).unwrap();
+            assert_eq!(decoded, test_payload(), "{wire_format:?}");
+        }
+        let json = encode_payload(WireFormat::Json, &test_payload()).unwrap();
+        assert_eq!(json, br#"{"seq":7,"note":"hi"}"#);
+    }
+
+    /// What a non-Copper publisher sends: plain JSON, no attachment.
+    #[test]
+    fn a_sample_without_attachment_is_stamped_at_receive_time() {
+        let mut msg = CuMsg::<TestPayload>::default();
+        msg.metadata.set_origin(CuMsgOrigin {
+            subsystem_code: 9,
+            instance_id: 9,
+            cl_id: 9,
+        });
+        let now = CuTime::from_nanos(5_000);
+        apply_sample(
+            &mut msg,
+            WireFormat::Json,
+            br#"{"seq":7,"note":"hi"}"#,
+            None,
+            now,
+        )
+        .unwrap();
+        assert_eq!(msg.payload(), Some(&test_payload()));
+        assert_eq!(msg.tov, Tov::Time(now));
+        assert!(msg.metadata.origin.is_none());
+    }
+
+    #[test]
+    fn an_attachment_restores_the_sender_tov_and_origin() {
+        let mut msg = CuMsg::<TestPayload>::default();
+        msg.metadata.process_time.start = CuTime::from_nanos(4_000).into();
+        let body = encode_payload(WireFormat::Bincode, &test_payload()).unwrap();
+        apply_sample(
+            &mut msg,
+            WireFormat::Bincode,
+            &body,
+            Some(copper_attachment(true)),
+            CuTime::from_nanos(5_000),
+        )
+        .unwrap();
+        assert_eq!(msg.payload(), Some(&test_payload()));
+        assert_eq!(msg.tov, Tov::Time(CuTime::from_nanos(1_000)));
+        let origin = msg.metadata.origin.unwrap();
+        assert_eq!(
+            (origin.subsystem_code, origin.instance_id, origin.cl_id),
+            (3, 2, 41)
+        );
+        assert_eq!(
+            Option::<CuTime>::from(msg.metadata.process_time.start),
+            Some(CuTime::from_nanos(4_000)),
+            "process_time is stamped locally by the runtime and must not be overwritten"
+        );
+    }
+
+    /// `[publish_empty]` sends an empty body flagged as payload-less.
+    #[test]
+    fn an_attachment_without_payload_clears_the_payload() {
+        let mut msg = CuMsg::<TestPayload>::new(Some(test_payload()));
+        apply_sample(
+            &mut msg,
+            WireFormat::Json,
+            &[],
+            Some(copper_attachment(false)),
+            CuTime::from_nanos(5_000),
+        )
+        .unwrap();
+        assert!(msg.payload().is_none());
+        assert_eq!(msg.tov, Tov::Time(CuTime::from_nanos(1_000)));
+    }
+
+    #[test]
+    fn the_attachment_round_trips() {
+        let bytes =
+            bincode::encode_to_vec(copper_attachment(true), bincode::config::standard()).unwrap();
+        assert_eq!(decode_attachment(&bytes).unwrap(), copper_attachment(true));
+    }
+
+    #[test]
+    fn a_foreign_attachment_version_is_named_in_the_error() {
+        let mut attachment = copper_attachment(true);
+        attachment.version = ATTACHMENT_VERSION + 1;
+        let bytes = bincode::encode_to_vec(attachment, bincode::config::standard()).unwrap();
+        let err = decode_attachment(&bytes).unwrap_err();
+        assert!(err.to_string().contains("attachment version"), "got: {err}");
     }
 
     /// A misspelling must not silently fall back to `fifo`: that is the exact failure this

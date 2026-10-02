@@ -25,6 +25,39 @@ You should see pong logs tagged with `pong-bincode`, `pong-json`, and `pong-cbor
 Logs are written under `examples/cu_zenoh_bridge_demo/logs/` by default. You can override the
 path with `--log <path>`.
 
+## Talk To The Demo From Python
+
+The bridge sends and receives bare payloads, so a non-Copper process can take the place of the
+ping app. Install `eclipse-zenoh`, start the pong app, then run:
+
+```python
+import json, time, zenoh
+
+def main() -> None:
+    with zenoh.open(zenoh.Config()) as session:
+        # Keep a reference: the subscriber is undeclared when dropped.
+        sub = session.declare_subscriber(
+            "demo/pong/json",
+            lambda sample: print("pong:", json.loads(sample.payload.to_bytes())),
+        )
+        for seq in range(10):
+            session.put("demo/ping/json", json.dumps({"seq": seq, "note": f"python#{seq}"}))
+            time.sleep(0.2)
+        time.sleep(1.0)
+
+if __name__ == "__main__":
+    main()
+```
+
+Each ping is plain JSON matching `Ping { seq, note }`, and each reply prints as plain JSON matching
+`Pong { seq, reply }`. The Copper metadata travels in the Zenoh attachment, which the script
+ignores.
+
+Both sides use Zenoh's default multicast discovery. On networks where multicast is blocked, run a
+`zenohd` router and point every process at it, e.g. with
+`{ mode: "client", connect: { endpoints: ["tcp/[::1]:7447"] } }` as `zenoh_config_json` in both demo
+configs and `zenoh.Config.from_json5(...)` with the same string in Python.
+
 ## Validate The Strict Multi-Copper Config Layer
 
 This example also includes `multi_copper.ron`, a strict umbrella config that models the ping and
