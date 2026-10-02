@@ -15,6 +15,7 @@
   <img src="https://img.shields.io/badge/Rust-1.95+-orange.svg" alt="Rust 1.95 or newer" />
   <a href="https://copper-project.github.io/copper-rs-book/"><img src="https://img.shields.io/badge/book-read-blue" alt="Read the Copper book" /></a>
   <a href="https://copper-project.github.io/copper-rs/"><img src="https://img.shields.io/badge/docs-read-blue" alt="Copper documentation" /></a>
+  <a href="https://github.com/copper-project/copper-rs/wiki/Copper-Release-Notes"><img src="https://img.shields.io/badge/release_notes-read-blue" alt="Copper release notes" /></a>
   <a href="https://discord.gg/VkCG7Sb9Kw"><img src="https://img.shields.io/discord/1305916875741597826?logo=discord" alt="Copper Discord" /></a>
 </p>
 
@@ -127,7 +128,7 @@ bandwidth. Try the [telemetry demo](examples/cu_logstream_demo#native-telemetry-
   </tr>
   <tr>
     <td><strong>Project</strong></td>
-    <td><a href="https://copper-project.github.io/copper-rs/Supported-Platforms">Supported platforms</a> · <a href="https://copper-project.github.io/copper-rs/Roadmap">Roadmap</a> · <a href="https://copper-project.github.io/copper-rs/Copper-Release-Notes">Release notes</a></td>
+    <td><a href="https://copper-project.github.io/copper-rs/Supported-Platforms">Supported platforms</a> · <a href="https://copper-project.github.io/copper-rs/Copper-Release-Notes">Release notes</a></td>
   </tr>
   <tr>
     <td><strong>Community</strong></td>
