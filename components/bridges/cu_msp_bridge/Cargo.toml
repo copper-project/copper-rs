@@ -29,6 +29,10 @@ serde = { workspace = true }
 cu-linux-resources = { workspace = true, optional = true }
 
 [features]
+self-describing-logs = [
+  "cu29/self-describing-logs",
+  "cu-msp-lib/self-describing-logs",
+]
 default = ["std"]
 std = [
   "cu29/std",

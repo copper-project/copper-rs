@@ -32,7 +32,7 @@ macro_rules! impl_f32_raster_payload {
         {
             pub seq: u64,
             pub format: ZedRasterFormat,
-            #[reflect(ignore)]
+            #[cfg_attr(not(feature = "self-describing-logs"), reflect(ignore))]
             pub buffer_handle: CuHandle<A>,
         }
 

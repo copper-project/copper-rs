@@ -12,4 +12,5 @@ sinks, including image and point-cloud related data structures.
 - `image`
 - `kornia`
 - `rerun`
-
+- `self-describing-logs`: native payload descriptions for host catalog generation,
+  including captured image and depth buffers; enables `std` and reflection.

@@ -58,6 +58,11 @@ impl Encode for RcChannelsPayload {
     }
 }
 
+#[cfg(feature = "self-describing-logs")]
+impl bincode::ValueDecode for RcChannelsPayload {
+    const DECODE: &'static bincode::ValueDecodeSpec = <[u16; 16] as bincode::ValueDecode>::DECODE;
+}
+
 impl Decode<()> for RcChannelsPayload {
     fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let mut channels = [0u16; 16];
@@ -235,6 +240,31 @@ impl<'de> Deserialize<'de> for LinkStatisticsPayload {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "self-describing-logs")]
+    #[test]
+    fn test_catalog_decodes_native_rc_channels() {
+        use cu29::prelude::{Value, ValueDecodeDescription, ValueDecodeLimits};
+
+        let mut sample = RcChannelsPayload::default();
+        for (index, channel) in sample.0.0.iter_mut().enumerate() {
+            *channel = 1000 + index as u16;
+        }
+        let bytes = bincode::encode_to_vec(&sample, bincode::config::standard()).unwrap();
+        let description = ValueDecodeDescription::from_type::<RcChannelsPayload>().unwrap();
+        let (decoded, used) = description
+            .decode(
+                &bytes,
+                bincode::config::standard(),
+                ValueDecodeLimits::default(),
+            )
+            .unwrap();
+        assert_eq!(used, bytes.len());
+        assert_eq!(
+            decoded,
+            Value::Seq(sample.0.0.into_iter().map(Value::U16).collect())
+        );
+    }
+
     use super::*;
     use bincode::{config, decode_from_slice, encode_to_vec};
 

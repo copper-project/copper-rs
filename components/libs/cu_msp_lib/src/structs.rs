@@ -15,6 +15,7 @@ use packed_struct::types::bits::ByteArray;
 use packed_struct::{PackedStruct, PackingError, PrimitiveEnum};
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 pub struct MspApiVersion {
     pub protocol_version: u8,
@@ -29,6 +30,7 @@ pub struct MspFlightControllerVariant {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 pub struct MspFlightControllerVersion {
     pub major: u8,
@@ -76,6 +78,7 @@ pub struct MspAvailableSensors {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
 #[derive(Serialize, Deserialize, Debug, Copy, Clone, Default, PartialEq, Eq)]
 pub struct MspStatusSensors {
     pub acc: bool,
@@ -124,6 +127,7 @@ impl From<MspStatusSensors> for u16 {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
 pub struct MspStatus {
     pub cycle_time: u16,
@@ -142,6 +146,7 @@ pub struct MspStatus {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
 pub struct MspStatusEx {
     pub cycle_time: u16,
@@ -381,6 +386,7 @@ pub struct MspBfConfig {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspRawImu {
@@ -483,6 +489,7 @@ pub struct MspAltitude {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspSensorRangefinder {
@@ -491,6 +498,7 @@ pub struct MspSensorRangefinder {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspSensorOpticFlow {
@@ -500,6 +508,7 @@ pub struct MspSensorOpticFlow {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspBatteryConfig {
@@ -515,6 +524,7 @@ pub struct MspBatteryConfig {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspVoltageMeterConfig {
@@ -528,6 +538,7 @@ pub struct MspVoltageMeterConfig {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspAnalog {
@@ -548,6 +559,7 @@ pub struct MspRssiConfig {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 pub struct MspVoltageMeter {
     pub id: u8,
@@ -565,6 +577,7 @@ pub struct MspCurrentMeter {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspBatteryState {
@@ -882,6 +895,7 @@ pub const MSP_DP_SYS: u8 = 6;
 pub const MSP_DP_FONTCHAR_WRITE: u8 = 7;
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
 #[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq, Eq)]
 pub struct MspDisplayPort {
     pub payload: Vec<u8>,
@@ -1270,6 +1284,7 @@ pub struct MspSettingInfo {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone)]
 #[packed_struct(endian = "lsb")]
 pub struct MspRc {
@@ -1319,6 +1334,7 @@ impl MspRc {
 
 // Gather all the commands in a common enum we can use as a higher level protocol
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub enum MspRequest {
     #[default]
