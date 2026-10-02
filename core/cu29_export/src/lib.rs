@@ -19,6 +19,9 @@ pub mod logstats;
 pub mod pgs;
 mod runs;
 
+#[cfg(feature = "self-describing-logs")]
+pub mod catalog;
+
 #[cfg(feature = "mcap")]
 pub mod mcap_export;
 

@@ -31,6 +31,7 @@ use bincode::value_decode::ValueDecodeRef;
 use core::any::TypeId;
 use cu29_clock::CuDuration;
 use cu29_clock::CuTime;
+use serde::{Deserialize, Serialize};
 
 /// A portable description of native encoded bytes. This API is experimental.
 ///
@@ -38,7 +39,7 @@ use cu29_clock::CuTime;
 /// and coherent storage unit of quantities that share a scalar representation.
 /// Versioned transport is supplied by `ValueDecodeCatalog` when the
 /// `decode-catalog` feature is enabled.
-#[derive(Clone, Debug, Encode, Decode)]
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct ValueDecodeDescription {
     /// Binding for the described payload.
     pub root: usize,
@@ -51,7 +52,7 @@ pub struct ValueDecodeDescription {
 }
 
 /// A wire operation bound to its original logical schema.
-#[derive(Clone, Debug, Encode, Decode)]
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct ValueDecodeBinding {
     /// Index into the operation table.
     pub operation: usize,
@@ -60,7 +61,7 @@ pub struct ValueDecodeBinding {
 }
 
 /// Original type identity and names, retained separately from wire operations.
-#[derive(Clone, Debug, Encode, Decode)]
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct ValueDecodeSchema {
     /// Reflected type path, or the native name for a standard wire type.
     pub type_path: String,
@@ -73,7 +74,7 @@ pub struct ValueDecodeSchema {
 }
 
 /// Canonical storage metadata; independent of debugger display preferences.
-#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, Serialize, Deserialize)]
 pub struct ValueDecodeQuantity {
     /// Quantity identity such as `length` or `mass`.
     pub quantity: String,
@@ -82,7 +83,7 @@ pub struct ValueDecodeQuantity {
 }
 
 /// A logical field bound by name or original declaration index.
-#[derive(Clone, Debug, Encode, Decode)]
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct ValueDecodeSchemaField {
     /// Named fields use their reflected name; tuple fields have no name.
     pub name: Option<String>,
@@ -93,7 +94,7 @@ pub struct ValueDecodeSchemaField {
 }
 
 /// A logical enum branch matched to its encoded tag.
-#[derive(Clone, Debug, Encode, Decode)]
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct ValueDecodeSchemaVariant {
     /// Original variant name.
     pub name: String,
@@ -102,7 +103,7 @@ pub struct ValueDecodeSchemaVariant {
 }
 
 /// Portable native scalar encoding. Widths are preserved in the value tree.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, Serialize, Deserialize)]
 pub enum ValueDecodeScalar {
     /// Native `bool` encoding.
     Bool,
@@ -135,7 +136,7 @@ pub enum ValueDecodeScalar {
 }
 
 /// Aggregate shape, independent of the native Rust memory layout.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, Serialize, Deserialize)]
 pub enum ValueDecodeShape {
     /// A unit record.
     Unit,
@@ -148,7 +149,7 @@ pub enum ValueDecodeShape {
 }
 
 /// One portable branch of a tagged encoding.
-#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, Serialize, Deserialize)]
 pub struct ValueDecodeBranch {
     /// Wire tag.
     pub tag: u32,
@@ -160,7 +161,7 @@ pub struct ValueDecodeBranch {
 
 /// Portable wire operations. Codec integer settings and endianness are supplied
 /// to [`ValueDecodeDescription::decode`] exactly as used by the producer.
-#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, Serialize, Deserialize)]
 pub enum ValueDecodeOp {
     /// No bytes.
     Unit,
@@ -235,6 +236,138 @@ impl Default for ValueDecodeLimits {
 }
 
 impl ValueDecodeDescription {
+    /// Validate all graph references and aggregate shapes, including unused branches.
+    /// Empty graphs represent catalogs containing only uncaptured slots.
+    pub fn validate(&self) -> Result<(), DecodeError> {
+        if self.bindings.is_empty() {
+            return if self.root == 0 && self.operations.is_empty() && self.schemas.is_empty() {
+                Ok(())
+            } else {
+                Err(DecodeError::Other("invalid empty ValueDecode graph"))
+            };
+        }
+        let binding = |id: usize| {
+            self.bindings
+                .get(id)
+                .ok_or(DecodeError::Other("invalid ValueDecode binding reference"))
+        };
+        binding(self.root)?;
+        let count = |scalar| match scalar {
+            ValueDecodeScalar::U8
+            | ValueDecodeScalar::U16
+            | ValueDecodeScalar::U32
+            | ValueDecodeScalar::U64 => Ok(()),
+            _ => Err(DecodeError::Other(
+                "ValueDecode count/tag must be an unsigned integer",
+            )),
+        };
+        let record = |shape, fields: &[usize], schema: &[ValueDecodeSchemaField]| {
+            if fields.len() != schema.len()
+                || (shape == ValueDecodeShape::Unit && !fields.is_empty())
+                || (shape == ValueDecodeShape::Newtype && fields.len() != 1)
+            {
+                return Err(DecodeError::Other(
+                    "ValueDecode record/schema shape mismatch",
+                ));
+            }
+            let mut names = alloc::collections::BTreeSet::new();
+            for (id, field) in fields.iter().zip(schema) {
+                if binding(*id)?.schema != field.schema {
+                    return Err(DecodeError::Other("ValueDecode child/schema mismatch"));
+                }
+                if shape == ValueDecodeShape::Struct {
+                    let name = field
+                        .name
+                        .as_ref()
+                        .ok_or(DecodeError::Other("missing ValueDecode field name"))?;
+                    if !names.insert(name) {
+                        return Err(DecodeError::Other("duplicate ValueDecode field name"));
+                    }
+                }
+            }
+            Ok(())
+        };
+        for schema in &self.schemas {
+            for field in schema
+                .fields
+                .iter()
+                .chain(schema.variants.iter().flat_map(|variant| &variant.fields))
+            {
+                if field.schema >= self.schemas.len() {
+                    return Err(DecodeError::Other("invalid ValueDecode schema reference"));
+                }
+            }
+        }
+        for operation in &self.operations {
+            match operation {
+                ValueDecodeOp::Record { fields, .. } => {
+                    for id in fields {
+                        binding(*id)?;
+                    }
+                }
+                ValueDecodeOp::Array { element, .. }
+                | ValueDecodeOp::Option(element)
+                | ValueDecodeOp::Delegate(element) => {
+                    binding(*element)?;
+                }
+                ValueDecodeOp::Sequence {
+                    element,
+                    count: scalar,
+                    ..
+                } => {
+                    binding(*element)?;
+                    count(*scalar)?;
+                }
+                ValueDecodeOp::Map { key, value } => {
+                    binding(*key)?;
+                    binding(*value)?;
+                }
+                ValueDecodeOp::Enum { tag, branches } => {
+                    count(*tag)?;
+                    let mut tags = alloc::collections::BTreeSet::new();
+                    for branch in branches {
+                        if !tags.insert(branch.tag) {
+                            return Err(DecodeError::Other("duplicate ValueDecode enum tag"));
+                        }
+                        for id in &branch.fields {
+                            binding(*id)?;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        for bound in &self.bindings {
+            let operation = self
+                .operations
+                .get(bound.operation)
+                .ok_or(DecodeError::Other(
+                    "invalid ValueDecode operation reference",
+                ))?;
+            let schema = self
+                .schemas
+                .get(bound.schema)
+                .ok_or(DecodeError::Other("invalid ValueDecode schema reference"))?;
+            match operation {
+                ValueDecodeOp::Record { shape, fields } => record(*shape, fields, &schema.fields)?,
+                ValueDecodeOp::Enum { branches, .. } => {
+                    if branches.len() != schema.variants.len() {
+                        return Err(DecodeError::Other("ValueDecode enum/schema mismatch"));
+                    }
+                    let mut names = alloc::collections::BTreeSet::new();
+                    for (branch, variant) in branches.iter().zip(&schema.variants) {
+                        if !names.insert(&variant.name) {
+                            return Err(DecodeError::Other("duplicate ValueDecode variant name"));
+                        }
+                        record(branch.shape, &branch.fields, &variant.fields)?;
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
     /// Bind generated wire operations to reflection and Copper standard quantities.
     /// Encoded fields hidden from reflection produce an error naming that field.
     ///
@@ -303,10 +436,34 @@ impl ValueDecodeDescription {
         config: C,
         limits: ValueDecodeLimits,
     ) -> Result<(Value, usize), DecodeError> {
+        self.decode_at(self.root, bytes, config, limits)
+    }
+
+    /// Decode one binding from a shared catalog without cloning its graph.
+    pub fn decode_at<C: Config>(
+        &self,
+        binding: usize,
+        bytes: &[u8],
+        config: C,
+        limits: ValueDecodeLimits,
+    ) -> Result<(Value, usize), DecodeError> {
+        let mut remaining = limits.max_values;
+        self.decode_at_with_budget(binding, bytes, config, limits, &mut remaining)
+    }
+
+    /// Shared allocation budget for offline CopperList readers.
+    #[doc(hidden)]
+    pub fn decode_at_with_budget<C: Config>(
+        &self,
+        binding: usize,
+        bytes: &[u8],
+        config: C,
+        limits: ValueDecodeLimits,
+        remaining: &mut usize,
+    ) -> Result<(Value, usize), DecodeError> {
         let reader = ValueReader { bytes, offset: 0 };
         let mut decoder = bincode::de::DecoderImpl::new(reader, config, ());
-        let mut remaining = limits.max_values;
-        let value = self.decode_binding(self.root, &mut decoder, limits, &mut remaining, 1)?;
+        let value = self.decode_binding(binding, &mut decoder, limits, remaining, 1)?;
         Ok((value, decoder.reader().offset))
     }
 
