@@ -172,6 +172,45 @@ web-dist:
   trunk build --release --public-url ./ --dist dist/flight-controller
   echo "Static web bundle written to ${PWD}/dist/flight-controller"
 
+# Inspect an embedded catalog; pass --export-format ron or json for a complete dump.
+catalog log="logs/flight_controller_sim.copper" *args:
+  just logextract "{{log}}" catalog {{args}}
+
+# Decode recorded payloads using the embedded catalog (JSONL by default).
+extract log="logs/flight_controller_sim.copper" format="jsonl":
+  just logextract "{{log}}" extract-copperlists --export-format "{{format}}"
+
+# Validate every recorded payload using the embedded catalog.
+deep-fsck log="logs/flight_controller_sim.copper":
+  just logextract "{{log}}" fsck --deep
+
+# Standalone offline tool; relative log paths are resolved from this example.
+logextract log="logs/flight_controller_sim.copper" *args:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  log="{{log}}"
+  if [[ "$log" != /* ]]; then
+    log="{{justfile_directory()}}/${log}"
+  fi
+  cd "{{ROOT}}"
+  cargo run --quiet -p cu29-export --features self-describing-logs --bin cu29-logextract -- "$log" {{args}}
+
+# Check catalog generation and both simulation runtimes.
+catalog-check:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  cargo test -p cu-crsf -p cu-msp-bridge -p cu-sensor-payloads --lib --features cu-crsf/self-describing-logs,cu-msp-bridge/self-describing-logs,cu-sensor-payloads/self-describing-logs catalog_decodes_native
+  cargo check -p cu-flight-controller --no-default-features --features sim,forest-world --bin quad-sim
+
+# Record and catalog-decode both subsystem logs without opening a window.
+catalog-smoke:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  mkdir -p target/flight-catalog-smoke
+  TMPDIR="{{ROOT}}/target/flight-catalog-smoke" cargo test -p cu-flight-controller --no-default-features --features sim,forest-world --bin quad-sim subsystem_logs_record_predictions_and_complete_distributed_replay
+
 # Extract CopperLists from a log file (JSON export).
 logreader log="logs/flight_controller_sim.copper":
   #!/usr/bin/env bash
