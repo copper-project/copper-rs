@@ -634,3 +634,32 @@ fn test_quantity_registrations_cover_both_widths_and_named_dimensionless_units()
         );
     }
 }
+
+#[test]
+fn test_opaque_encoding_recipes_describe_enum_and_record_fields() {
+    #[derive(Debug, Clone, PartialEq, Encode, Decode, Reflect)]
+    #[reflect(opaque)]
+    enum Update {
+        NoChange,
+        Set(u16),
+        Clear,
+    }
+    for (sample, expected) in [
+        (Update::NoChange, Value::String("NoChange".into())),
+        (Update::Set(300), map(&[("Set", Value::U16(300))])),
+        (Update::Clear, Value::String("Clear".into())),
+    ] {
+        round_trip(&sample, expected, bincode::config::standard());
+    }
+
+    #[derive(Debug, Clone, PartialEq, Encode, Decode, Reflect)]
+    #[reflect(opaque)]
+    struct Sample {
+        channel: u16,
+    }
+    round_trip(
+        &Sample { channel: 300 },
+        map(&[("channel", Value::U16(300))]),
+        bincode::config::standard(),
+    );
+}

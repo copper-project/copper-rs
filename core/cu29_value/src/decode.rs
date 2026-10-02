@@ -667,7 +667,7 @@ impl DescriptionBuilder<'_> {
                         Some(TypeInfo::Enum(info)) => info.variant(variant.name),
                         _ => None,
                     };
-                    if reflected.is_none() {
+                    if reflected.is_none() && !matches!(info, Some(TypeInfo::Opaque(_))) {
                         return Err(DecodeError::OtherString(format!(
                             "ValueDecode: {0} variant {1} is missing from reflection",
                             ty.type_name, variant.name
@@ -717,6 +717,9 @@ impl DescriptionBuilder<'_> {
     ) -> Result<(Vec<usize>, Vec<ValueDecodeSchemaField>), DecodeError> {
         let mut children = Vec::new();
         let mut schemas = Vec::new();
+        // Opaque reflection intentionally has no field/variant view. Its static
+        // encoding recipe supplies the declaration names, positions and types.
+        let opaque = matches!(info, Some(TypeInfo::Opaque(_)));
         for field in fields {
             let ty = (field.value.describe)();
             let (name, reflected) = match field.selector {
@@ -748,7 +751,7 @@ impl DescriptionBuilder<'_> {
                             _ => None,
                         },
                     };
-                    if reflected_len != Some(declared_fields) {
+                    if !opaque && reflected_len != Some(declared_fields) {
                         return Err(DecodeError::OtherString(format!(
                             "ValueDecode: {parent} tuple field {index} cannot be bound because reflection omits declaration positions"
                         )));
@@ -775,7 +778,7 @@ impl DescriptionBuilder<'_> {
                     (None, reflected)
                 }
             };
-            if reflected != Some(ty.type_id) {
+            if !opaque && reflected != Some(ty.type_id) {
                 return Err(DecodeError::OtherString(format!(
                     "ValueDecode: {parent} field {:?} ({}) is missing from reflection or has a different type",
                     field.selector, ty.type_name
