@@ -711,6 +711,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#resource-usage-in-the-dag" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resource usage in the DAG
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#creating-or-adding-resources" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -737,6 +748,17 @@
     <span class="md-ellipsis">
       
         Examples
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#composing-resource-bundles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Composing resource bundles
       
     </span>
   </a>
@@ -943,6 +965,62 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Reading-Unified-Logs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reading Unified Logs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Remote-Debugging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Remote Debugging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -1306,6 +1384,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#resource-usage-in-the-dag" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resource usage in the DAG
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#creating-or-adding-resources" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1332,6 +1421,17 @@
     <span class="md-ellipsis">
       
         Examples
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#composing-resource-bundles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Composing resource bundles
       
     </span>
   </a>
@@ -1416,6 +1516,14 @@ impl CuTask for TelemetryTask {
 <li>Use <code>missions: [...]</code> on resource entries to scope bundles to specific missions.</li>
 <li>See <a href="../Copper-RON-Configuration-Reference/">Copper Configuration file Reference</a> for the full schema.</li>
 </ul>
+<h2 id="resource-usage-in-the-dag">Resource usage in the DAG<a class="headerlink" href="#resource-usage-in-the-dag" title="Permanent link">&para;</a></h2>
+<p><code>cu29-graph-view</code> shows resource bundles in tables alongside the task graph. The
+<strong>Used by</strong> column identifies task, bridge, and system consumers. A transport
+resource referenced by <code>log_streaming.destinations[].transport.resource</code> appears
+as <code>system: logstream (&lt;destination id&gt;)</code>, even when no task or bridge binds it.
+For example, the logstream demo shows <code>network.tx</code> used by
+<code>system: logstream (ground)</code>. This usage is inferred from the existing config;
+no additional resource annotation is needed.</p>
 <h2 id="creating-or-adding-resources">Creating or adding resources<a class="headerlink" href="#creating-or-adding-resources" title="Permanent link">&para;</a></h2>
 <p>1) Define the resource types you want to expose (drivers, pools, arenas, handles).
 2) Declare bundle IDs with <code>bundle_resources!</code>.
@@ -1467,6 +1575,49 @@ when validating that adjacent tasks forwarded the same allocation.</p>
 <li><code>https://github.com/copper-project/copper-rs/tree/master/examples/cu_elrs_bdshot_demo</code> - Embedded demo that wires a board resource bundle into tasks and bridges.</li>
 <li><code>https://github.com/copper-project/copper-rs/tree/master/examples/cu_flight_controller</code> - Uses the <code>resources!</code> macro to bind board peripherals to tasks.</li>
 </ul>
+<h2 id="composing-resource-bundles">Composing resource bundles<a class="headerlink" href="#composing-resource-bundles" title="Permanent link">&para;</a></h2>
+<p>Resource bundles can consume other bundles' outputs through their own <code>resources</code>
+map. For example, a UART and SET pin become an HC-12 radio, and that radio can
+become a serial LogStream transport:</p>
+<pre><code class="language-ron">resources: [
+    (id: &quot;board&quot;, provider: &quot;BoardResources&quot;),
+    (id: &quot;radio&quot;, provider: &quot;RadioResources&quot;,
+     resources: { &quot;serial&quot;: &quot;board.uart&quot;, &quot;set&quot;: &quot;board.set&quot;, &quot;delay&quot;: &quot;board.delay&quot; },
+     config: { &quot;channel&quot;: 21 }),
+    (id: &quot;telemetry&quot;, provider: &quot;RadioLogResources&quot;,
+     resources: { &quot;serial&quot;: &quot;radio.serial&quot; }),
+],
+</code></pre>
+<p><code>RadioResources</code> and <code>RadioLogResources</code> are concrete application aliases for the
+chosen hardware and framing providers. The runtime macro computes construction
+order per mission; declaration order does not change bundle indices. Cycles,
+missing/inactive providers and unknown input or output names fail compilation.
+Bindings compile into static resource keys. Changes to provider input wiring need
+a rebuild; a runtime configuration cannot replace the compiled input topology.</p>
+<p>A composing provider declares inputs with <code>resources!</code>, sets
+<code>ResourceBundle::INPUT_NAMES</code> to <code>&lt;Inputs as ResourceBindings&gt;::NAMES</code>, and calls
+<code>bundle.inputs::&lt;Inputs&gt;(manager)?</code> inside its existing <code>build</code> method. It consumes
+owned inputs or clones explicitly shared handles, then registers the wrapped
+output. Borrowed manager references cannot be stored in owned <code>'static</code> outputs.
+Concrete resource types and exclusive takes are still checked by the manager at
+startup. Existing providers require no changes: <code>INPUT_NAMES</code> defaults to empty,
+and the <code>ResourceBundle::build</code> signature is unchanged.</p>
+<p><code>just graph</code> includes bundle consumers and LogStream destinations in each resource's
+“Used by” column. Dashed directed arrows run from provider bundles to consuming
+bundles; hover an arrow for the source slot and destination binding. These arrows
+show startup dependencies, not scheduled task-message edges.</p>
+<p>The <code>cu-hc12</code> component offers FU3 channel configuration, <code>cu-serial-bridge</code> offers
+raw byte channels, and <code>cu29-logstream-serial</code> adds bounded packet framing. Choose
+one consumer per radio. Multiplexing raw traffic and log streaming requires an
+explicit framing and routing protocol.</p>
+<p>For USB-to-TTL HC-12 wiring on Unix, enable the <code>cu-linux-resources/serial-rts</code>
+Cargo feature and set <code>serial0_rts: true</code> alongside <code>serial0_dev</code> and
+<code>serial0_nonblocking: true</code> in the Linux bundle config. Bind the radio's <code>set</code>
+input to <code>board.serial0_rts</code> and use <code>LinuxSerialRtsPin</code> as its pin type. This
+owned <code>OutputPin</code> disables flow control, starts high and maps low/high to
+asserted/deasserted active-low RTS#. Use a compatible 3.3 V RTS# output and common
+ground. The same option works for <code>serial1</code> through <code>serial5</code>; unsupported modem
+control fails startup. The HC-12 echo example shows complete USB-only wiring.</p>
 
 
 

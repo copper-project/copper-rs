@@ -951,6 +951,62 @@
   
   
     <li class="md-nav__item">
+      <a href="../Reading-Unified-Logs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reading Unified Logs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Remote-Debugging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Remote Debugging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../SDK-Features/" class="md-nav__link">
         
   
@@ -1428,7 +1484,7 @@ cargo run -p cu_example_app
 <li><code>cd support/cargo_cunew/templates &amp;&amp; just gen-project</code></li>
 <li><code>cd support/cargo_cunew/templates &amp;&amp; just gen-workspace</code></li>
 </ul>
-<p>Generated projects include <code>just dag</code> for graph topology and <code>just plan</code> for the exact generated process order. <code>just plan-log</code> uses the default Copper log, while <code>just plan log=logs/&lt;app&gt;.copper</code> selects one explicitly; both add packed, proportional observed task timing through the generated typed logreader. Local and published/git dependency modes resolve the matching first-party renderer automatically.</p>
+<p>Generated host projects include <code>just graph[-log]</code> for topology and <code>just sched[-log]</code> for the generated process order and recorded timing. <code>cargo-cunew</code> asks whether the target is bare-metal/no_std; that choice omits host-only PGS helpers. Host templates also include <code>pgs-baseline</code>, <code>pgs-optimize candidates=3</code>, <code>pgs-candidate candidate=1</code>, and <code>pgs-measure candidates=1</code>. Tune the starter <code>schedule.ron</code> deadline, CPU set, and timing assumptions before using its ranking for a real application.</p>
 
 
 
