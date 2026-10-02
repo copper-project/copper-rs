@@ -173,7 +173,6 @@ pub(crate) struct RunReader {
 }
 
 impl RunReader {
-    #[cfg(feature = "self-describing-logs")]
     pub(crate) fn position(&self) -> LogPosition {
         self.inner.position()
     }

@@ -18,7 +18,7 @@ const MAX_COPPERLIST_BYTES: usize = 16 * 1024 * 1024;
 const MAX_SLOTS: usize = 65_536;
 
 /// One recorded slot decoded without its native payload type. Experimental API.
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 pub struct CuDecodedLogSlot {
     /// Task or bridge/channel identity in catalog order.
     pub task_id: String,
@@ -27,6 +27,7 @@ pub struct CuDecodedLogSlot {
     /// Whether this record contains payload bytes.
     pub captured_payload_present: bool,
     /// Decoded payload; its catalog schema retains scalar widths and storage units.
+    #[serde(serialize_with = "crate::value_export::serialize_payload")]
     pub payload: Option<Value>,
     /// Time of validity.
     pub tov: Tov,
@@ -35,7 +36,7 @@ pub struct CuDecodedLogSlot {
 }
 
 /// A CopperList decoded to offline values. Experimental API.
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 pub struct CuDecodedCopperList {
     /// Recorded cycle identifier.
     pub id: u64,
@@ -122,6 +123,12 @@ pub fn copperlist_values_reader(
         position,
         finished: false,
     })
+}
+
+impl CopperListValueReader {
+    pub(crate) fn catalog(&self) -> &ValueDecodeCatalog {
+        &self.catalog
+    }
 }
 
 impl Iterator for CopperListValueReader {

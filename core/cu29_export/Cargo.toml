@@ -18,6 +18,11 @@ repository.workspace = true
 name = "cu29_export"
 crate-type = ["cdylib", "rlib"]
 
+[[bin]]
+name = "cu29-logextract"
+path = "src/bin/cu29-logextract.rs"
+required-features = ["self-describing-logs"]
+
 [dependencies]
 cu29 = { workspace = true, features = ["reflect"] }
 cu29-clock = { workspace = true }
@@ -40,6 +45,7 @@ erased-serde = { version = "0.4", optional = true, default-features = false }
 
 
 [dev-dependencies]
+brotli = { version = "8.0.4", default-features = false, features = ["std"] }
 cu-sensor-payloads = { workspace = true }
 tempfile = { workspace = true }
 jsonschema = { version = "0.56", default-features = false }
