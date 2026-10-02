@@ -2,7 +2,20 @@
 
 Run `just` here to build a compressed catalog on the host, embed it as a Rust static
 byte array, and record it alongside ten wheel samples in `logs/wheel.copper`.
-Run `just check` to verify the complete build/startup/offline-read workflow.
+The default also displays the catalog and runs deep fsck.
+Run `just check` to verify the build/startup workflow.
+
+```sh
+just catalog --export-format ron > catalog.ron
+just catalog --export-format json > catalog.json
+just extract --export-format jsonl > samples.jsonl
+just extract --export-format csv > samples.csv
+just fsck
+```
+
+These commands use the standalone `cu29-logextract` binary. Each of the ten
+CopperLists contains two captured wheel payloads; the sink retains its metadata.
+The catalog carries storage units for distance, speed and time.
 
 The `payloads` crate is shared between the host build script and application.
 `gen_cumsgs!("copperconfig.ron")` supplies `cumsgs::value_decode_catalog()` using
@@ -38,5 +51,5 @@ Brotli gives the smallest result in this comparison. Compression runs only durin
 the host build. The catalog's layout byte differs between compact and flat
 CopperList encoding, so the flat build can differ slightly in compressed size.
 
-The next integration step supplies standalone CopperList metadata interpretation
-and CLI/Python export of complete recorded CopperLists.
+The same recorded slabs can be read through the registration-free Python API; see
+[standalone decoding](../../doc/self-describing-logs.md#rust-and-python).
