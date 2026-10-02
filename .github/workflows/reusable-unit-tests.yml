@@ -139,9 +139,11 @@ jobs:
           cargo +${{ inputs.toolchain }} clippy -p cu-logstream-demo --all-targets --features replay -- --deny warnings
           cargo +${{ inputs.toolchain }} build -p cu-logstream-demo --features replay --bins
           python3 examples/cu_logstream_demo/run.py all --binary "${CARGO_TARGET_DIR:-target}/debug/cu-logstream-demo"
-      - name: Run cu29-derive ui tests on (ubuntu-26.04 | debug)
+      - name: Run compile tests on (ubuntu-26.04 | debug)
         if: matrix.task == 'ui'
-        run: cargo +${{ inputs.toolchain }} test -p cu29-derive test_compile_fail -- --nocapture
+        run: |
+          cargo +${{ inputs.toolchain }} test -p cu29-derive --lib test_compile_fail -- --nocapture
+          cargo +${{ inputs.toolchain }} test -p cu29-value --features self-describing-logs --test value_decode_compile -- --nocapture
       - name: Run cu-caterpillar determinism test (determinism_ci)
         if: matrix.task == 'test'
         env:
@@ -229,9 +231,11 @@ jobs:
           cargo +${{ inputs.toolchain }} clippy -p cu-logstream-demo --all-targets --features replay -- --deny warnings
           cargo +${{ inputs.toolchain }} build -p cu-logstream-demo --features replay --bins
           python3 examples/cu_logstream_demo/run.py all --binary "${CARGO_TARGET_DIR:-target}/debug/cu-logstream-demo"
-      - name: Run cu29-derive ui tests on (${{ inputs.linux_runner_label }} | debug)
+      - name: Run compile tests on (${{ inputs.linux_runner_label }} | debug)
         if: matrix.task == 'ui'
-        run: cargo +${{ inputs.toolchain }} test -p cu29-derive test_compile_fail -- --nocapture
+        run: |
+          cargo +${{ inputs.toolchain }} test -p cu29-derive --lib test_compile_fail -- --nocapture
+          cargo +${{ inputs.toolchain }} test -p cu29-value --features self-describing-logs --test value_decode_compile -- --nocapture
       - name: Run cu-caterpillar determinism test (determinism_ci)
         if: matrix.task == 'test'
         env:
@@ -441,9 +445,11 @@ jobs:
           cargo +${{ inputs.toolchain }} clippy -p cu-logstream-demo --all-targets --features replay -- --deny warnings
           cargo +${{ inputs.toolchain }} build -p cu-logstream-demo --features replay --bins
           python3 examples/cu_logstream_demo/run.py all --binary "${CARGO_TARGET_DIR:-target}/debug/cu-logstream-demo"
-      - name: Run cu29-derive ui tests on (${{ matrix.target_os == 'windows' && inputs.windows_runner_label || 'macos-latest' }} | debug)
+      - name: Run compile tests on (${{ matrix.target_os == 'windows' && inputs.windows_runner_label || 'macos-latest' }} | debug)
         if: matrix.task == 'ui'
-        run: cargo +${{ inputs.toolchain }} test -p cu29-derive test_compile_fail -- --nocapture
+        run: |
+          cargo +${{ inputs.toolchain }} test -p cu29-derive --lib test_compile_fail -- --nocapture
+          cargo +${{ inputs.toolchain }} test -p cu29-value --features self-describing-logs --test value_decode_compile -- --nocapture
       - name: Run cu-caterpillar determinism test (determinism_ci)
         if: matrix.task == 'test' && matrix.target_os == 'macos'
         env:

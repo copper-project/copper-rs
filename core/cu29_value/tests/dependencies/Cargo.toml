@@ -1,0 +1,17 @@
+[package]
+name = "cu29-value-ui-dependencies"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+bincode = { workspace = true, features = ["self-describing"] }
+
+[package.metadata.cargo-shear]
+# ui_test exposes this dependency to the fixture files through --extern.
+ignored = ["bincode"]

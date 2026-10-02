@@ -101,8 +101,8 @@ wrappers.
 
 ## Compile Tests
 
-Run `just compile-tests` for the proc-macro and lifecycle compile fixtures, or
-`just compile-tests beta` to check the next compiler release. The harness
+Run `just compile-tests` for the proc-macro, lifecycle, and value-description
+compile fixtures, or `just compile-tests beta` to check the next compiler release. The harness
 uses `ui_test` to check structured diagnostics and combines the successful fixtures
 into one compile-pass application.
 
@@ -124,6 +124,9 @@ wording or error codes for the same failure. Prefer a code assertion when it is
 consistent across supported compilers. Keep patterns specific enough to identify
 the intended failure. The harness ignores rendered output and does not require
 stderr snapshots or blessing.
+
+Use this harness for new compile-fail tests. Assert structured diagnostics rather
+than rendered compiler output, which changes across compiler releases.
 
 ## Design Expectations
 

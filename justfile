@@ -117,6 +117,7 @@ publish:
 # Compile fixtures: error codes/messages and successful downstream applications.
 compile-tests toolchain="stable":
     cargo +{{toolchain}} test -p cu29-derive --lib test_compile_fail -- --nocapture
+    cargo +{{toolchain}} test -p cu29-value --features self-describing-logs --test value_decode_compile -- --nocapture
 
 # Formatting, typo, and clippy checks.
 lint:
