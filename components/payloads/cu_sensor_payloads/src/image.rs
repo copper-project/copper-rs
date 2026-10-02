@@ -170,7 +170,7 @@ where
 {
     pub seq: u64,
     pub format: CuImageBufferFormat,
-    #[reflect(ignore)]
+    #[cfg_attr(not(feature = "self-describing-logs"), reflect(ignore))]
     pub buffer_handle: CuHandle<A>,
 }
 
@@ -432,6 +432,43 @@ where
 #[cfg(test)]
 mod tests {
     use super::{CuImageBufferFormat, CuImagePlaneLayout};
+
+    #[cfg(feature = "self-describing-logs")]
+    #[test]
+    fn test_catalog_decodes_native_image() {
+        use super::CuImage;
+        use cu29::prelude::*;
+
+        let mut sample = CuImage::new(
+            CuImageBufferFormat {
+                width: 1,
+                height: 1,
+                stride: 3,
+                pixel_format: *b"RGB3",
+            },
+            CuHandle::new_detached(vec![1u8, 2, 255]),
+        );
+        sample.seq = 42;
+        let config = bincode::config::standard();
+        let bytes = bincode::encode_to_vec(&sample, config).unwrap();
+        let description = ValueDecodeDescription::from_type::<CuImage<Vec<u8>>>().unwrap();
+        let (decoded, used) = description
+            .decode(&bytes, config, ValueDecodeLimits::default())
+            .unwrap();
+        assert_eq!(used, bytes.len());
+        let Value::Map(fields) = decoded else {
+            panic!("expected named image fields")
+        };
+        assert_eq!(fields[&Value::String("seq".into())], Value::U64(42));
+        assert_eq!(
+            fields[&Value::String("format".into())],
+            to_value(sample.format).unwrap()
+        );
+        assert_eq!(
+            fields[&Value::String("buffer_handle".into())],
+            Value::Seq(vec![Value::U8(1), Value::U8(2), Value::U8(255)])
+        );
+    }
 
     fn assert_plane(
         plane: Option<CuImagePlaneLayout>,

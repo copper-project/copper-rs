@@ -38,6 +38,17 @@ self-describing-logs-check:
 	cargo check -p cu29 -p cu29-value -p cu29-value-types --no-default-features
 	cargo check -p cu29 -p cu29-value -p cu29-value-types -p cu29-units --no-default-features --target thumbv7em-none-eabihf
 
+# Verify sensor and protocol descriptions against their native encoders.
+self-describing-payloads-check:
+	cargo test -p cu-crsf -p cu-msp-bridge -p cu-sensor-payloads --lib --features cu-crsf/self-describing-logs,cu-msp-bridge/self-describing-logs,cu-sensor-payloads/self-describing-logs
+	cargo test -p cu-sensor-payloads --features self-describing-logs --test pointcloud_soa_handle_export
+	cargo test -p cu-msp-lib --features self-describing-logs
+	cargo clippy -p cu-crsf -p cu-msp-bridge -p cu-msp-lib -p cu-sensor-payloads --all-targets --features cu-crsf/self-describing-logs,cu-msp-bridge/self-describing-logs,cu-msp-lib/self-describing-logs,cu-sensor-payloads/self-describing-logs -- --deny warnings
+	cargo check -p cu-crsf -p cu-msp-bridge -p cu-msp-lib -p cu-sensor-payloads --no-default-features --features cu-crsf/alloc,cu-msp-bridge/alloc,cu-msp-lib/bincode
+	cargo check -p cu-flight-controller-catalog --features sim,compute
+	cargo clippy -p cu-zed --all-targets --features self-describing-logs -- --deny warnings
+	cargo test -p cu-zed --features self-describing-logs
+
 # Run standalone catalog-backed log tools from the workspace root.
 logextract *args:
     cargo run --quiet -p cu29-export --features self-describing-logs --bin cu29-logextract -- {{args}}

@@ -1,0 +1,49 @@
+[package]
+name = "cu-flight-controller-catalog"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[package.metadata.copper]
+ci_exclude_workspace = true
+
+[features]
+sim = []
+end2end = []
+bevymon = []
+compute = ["dep:cu-zed", "dep:cu-vitfly"]
+
+[dependencies]
+cu29 = { workspace = true, features = ["self-describing-logs"] }
+cu29-build = { workspace = true, features = ["self-describing-logs"] }
+cu-ahrs = { path = "../../../components/tasks/cu_ahrs" }
+cu-bdshot = { path = "../../../components/bridges/cu_bdshot", default-features = false, features = [
+  "messages-only",
+] }
+cu-crsf = { path = "../../../components/bridges/cu_crsf", default-features = false, features = [
+  "alloc",
+  "self-describing-logs",
+] }
+cu-msp-bridge = { path = "../../../components/bridges/cu_msp_bridge", default-features = false, features = [
+  "alloc",
+  "self-describing-logs",
+] }
+cu-sensor-payloads = { workspace = true, features = ["self-describing-logs"] }
+cu-msp-lib = { path = "../../../components/libs/cu_msp_lib", features = [
+  "self-describing-logs",
+] }
+cu-gnss-payloads = { path = "../../../components/payloads/cu_gnss_payloads" }
+cu-zed = { version = "=1.3.0-dev", features = [
+  "self-describing-logs",
+], optional = true }
+cu-vitfly = { version = "=1.3.0-dev", default-features = false, optional = true }
+serde = { workspace = true }
+bincode = { workspace = true }
+
+[build-dependencies]
+cu29-build = { workspace = true }
+
+[lib]
+path = "lib.rs"
