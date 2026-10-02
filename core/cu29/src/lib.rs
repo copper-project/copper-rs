@@ -350,6 +350,11 @@ pub mod prelude {
     pub use cu29_unifiedlog::memmap;
     pub use cu29_unifiedlog::*;
     #[cfg(feature = "self-describing-logs")]
+    pub use cu29_value::catalog::{
+        ValueDecodeCatalog, ValueDecodeCatalogBuilder, ValueDecodeCatalogHeader,
+        ValueDecodeCatalogLayout,
+    };
+    #[cfg(feature = "self-describing-logs")]
     pub use cu29_value::decode::{ValueDecodeDescription, ValueDecodeLimits};
     pub use cu29_value::to_value;
     pub use cu29_value::{
@@ -357,6 +362,10 @@ pub mod prelude {
     };
     pub use serde_derive::{Deserialize, Serialize};
 }
+
+/// Versioned self-describing payload catalogs (experimental).
+#[cfg(feature = "self-describing-logs")]
+pub use cu29_value::catalog as value_decode_catalog;
 
 #[cfg(all(test, feature = "std"))]
 mod tests {

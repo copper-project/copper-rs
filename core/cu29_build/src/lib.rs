@@ -35,3 +35,6 @@ mod tests {
         assert_eq!(COPPER_CFG_FEATURES_ENV, "COPPER_CFG_FEATURES");
     }
 }
+
+#[cfg(feature = "self-describing-logs")]
+pub mod catalog;

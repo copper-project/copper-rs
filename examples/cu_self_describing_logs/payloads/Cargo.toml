@@ -1,0 +1,15 @@
+[package]
+name = "cu-self-describing-payloads"
+description = "Shared wheel payloads for the embedded decode catalog example."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+cu29 = { workspace = true, features = ["reflect"] }
+serde = { workspace = true }
+
+[features]
+self-describing-logs = ["cu29/self-describing-logs"]

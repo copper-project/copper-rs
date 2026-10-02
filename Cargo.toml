@@ -105,6 +105,8 @@ members = [
   "examples/cu_bridge_test",
   "examples/cu_bevymon_demo",
   "examples/cu_caterpillar",
+  "examples/cu_self_describing_logs",
+  "examples/cu_self_describing_logs/payloads",
   "examples/cu_logstream_demo",
   "examples/cu_distributed_resim_demo",
   "examples/cu_elrs_bdshot_demo",

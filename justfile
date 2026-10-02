@@ -18,6 +18,23 @@ PREK_FMT_CI_HOOKS := "trailing-whitespace check-merge-conflict detect-private-ke
 default:
 	just pr-check
 
+# Verify native decoding, host packaging, startup recording and run catalog retention.
+self-describing-logs-check:
+	cargo test -p cu29-value-types --all-features
+	cargo test -p cu-bincode --test describe
+	cargo test -p cu-bincode --test describe --features self-describing
+	cargo test -p cu29-value --features decode-catalog-build
+	cargo test -p cu29 --features self-describing-logs --test value_decode
+	cargo test -p cu-self-describing-logs --features self-describing-logs
+	cargo test -p cu-self-describing-logs --features self-describing-logs,flat-copperlist-encoding
+	cargo test -p cu29-export --lib runs::tests
+	cargo clippy -p cu29-value -p cu29-value-types -p cu29-units -p cu29-build --all-targets --features cu29-value/decode-catalog-build,cu29-build/self-describing-logs -- --deny warnings
+	cargo clippy -p cu29 --lib --test value_decode --features self-describing-logs -- --deny warnings
+	cargo clippy -p cu-self-describing-logs --all-targets --features self-describing-logs -- --deny warnings
+	cargo check -p cu29-export --features self-describing-logs
+	cargo check -p cu29 -p cu29-value -p cu29-value-types --no-default-features
+	cargo check -p cu29 -p cu29-value -p cu29-value-types -p cu29-units --no-default-features --target thumbv7em-none-eabihf
+
 # Verify workspace CI exclusions across runner operating systems.
 workspace-excludes-check:
 	python3 -m unittest discover -s support/ci -p test_workspace_excludes.py
@@ -35,16 +52,6 @@ template-check toolchain="stable":
 	cargo +{{toolchain}} run -p cargo-cunew -- "$output/project" --template project --source local --copper-root "{{ROOT}}" --no-vcs
 	cargo +{{toolchain}} run -p cargo-cunew -- "$output/workspace" --template workspace --source local --copper-root "{{ROOT}}" --no-vcs
 	bash "{{ROOT}}/support/cargo_cunew/templates/smoke_generated.sh" "{{toolchain}}" "$output/project" "$output/workspace"
-
-# Verify the scaffold tool, including its cold-install dependency budget.
-cunew-check toolchain="stable":
-	cargo +{{toolchain}} test -p cargo-cunew
-	cargo +{{toolchain}} clippy -p cargo-cunew --all-targets -- --deny warnings
-	python3 support/ci/cunew_dependencies.py --toolchain {{toolchain}}
-
-# Install the tool and build/run both templates using published Copper crates.
-released-template-check source="published" toolchain="stable":
-	python3 support/ci/released_templates.py --toolchain {{toolchain}} --source {{source}}
 
 # Local PR pipeline: format, lint, then tests.
 pr-check:

@@ -1,11 +1,11 @@
 error[E0277]: the trait bound `NativeOnly: ValueDecode` is not satisfied
- --> tests/ui/missing_nested_recipe.rs:6:10
+ --> tests/ui/missing_nested_description.rs:6:10
   |
 6 | #[derive(Encode)]
   |          ^^^^^^ unsatisfied trait bound
   |
 help: the trait `ValueDecode` is not implemented for `NativeOnly`
- --> tests/ui/missing_nested_recipe.rs:2:1
+ --> tests/ui/missing_nested_description.rs:2:1
   |
 2 | struct NativeOnly;
   | ^^^^^^^^^^^^^^^^^
