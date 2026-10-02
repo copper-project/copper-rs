@@ -76,7 +76,20 @@ fn test_machine_output_and_process_failure_contract() {
     );
     assert!(output.status.success());
     assert!(!output.stdout.contains(&0x1b));
-    assert!(run(&good, &["fsck", "--deep"]).status.success());
+    let basic = run(&good, &["fsck"]);
+    assert!(basic.status.success());
+    let basic = String::from_utf8(basic.stdout).unwrap();
+    assert!(basic.contains("# of Catalogs"));
+    let catalog_bytes = include_bytes!("../../cu29_value/tests/fixtures/catalog_v1.bin").len();
+    assert!(basic.contains(&format!("Catalog total size    -> {catalog_bytes} bytes")));
+    let deep = run(&good, &["fsck", "--deep"]);
+    assert!(deep.status.success());
+    let deep = String::from_utf8(deep.stdout).unwrap();
+    assert!(deep.contains("\n\n  Deep validation"));
+    assert!(deep.contains("-> passed"));
+    assert!(deep.contains("# of captured payloads -> 0"));
+    assert!(deep.contains("Payload total size     -> 0 bytes"));
+    assert!(!deep.contains("frozen task-state"));
     for (name, catalog, corrupt, duplicate) in [
         ("legacy", false, false, false),
         ("corrupt", true, true, false),

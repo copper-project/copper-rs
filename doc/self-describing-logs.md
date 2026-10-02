@@ -395,8 +395,10 @@ Plain standalone `fsck` checks structure and common record streams. `fsck --deep
 requires a catalog, validates every graph reference/branch and completely decodes
 all recorded CopperLists and captured payloads. Truncation, invalid tags, missing
 bindings and repeated/decreasing CL IDs fail with a nonzero exit. Errors identify
-the run, slab, section, record offset, CL ID and slot where available. Keyframe
-envelopes are checked; serialized frozen task-state bytes remain opaque.
+the run, slab, section, record offset, CL ID and slot where available. Basic stats
+include the number and compressed size of embedded catalogs. Deep validation
+reports decoded CopperLists, captured payloads, and their total, mean, and minimum
+and maximum encoded sizes. Payload sizes exclude CopperList metadata.
 
 ## Rust and Python
 

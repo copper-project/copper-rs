@@ -53,6 +53,52 @@ pub fn read_value_decode_catalog(path: &Path, run: Option<usize>) -> CuResult<Va
     load_catalog(selected, path)
 }
 
+fn configs_match(recorded: &str, described: &str) -> CuResult<bool> {
+    if recorded == described {
+        return Ok(true);
+    }
+    fn document(source: &str) -> CuResult<serde_json::Value> {
+        let config = cu29::config::CuConfig::deserialize_ron(source)?;
+        let mut document = serde_json::to_value(config).map_err(|error| {
+            CuError::new_with_cause("Could not compare catalog configuration", error)
+        })?;
+        // Mission maps and their merged task lists can serialize in different
+        // orders. Log slots are ordered explicitly by the catalog, while these
+        // declarations identify the same configured nodes by id.
+        let merged_missions = document
+            .get("missions")
+            .is_some_and(serde_json::Value::is_array);
+        for field in ["tasks", "missions"] {
+            if !merged_missions {
+                continue;
+            }
+            if let Some(values) = document
+                .get_mut(field)
+                .and_then(serde_json::Value::as_array_mut)
+            {
+                values.sort_by(|left, right| left["id"].as_str().cmp(&right["id"].as_str()));
+            }
+        }
+        for field in ["tasks", "cnx", "bridges", "resources", "monitors"] {
+            if let Some(declarations) = document
+                .get_mut(field)
+                .and_then(serde_json::Value::as_array_mut)
+            {
+                for declaration in declarations {
+                    if let Some(missions) = declaration
+                        .get_mut("missions")
+                        .and_then(serde_json::Value::as_array_mut)
+                    {
+                        missions.sort_by(|left, right| left.as_str().cmp(&right.as_str()));
+                    }
+                }
+            }
+        }
+        Ok(document)
+    }
+    Ok(document(recorded)? == document(described)?)
+}
+
 pub(crate) fn load_catalog(run: &runs::RecordedRun, path: &Path) -> CuResult<ValueDecodeCatalog> {
     let mut reader = run.reader(path)?;
     let mut found = None;
@@ -76,7 +122,7 @@ pub(crate) fn load_catalog(run: &runs::RecordedRun, path: &Path) -> CuResult<Val
             return Err("Catalog exceeds offline slot limit".into());
         }
         if let Some(config) = &run.config
-            && config != &catalog.config_ron
+            && !configs_match(config, &catalog.config_ron)?
         {
             return Err("Catalog configuration does not match the selected run".into());
         }
@@ -258,6 +304,14 @@ pub(crate) fn decode_copperlist(
     catalog: &ValueDecodeCatalog,
     bytes: &[u8],
 ) -> CuResult<(CuDecodedCopperList, usize)> {
+    decode_copperlist_with_payload_sizes(catalog, bytes, |_| {})
+}
+
+pub(crate) fn decode_copperlist_with_payload_sizes(
+    catalog: &ValueDecodeCatalog,
+    bytes: &[u8],
+    mut payload_size: impl FnMut(usize),
+) -> CuResult<(CuDecodedCopperList, usize)> {
     if catalog.slots.len() > MAX_SLOTS {
         return Err("Catalog exceeds offline slot limit".into());
     }
@@ -313,6 +367,7 @@ pub(crate) fn decode_copperlist(
                     .map_err(|error| CuError::new_with_cause("Invalid captured payload", error))?;
                 cursor.offset += used;
                 msg.payload = Some(value);
+                payload_size(used);
             }
             if catalog.layout == ValueDecodeCatalogLayout::Flat {
                 msg.tov = match cursor.read::<u32>()? {
@@ -463,6 +518,60 @@ mod tests {
     use cu29::prelude::*;
     use cu29::value_decode::ValueDecodeOp;
 
+    #[test]
+    fn test_catalog_config_comparison_accepts_mission_map_order_and_rejects_changes() {
+        let first = r#"(
+            missions: [(id: "default"), (id: "flow")],
+            tasks: [(id: "source", type: "Source", config: {"threshold": 1, "rate": 2, "missions": ["first", "second"]}), (id: "sink", type: "Sink")],
+            cnx: [(src: "source", dst: "sink", msg: "u32")],
+        )"#;
+        let reordered = r#"(
+            missions: [(id: "flow"), (id: "default")],
+            tasks: [(id: "sink", type: "Sink"), (id: "source", type: "Source", config: {"rate": 2, "threshold": 1, "missions": ["first", "second"]})],
+            cnx: [(src: "source", dst: "sink", msg: "u32")],
+        )"#;
+        assert!(configs_match(first, reordered).unwrap());
+        assert!(!configs_match(first, &reordered.replace("u32", "u64")).unwrap());
+        assert!(
+            !configs_match(
+                first,
+                &reordered.replace("threshold\": 1", "threshold\": 3")
+            )
+            .unwrap()
+        );
+        assert!(
+            !configs_match(
+                first,
+                &reordered.replace(r#"["first", "second"]"#, r#"["second", "first"]"#)
+            )
+            .unwrap()
+        );
+        assert!(configs_match(first, "invalid config").is_err());
+
+        let scoped = first
+            .replace(
+                "type: \"Sink\"",
+                "type: \"Sink\", missions: [\"default\", \"flow\"]",
+            )
+            .replace("msg: \"u32\"", "msg: \"u32\", missions: [\"default\"]");
+        let scoped_reordered = scoped.replace(
+            "missions: [\"default\", \"flow\"]",
+            "missions: [\"flow\", \"default\"]",
+        );
+        assert!(configs_match(&scoped, &scoped_reordered).unwrap());
+        let changed_membership = scoped.replace(
+            "missions: [\"default\", \"flow\"]",
+            "missions: [\"default\"]",
+        );
+        assert!(!configs_match(&scoped, &changed_membership).unwrap());
+
+        // A plain graph's task declaration order remains significant.
+        let plain_first = first.replace("missions: [(id: \"default\"), (id: \"flow\")],", "");
+        let plain_reordered =
+            reordered.replace("missions: [(id: \"flow\"), (id: \"default\")],", "");
+        assert!(!configs_match(&plain_first, &plain_reordered).unwrap());
+    }
+
     fn catalog(layout: ValueDecodeCatalogLayout) -> ValueDecodeCatalog {
         let mut builder = ValueDecodeCatalogBuilder::default();
         builder.add::<u32>("first", "u32");
@@ -528,7 +637,12 @@ mod tests {
         let bytes = compact_bytes();
         let mut consecutive = bytes.clone();
         consecutive.extend_from_slice(&bytes);
-        let (entry, used) = decode_copperlist(&catalog, &consecutive).unwrap();
+        let mut payload_sizes = Vec::new();
+        let (entry, used) = decode_copperlist_with_payload_sizes(&catalog, &consecutive, |size| {
+            payload_sizes.push(size);
+        })
+        .unwrap();
+        assert_eq!(payload_sizes, vec![3, 1]);
         assert_eq!(used, bytes.len());
         assert_eq!(entry.id, 19);
         assert_eq!(entry.msgs[0].payload, Some(Value::U32(300)));
@@ -567,7 +681,12 @@ mod tests {
         for message in messages() {
             bytes.extend(bincode::encode_to_vec(message, bincode::config::standard()).unwrap());
         }
-        let (entry, used) = decode_copperlist(&catalog, &bytes).unwrap();
+        let mut payload_sizes = Vec::new();
+        let (entry, used) = decode_copperlist_with_payload_sizes(&catalog, &bytes, |size| {
+            payload_sizes.push(size);
+        })
+        .unwrap();
+        assert_eq!(payload_sizes, vec![3, 1]);
         assert_eq!(used, bytes.len());
         assert_eq!(entry.msgs[0].payload, Some(Value::U32(300)));
         assert_eq!(entry.msgs[2].original_payload_present, None);

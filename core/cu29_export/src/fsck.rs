@@ -302,6 +302,8 @@ pub(crate) fn check_with(
     let mut runtime_lifecycle_size: usize = 0;
     let mut runtime_lifecycle_events: usize = 0;
     let mut sl_entries: usize = 0;
+    let mut catalogs: usize = 0;
+    let mut catalog_size: usize = 0;
 
     let result = 'scan: loop {
         // for _ in 0..4 {
@@ -471,6 +473,8 @@ pub(crate) fn check_with(
                         }
                     }
                     UnifiedLogType::ValueDecodeCatalog => {
+                        catalogs += 1;
+                        catalog_size += content.len();
                         #[cfg(feature = "self-describing-logs")]
                         cu29::prelude::ValueDecodeCatalog::from_blob(&content).map_err(
                             |error| {
@@ -646,6 +650,15 @@ pub(crate) fn check_with(
     println!(
         "  Lifecycle total size  -> {} bytes",
         runtime_lifecycle_size.to_formatted_string(l)
+    );
+    println!();
+    println!(
+        "  # of Catalogs         -> {}",
+        catalogs.to_formatted_string(l)
+    );
+    println!(
+        "  Catalog total size    -> {} bytes",
+        catalog_size.to_formatted_string(l)
     );
 
     result
