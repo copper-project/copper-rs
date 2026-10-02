@@ -192,4 +192,6 @@ Update `.pre-commit-config.yaml` if the shared hook configuration needs to chang
 </details>
 
 Maintainer release branches, versioning, tagging, and backporting are documented in
-[RELEASING.md](RELEASING.md).
+[RELEASING.md](RELEASING.md). Every stable minor and patch release also needs a
+published GitHub Release using its entry from the global Copper Release Notes;
+follow the [GitHub release checklist](RELEASING.md#github-release-checklist).

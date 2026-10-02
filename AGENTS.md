@@ -199,6 +199,11 @@ Implications:
 
 ## Practical Development Notes
 
+- When publishing a stable minor or patch release, including a backport, complete
+  the GitHub release checklist in `RELEASING.md`. Publish an entry for the exact
+  release tag using the global Copper Release Notes, and keep Latest on the
+  newest stable version.
+
 - Do not paper over issues just to make something work.
   - No hacks to hide a deeper design/runtime problem.
   - No shortcut that creates spaghetti code or weakens the architecture.
