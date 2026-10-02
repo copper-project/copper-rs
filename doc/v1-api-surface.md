@@ -108,7 +108,7 @@ option select recorded runs identified by `Instantiated` lifecycle records.
   ValueDecodeLimits}` with `self-describing-logs` enabled. The companion trait and
   static wire recipes are supplied by `cu-bincode`.
 - Standard `ValueDecode` implementations for Copper time, compact strings,
-  quantities, `CuArray`, and `CuArrayVec`.
+  quantities, `CuArray`, `CuArrayVec`, and pooled buffer handles.
 
 - Background empty-input dispatch policy: `background_process_empty` and the defaulted
   `CuAsyncTask<T, O, const PROCESS_EMPTY: bool = false>` parameter.

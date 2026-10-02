@@ -53,9 +53,11 @@ impl ValueDecode for Orientation {
 }
 ```
 
-Named encoded fields must be present in reflection with the same native type.
-Tuple fields require reflection to retain every declaration position. Hidden
-encoded fields and ambiguous tuple mappings return a description-building error.
+Structurally reflected encoded fields must be present in reflection with the same
+native type. Tuple fields require reflection to retain every declaration position.
+Hidden encoded fields and ambiguous tuple mappings return a description-building
+error. For opaque reflection, the static encoding recipe supplies the encoded
+field names, declaration positions, and enum variants.
 Skipped fields are excluded from the wire recipe. Missing nested recipes and
 custom codec recipes fail compilation with `self-describing-logs` enabled.
 
