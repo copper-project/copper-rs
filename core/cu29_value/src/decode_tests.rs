@@ -636,6 +636,85 @@ fn test_quantity_registrations_cover_both_widths_and_named_dimensionless_units()
 }
 
 #[test]
+fn test_shared_output_budget_is_not_reset_between_bindings() {
+    let description = ValueDecodeDescription::from_type::<String>().unwrap();
+    let bytes = bincode::encode_to_vec("x".repeat(1_000_000), bincode::config::standard()).unwrap();
+    let limits = ValueDecodeLimits::default();
+    let mut budget = ValueDecodeBudget::new(limits);
+    description
+        .decode_at_with_budget(
+            description.root,
+            &bytes,
+            bincode::config::standard(),
+            limits,
+            &mut budget,
+        )
+        .unwrap();
+    for _ in 0..32 {
+        match description.decode_at_with_budget(
+            description.root,
+            &bytes,
+            bincode::config::standard(),
+            limits,
+            &mut budget,
+        ) {
+            Ok(_) => {}
+            Err(error) => {
+                assert!(error.to_string().contains("output byte limit"));
+                return;
+            }
+        }
+    }
+    panic!("Shared output budget was reset between bindings");
+}
+
+#[test]
+fn test_repeated_field_names_are_charged_to_output_budget() {
+    #[derive(Encode, Reflect)]
+    struct Named {
+        value: (),
+    }
+    let mut description = ValueDecodeDescription::from_type::<Vec<Named>>().unwrap();
+    let field = description
+        .schemas
+        .iter_mut()
+        .flat_map(|schema| &mut schema.fields)
+        .find(|field| field.name.as_deref() == Some("value"))
+        .unwrap();
+    field.name = Some("x".repeat(1024));
+    let samples = (0..20_000).map(|_| Named { value: () }).collect::<Vec<_>>();
+    let bytes = bincode::encode_to_vec(samples, bincode::config::standard()).unwrap();
+    let error = description
+        .decode(
+            &bytes,
+            bincode::config::standard(),
+            ValueDecodeLimits::default(),
+        )
+        .unwrap_err();
+    assert!(error.to_string().contains("output byte limit"));
+}
+
+#[test]
+fn test_unused_wire_operations_are_validated() {
+    let mut description = ValueDecodeDescription::from_type::<u32>().unwrap();
+    description.operations.push(ValueDecodeOp::Record {
+        shape: ValueDecodeShape::Newtype,
+        fields: Vec::new(),
+    });
+    assert!(description.validate().is_err());
+    description.operations.pop();
+    description.operations.push(ValueDecodeOp::Enum {
+        tag: ValueDecodeScalar::U8,
+        branches: vec![ValueDecodeBranch {
+            tag: 256,
+            shape: ValueDecodeShape::Unit,
+            fields: Vec::new(),
+        }],
+    });
+    assert!(description.validate().is_err());
+}
+
+#[test]
 fn test_opaque_encoding_recipes_describe_enum_and_record_fields() {
     #[derive(Debug, Clone, PartialEq, Encode, Decode, Reflect)]
     #[reflect(opaque)]

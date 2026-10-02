@@ -235,6 +235,35 @@ impl Default for ValueDecodeLimits {
     }
 }
 
+/// Internal allocation budget shared across payload slots in an offline CopperList.
+#[doc(hidden)]
+pub struct ValueDecodeBudget {
+    values: usize,
+    bytes: usize,
+}
+impl ValueDecodeBudget {
+    pub fn new(limits: ValueDecodeLimits) -> Self {
+        Self {
+            values: limits.max_values,
+            bytes: 16 * 1024 * 1024,
+        }
+    }
+    fn spend_values(&mut self, count: usize) -> Result<(), DecodeError> {
+        spend(&mut self.values, count)?;
+        let bytes = count
+            .checked_mul(2 * core::mem::size_of::<Value>())
+            .ok_or(DecodeError::Other("ValueDecode output size overflow"))?;
+        self.spend_bytes(bytes)
+    }
+    fn spend_bytes(&mut self, count: usize) -> Result<(), DecodeError> {
+        self.bytes = self
+            .bytes
+            .checked_sub(count)
+            .ok_or(DecodeError::Other("ValueDecode output byte limit exceeded"))?;
+        Ok(())
+    }
+}
+
 impl ValueDecodeDescription {
     /// Validate all graph references and aggregate shapes, including unused branches.
     /// Empty graphs represent catalogs containing only uncaptured slots.
@@ -300,7 +329,8 @@ impl ValueDecodeDescription {
         }
         for operation in &self.operations {
             match operation {
-                ValueDecodeOp::Record { fields, .. } => {
+                ValueDecodeOp::Record { shape, fields } => {
+                    check_shape(*shape, fields.len())?;
                     for id in fields {
                         binding(*id)?;
                     }
@@ -326,6 +356,17 @@ impl ValueDecodeDescription {
                     count(*tag)?;
                     let mut tags = alloc::collections::BTreeSet::new();
                     for branch in branches {
+                        check_shape(branch.shape, branch.fields.len())?;
+                        let maximum = match tag {
+                            ValueDecodeScalar::U8 => u32::from(u8::MAX),
+                            ValueDecodeScalar::U16 => u32::from(u16::MAX),
+                            _ => u32::MAX,
+                        };
+                        if branch.tag > maximum {
+                            return Err(DecodeError::Other(
+                                "ValueDecode enum tag exceeds its wire width",
+                            ));
+                        }
                         if !tags.insert(branch.tag) {
                             return Err(DecodeError::Other("duplicate ValueDecode enum tag"));
                         }
@@ -447,8 +488,8 @@ impl ValueDecodeDescription {
         config: C,
         limits: ValueDecodeLimits,
     ) -> Result<(Value, usize), DecodeError> {
-        let mut remaining = limits.max_values;
-        self.decode_at_with_budget(binding, bytes, config, limits, &mut remaining)
+        let mut budget = ValueDecodeBudget::new(limits);
+        self.decode_at_with_budget(binding, bytes, config, limits, &mut budget)
     }
 
     /// Shared allocation budget for offline CopperList readers.
@@ -459,11 +500,11 @@ impl ValueDecodeDescription {
         bytes: &[u8],
         config: C,
         limits: ValueDecodeLimits,
-        remaining: &mut usize,
+        budget: &mut ValueDecodeBudget,
     ) -> Result<(Value, usize), DecodeError> {
         let reader = ValueReader { bytes, offset: 0 };
         let mut decoder = bincode::de::DecoderImpl::new(reader, config, ());
-        let value = self.decode_binding(binding, &mut decoder, limits, remaining, 1)?;
+        let value = self.decode_binding(binding, &mut decoder, limits, budget, 1)?;
         Ok((value, decoder.reader().offset))
     }
 
@@ -472,13 +513,13 @@ impl ValueDecodeDescription {
         id: usize,
         decoder: &mut D,
         limits: ValueDecodeLimits,
-        remaining: &mut usize,
+        budget: &mut ValueDecodeBudget,
         depth: usize,
     ) -> Result<Value, DecodeError> {
         if depth > limits.max_depth {
             return Err(DecodeError::Other("ValueDecode nesting limit exceeded"));
         }
-        spend(remaining, 1)?;
+        budget.spend_values(1)?;
         let binding = self
             .bindings
             .get(id)
@@ -491,14 +532,15 @@ impl ValueDecodeDescription {
             .operations
             .get(binding.operation)
             .ok_or(DecodeError::Other("invalid ValueDecode operation index"))?;
-        let child = |id, decoder: &mut D, remaining: &mut usize| {
-            self.decode_binding(id, decoder, limits, remaining, depth + 1)
+        let child = |id, decoder: &mut D, budget: &mut ValueDecodeBudget| {
+            self.decode_binding(id, decoder, limits, budget, depth + 1)
         };
         Ok(match operation {
             ValueDecodeOp::Unit => Value::Unit,
             ValueDecodeOp::Scalar(scalar) => decode_scalar(*scalar, decoder)?,
             ValueDecodeOp::String | ValueDecodeOp::Bytes => {
                 let len = checked_len(u64::decode(decoder)?, limits.max_collection_len)?;
+                budget.spend_bytes(len)?;
                 decoder.claim_bytes_read(len)?;
                 // Read before constructing the tree; truncation is reported by the bounded reader.
                 let mut bytes = alloc::vec![0; len];
@@ -519,14 +561,14 @@ impl ValueDecodeDescription {
                 },
                 decoder,
                 limits,
-                remaining,
+                budget,
                 depth,
             )?,
             ValueDecodeOp::Array { element, len } => {
-                check_count(*len, limits, *remaining)?;
+                check_count(*len, limits, budget.values)?;
                 let mut values = Vec::new();
                 for _ in 0..*len {
-                    values.push(child(*element, decoder, remaining)?);
+                    values.push(child(*element, decoder, budget)?);
                 }
                 Value::Seq(values)
             }
@@ -542,10 +584,10 @@ impl ValueDecodeDescription {
                         .unwrap_or(usize::MAX)
                         .min(limits.max_collection_len),
                 )?;
-                check_count(len, limits, *remaining)?;
+                check_count(len, limits, budget.values)?;
                 let mut values = Vec::new();
                 for _ in 0..len {
-                    values.push(child(*element, decoder, remaining)?);
+                    values.push(child(*element, decoder, budget)?);
                 }
                 Value::Seq(values)
             }
@@ -558,21 +600,21 @@ impl ValueDecodeDescription {
                         max_collection_len: usize::MAX,
                         ..limits
                     },
-                    *remaining,
+                    budget.values,
                 )?;
                 let mut values = BTreeMap::new();
                 for _ in 0..len {
                     values.insert(
-                        child(*key, decoder, remaining)?,
-                        child(*value, decoder, remaining)?,
+                        child(*key, decoder, budget)?,
+                        child(*value, decoder, budget)?,
                     );
                 }
                 Value::Map(values)
             }
-            ValueDecodeOp::Delegate(element) => child(*element, decoder, remaining)?,
+            ValueDecodeOp::Delegate(element) => child(*element, decoder, budget)?,
             ValueDecodeOp::Option(element) => match u8::decode(decoder)? {
                 0 => Value::Option(None),
-                1 => Value::Option(Some(Box::new(child(*element, decoder, remaining)?))),
+                1 => Value::Option(Some(Box::new(child(*element, decoder, budget)?))),
                 _ => return Err(DecodeError::Other("invalid ValueDecode option tag")),
             },
             ValueDecodeOp::Enum { tag, branches } => {
@@ -586,6 +628,7 @@ impl ValueDecodeDescription {
                     .variants
                     .get(index)
                     .ok_or(DecodeError::Other("missing ValueDecode variant schema"))?;
+                budget.spend_bytes(variant.name.len())?;
                 // Serde-compatible externally tagged enum representation.
                 if branch.shape == ValueDecodeShape::Unit {
                     if !branch.fields.is_empty() {
@@ -593,9 +636,9 @@ impl ValueDecodeDescription {
                     }
                     Value::String(variant.name.clone())
                 } else {
-                    spend(remaining, 1)?;
+                    budget.spend_values(1)?;
                     if branch.shape != ValueDecodeShape::Newtype {
-                        spend(remaining, 1)?;
+                        budget.spend_values(1)?;
                     }
                     let value = self.decode_record(
                         ValueDecodeRecord {
@@ -605,7 +648,7 @@ impl ValueDecodeDescription {
                         },
                         decoder,
                         limits,
-                        remaining,
+                        budget,
                         depth,
                     )?;
                     let value = match value {
@@ -628,7 +671,7 @@ impl ValueDecodeDescription {
         record: ValueDecodeRecord<'_>,
         decoder: &mut D,
         limits: ValueDecodeLimits,
-        remaining: &mut usize,
+        budget: &mut ValueDecodeBudget,
         depth: usize,
     ) -> Result<Value, DecodeError> {
         let ValueDecodeRecord {
@@ -641,12 +684,12 @@ impl ValueDecodeDescription {
                 "ValueDecode record/schema field mismatch",
             ));
         }
-        check_count(fields.len(), limits, *remaining)?;
+        check_count(fields.len(), limits, budget.values)?;
         match shape {
             ValueDecodeShape::Unit if fields.is_empty() => Ok(Value::Unit),
             ValueDecodeShape::Unit => Err(DecodeError::Other("unit record has encoded fields")),
             ValueDecodeShape::Newtype if fields.len() == 1 => Ok(Value::Newtype(Box::new(
-                self.decode_binding(fields[0], decoder, limits, remaining, depth + 1)?,
+                self.decode_binding(fields[0], decoder, limits, budget, depth + 1)?,
             ))),
             ValueDecodeShape::Newtype => Err(DecodeError::Other(
                 "newtype record must have one encoded field",
@@ -654,19 +697,20 @@ impl ValueDecodeDescription {
             ValueDecodeShape::Tuple => {
                 let mut values = Vec::new();
                 for id in fields {
-                    values.push(self.decode_binding(*id, decoder, limits, remaining, depth + 1)?);
+                    values.push(self.decode_binding(*id, decoder, limits, budget, depth + 1)?);
                 }
                 Ok(Value::Seq(values))
             }
             ValueDecodeShape::Struct => {
                 let mut values = BTreeMap::new();
                 for (id, field) in fields.iter().zip(schema) {
-                    spend(remaining, 1)?;
+                    budget.spend_values(1)?;
                     let name = field
                         .name
                         .as_ref()
                         .ok_or(DecodeError::Other("missing ValueDecode field name"))?;
-                    let value = self.decode_binding(*id, decoder, limits, remaining, depth + 1)?;
+                    budget.spend_bytes(name.len())?;
+                    let value = self.decode_binding(*id, decoder, limits, budget, depth + 1)?;
                     if values.insert(Value::String(name.clone()), value).is_some() {
                         return Err(DecodeError::Other("duplicate ValueDecode field name"));
                     }
@@ -674,6 +718,16 @@ impl ValueDecodeDescription {
                 Ok(Value::Map(values))
             }
         }
+    }
+}
+
+fn check_shape(shape: ValueDecodeShape, count: usize) -> Result<(), DecodeError> {
+    if (shape == ValueDecodeShape::Unit && count != 0)
+        || (shape == ValueDecodeShape::Newtype && count != 1)
+    {
+        Err(DecodeError::Other("invalid ValueDecode record shape"))
+    } else {
+        Ok(())
     }
 }
 
