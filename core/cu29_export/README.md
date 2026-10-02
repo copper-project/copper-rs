@@ -48,7 +48,9 @@ Deep fsck requires a catalog and decodes every captured payload to exact section
 exhaustion. Invalid/truncated records return an error with their recorded location.
 Plain standalone fsck checks structure and common streams and reports the number
 and compressed size of embedded catalogs. Deep validation adds decoded CopperList
-and captured-payload counts, encoded payload bytes, mean size, and size range.
+and captured-payload counts and encoded payload bytes. A table lists every captured
+task and message type, sorted by total bytes, with counts, share of payload storage,
+mean size, and size range.
 Payload sizes count native payload bytes, excluding CopperList metadata.
 
 App logreaders retain typed defaults; `extract-copperlists --decoder catalog` selects

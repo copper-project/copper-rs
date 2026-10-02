@@ -304,13 +304,13 @@ pub(crate) fn decode_copperlist(
     catalog: &ValueDecodeCatalog,
     bytes: &[u8],
 ) -> CuResult<(CuDecodedCopperList, usize)> {
-    decode_copperlist_with_payload_sizes(catalog, bytes, |_| {})
+    decode_copperlist_with_payload_sizes(catalog, bytes, |_, _| {})
 }
 
 pub(crate) fn decode_copperlist_with_payload_sizes(
     catalog: &ValueDecodeCatalog,
     bytes: &[u8],
-    mut payload_size: impl FnMut(usize),
+    mut payload_size: impl FnMut(usize, usize),
 ) -> CuResult<(CuDecodedCopperList, usize)> {
     if catalog.slots.len() > MAX_SLOTS {
         return Err("Catalog exceeds offline slot limit".into());
@@ -367,7 +367,7 @@ pub(crate) fn decode_copperlist_with_payload_sizes(
                     .map_err(|error| CuError::new_with_cause("Invalid captured payload", error))?;
                 cursor.offset += used;
                 msg.payload = Some(value);
-                payload_size(used);
+                payload_size(index, used);
             }
             if catalog.layout == ValueDecodeCatalogLayout::Flat {
                 msg.tov = match cursor.read::<u32>()? {
@@ -638,11 +638,12 @@ mod tests {
         let mut consecutive = bytes.clone();
         consecutive.extend_from_slice(&bytes);
         let mut payload_sizes = Vec::new();
-        let (entry, used) = decode_copperlist_with_payload_sizes(&catalog, &consecutive, |size| {
-            payload_sizes.push(size);
-        })
-        .unwrap();
-        assert_eq!(payload_sizes, vec![3, 1]);
+        let (entry, used) =
+            decode_copperlist_with_payload_sizes(&catalog, &consecutive, |slot, size| {
+                payload_sizes.push((slot, size));
+            })
+            .unwrap();
+        assert_eq!(payload_sizes, vec![(0, 3), (1, 1)]);
         assert_eq!(used, bytes.len());
         assert_eq!(entry.id, 19);
         assert_eq!(entry.msgs[0].payload, Some(Value::U32(300)));
@@ -682,11 +683,11 @@ mod tests {
             bytes.extend(bincode::encode_to_vec(message, bincode::config::standard()).unwrap());
         }
         let mut payload_sizes = Vec::new();
-        let (entry, used) = decode_copperlist_with_payload_sizes(&catalog, &bytes, |size| {
-            payload_sizes.push(size);
+        let (entry, used) = decode_copperlist_with_payload_sizes(&catalog, &bytes, |slot, size| {
+            payload_sizes.push((slot, size));
         })
         .unwrap();
-        assert_eq!(payload_sizes, vec![3, 1]);
+        assert_eq!(payload_sizes, vec![(0, 3), (1, 1)]);
         assert_eq!(used, bytes.len());
         assert_eq!(entry.msgs[0].payload, Some(Value::U32(300)));
         assert_eq!(entry.msgs[2].original_payload_present, None);
