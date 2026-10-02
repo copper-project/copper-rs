@@ -33,7 +33,7 @@ ordered-float = { version = "5.1", default-features = false }
 pyo3 = { workspace = true, optional = true }
 
 [dev-dependencies]
-trybuild = "1.0"
+ui_test = { version = "0.30.7", default-features = false, features = ["rustc"] }
 serde_derive = { workspace = true }
 
 [features]
