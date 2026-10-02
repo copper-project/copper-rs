@@ -509,3 +509,9 @@ wt branch:
     zellij action write-chars "cd ${dir};reset"
     zellij action write 13
   fi
+
+# Verify a patch release of the runtime, generator, and prelude crates.
+core-release-check toolchain="stable": fmt-check typos
+	cargo +{{toolchain}} clippy -p cu29-runtime -p cu29-derive -p cu29 --all-targets --features cu29/reflect -- --deny warnings
+	cargo +{{toolchain}} nextest run -p cu29-runtime -p cu29-derive -p cu29 --all-targets --features cu29/reflect
+	cargo +{{toolchain}} clippy -p cu29-runtime -p cu29 --no-default-features -- --deny warnings
