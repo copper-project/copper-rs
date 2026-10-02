@@ -397,8 +397,9 @@ all recorded CopperLists and captured payloads. Truncation, invalid tags, missin
 bindings and repeated/decreasing CL IDs fail with a nonzero exit. Errors identify
 the run, slab, section, record offset, CL ID and slot where available. Basic stats
 include the number and compressed size of embedded catalogs. Deep validation
-reports decoded CopperLists, captured payloads, and their total, mean, and minimum
-and maximum encoded sizes. Payload sizes exclude CopperList metadata.
+reports decoded CopperLists and captured payloads. Its table identifies each task
+and message type, sorted by encoded bytes, with capture counts, share of payload
+storage, mean size, and size range. Payload sizes exclude CopperList metadata.
 
 ## Rust and Python
 

@@ -326,6 +326,94 @@ fn csv_row(output: &mut impl Write, cells: &[String]) -> CuResult<()> {
     Ok(())
 }
 
+#[derive(Clone, Default)]
+struct PayloadStats {
+    count: usize,
+    bytes: usize,
+    minimum: usize,
+    maximum: usize,
+}
+
+impl PayloadStats {
+    fn observe(&mut self, bytes: usize) {
+        self.minimum = if self.count == 0 {
+            bytes
+        } else {
+            self.minimum.min(bytes)
+        };
+        self.maximum = self.maximum.max(bytes);
+        self.count += 1;
+        self.bytes += bytes;
+    }
+}
+
+fn write_payload_stats(
+    catalog: &ValueDecodeCatalog,
+    stats: &[PayloadStats],
+    total_bytes: usize,
+    output: &mut impl Write,
+) -> CuResult<()> {
+    let mut rows = catalog
+        .slots
+        .iter()
+        .zip(stats)
+        .filter(|(_, stats)| stats.count > 0)
+        .collect::<Vec<_>>();
+    if rows.is_empty() {
+        return Ok(());
+    }
+    rows.sort_by(|(left_slot, left), (right_slot, right)| {
+        right
+            .bytes
+            .cmp(&left.bytes)
+            .then_with(|| left_slot.task_id.cmp(&right_slot.task_id))
+    });
+    let task_width = rows
+        .iter()
+        .map(|(slot, _)| slot.task_id.len())
+        .max()
+        .unwrap_or(0)
+        .max(4);
+    let type_width = rows
+        .iter()
+        .map(|(slot, _)| slot.msg_type.len())
+        .max()
+        .unwrap_or(0)
+        .max(12);
+    writeln!(
+        output,
+        "\n  Captured payloads by task and type (largest first)"
+    )
+    .map_err(output_error)?;
+    writeln!(
+        output,
+        "    {:<task_width$}  {:<type_width$}  {:>12}  {:>16}  {:>7}  {:>14}  Size range (bytes)",
+        "Task", "Message type", "Captured", "Total bytes", "Share", "Mean bytes"
+    )
+    .map_err(output_error)?;
+    for (slot, stats) in rows {
+        let share = if total_bytes == 0 {
+            0.0
+        } else {
+            stats.bytes as f64 * 100.0 / total_bytes as f64
+        };
+        writeln!(
+            output,
+            "    {:<task_width$}  {:<type_width$}  {:>12}  {:>16}  {:>6.2}%  {:>14.2}  {}-{}",
+            slot.task_id,
+            slot.msg_type,
+            stats.count.to_formatted_string(&Locale::en),
+            stats.bytes.to_formatted_string(&Locale::en),
+            share,
+            stats.bytes as f64 / stats.count as f64,
+            stats.minimum.to_formatted_string(&Locale::en),
+            stats.maximum.to_formatted_string(&Locale::en)
+        )
+        .map_err(output_error)?;
+    }
+    Ok(())
+}
+
 pub(crate) fn deep_check(
     run: &runs::RecordedRun,
     path: &Path,
@@ -336,14 +424,12 @@ pub(crate) fn deep_check(
     let mut lists = 0usize;
     let mut payloads = 0usize;
     let mut payload_bytes = 0usize;
-    let mut smallest_payload = usize::MAX;
-    let mut largest_payload = 0usize;
+    let mut slot_stats = vec![PayloadStats::default(); catalog.slots.len()];
     let mut decode = |bytes: &[u8]| {
-        let (entry, used) = decode_copperlist_with_payload_sizes(&catalog, bytes, |size| {
+        let (entry, used) = decode_copperlist_with_payload_sizes(&catalog, bytes, |slot, size| {
             payloads += 1;
             payload_bytes += size;
-            smallest_payload = smallest_payload.min(size);
-            largest_payload = largest_payload.max(size);
+            slot_stats[slot].observe(size);
         })?;
         lists += 1;
         Ok(CheckedCopperList {
@@ -381,17 +467,13 @@ pub(crate) fn deep_check(
         "  Payload total size     -> {} bytes",
         payload_bytes.to_formatted_string(locale)
     );
-    if payloads > 0 {
-        println!(
-            "  Payload mean size      -> {:.2} bytes",
-            payload_bytes as f64 / payloads as f64
-        );
-        println!(
-            "  Payload size range     -> {}-{} bytes",
-            smallest_payload.to_formatted_string(locale),
-            largest_payload.to_formatted_string(locale)
-        );
-    }
+    write_payload_stats(
+        &catalog,
+        &slot_stats,
+        payload_bytes,
+        &mut std::io::stdout().lock(),
+    )?;
+
     Ok(())
 }
 
@@ -402,6 +484,76 @@ fn output_error(error: std::io::Error) -> CuError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_payload_stats_identify_largest_sources_and_native_sizes() {
+        use cu29::prelude::{ValueDecodeCatalogBuilder, ValueDecodeCatalogLayout};
+
+        let mut builder = ValueDecodeCatalogBuilder::default();
+        builder.add::<u32>("control", "u32");
+        builder.add::<Vec<u8>>("camera", "Vec<u8>");
+        builder.add_uncaptured("hidden", "Opaque");
+        let catalog = builder
+            .finish("()", "default", ValueDecodeCatalogLayout::Compact)
+            .unwrap();
+        let mut stats = vec![PayloadStats::default(); 3];
+        let config = bincode::config::standard();
+        for value in [42u32, 300] {
+            stats[0].observe(bincode::encode_to_vec(value, config).unwrap().len());
+        }
+        let image_size = bincode::encode_to_vec(vec![0u8; 1024], config)
+            .unwrap()
+            .len();
+        stats[1].observe(image_size);
+        stats[1].observe(image_size);
+        let mut output = Vec::new();
+        write_payload_stats(
+            &catalog,
+            &stats,
+            stats.iter().map(|stats| stats.bytes).sum(),
+            &mut output,
+        )
+        .unwrap();
+        let output = String::from_utf8(output).unwrap();
+        let rows = output
+            .lines()
+            .skip(3)
+            .map(|line| line.split_whitespace().collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(&rows[0][..4], &["camera", "Vec<u8>", "2", "2,054"]);
+        assert_eq!(
+            &rows[1],
+            &["control", "u32", "2", "4", "0.19%", "2.00", "1-3"]
+        );
+        assert!(!output.contains("hidden"));
+    }
+
+    #[test]
+    fn test_zero_byte_captured_payload_has_finite_size_stats() {
+        use cu29::prelude::{ValueDecodeCatalogBuilder, ValueDecodeCatalogLayout};
+
+        let mut builder = ValueDecodeCatalogBuilder::default();
+        builder.add::<()>("unit", "()");
+        let catalog = builder
+            .finish("()", "default", ValueDecodeCatalogLayout::Compact)
+            .unwrap();
+        let mut stats = PayloadStats::default();
+        stats.observe(0);
+        let mut output = Vec::new();
+        write_payload_stats(&catalog, &[stats], 0, &mut output).unwrap();
+        let output = String::from_utf8(output).unwrap();
+        assert_eq!(
+            output
+                .lines()
+                .last()
+                .unwrap()
+                .split_whitespace()
+                .collect::<Vec<_>>(),
+            vec!["unit", "()", "1", "0", "0.00%", "0.00", "0-0"]
+        );
+    }
+
     fn with_fixture(test: impl FnOnce(&Path)) {
         let dir = tempfile::tempdir_in(env!("CARGO_MANIFEST_DIR")).unwrap();
         let path = dir.path().join("fixture.copper");
