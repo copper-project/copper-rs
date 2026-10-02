@@ -123,6 +123,8 @@ where
 mod mcu_copper {
     use super::*;
 
+    include!(concat!(env!("OUT_DIR"), "/mcu_catalog.rs"));
+
     pub mod tasks {
         pub use crate::tasks::*;
     }
@@ -150,6 +152,7 @@ mod mcu_copper {
                 .with_clock(clock.clone())
                 .with_log_path(PathBuf::from(logger_path), log_slab_size)
                 .expect("failed to create logger")
+                .with_value_decode_catalog(VALUE_DECODE_CATALOG)
                 .with_sim_callback(&mut default_callback)
                 .build()
                 .expect("failed to create runtime")
@@ -176,6 +179,7 @@ mod mcu_copper {
             let app = default::FlightControllerSim::builder()
                 .with_clock(clock.clone())
                 .with_logger::<BevyMonSectionStorage, BevyMonUnifiedLogger>(logger)
+                .with_value_decode_catalog(VALUE_DECODE_CATALOG)
                 .with_sim_callback(&mut default_callback)
                 .build()
                 .expect("failed to create runtime")
@@ -337,6 +341,8 @@ mod mcu_copper {
 mod compute_copper {
     use super::*;
 
+    include!(concat!(env!("OUT_DIR"), "/compute_catalog.rs"));
+
     pub mod tasks {
         pub use crate::compute_tasks::*;
     }
@@ -369,6 +375,7 @@ mod compute_copper {
                 .with_clock(clock.clone())
                 .with_log_path(PathBuf::from(logger_path), log_slab_size)
                 .expect("failed to create compute logger")
+                .with_value_decode_catalog(VALUE_DECODE_CATALOG)
                 .with_sim_callback(&mut default_callback)
                 .build()
                 .expect("failed to create compute runtime")
@@ -797,9 +804,7 @@ impl Default for SimOsdOverlay {
 
 impl SimOsdOverlay {
     fn clear(&mut self) {
-        for c in &mut self.cells {
-            *c = OSD_BLANK_SYMBOL;
-        }
+        self.cells.fill(OSD_BLANK_SYMBOL);
     }
 
     fn apply_batch(&mut self, batch: &MspRequestBatch) {
@@ -1541,8 +1546,8 @@ fn capture_zed_depth(event: On<ReadbackComplete>, store: Res<sim_zed::SimZedFram
 
     let mut depth = Vec::with_capacity(pixel_count);
     let mut confidence = Vec::with_capacity(pixel_count);
-    for bytes in event.data.chunks_exact(size_of::<f32>()) {
-        let reverse_z = f32::from_ne_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+    for bytes in event.data.as_chunks::<{ size_of::<f32>() }>().0 {
+        let reverse_z = f32::from_ne_bytes(*bytes);
         let distance = zed_reverse_z_to_distance(reverse_z);
         let valid = distance.is_finite() && distance <= sim_zed::ZED_SIM_MAX_DEPTH_M;
         depth.push(if valid {
@@ -3946,6 +3951,17 @@ mod tests {
             .log_shutdown_completed()
             .expect("failed to log compute shutdown");
         drop(copper);
+
+        for log_base in [&mcu_log_base, &compute_log_base] {
+            let catalog = cu29_export::catalog::read_value_decode_catalog(log_base, None)
+                .expect("each subsystem log should embed its catalog");
+            assert!(!catalog.slots.is_empty());
+            let records = cu29_export::catalog::copperlist_values_reader(log_base, None)
+                .expect("catalog reader should open each subsystem log")
+                .collect::<CuResult<Vec<_>>>()
+                .expect("catalog should decode every recorded subsystem payload");
+            assert!(!records.is_empty());
+        }
 
         let discovered =
             cu29::distributed_replay::DistributedReplayLog::discover(&compute_log_base)
