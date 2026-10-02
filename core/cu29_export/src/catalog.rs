@@ -12,6 +12,7 @@ use cu29::prelude::{
     PartialCuTimeRange, Tov, UnifiedLogType, Value, ValueDecodeCatalog, ValueDecodeCatalogLayout,
     ValueDecodeLimits,
 };
+use cu29::value_decode::ValueDecodeBudget;
 use std::path::Path;
 
 const MAX_COPPERLIST_BYTES: usize = 16 * 1024 * 1024;
@@ -271,7 +272,7 @@ pub(crate) fn decode_copperlist(
         offset: 0,
     };
     let id = cursor.read::<u64>()?;
-    let mut budget = ValueDecodeLimits::default().max_values;
+    let mut budget = ValueDecodeBudget::new(ValueDecodeLimits::default());
     let mut msgs = catalog
         .slots
         .iter()
