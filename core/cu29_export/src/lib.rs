@@ -23,6 +23,8 @@ mod runs;
 pub mod catalog;
 #[cfg(feature = "self-describing-logs")]
 mod catalog_cli;
+#[cfg(all(feature = "self-describing-logs", feature = "python"))]
+mod catalog_python;
 #[cfg(all(test, feature = "self-describing-logs"))]
 mod catalog_tests;
 #[cfg(feature = "self-describing-logs")]
@@ -1264,6 +1266,8 @@ Call register_copperlist_python_type::<P>() from Rust before using this function
     /// This needs to match the name of the generated '.so'
     #[pymodule(name = "libcu29_export")]
     fn cu29_export(m: &Bound<'_, PyModule>) -> PyResult<()> {
+        #[cfg(feature = "self-describing-logs")]
+        crate::catalog_python::add_functions(m)?;
         m.add_class::<PyCuLogEntry>()?;
         m.add_class::<PyLogIterator>()?;
         m.add_class::<PyCopperListIterator>()?;
@@ -1654,7 +1658,7 @@ Call register_copperlist_python_type::<P>() from Rust before using this function
         let fallback = format!("{value:?}");
         Ok(fallback.into_pyobject(py)?.into())
     }
-    fn value_to_py(value: &cu29::prelude::Value, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(super) fn value_to_py(value: &cu29::prelude::Value, py: Python<'_>) -> PyResult<Py<PyAny>> {
         match value {
             Value::String(s) => Ok(s.into_pyobject(py)?.into()),
             Value::U64(u) => Ok(u.into_pyobject(py)?.into()),
