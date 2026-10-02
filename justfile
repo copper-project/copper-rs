@@ -633,3 +633,8 @@ logstream-sender-check:
     cargo +stable clippy -p cu-logstream-demo --all-targets --features replay,tui,verify-reconstruction,sender-monitor -- --deny warnings
     cargo +stable test -p cu-logstream-demo --features demo,tui,verify-reconstruction,sender-monitor
     just --justfile examples/cu_logstream_demo/justfile check-sender
+
+# Verify reviewed website sources and their MkDocs preparation.
+wiki-check: fmt-check typos
+    python3 -m unittest discover -s support/ci -p 'test_wiki_site.py'
+    python3 support/ci/wiki_site.py

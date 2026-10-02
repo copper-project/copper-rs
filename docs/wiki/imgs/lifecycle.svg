@@ -1,0 +1,442 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="210mm"
+   height="297mm"
+   viewBox="0 0 210 297"
+   version="1.1"
+   id="svg1"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs1">
+    <marker
+       style="overflow:visible"
+       id="marker22"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       markerWidth="1"
+       markerHeight="1"
+       viewBox="0 0 1 1"
+       preserveAspectRatio="xMidYMid">
+      <path
+         transform="scale(0.5)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:context-stroke;stroke-width:1pt"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path22" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="marker21"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       markerWidth="1"
+       markerHeight="1"
+       viewBox="0 0 1 1"
+       preserveAspectRatio="xMidYMid">
+      <path
+         transform="scale(0.5)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:context-stroke;stroke-width:1pt"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path21" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="Triangle"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       markerWidth="1"
+       markerHeight="1"
+       viewBox="0 0 1 1"
+       preserveAspectRatio="xMidYMid">
+      <path
+         transform="scale(0.5)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:context-stroke;stroke-width:1pt"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path135" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="Triangle-9"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       markerWidth="1"
+       markerHeight="1"
+       viewBox="0 0 1 1"
+       preserveAspectRatio="xMidYMid">
+      <path
+         transform="scale(0.5)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:context-stroke;stroke-width:1pt"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path135-1" />
+    </marker>
+  </defs>
+  <g
+     id="layer1">
+    <rect
+       style="fill:#ffffff;fill-opacity:1;stroke:none;stroke-width:0.600001;stroke-dasharray:none;stroke-dashoffset:0"
+       id="rect37"
+       width="206.76343"
+       height="255.64015"
+       x="2.2775998"
+       y="10.615847" />
+    <g
+       id="g36">
+      <rect
+         style="fill:#eef4d7;stroke:none;stroke-width:0.600001;stroke-dasharray:none;stroke-dashoffset:0"
+         id="rect36"
+         width="197.40108"
+         height="23.283474"
+         x="6.1789212"
+         y="203.7291" />
+      <rect
+         style="fill:#eef4d7;stroke:none;stroke-width:0.600001;stroke-dasharray:none;stroke-dashoffset:0"
+         id="rect35"
+         width="197.39598"
+         height="22.225014"
+         x="6.1219692"
+         y="40.34013" />
+      <rect
+         style="fill:#ffe6d5;stroke:none;stroke-width:0.600001;stroke-dasharray:none;stroke-dashoffset:0"
+         id="rect34"
+         width="197.40108"
+         height="52.677074"
+         x="6.1789212"
+         y="151.05202" />
+      <rect
+         style="fill:#ffe6d5;stroke:none;stroke-width:0.600001;stroke-dasharray:none;stroke-dashoffset:0"
+         id="rect33"
+         width="197.45773"
+         height="53.96603"
+         x="6.1219692"
+         y="62.56514" />
+      <rect
+         style="fill:#f4d7d7;stroke:none;stroke-width:0.600001;stroke-dasharray:none;stroke-dashoffset:0"
+         id="rect32"
+         width="197.40108"
+         height="34.520836"
+         x="6.1789212"
+         y="116.53117"
+         ry="0" />
+      <g
+         id="g25">
+        <circle
+           style="fill:#e6e6e6;stroke:#000000;stroke-width:1"
+           id="path1"
+           cx="101.96603"
+           cy="28.502888"
+           r="7.5388603" />
+        <text
+           xml:space="preserve"
+           style="font-size:4.9389px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#000000;stroke:none;stroke-width:1"
+           x="97.586815"
+           y="29.807549"
+           id="text1"><tspan
+             id="tspan1"
+             style="fill:#000000;stroke:none;stroke-width:1"
+             x="97.586815"
+             y="29.807549">new</tspan></text>
+      </g>
+      <circle
+         style="fill:#99ff55;stroke:#000000;stroke-width:1"
+         id="path1-5"
+         cx="101.96603"
+         cy="52.121754"
+         r="7.5388603" />
+      <g
+         id="g3"
+         transform="translate(3.9198533,-46.071496)">
+        <text
+           xml:space="preserve"
+           style="font-size:4.9389px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#000000;stroke:none;stroke-width:1"
+           x="93.294189"
+           y="99.789711"
+           id="text1-2"><tspan
+             id="tspan1-9"
+             style="fill:#000000;stroke:none;stroke-width:1"
+             x="93.294189"
+             y="99.789711">start</tspan></text>
+      </g>
+      <circle
+         style="fill:#99ff55;fill-opacity:1;stroke:#000000;stroke-width:1"
+         id="path1-3"
+         cx="101.96603"
+         cy="215.42319"
+         r="7.5388603" />
+      <text
+         xml:space="preserve"
+         style="font-size:4.9389px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#000000;stroke:none;stroke-width:1"
+         x="97.586815"
+         y="216.54216"
+         id="text1-1"><tspan
+           id="tspan1-4"
+           style="fill:#000000;stroke:none;stroke-width:1"
+           x="97.586815"
+           y="216.54216">stop</tspan></text>
+      <g
+         id="g31">
+        <circle
+           style="fill:#e6e6e6;stroke:#000000;stroke-width:1"
+           id="path1-5-2"
+           cx="101.96603"
+           cy="239.04211"
+           r="7.5388603" />
+        <g
+           id="g3-0"
+           transform="translate(3.938046,140.60288)">
+          <text
+             xml:space="preserve"
+             style="font-size:4.9389px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#000000;stroke:none;stroke-width:1"
+             x="93.294189"
+             y="99.789711"
+             id="text1-2-6"><tspan
+               id="tspan1-9-8"
+               style="fill:#000000;stroke:none;stroke-width:1"
+               x="93.294189"
+               y="99.789711">drop</tspan></text>
+        </g>
+      </g>
+      <rect
+         style="fill:#ff9955;stroke:#000000;stroke-width:1"
+         id="rect5"
+         width="39.320507"
+         height="12.03485"
+         x="82.305771"
+         y="95.200699"
+         ry="2.16956" />
+      <text
+         xml:space="preserve"
+         style="font-size:4.9389px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#000000;stroke:none;stroke-width:1"
+         x="90.090614"
+         y="102.75819"
+         id="text1-2-9-5"><tspan
+           id="tspan1-9-3-9"
+           style="fill:#000000;stroke:none;stroke-width:1"
+           x="90.090614"
+           y="102.75819">preprocess</tspan></text>
+      <rect
+         style="fill:#ff9955;stroke:#000000;stroke-width:1"
+         id="rect5-0"
+         width="39.320507"
+         height="12.03485"
+         x="131.22012"
+         y="182.10825"
+         ry="2.16956" />
+      <text
+         xml:space="preserve"
+         style="font-size:4.9389px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#000000;stroke:none;stroke-width:1"
+         x="144.26564"
+         y="189.66574"
+         id="text1-2-9-5-4"><tspan
+           id="tspan1-9-3-9-5"
+           style="fill:#000000;stroke:none;stroke-width:1"
+           x="144.26564"
+           y="189.66574">freeze</tspan></text>
+      <rect
+         style="fill:#ff5555;stroke:#000000;stroke-width:1"
+         id="rect5-9"
+         width="39.320507"
+         height="12.03485"
+         x="82.305771"
+         y="127.10714"
+         ry="2.16956" />
+      <text
+         xml:space="preserve"
+         style="font-size:4.9389px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#000000;stroke:none;stroke-width:1"
+         x="93.541451"
+         y="134.66463"
+         id="text1-2-9-5-93"><tspan
+           id="tspan1-9-3-9-1"
+           style="font-weight:bold;fill:#000000;stroke:none;stroke-width:1"
+           x="93.541451"
+           y="134.66463">process</tspan></text>
+      <rect
+         style="fill:#ff9955;stroke:#000000;stroke-width:1"
+         id="rect5-3"
+         width="39.320507"
+         height="12.03485"
+         x="82.305771"
+         y="158.59947"
+         ry="2.16956" />
+      <text
+         xml:space="preserve"
+         style="font-size:4.9389px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#000000;stroke:none;stroke-width:1"
+         x="88.795639"
+         y="166.15697"
+         id="text1-2-9-5-9"><tspan
+           id="tspan1-9-3-9-7"
+           style="fill:#000000;stroke:none;stroke-width:1"
+           x="88.795639"
+           y="166.15697">postprocess</tspan></text>
+      <path
+         style="fill:#000000;stroke:#000000;stroke-width:0.6;stroke-dasharray:1.2, 0.6;stroke-dashoffset:0"
+         d="M 6.1789212,151.05201 H 203.58"
+         id="path5" />
+      <path
+         style="fill:#000000;stroke:#000000;stroke-width:0.6;stroke-dasharray:1.2, 0.6;stroke-dashoffset:0"
+         d="M 6.1789214,116.53117 H 203.58"
+         id="path5-1" />
+      <path
+         style="fill:#000000;stroke:#000000;stroke-width:0.6;stroke-dasharray:1.2, 0.6;stroke-dashoffset:0"
+         d="M 6.1219691,62.565143 H 203.51794"
+         id="path5-1-7" />
+      <path
+         style="fill:#000000;stroke:#000000;stroke-width:0.6;stroke-dasharray:1.2, 0.6;stroke-dashoffset:0"
+         d="M 6.1789212,203.7291 203.58,203.72909"
+         id="path5-1-9" />
+      <rect
+         style="fill:#ff9955;stroke:#000000;stroke-width:1"
+         id="rect5-0-3"
+         width="39.320507"
+         height="12.03485"
+         x="131.22012"
+         y="71.403595"
+         ry="2.16956" />
+      <text
+         xml:space="preserve"
+         style="font-size:4.9389px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#000000;stroke:none;stroke-width:1"
+         x="145.82463"
+         y="78.96109"
+         id="text1-2-9-5-4-0"><tspan
+           id="tspan1-9-3-9-5-6"
+           style="fill:#000000;stroke:none;stroke-width:1"
+           x="145.82463"
+           y="78.96109">thaw</tspan></text>
+      <text
+         xml:space="preserve"
+         style="font-size:4.9389px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#000000;stroke:none;stroke-width:1"
+         x="7.0902753"
+         y="124.35172"
+         id="text10"><tspan
+           id="tspan10"
+           style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed,  Bold';fill:#000000;stroke:none;stroke-width:1"
+           x="7.0902753"
+           y="124.35172">Time-critical</tspan></text>
+      <text
+         xml:space="preserve"
+         style="font-size:4.9389px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#000000;stroke:none;stroke-width:1"
+         x="6.9311113"
+         y="69.850014"
+         id="text10-5"><tspan
+           id="tspan10-2"
+           style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed,  Bold';fill:#000000;stroke:none;stroke-width:1"
+           x="6.9311113"
+           y="69.850014">Best effort</tspan></text>
+      <text
+         xml:space="preserve"
+         style="font-size:4.9389px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#000000;stroke:none;stroke-width:1"
+         x="7.6742024"
+         y="23.27216"
+         id="text10-5-6"><tspan
+           id="tspan10-2-49"
+           style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed,  Bold';fill:#000000;stroke:none;stroke-width:1"
+           x="7.6742024"
+           y="23.27216">Process init</tspan></text>
+      <text
+         xml:space="preserve"
+         style="font-size:4.9389px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#000000;stroke:none;stroke-width:1"
+         x="6.9311113"
+         y="47.202366"
+         id="text10-5-6-8"><tspan
+           id="tspan10-2-49-7"
+           style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed,  Bold';fill:#000000;stroke:none;stroke-width:1"
+           x="6.9311113"
+           y="47.202366">Engine init</tspan></text>
+      <text
+         xml:space="preserve"
+         style="font-size:4.9389px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#000000;stroke:none;stroke-width:1"
+         x="6.9311113"
+         y="159.36739"
+         id="text10-5-4"><tspan
+           id="tspan10-2-4"
+           style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed,  Bold';fill:#000000;stroke:none;stroke-width:1"
+           x="6.9311113"
+           y="159.36739">Best effort</tspan></text>
+      <path
+         style="fill:#000000;stroke:#000000;stroke-width:0.6;stroke-dasharray:1.2, 0.6;stroke-dashoffset:0"
+         d="M 6.1219691,40.340129 H 203.51794"
+         id="path12" />
+      <path
+         style="fill:#000000;stroke:#000000;stroke-width:0.6;stroke-dasharray:1.2, 0.6;stroke-dashoffset:0"
+         d="M 6.1219691,17.056781 H 203.51794"
+         id="path13" />
+      <path
+         style="fill:#000000;stroke:#000000;stroke-width:0.6;stroke-dasharray:1.2, 0.6;stroke-dashoffset:0"
+         d="M 6.1789212,227.01257 H 203.58"
+         id="path14" />
+      <text
+         xml:space="preserve"
+         style="font-size:4.9389px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#000000;stroke:none;stroke-width:1"
+         x="6.9311113"
+         y="210.84966"
+         id="text10-5-4-7"><tspan
+           id="tspan10-2-4-2"
+           style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed,  Bold';fill:#000000;stroke:none;stroke-width:1"
+           x="6.9311113"
+           y="210.84966">Engine teardown</tspan></text>
+      <text
+         xml:space="preserve"
+         style="font-size:4.9389px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#000000;stroke:none;stroke-width:1"
+         x="6.9311113"
+         y="233.14383"
+         id="text10-5-4-7-0"><tspan
+           id="tspan10-2-4-2-6"
+           style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed,  Bold';fill:#000000;stroke:none;stroke-width:1"
+           x="6.9311113"
+           y="233.14383">Process teardown</tspan></text>
+      <path
+         style="fill:#000000;stroke:#000000;stroke-width:0.6;stroke-dasharray:none;stroke-dashoffset:0;marker-end:url(#Triangle)"
+         d="M 101.96603,59.660614 V 92.621462"
+         id="path5-1-7-4" />
+      <path
+         style="fill:#000000;stroke:#000000;stroke-width:0.6;stroke-dasharray:4.8, 0.6;stroke-dashoffset:0;marker-start:url(#marker21);marker-end:url(#Triangle-9)"
+         d="M 104.43639,77.175002 H 128.465"
+         id="path5-1-7-4-7" />
+      <path
+         style="fill:#000000;stroke:#000000;stroke-width:0.6;stroke-dasharray:none;stroke-dashoffset:0;marker-end:url(#Triangle)"
+         d="m 101.96603,36.041748 v 5.974838"
+         id="path15" />
+      <path
+         style="fill:#000000;stroke:#000000;stroke-width:0.6;stroke-dasharray:none;stroke-dashoffset:0;marker-end:url(#Triangle)"
+         d="m 101.96602,107.23555 v 17.29131"
+         id="path16" />
+      <path
+         style="fill:#000000;stroke:#000000;stroke-width:0.6;stroke-dasharray:none;stroke-dashoffset:0;marker-end:url(#Triangle)"
+         d="m 101.96602,139.14199 v 16.95179"
+         id="path17" />
+      <path
+         style="fill:#000000;stroke:#000000;stroke-width:0.6;stroke-dasharray:none;stroke-dashoffset:0;marker-end:url(#Triangle)"
+         d="m 101.96602,170.63432 v 34.6212"
+         id="path18" />
+      <path
+         style="fill:#000000;stroke:#000000;stroke-width:0.6;stroke-dasharray:none;stroke-dashoffset:0;marker-end:url(#Triangle)"
+         d="m 101.96603,222.96205 v 2.49657 3.47831"
+         id="path19" />
+      <path
+         style="fill:#000000;stroke:#000000;stroke-width:0.6;stroke-dasharray:4.8, 0.6;stroke-dashoffset:0;marker-start:url(#marker22);marker-end:url(#Triangle-9)"
+         d="M 104.40262,187.7714 H 128.465"
+         id="path20" />
+      <path
+         style="fill:#000000;stroke:#000000;stroke-width:0.6;stroke-dasharray:none;stroke-dashoffset:0;marker-end:url(#Triangle-9)"
+         d="m 59.494975,72.412499 h 40.01362"
+         id="path23" />
+      <path
+         style="fill:#000000;stroke:#000000;stroke-width:0.6;stroke-dasharray:none;stroke-dashoffset:0"
+         d="M 59.494975,72.109008 V 194.4205"
+         id="path24" />
+      <path
+         style="fill:#000000;stroke:#000000;stroke-width:0.6;stroke-dasharray:none;stroke-dashoffset:0"
+         d="M 59.494975,194.12144 H 101.96602"
+         id="path25" />
+      <path
+         style="fill:#000000;stroke:#000000;stroke-width:0.6;stroke-dasharray:1.2, 0.6;stroke-dashoffset:0"
+         d="M 6.1219691,249.89111 H 203.51794"
+         id="path36" />
+    </g>
+  </g>
+</svg>

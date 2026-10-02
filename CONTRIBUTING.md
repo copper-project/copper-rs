@@ -193,3 +193,17 @@ Update `.pre-commit-config.yaml` if the shared hook configuration needs to chang
 
 Maintainer release branches, versioning, tagging, and backporting are documented in
 [RELEASING.md](RELEASING.md).
+
+## Website and release notes
+
+Edit the website pages in `docs/wiki/` and submit a pull request to `master`.
+`docs/wiki/Copper-Release-Notes.md` is the source for the published release-notes
+page. Keep released version headings dated to their crates.io publication and
+include compatibility instructions when defaults change. Update `_Sidebar.md`
+when adding a page to the navigation.
+
+Run `just wiki-check` before pushing. To preview the website, install `mkdocs`
+and `mkdocs-material`, run `python3 support/ci/wiki_site.py`, and run
+`mkdocs build -f build/wiki/mkdocs.yml`. The master Docs workflow deploys these
+reviewed pages to GitHub Pages. The separate GitHub wiki is a legacy copy; its
+branches and uncommitted edits do not feed this build.

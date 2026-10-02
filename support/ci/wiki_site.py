@@ -7,24 +7,12 @@ from __future__ import annotations
 import argparse
 import re
 import shutil
-import subprocess
 from pathlib import Path
 from typing import Dict, Iterable, List
 
-WIKI_REPO = "https://github.com/copper-project/copper-rs.wiki.git"
 WIKI_WEB_URL = "https://github.com/copper-project/copper-rs/wiki/"
 
 LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
-
-
-def _run(cmd: List[str]) -> None:
-    subprocess.run(cmd, check=True)
-
-
-def _clone_repo(repo_url: str, dest: Path) -> None:
-    if dest.exists():
-        shutil.rmtree(dest)
-    _run(["git", "clone", "--depth", "1", repo_url, str(dest)])
 
 
 def _page_map(wiki_dir: Path) -> Dict[str, str]:
@@ -231,9 +219,9 @@ def main() -> None:
         description="Prepare the GitHub wiki content for MkDocs."
     )
     parser.add_argument(
-        "--repo",
-        default=WIKI_REPO,
-        help="Git URL for the wiki repository.",
+        "--source",
+        default="docs/wiki",
+        help="Wiki source directory (relative to repo root).",
     )
     parser.add_argument(
         "--site-url",
@@ -250,15 +238,18 @@ def main() -> None:
 
     repo_root = Path(__file__).resolve().parents[2]
     workdir = _resolve_workdir(repo_root, args.workdir)
+    src_dir = _resolve_workdir(repo_root, args.source)
+    if not (src_dir / "Copper-Release-Notes.md").is_file():
+        raise FileNotFoundError(f"Missing release notes in {src_dir}")
+    if src_dir == workdir or workdir in src_dir.parents:
+        raise ValueError("Build directory must not contain wiki sources")
 
     if workdir.exists():
         shutil.rmtree(workdir)
     workdir.mkdir(parents=True)
 
-    src_dir = workdir / "src"
     docs_dir = workdir / "docs"
 
-    _clone_repo(args.repo, src_dir)
     pages = _page_map(src_dir)
 
     _copy_wiki(src_dir, docs_dir)

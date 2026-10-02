@@ -47,8 +47,10 @@ jobs:
           python-version: "3.x"
       - name: Install MkDocs
         run: python -m pip install --upgrade pip mkdocs mkdocs-material
-      - name: Prepare wiki sources
-        run: python support/ci/wiki_site.py
+      - name: Verify and prepare reviewed wiki sources
+        run: |
+          python -m unittest discover -s support/ci -p 'test_wiki_site.py'
+          python support/ci/wiki_site.py
       - name: Build wiki site
         run: mkdocs build -f build/wiki/mkdocs.yml
       - name: Stage API docs
