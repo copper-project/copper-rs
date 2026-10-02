@@ -167,3 +167,28 @@ fn catalog_blob(catalog: &ValueDecodeCatalog) -> Vec<u8> {
     }
     blob
 }
+
+#[test]
+fn test_oversized_catalog_is_rejected_before_loading_its_body() {
+    let dir = tempfile::tempdir_in(env!("CARGO_MANIFEST_DIR")).unwrap();
+    let path = dir.path().join("oversized.copper");
+    let UnifiedLogger::Write(logger) = UnifiedLoggerBuilder::new()
+        .file_base_name(&path)
+        .write(true)
+        .create(true)
+        .preallocated_size(32 * 1024 * 1024)
+        .build()
+        .unwrap()
+    else {
+        panic!("writer")
+    };
+    let logger = Arc::new(Mutex::new(logger));
+    let blob = vec![0; 16 * 1024 * 1024 + 11];
+    write_value_decode_catalog(logger.clone(), &blob).unwrap();
+    drop(logger);
+    let error = crate::catalog::read_value_decode_catalog(&path, None)
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("catalog discovery"), "{error}");
+    assert!(error.contains("exceeds 16 MiB"), "{error}");
+}
