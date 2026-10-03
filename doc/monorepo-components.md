@@ -18,6 +18,11 @@ resolution, clippy, tests, codec doctests, and codec `no_std` builds. ViTFly use
 the CPU backend by default. Its parity tests download and cache the pretrained
 weights inside `components/tasks/cu_vitfly/weights` on first use.
 
+Generated application templates use `cu29::bincode` for payload derives so they
+share the runtime's codec for crates.io, Git, and local dependencies. Run
+`just template-check` to generate both templates and compile their application,
+replay, logreader, and planner binaries against this checkout.
+
 Run `just cuda-test` in `components/tasks/cu_vitfly` to test CUDA inference.
 Camera demos require the native Stereolabs SDK; the crate READMEs describe
 installation and demo commands.
