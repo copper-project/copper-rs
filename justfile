@@ -44,6 +44,21 @@ monorepo-crates-check:
 	cargo +stable check -p cu-bincode --no-default-features
 	cargo +stable check -p cu-bincode --no-default-features --features alloc,derive,serde
 
+# Generate and build both app templates against this checkout's codec and runtime.
+template-check toolchain="stable":
+	#!/usr/bin/env bash
+	set -euo pipefail
+	export CARGO_NAME="Copper Tests"
+	export CARGO_TARGET_DIR="{{ROOT}}/target"
+	output="{{ROOT}}/target/template-check"
+	rm -rf "$output"
+	mkdir -p "$output"
+	cargo +{{toolchain}} test -p cargo-cunew --lib
+	cargo +{{toolchain}} run -p cargo-cunew -- "$output/project" --template project --source local --copper-root "{{ROOT}}" --no-vcs
+	cargo +{{toolchain}} run -p cargo-cunew -- "$output/workspace" --template workspace --source local --copper-root "{{ROOT}}" --no-vcs
+	cargo +{{toolchain}} generate --path "{{ROOT}}/support/cargo_cunew/templates/cu_project" --name cargo_generate_project --destination "$output" -d copper_source=local -d copper_root_path="{{ROOT}}" --silent
+	bash "{{ROOT}}/support/cargo_cunew/templates/smoke_generated.sh" "{{toolchain}}" "$output/project" "$output/workspace" "$output/cargo_generate_project"
+
 # Local PR pipeline: format, lint, then tests.
 pr-check:
 	just fmt
