@@ -28,6 +28,7 @@ cu29 = { workspace = true, features = ["reflect", "std", "units"] }
 
 [dev-dependencies]
 anyhow = { workspace = true, features = ["std"] }
+tempfile = { workspace = true }
 
 [[example]]
 name = "synthetic_depth"

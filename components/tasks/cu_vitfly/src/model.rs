@@ -109,12 +109,27 @@ fn validate_model_file(path: PathBuf) -> std::result::Result<PathBuf, CacheError
 
 fn prepare_model_weights() -> Result<PathBuf> {
     let weights_root = model_root();
+    prepare_model_weights_in(&weights_root)
+}
+
+fn prepare_model_weights_in(weights_root: &Path) -> Result<PathBuf> {
+    fs::create_dir_all(weights_root).map_err(candle_core::Error::msg)?;
+    // Hold an OS lock across validation, download, and publication: separate
+    // processes can load the same checkpoint concurrently (including nextest).
+    // Keep the lock file in place so all callers lock the same inode.
+    let setup_lock = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(weights_root.join(".model-setup.lock"))
+        .map_err(candle_core::Error::msg)?;
+    setup_lock.lock().map_err(candle_core::Error::msg)?;
     let model_path = weights_root.join(MODEL_NAME);
     if model_file_is_valid(&model_path) {
         return Ok(model_path);
     }
 
-    fs::create_dir_all(&weights_root).map_err(candle_core::Error::msg)?;
     if fs::symlink_metadata(&model_path).is_ok() {
         fs::remove_file(&model_path).map_err(candle_core::Error::msg)?;
     }
@@ -652,4 +667,48 @@ fn validate_shape(name: &str, actual: &Shape, expected: &[usize]) -> Result<()> 
         )
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    #[test]
+    fn test_model_setup_waits_for_publication() {
+        let root = tempfile::tempdir_in(model_root().parent().unwrap()).unwrap();
+        let lock = fs::File::create(root.path().join(".model-setup.lock")).unwrap();
+        lock.lock().unwrap();
+        let weights_root = root.path().to_path_buf();
+        let (started_tx, started_rx) = mpsc::channel();
+        let (done_tx, done_rx) = mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            started_tx.send(()).unwrap();
+            done_tx
+                .send(prepare_model_weights_in(&weights_root))
+                .unwrap();
+        });
+        started_rx.recv().unwrap();
+        assert!(matches!(
+            done_rx.recv_timeout(Duration::from_millis(100)),
+            Err(mpsc::RecvTimeoutError::Timeout)
+        ));
+
+        // Simulate another process finishing publication while holding the lock.
+        let model_path = root.path().join(MODEL_NAME);
+        fs::File::create(&model_path)
+            .unwrap()
+            .set_len(MODEL_SIZE_BYTES)
+            .unwrap();
+        drop(lock);
+        assert_eq!(
+            done_rx
+                .recv_timeout(Duration::from_secs(5))
+                .unwrap()
+                .unwrap(),
+            model_path
+        );
+        worker.join().unwrap();
+    }
 }
