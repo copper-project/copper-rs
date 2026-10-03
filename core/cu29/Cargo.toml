@@ -2,7 +2,7 @@
 name = "cu29"
 description = "Copper Runtime prelude crate. Copper is a Rust engine for robotics."
 documentation = "https://docs.rs/cu29"
-version = "1.2.2"
+version = "1.2.3"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true

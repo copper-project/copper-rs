@@ -246,7 +246,7 @@ cu29-log = { path = "core/cu29_log", default-features = false, version = "~1.2.1
 cu29-log-derive = { path = "core/cu29_log_derive", default-features = false, version = "~1.2.1" }
 cu29-log-runtime = { path = "core/cu29_log_runtime", default-features = false, version = "~1.2.1" }
 cu29-logstream = { path = "core/cu29_logstream", default-features = false, version = "~1.2.1" }
-cu29-runtime = { path = "core/cu29_runtime", default-features = false, version = "~1.2.2" }
+cu29-runtime = { path = "core/cu29_runtime", default-features = false, version = "~1.2.3" }
 cu29-soa-derive = { path = "core/cu29_soa_derive", default-features = false, version = "~1.2.1" }
 cu29-traits = { path = "core/cu29_traits", default-features = false, version = "~1.2.1" }
 cu29-unifiedlog = { path = "core/cu29_unifiedlog", default-features = false, features = [
