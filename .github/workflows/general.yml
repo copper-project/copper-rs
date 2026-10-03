@@ -470,6 +470,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Check workspace CI exclusions
+        run: python3 -m unittest discover -s support/ci -p test_workspace_excludes.py
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt

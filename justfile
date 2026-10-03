@@ -35,14 +35,28 @@ vit-extract:
 
 # Verify the in-tree codec, ZED wrappers, and CPU inference task.
 monorepo-crates-check:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	excluded="$(python3 support/ci/workspace_excludes.py list --toolchain stable)"
+	packages=()
+	for package in cu-bincode cu-bincode-derive cu-zed zed-sdk zed-sdk-sys cu-vitfly; do
+		if ! grep -Fxq "$package" <<< "$excluded"; then
+			packages+=(-p "$package")
+		fi
+	done
+	just workspace-excludes-check
 	cargo +stable metadata --format-version 1 --all-features --filter-platform x86_64-unknown-linux-gnu > /dev/null
-	cargo +stable clippy -p cu-bincode -p cu-bincode-derive -p cu-zed -p zed-sdk -p zed-sdk-sys -p cu-vitfly --all-targets -- --deny warnings
-	cargo +stable nextest run -p cu-bincode -p cu-bincode-derive -p cu-zed -p zed-sdk -p zed-sdk-sys -p cu-vitfly --all-targets
+	cargo +stable clippy "${packages[@]}" --all-targets -- --deny warnings
+	cargo +stable nextest run "${packages[@]}" --all-targets
 	cargo +stable clippy -p cu-bincode -p cu-bincode-derive --all-targets --all-features -- --deny warnings
 	cargo +stable nextest run -p cu-bincode -p cu-bincode-derive --all-targets --all-features
 	cargo +stable test -p cu-bincode -p cu-bincode-derive --doc --all-features
 	cargo +stable check -p cu-bincode --no-default-features
 	cargo +stable check -p cu-bincode --no-default-features --features alloc,derive,serde
+
+# Verify workspace CI exclusions across runner operating systems.
+workspace-excludes-check:
+	python3 -m unittest discover -s support/ci -p test_workspace_excludes.py
 
 # Generate and build both app templates against this checkout's codec and runtime.
 template-check toolchain="stable":
@@ -95,6 +109,7 @@ compile-tests toolchain="stable":
 lint:
 	just fmt-check
 	just typos
+	just workspace-excludes-check
 	just clippy-std
 	just clippy-nostd
 

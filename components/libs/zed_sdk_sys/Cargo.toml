@@ -25,5 +25,8 @@ demo = []
 [package.metadata.cargo-shear]
 ignored = []
 
+[package.metadata.copper]
+ci_exclude_workspace_os = ["macos"]
+
 [build-dependencies]
 cc = { workspace = true }
