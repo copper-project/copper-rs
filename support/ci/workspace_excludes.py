@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+import sys
 from typing import Any, Dict, List, Optional
 
 
@@ -33,6 +34,7 @@ def _load_excluded_packages(toolchain: Optional[str]) -> List[Dict[str, Any]]:
         encoding="utf-8",
     )
     metadata = json.loads(metadata_json)
+    host_os = {"darwin": "macos", "win32": "windows"}.get(sys.platform, sys.platform)
 
     excluded: List[Dict[str, Any]] = []
     for pkg in metadata.get("packages", []):
@@ -40,7 +42,12 @@ def _load_excluded_packages(toolchain: Optional[str]) -> List[Dict[str, Any]]:
         copper_meta = pkg_metadata.get("copper", {})
         environments = set(_normalize_list(copper_meta.get("environments")))
         embedded_only = "embedded" in environments and "host" not in environments
-        if embedded_only or bool(copper_meta.get("ci_exclude_workspace", False)):
+        excluded_os = _normalize_list(copper_meta.get("ci_exclude_workspace_os"))
+        if (
+            embedded_only
+            or bool(copper_meta.get("ci_exclude_workspace", False))
+            or host_os in excluded_os
+        ):
             excluded.append(
                 {
                     "name": pkg["name"],

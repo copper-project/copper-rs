@@ -1,0 +1,17 @@
+default: test
+
+# CPU parity against the original PyTorch model.
+test:
+	cargo test -p cu-vitfly --release
+
+sample:
+	cargo run -p cu-vitfly --release --example synthetic_depth
+
+benchmark:
+	cargo run -p cu-vitfly --release --example benchmark
+
+cuda-test:
+	cargo test -p cu-vitfly --release --features cuda
+
+cuda-sample:
+	cargo run -p cu-vitfly --release --features cuda --example synthetic_depth -- --cuda

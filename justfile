@@ -33,6 +33,45 @@ tuimon-check:
 vit-extract:
 	just --justfile "{{ROOT}}/examples/cu_flight_controller/justfile" vit-extract
 
+# Verify the in-tree codec, ZED wrappers, and CPU inference task.
+monorepo-crates-check:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	excluded="$(python3 support/ci/workspace_excludes.py list --toolchain stable)"
+	packages=()
+	for package in cu-bincode cu-bincode-derive cu-zed zed-sdk zed-sdk-sys cu-vitfly; do
+		if ! grep -Fxq "$package" <<< "$excluded"; then
+			packages+=(-p "$package")
+		fi
+	done
+	just workspace-excludes-check
+	cargo +stable metadata --format-version 1 --all-features --filter-platform x86_64-unknown-linux-gnu > /dev/null
+	cargo +stable clippy "${packages[@]}" --all-targets -- --deny warnings
+	cargo +stable nextest run "${packages[@]}" --all-targets
+	cargo +stable clippy -p cu-bincode -p cu-bincode-derive --all-targets --all-features -- --deny warnings
+	cargo +stable nextest run -p cu-bincode -p cu-bincode-derive --all-targets --all-features
+	cargo +stable test -p cu-bincode -p cu-bincode-derive --doc --all-features
+	cargo +stable check -p cu-bincode --no-default-features
+	cargo +stable check -p cu-bincode --no-default-features --features alloc,derive,serde
+
+# Verify workspace CI exclusions across runner operating systems.
+workspace-excludes-check:
+	python3 -m unittest discover -s support/ci -p test_workspace_excludes.py
+
+# Generate and build both app templates against this checkout's codec and runtime.
+template-check toolchain="stable":
+	#!/usr/bin/env bash
+	set -euo pipefail
+	export CARGO_NAME="Copper Tests"
+	export CARGO_TARGET_DIR="{{ROOT}}/target"
+	output="{{ROOT}}/target/template-check"
+	rm -rf "$output"
+	mkdir -p "$output"
+	cargo +{{toolchain}} test -p cargo-cunew --lib
+	cargo +{{toolchain}} run -p cargo-cunew -- "$output/project" --template project --source local --copper-root "{{ROOT}}" --no-vcs
+	cargo +{{toolchain}} run -p cargo-cunew -- "$output/workspace" --template workspace --source local --copper-root "{{ROOT}}" --no-vcs
+	bash "{{ROOT}}/support/cargo_cunew/templates/smoke_generated.sh" "{{toolchain}}" "$output/project" "$output/workspace"
+
 # Local PR pipeline: format, lint, then tests.
 pr-check:
 	just fmt
@@ -70,6 +109,7 @@ compile-tests toolchain="stable":
 lint:
 	just fmt-check
 	just typos
+	just workspace-excludes-check
 	just clippy-std
 	just clippy-nostd
 

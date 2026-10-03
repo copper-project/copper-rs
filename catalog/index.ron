@@ -64,12 +64,10 @@
         (name: "cu-tuimon", source: GitHub(path: "components/libs/cu_tuimon")),
         (name: "cu-udp-inject", source: GitHub(path: "components/testing/cu_udp_inject")),
         (name: "cu-v4l", source: GitHub(path: "components/sources/cu_v4l")),
+        (name: "cu-vitfly", source: GitHub(path: "components/tasks/cu_vitfly")),
         (name: "cu-vlp16", source: GitHub(path: "components/sources/cu_vlp16")),
         (name: "cu-wt901", source: GitHub(path: "components/sources/cu_wt901")),
-        (
-            name: "cu-zed",
-            source: GitHub(repo: Some("copper-project/zed"), path: "components/sources/cu_zed"),
-        ),
+        (name: "cu-zed", source: GitHub(path: "components/sources/cu_zed")),
         (
             name: "cu-zed-f9r",
             source: GitLab(

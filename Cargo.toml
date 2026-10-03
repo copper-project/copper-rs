@@ -1,6 +1,12 @@
 [workspace]
 
 members = [
+  "core/cu_bincode",
+  "core/cu_bincode_derive",
+  "components/libs/zed_sdk",
+  "components/libs/zed_sdk_sys",
+  "components/sources/cu_zed",
+  "components/tasks/cu_vitfly",
   "components/libs/cu_serial",
   "components/res/cu_hc12",
   "components/res/cu29_logstream_serial",
@@ -175,9 +181,7 @@ debug = 2
 debug-assertions = true
 
 # Keep normal application code debuggable while compiling the CPU inference
-# hot path with the optimizations it requires. Cargo profiles declared by the
-# git dependency itself are ignored, so these overrides belong at the workspace
-# root.
+# hot path with the optimizations it requires.
 [profile.dev.package.cu-vitfly]
 opt-level = 3
 
@@ -206,12 +210,14 @@ opt-level = 3
 opt-level = 3
 
 [patch.crates-io]
+cu-bincode = { path = "core/cu_bincode" }
+cu-bincode-derive = { path = "core/cu_bincode_derive" }
 cu-ahrs = { path = "components/tasks/cu_ahrs" }
 cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads" }
 cu-transform = { path = "components/libs/cu_transform" }
 cu29 = { path = "core/cu29" }
-cu-vitfly = { path = "../cu-vitfly" }
-cu-zed = { path = "../zed/components/sources/cu_zed" }
+cu-vitfly = { path = "components/tasks/cu_vitfly" }
+cu-zed = { path = "components/sources/cu_zed" }
 soft_ratatui = { path = "vendor/soft_ratatui" }
 
 [workspace.package]
@@ -229,6 +235,16 @@ repository = "https://github.com/copper-project/copper-rs"
 no_individual_tags = true
 
 [workspace.dependencies]
+cu-transform = { path = "components/libs/cu_transform", version = "1.3.0-dev" }
+cu-zed = { path = "components/sources/cu_zed", version = "1.3.0-dev" }
+cu-vitfly = { path = "components/tasks/cu_vitfly", version = "1.3.0-dev", default-features = false }
+zed-sdk = { path = "components/libs/zed_sdk", version = "1.3.0-dev" }
+zed-sdk-sys = { path = "components/libs/zed_sdk_sys", version = "1.3.0-dev" }
+cc = "1.2"
+eframe = "0.33"
+candle-core = "0.11.0"
+candle-nn = "0.11.0"
+
 cu-serial = { path = "components/libs/cu_serial", version = "1.3.0-dev", default-features = false }
 cu-hc12 = { path = "components/res/cu_hc12", version = "1.3.0-dev", default-features = false }
 cu29-logstream-serial = { path = "components/res/cu29_logstream_serial", version = "1.3.0-dev", default-features = false }
@@ -294,8 +310,8 @@ cu-spatial-payloads = { path = "components/payloads/cu_spatial_payloads", versio
 cu-ros2-payloads = { path = "components/payloads/cu_ros2_payloads", version = "1.3.0-dev" }
 cu-pid = { path = "components/tasks/cu_pid", version = "1.3.0-dev" }
 
-# External serialization
-bincode = { package = "cu-bincode", version = "2.1", default-features = false, features = [
+# Serialization
+bincode = { package = "cu-bincode", path = "core/cu_bincode", version = "=2.2.0-beta", default-features = false, features = [
   "derive",
   "alloc",
 ] }

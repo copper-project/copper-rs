@@ -5,5 +5,4 @@ edition = "2024"
 
 [dependencies]
 cu29 = { workspace = true }
-bincode = { workspace = true }
 serde = { workspace = true }

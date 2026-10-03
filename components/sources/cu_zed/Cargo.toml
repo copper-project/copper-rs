@@ -1,0 +1,39 @@
+[package]
+name = "cu-zed"
+description = "Copper source task for Stereolabs ZED stereo cameras."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[package.metadata.copper]
+kind = "source"
+domains = ["sensor/camera", "sensor/depth"]
+environments = ["host"]
+host_os = ["linux"]
+
+[features]
+zed-rerun-demo = []
+
+[dependencies]
+cu29 = { workspace = true }
+cu-sensor-payloads = { workspace = true }
+serde = { workspace = true }
+cu-transform = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zed-sdk = { workspace = true }
+
+[dev-dependencies]
+bytemuck = { workspace = true }
+rerun = { workspace = true }
+serde_json = "1.0"
+
+[[example]]
+name = "zed_rerun_demo"
+required-features = ["zed-rerun-demo"]

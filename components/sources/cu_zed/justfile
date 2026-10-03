@@ -1,0 +1,38 @@
+default: check
+
+_ffi-vendor-check:
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	repo_root="$(cd "{{justfile_directory()}}/../../.." && pwd)"
+	just --justfile "$repo_root/components/libs/zed_sdk_sys/justfile" _vendor-check
+
+build: _ffi-vendor-check
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	repo_root="$(cd "{{justfile_directory()}}/../../.." && pwd)"
+	cd "$repo_root"
+	cargo build -p cu-zed --example zed_rerun_demo --features zed-rerun-demo
+
+check: _ffi-vendor-check
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	repo_root="$(cd "{{justfile_directory()}}/../../.." && pwd)"
+	cd "$repo_root"
+	cargo check -p cu-zed --example zed_rerun_demo --features zed-rerun-demo
+
+demo: _ffi-vendor-check
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	repo_root="$(cd "{{justfile_directory()}}/../../.." && pwd)"
+	cd "$repo_root"
+	cargo run -r -p cu-zed --example zed_rerun_demo --features zed-rerun-demo
+
+run: demo
+
+build-demo: build
+
+run-demo: demo

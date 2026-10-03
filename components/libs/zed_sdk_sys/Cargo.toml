@@ -1,0 +1,32 @@
+[package]
+name = "zed-sdk-sys"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Raw Rust FFI bindings for the Stereolabs ZED C API"
+repository.workspace = true
+links = "sl_zed_c"
+build = "build.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "zed_lowlevel_demo"
+path = "src/bin/zed_lowlevel_demo.rs"
+required-features = ["demo"]
+
+[features]
+default = []
+demo = []
+
+[package.metadata.cargo-shear]
+ignored = []
+
+[package.metadata.copper]
+ci_exclude_workspace_os = ["macos"]
+
+[build-dependencies]
+cc = { workspace = true }

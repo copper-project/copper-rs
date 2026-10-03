@@ -92,6 +92,13 @@ hardware-in-the-loop. See
 [Supported Platforms](https://copper-project.github.io/copper-rs/Supported-Platforms)
 for the public platform matrix.
 
+Workspace checks use `support/ci/workspace_excludes.py` to read
+`package.metadata.copper`. Set `ci_exclude_workspace = true` to exclude a package
+on every runner, or `ci_exclude_workspace_os = ["macos"]` to exclude it on specific
+runner operating systems (`linux`, `macos`, or `windows`). macOS checks include
+the portable `cu-zed` payload and projection code and exclude the native ZED SDK
+wrappers.
+
 ## Compile Tests
 
 Run `just compile-tests` for the proc-macro and lifecycle compile fixtures, or

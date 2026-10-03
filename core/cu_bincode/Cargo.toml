@@ -1,0 +1,70 @@
+[package]
+name = "cu-bincode"
+version = "2.2.0-beta"
+authors = [
+  "Guillaume Binet <gbin@copper-robotics.com>",
+  "Ty Overby <ty@pre-alpha.com>",
+  "Zoey Riordan <zoey@dos.cafe>",
+  "Victor Koenders <bincode@trangar.com>",
+]
+exclude = ["logo.svg", "examples/*", ".gitignore", ".github/"]
+rust-version = "1.92.0"
+
+publish = true
+
+repository = "https://github.com/copper-project/copper-rs"
+documentation = "https://docs.rs/cu-bincode"
+readme = "./README.md"
+categories = ["encoding", "network-programming"]
+keywords = ["binary", "encode", "decode", "serialize", "deserialize"]
+
+license = "MIT"
+description = "A binary serialization / deserialization strategy for transforming structs into bytes and vice versa!"
+
+edition = "2024"
+
+[features]
+default = ["std", "derive"]
+std = ["alloc", "serde?/std"]
+alloc = ["serde?/alloc"]
+derive = ["dep:cu-bincode-derive"]
+self-describing = ["cu-bincode-derive?/self-describing"]
+
+[dependencies]
+cu-bincode-derive = { path = "../cu_bincode_derive", version = "=2.2.0-beta", optional = true }
+serde = { version = "1.0", default-features = false, optional = true }
+unty = "0.0"
+
+# Used for tests
+[dev-dependencies]
+ouroboros = "0.18"
+serde_derive = "1.0"
+serde_json = { version = "1.0", default-features = false }
+tempfile = "3.23"
+criterion = "0.8"
+rand = "0.9"
+uuid = { version = "1.1", features = ["serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+glam = { version = "0.25", features = ["serde"] }
+bincode_1 = { version = "1.3", package = "bincode" }
+serde = { version = "1.0", features = ["derive"] }
+bumpalo = { version = "3.16.0", features = ["collections"] }
+
+[[bench]]
+name = "varint"
+harness = false
+
+[[bench]]
+name = "inline"
+harness = false
+
+[[bench]]
+name = "string"
+harness = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[package.metadata.workspaces]
+independent = true

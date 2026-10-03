@@ -46,7 +46,6 @@ pgs-candidate = []
 [dependencies]
 cu29 = { workspace = true }
 cu29-export = { workspace = true, optional = true }
-bincode = { workspace = true }
 serde = { workspace = true }
 clap = { workspace = true }
 # cu-memmon = { workspace = true, optional = true }
