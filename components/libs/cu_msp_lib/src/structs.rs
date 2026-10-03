@@ -15,7 +15,8 @@ use packed_struct::types::bits::ByteArray;
 use packed_struct::{PackedStruct, PackingError, PrimitiveEnum};
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
-#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
+#[cfg_attr(feature = "reflect", derive(bevy_reflect::Reflect))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 pub struct MspApiVersion {
     pub protocol_version: u8,
@@ -24,13 +25,15 @@ pub struct MspApiVersion {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 pub struct MspFlightControllerVariant {
     pub identifier: [u8; 4],
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
-#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
+#[cfg_attr(feature = "reflect", derive(bevy_reflect::Reflect))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 pub struct MspFlightControllerVersion {
     pub major: u8,
@@ -39,6 +42,7 @@ pub struct MspFlightControllerVersion {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspBoardInfo {
@@ -48,6 +52,7 @@ pub struct MspBoardInfo {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 pub struct MspBuildInfo {
     pub date_str: [u8; 11],
@@ -56,12 +61,14 @@ pub struct MspBuildInfo {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 pub struct MspUniqueId {
     pub uid: [u8; 12],
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(bytes = "1", endian = "lsb", bit_numbering = "msb0")]
 pub struct MspAvailableSensors {
@@ -78,7 +85,8 @@ pub struct MspAvailableSensors {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
-#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
+#[cfg_attr(feature = "reflect", derive(bevy_reflect::Reflect))]
 #[derive(Serialize, Deserialize, Debug, Copy, Clone, Default, PartialEq, Eq)]
 pub struct MspStatusSensors {
     pub acc: bool,
@@ -127,7 +135,8 @@ impl From<MspStatusSensors> for u16 {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
-#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
+#[cfg_attr(feature = "reflect", derive(bevy_reflect::Reflect))]
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
 pub struct MspStatus {
     pub cycle_time: u16,
@@ -146,7 +155,8 @@ pub struct MspStatus {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
-#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
+#[cfg_attr(feature = "reflect", derive(bevy_reflect::Reflect))]
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
 pub struct MspStatusEx {
     pub cycle_time: u16,
@@ -372,6 +382,7 @@ fn read_bytes(data: &[u8], offset: &mut usize, len: usize) -> Result<Vec<u8>, Pa
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspBfConfig {
@@ -386,7 +397,8 @@ pub struct MspBfConfig {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
-#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
+#[cfg_attr(feature = "reflect", derive(bevy_reflect::Reflect))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspRawImu {
@@ -402,6 +414,7 @@ pub struct MspRawImu {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(bytes = "1", endian = "lsb", bit_numbering = "msb0")]
 pub struct MspDataFlashSummaryReply {
@@ -415,6 +428,7 @@ pub struct MspDataFlashSummaryReply {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(bytes = "1", endian = "lsb", bit_numbering = "msb0")]
 pub struct MspDataFlashReply {
@@ -423,6 +437,7 @@ pub struct MspDataFlashReply {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(bytes = "6", endian = "lsb", bit_numbering = "msb0")]
 pub struct MspDataFlashRead {
@@ -431,6 +446,7 @@ pub struct MspDataFlashRead {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspAccTrim {
@@ -439,6 +455,7 @@ pub struct MspAccTrim {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspIdent {
@@ -449,6 +466,7 @@ pub struct MspIdent {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspMisc {
@@ -470,6 +488,7 @@ pub struct MspMisc {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspAttitude {
@@ -479,6 +498,7 @@ pub struct MspAttitude {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspAltitude {
@@ -489,7 +509,8 @@ pub struct MspAltitude {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
-#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
+#[cfg_attr(feature = "reflect", derive(bevy_reflect::Reflect))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspSensorRangefinder {
@@ -498,7 +519,8 @@ pub struct MspSensorRangefinder {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
-#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
+#[cfg_attr(feature = "reflect", derive(bevy_reflect::Reflect))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspSensorOpticFlow {
@@ -508,7 +530,8 @@ pub struct MspSensorOpticFlow {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
-#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
+#[cfg_attr(feature = "reflect", derive(bevy_reflect::Reflect))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspBatteryConfig {
@@ -524,7 +547,8 @@ pub struct MspBatteryConfig {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
-#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
+#[cfg_attr(feature = "reflect", derive(bevy_reflect::Reflect))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspVoltageMeterConfig {
@@ -538,7 +562,8 @@ pub struct MspVoltageMeterConfig {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
-#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
+#[cfg_attr(feature = "reflect", derive(bevy_reflect::Reflect))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspAnalog {
@@ -552,6 +577,7 @@ pub struct MspAnalog {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspRssiConfig {
@@ -559,7 +585,8 @@ pub struct MspRssiConfig {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
-#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
+#[cfg_attr(feature = "reflect", derive(bevy_reflect::Reflect))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 pub struct MspVoltageMeter {
     pub id: u8,
@@ -567,6 +594,7 @@ pub struct MspVoltageMeter {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspCurrentMeter {
@@ -577,7 +605,8 @@ pub struct MspCurrentMeter {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
-#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
+#[cfg_attr(feature = "reflect", derive(bevy_reflect::Reflect))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspBatteryState {
@@ -602,6 +631,7 @@ impl MspBatteryState {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspRcTuning {
@@ -621,6 +651,7 @@ pub struct MspRcTuning {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspRxConfig {
@@ -641,6 +672,7 @@ pub struct MspRxConfig {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspRcChannelValue {
@@ -648,6 +680,7 @@ pub struct MspRcChannelValue {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PrimitiveEnum, Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Default)]
 pub enum MspRcChannel {
     /// Ailerons
@@ -677,6 +710,7 @@ pub enum MspRcChannel {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 pub struct MspRcMappedChannel {
     #[packed_field(size_bits = "8", ty = "enum")]
@@ -684,12 +718,14 @@ pub struct MspRcMappedChannel {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 pub struct MspFeatures {
     pub features: [bool; 32],
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspMotor {
@@ -697,6 +733,7 @@ pub struct MspMotor {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspMotor3DConfig {
@@ -706,6 +743,7 @@ pub struct MspMotor3DConfig {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspMotorConfig {
@@ -715,6 +753,7 @@ pub struct MspMotorConfig {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspRcDeadband {
@@ -725,6 +764,7 @@ pub struct MspRcDeadband {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspSensorAlignment {
@@ -734,6 +774,7 @@ pub struct MspSensorAlignment {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspAdvancedConfig {
@@ -748,6 +789,7 @@ pub struct MspAdvancedConfig {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspFilterConfig {
@@ -763,6 +805,7 @@ pub struct MspFilterConfig {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspPidAdvanced {
@@ -783,6 +826,7 @@ pub struct MspPidAdvanced {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspSensorConfig {
@@ -792,6 +836,7 @@ pub struct MspSensorConfig {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspServos {
@@ -799,6 +844,7 @@ pub struct MspServos {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Debug, Copy, Clone, Default)]
 #[packed_struct(bytes = "14", endian = "lsb", bit_numbering = "msb0")]
 pub struct MspServoConfig {
@@ -813,6 +859,7 @@ pub struct MspServoConfig {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Debug, Copy, Clone, Default)]
 #[packed_struct(bytes = "1", endian = "lsb", bit_numbering = "msb0")]
 pub struct MspSetServoConfig {
@@ -822,6 +869,7 @@ pub struct MspSetServoConfig {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
 pub struct MspMixerConfig {
@@ -830,6 +878,7 @@ pub struct MspMixerConfig {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(bytes = "4", endian = "lsb", bit_numbering = "msb0")]
 pub struct MspModeRange {
@@ -841,6 +890,7 @@ pub struct MspModeRange {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode, Default))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone)]
 #[packed_struct(bytes = "5", endian = "lsb", bit_numbering = "msb0")]
 pub struct MspSetModeRange {
@@ -850,6 +900,7 @@ pub struct MspSetModeRange {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PrimitiveEnum, Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Default)]
 pub enum MixerMode {
     Tri = 1,
@@ -867,6 +918,7 @@ pub enum MixerMode {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(bytes = "8", endian = "lsb", bit_numbering = "msb0")]
 pub struct MspMotorMixer {
@@ -877,6 +929,7 @@ pub struct MspMotorMixer {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(bytes = "9", endian = "lsb", bit_numbering = "msb0")]
 pub struct MspSetMotorMixer {
@@ -895,7 +948,8 @@ pub const MSP_DP_SYS: u8 = 6;
 pub const MSP_DP_FONTCHAR_WRITE: u8 = 7;
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
-#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
+#[cfg_attr(feature = "reflect", derive(bevy_reflect::Reflect))]
 #[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq, Eq)]
 pub struct MspDisplayPort {
     pub payload: Vec<u8>,
@@ -962,6 +1016,7 @@ impl MspDisplayPort {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(bytes = "13", endian = "lsb", bit_numbering = "msb0")]
 pub struct MspOsdConfig {
@@ -976,6 +1031,7 @@ pub struct MspOsdConfig {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(bytes = "1", endian = "lsb", bit_numbering = "msb0")]
 pub struct MspSetGetOsdConfig {
@@ -985,6 +1041,7 @@ pub struct MspSetGetOsdConfig {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(bytes = "2", endian = "lsb", bit_numbering = "msb0")]
 pub struct MspOsdItemPosition {
@@ -993,6 +1050,7 @@ pub struct MspOsdItemPosition {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(bytes = "1", endian = "lsb", bit_numbering = "msb0")]
 pub struct MspSetOsdLayout {
@@ -1003,6 +1061,7 @@ pub struct MspSetOsdLayout {
 
 // inav msp layout item
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(bytes = "1", endian = "lsb", bit_numbering = "msb0")]
 pub struct MspSetOsdLayoutItem {
@@ -1012,6 +1071,7 @@ pub struct MspSetOsdLayoutItem {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct MspOsdSettings {
     pub osd_support: u8,
@@ -1020,6 +1080,7 @@ pub struct MspOsdSettings {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(bytes = "2", endian = "lsb", bit_numbering = "msb0")]
 pub struct MspOsdLayouts {
@@ -1028,6 +1089,7 @@ pub struct MspOsdLayouts {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PrimitiveEnum, Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Default)]
 pub enum SerialIdentifier {
     #[default]
@@ -1070,6 +1132,7 @@ impl TryFrom<u8> for SerialIdentifier {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PrimitiveEnum, Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Default)]
 pub enum Baudrate {
     #[default]
@@ -1147,6 +1210,7 @@ impl From<Baudrate> for String {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb", bit_numbering = "msb0")]
 pub struct MspSerialSetting {
@@ -1164,6 +1228,7 @@ pub struct MspSerialSetting {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(bytes = "1", endian = "lsb", bit_numbering = "msb0")]
 pub struct MspSetServoMixRule {
@@ -1173,6 +1238,7 @@ pub struct MspSetServoMixRule {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(bytes = "8", endian = "lsb", bit_numbering = "msb0")]
 pub struct MspServoMixRule {
@@ -1186,6 +1252,7 @@ pub struct MspServoMixRule {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(bytes = "1", endian = "lsb", bit_numbering = "msb0")]
 pub struct MspSetServoMixer {
@@ -1195,6 +1262,7 @@ pub struct MspSetServoMixer {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(bytes = "6", endian = "lsb", bit_numbering = "msb0")]
 pub struct MspServoMixer {
@@ -1206,6 +1274,7 @@ pub struct MspServoMixer {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb", bit_numbering = "msb0")]
 pub struct MspRxMap {
@@ -1213,6 +1282,7 @@ pub struct MspRxMap {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb", bit_numbering = "msb0")]
 pub struct MspSettingGroup {
@@ -1222,6 +1292,7 @@ pub struct MspSettingGroup {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb", bit_numbering = "msb0")]
 pub struct MspSettingInfoRequest {
@@ -1230,6 +1301,7 @@ pub struct MspSettingInfoRequest {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PrimitiveEnum, Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Default)]
 pub enum SettingMode {
     #[default]
@@ -1238,6 +1310,7 @@ pub enum SettingMode {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PrimitiveEnum, Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Default)]
 pub enum SettingType {
     #[default]
@@ -1252,6 +1325,7 @@ pub enum SettingType {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(bytes = "15", endian = "lsb", bit_numbering = "msb0")]
 pub struct MspSettingInfo {
@@ -1284,7 +1358,8 @@ pub struct MspSettingInfo {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
-#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
+#[cfg_attr(feature = "reflect", derive(bevy_reflect::Reflect))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone)]
 #[packed_struct(endian = "lsb")]
 pub struct MspRc {
@@ -1334,7 +1409,8 @@ impl MspRc {
 
 // Gather all the commands in a common enum we can use as a higher level protocol
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
-#[cfg_attr(feature = "self-describing-logs", derive(bevy_reflect::Reflect))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
+#[cfg_attr(feature = "reflect", derive(bevy_reflect::Reflect))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub enum MspRequest {
     #[default]
@@ -1688,6 +1764,7 @@ impl From<&MspRequest> for MspPacket {
 
 // Gather all the commands in a common enum we can use as a higher level protocol
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[cfg_attr(feature = "bincode", bincode(describe))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub enum MspResponse {
     #[default]

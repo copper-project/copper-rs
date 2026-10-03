@@ -125,7 +125,6 @@ impl Encode for MspRequestBatch {
     }
 }
 
-#[cfg(feature = "self-describing-logs")]
 impl bincode::ValueDecode for MspRequestBatch {
     const DECODE: &'static bincode::ValueDecodeSpec = &bincode::ValueDecodeSpec::Sequence {
         element: bincode::value_decode::ValueDecodeRef::of::<MspRequest>(),
@@ -440,9 +439,10 @@ where
 #[cfg(feature = "std")]
 pub type CuMspBridgeStd = CuMspBridge<cu_linux_resources::LinuxSerialPort, std::io::Error>;
 
-#[cfg(all(test, feature = "self-describing-logs"))]
+#[cfg(test)]
 mod catalog_tests {
     use super::*;
+    use cu29_value::decode::{ValueDecodeDescription, ValueDecodeLimits};
 
     #[test]
     fn test_catalog_decodes_native_msp_request_batch() {

@@ -12,5 +12,8 @@ sinks, including image and point-cloud related data structures.
 - `image`
 - `kornia`
 - `rerun`
-- `self-describing-logs`: native payload descriptions for host catalog generation,
-  including captured image and depth buffers; enables `std` and reflection.
+- `reflect`: reflection support for payload fields.
+
+Native encoding descriptions are always available, including captured image and
+depth buffers. Enable `cu29/self-describing-logs` in the catalog application to
+package these descriptions for offline decoding.

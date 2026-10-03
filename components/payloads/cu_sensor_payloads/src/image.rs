@@ -14,6 +14,7 @@ use kornia_tensor::MemoryDomain;
 use serde::{Deserialize, Serialize, Serializer};
 
 #[derive(Default, Debug, Encode, Decode, Clone, Copy, Serialize, Deserialize, Reflect)]
+#[bincode(describe)]
 pub struct CuImageBufferFormat {
     pub width: u32,
     pub height: u32,
@@ -164,13 +165,13 @@ impl CuImageBufferFormat {
 
 #[derive(Debug, Default, Clone, Encode, Reflect)]
 #[reflect(from_reflect = false, no_field_bounds, type_path = false)]
+#[bincode(describe)]
 pub struct CuImage<A>
 where
     A: ArrayLike<Element = u8> + Send + Sync + 'static,
 {
     pub seq: u64,
     pub format: CuImageBufferFormat,
-    #[cfg_attr(not(feature = "self-describing-logs"), reflect(ignore))]
     pub buffer_handle: CuHandle<A>,
 }
 
@@ -432,8 +433,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::{CuImageBufferFormat, CuImagePlaneLayout};
+    use cu29_value::decode::{ValueDecodeDescription, ValueDecodeLimits};
 
-    #[cfg(feature = "self-describing-logs")]
     #[test]
     fn test_catalog_decodes_native_image() {
         use super::CuImage;

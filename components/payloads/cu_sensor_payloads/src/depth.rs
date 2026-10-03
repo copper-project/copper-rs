@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize, Serializer};
 #[derive(
     Default, Debug, Encode, Decode, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Reflect,
 )]
+#[bincode(describe)]
 pub struct CuDepthMapFormat {
     pub width: u32,
     pub height: u32,
@@ -230,7 +231,6 @@ where
     A: ArrayLike<Element = E::Sample> + Send + Sync + 'static,
 {
     pub format: CuDepthMapFormat,
-    #[cfg_attr(not(feature = "self-describing-logs"), reflect(ignore))]
     pub buffer_handle: CuHandle<A>,
     #[reflect(ignore)]
     encoding: PhantomData<E>,
@@ -274,7 +274,6 @@ where
     }
 }
 
-#[cfg(feature = "self-describing-logs")]
 impl<A, E> bincode::ValueDecode for CuDepthMap<A, E>
 where
     E: CuDepthEncoding,
@@ -575,6 +574,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cu29_value::decode::{ValueDecodeDescription, ValueDecodeLimits};
 
     type U16MillimeterDepth = CuDepthMap<Vec<u16>, CuDepthInteger<u16, CuDepthMillimeter>>;
 
@@ -584,7 +584,6 @@ mod tests {
         stride: 4,
     };
 
-    #[cfg(feature = "self-describing-logs")]
     #[test]
     fn test_catalog_decodes_native_integer_depth() {
         let sample = U16MillimeterDepth::new_encoded(

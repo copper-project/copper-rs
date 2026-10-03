@@ -26,12 +26,7 @@ crc-any = { version = "3.0.1", default-features = false }
 packed_struct = { version = "0.10.1", default-features = false }
 
 [features]
-self-describing-logs = [
-  "std",
-  "bincode",
-  "bincode/self-describing",
-  "dep:bevy_reflect",
-]
+reflect = ["dep:bevy_reflect"]
 default = ["std", "bincode"]
 std = ["serde/std", "packed_struct/std"]
 bincode = ["dep:bincode"]

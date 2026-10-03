@@ -58,7 +58,6 @@ impl Encode for RcChannelsPayload {
     }
 }
 
-#[cfg(feature = "self-describing-logs")]
 impl bincode::ValueDecode for RcChannelsPayload {
     const DECODE: &'static bincode::ValueDecodeSpec = <[u16; 16] as bincode::ValueDecode>::DECODE;
 }
@@ -240,10 +239,10 @@ impl<'de> Deserialize<'de> for LinkStatisticsPayload {
 
 #[cfg(test)]
 mod tests {
-    #[cfg(feature = "self-describing-logs")]
     #[test]
     fn test_catalog_decodes_native_rc_channels() {
-        use cu29::prelude::{Value, ValueDecodeDescription, ValueDecodeLimits};
+        use cu29::prelude::Value;
+        use cu29_value::decode::{ValueDecodeDescription, ValueDecodeLimits};
 
         let mut sample = RcChannelsPayload::default();
         for (index, channel) in sample.0.0.iter_mut().enumerate() {

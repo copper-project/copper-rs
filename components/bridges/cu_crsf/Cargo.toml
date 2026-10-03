@@ -26,7 +26,6 @@ bincode = { workspace = true, features = ["alloc", "derive"] }
 cu-linux-resources = { workspace = true, optional = true }
 
 [features]
-self-describing-logs = ["cu29/self-describing-logs"]
 default = ["std"]
 std = ["cu29/std", "embedded-io/std", "dep:cu-linux-resources"]
 defmt = ["cu29/defmt"]
@@ -35,3 +34,7 @@ textlogs = ["cu29/textlogs"]
 
 [build-dependencies]
 cu29-build = { workspace = true }
+
+[dev-dependencies]
+cu29 = { workspace = true, features = ["reflect"] }
+cu29-value = { workspace = true, features = ["decode-catalog-build"] }
