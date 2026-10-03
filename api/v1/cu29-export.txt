@@ -66,6 +66,7 @@ pub cu29_export::Command::ExtractCopperlists::export_format: cu29_export::Export
 pub cu29_export::Command::ExtractTextLog
 pub cu29_export::Command::ExtractTextLog::log_index: std::path::PathBuf
 pub cu29_export::Command::Fsck
+pub cu29_export::Command::Fsck::deep: bool
 pub cu29_export::Command::Fsck::dump_runtime_lifecycle: bool
 pub cu29_export::Command::Fsck::verbose: u8
 pub cu29_export::Command::ListRuns
@@ -82,9 +83,11 @@ pub cu29_export::Command::OptimizeSchedule::output: std::path::PathBuf
 pub enum cu29_export::ExportFormat
 pub cu29_export::ExportFormat::Csv
 pub cu29_export::ExportFormat::Json
+pub cu29_export::ExportFormat::Jsonl
 impl core::fmt::Display for cu29_export::ExportFormat
 pub fn cu29_export::ExportFormat::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct cu29_export::LogReaderCli
+pub cu29_export::LogReaderCli::color: clap_builder::util::color::ColorChoice
 pub cu29_export::LogReaderCli::command: cu29_export::Command
 pub cu29_export::LogReaderCli::run: core::option::Option<usize>
 pub cu29_export::LogReaderCli::unifiedlog_base: std::path::PathBuf

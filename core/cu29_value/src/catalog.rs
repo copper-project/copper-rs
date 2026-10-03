@@ -13,6 +13,7 @@ use bincode::error::DecodeError;
 #[cfg(feature = "decode-catalog-build")]
 use bincode::error::EncodeError;
 use bincode::value_decode::ValueDecodeRef;
+use serde::{Deserialize, Serialize};
 use std::io::Read;
 #[cfg(feature = "decode-catalog-build")]
 use std::io::Write;
@@ -24,7 +25,7 @@ const HEADER_LEN: usize = 10;
 pub const VALUE_DECODE_CATALOG_MAX_BYTES: usize = 16 * 1024 * 1024;
 
 /// The generated CopperList layout whose payload slots this catalog describes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, Serialize, Deserialize)]
 pub enum ValueDecodeCatalogLayout {
     /// Shared presence/capture planes and delta-coded common metadata.
     Compact,
@@ -33,7 +34,7 @@ pub enum ValueDecodeCatalogLayout {
 }
 
 /// A recorded output slot in native CopperList encoding order.
-#[derive(Clone, Debug, Encode, Decode)]
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct ValueDecodeCatalogSlot {
     /// Task or bridge/channel identity from the generated output map.
     pub task_id: String,
@@ -47,9 +48,9 @@ pub struct ValueDecodeCatalogSlot {
 ///
 /// V1 uses bincode's standard configuration (little-endian, variable integers)
 /// for both the catalog body and the recorded native payloads. Common CopperList
-/// metadata is identified by `layout`; its standalone interpretation is a later
-/// extension of the catalog format.
-#[derive(Clone, Debug, Encode, Decode)]
+/// metadata is identified by `layout`. V1 fixes the Compact and Flat envelope
+/// rules as well as payload encoding; changing either requires a new version.
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct ValueDecodeCatalog {
     /// Mission selected by runtime generation.
     pub mission: String,
@@ -118,6 +119,7 @@ impl ValueDecodeCatalog {
         if used != raw.len() {
             return Err(DecodeError::Other("trailing ValueDecodeCatalog body bytes"));
         }
+        catalog.description.validate()?;
         for slot in &catalog.slots {
             if slot
                 .binding

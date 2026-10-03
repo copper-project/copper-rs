@@ -1,7 +1,7 @@
 # Self-describing Copper logs
 
-Status: payload API, build packaging and startup recording implemented, 2026-10-02.
-Standalone CopperList metadata decoding and CLI/Python value export remain planned.
+Status: payload API, host packaging, startup recording, standalone CopperList
+decoding and CLI/Python value export implemented, 2026-10-02.
 
 `self-describing-logs` exposes `ValueDecodeDescription::from_type::<T>()` and
 `description.decode(bytes, codec_config, limits)`. `Encode` generates static
@@ -17,8 +17,7 @@ existing encoding pass. `just self-describing-logs-check` verifies native decodi
 host packaging, startup recording, appended-run retention and feature isolation.
 
 The catalog format is versioned independently of unified-log encapsulation.
-Additional handwritten logging codecs, handles, SoA and standalone interpretation
-of complete CopperList metadata are integration work. Tuple reflection that omits
+Additional handwritten logging codecs, handles and SoA are integration work. Tuple reflection that omits
 declaration positions is rejected until an explicit mapping is supplied.
 
 **Collaboration preference:** keep responses within one page; decide one thing
@@ -302,7 +301,7 @@ let app = App::builder()
 Construction checks the bootstrap magic/version and copies the complete blob once.
 The catalog has its own `UnifiedLogType::ValueDecodeCatalog` section, closed before
 runtime streams are created. Appended runs retain their catalog in their physical
-section range. Rollover retention and standalone CL export remain integration work.
+section range. Offline readers isolate each selected run and follow retained slabs across rollover.
 The executable example is `examples/cu_self_describing_logs`; run `just` there.
 
 ## Compact bundle and compatibility
@@ -339,10 +338,11 @@ Compression is chosen by size on the wheel example, comparing Brotli quality 11,
 Zstd level 22, and XZ preset 9 extreme. Keep the measured results in the example
 README. Native message encoding and byte layout are unchanged.
 
-Cover the whole CL encoding in the next integration step: ID, presence/capture
-planes, timestamp deltas and metadata references in `copperlist_codec.rs`. Embed
-complete descriptions or versioned operations for these rules rather than assuming
-the exporter's current metadata decoder.
+V1 fixes the complete Compact/Flat envelope rules: ID, presence/capture planes,
+timestamp deltas, status/origin references and metadata fields. The standalone
+reader interprets those wire fields explicitly, independently of generated tuple
+types and the extractor's encoding features. Changing envelope rules requires a
+new catalog version and retaining the V1 reader.
 
 ## Recording constraints
 
@@ -355,18 +355,87 @@ or tags understood by their descriptions. Unsupported encodings are compile erro
 invalid/truncated bytes stop decoding rather than attempting opaque-slot recovery.
 Value-tree allocation happens only in the exporter.
 
-## Implementation sequence
+## Standalone tools
 
-1. Specify the wire IR, reflection bindings, standard quantity metadata, and
-   compile-time bounds; prove primitives, derived structs, quantities,
-   collections/enums, and supplied manual
-   encoders agree with native decoding. Verify missing nested/codec descriptions fail
-   compilation with useful diagnostics.
-2. Build packaging/compression and startup recording are implemented on the wheel
-   example. The catalog V1 format records the payload graphs and slot wiring.
-3. Add section discovery and sequential CLI/Python export, including common CL
-   metadata, capture policies, appended runs, and bundle retention. Verify multiple
-   consecutive CLs decode without additional framing.
-4. Bound decompression, recursion, collections, execution work, and output size;
-   test truncation/invalid descriptions, encoding attributes, and
-   compatibility fixtures across producer encoding changes.
+```sh
+just logextract examples/cu_self_describing_logs/logs/wheel.copper list-runs
+just logextract examples/cu_self_describing_logs/logs/wheel.copper catalog
+just logextract examples/cu_self_describing_logs/logs/wheel.copper catalog --export-format ron > catalog.ron
+just logextract examples/cu_self_describing_logs/logs/wheel.copper catalog --export-format json > catalog.json
+just logextract examples/cu_self_describing_logs/logs/wheel.copper extract-copperlists --export-format jsonl > samples.jsonl
+just logextract examples/cu_self_describing_logs/logs/wheel.copper fsck --deep
+```
+
+`cu29-logextract` is the binary in `cu29-export`, enabled by `self-describing-logs`.
+It uses the existing `LOG_BASE <command>` syntax. Multi-run logs require `--run N`,
+using the zero-based index from `list-runs`. Each run loads and validates its own
+catalog once; missing, unsupported, malformed or duplicate catalogs fail explicitly.
+
+`catalog` defaults to a human schema/slot/unit view. `--color auto|always|never`
+controls Catppuccin Mocha terminal colors. RON and JSON dump the complete versioned
+catalog document, including run index, canonical config, slots and the shared graph.
+RON uses named variants and raw multiline strings for the config. Machine output
+contains no ANSI codes; diagnostics go to stderr.
+
+`extract-copperlists` defaults to a streamed JSON array; `jsonl` emits one record per
+line and `csv` emits stable columns for every slot with correct CSV escaping.
+Records contain `id` and ordered `msgs`, retaining payload, TOV, metadata, slot
+identity, original presence and capture status. Flat encoding reports unknown
+original presence when suppression erased it. Payloads use plain JSON scalars;
+schemas retain scalar widths and units. Bytes become arrays, non-string-key maps
+use `{"$map": [[key, value], ...]}`, and nonfinite floats use
+`{"$float": "NaN"}`, `"+Inf"` or `"-Inf"`.
+
+App-specific logreaders keep typed decoding by default. With `self-describing-logs`,
+`extract-copperlists --decoder catalog` selects the embedded reader. Their existing
+JSON output stays compatible; `jsonl` is also available. MCAP, statistics and
+scheduling continue to use the compiled app decoder.
+
+Plain standalone `fsck` checks structure and common record streams. `fsck --deep`
+requires a catalog, validates every graph reference/branch and completely decodes
+all recorded CopperLists and captured payloads. Truncation, invalid tags, missing
+bindings and repeated/decreasing CL IDs fail with a nonzero exit. Errors identify
+the run, slab, section, record offset, CL ID and slot where available. Basic stats
+include the number and compressed size of embedded catalogs. Deep validation
+reports decoded CopperLists and captured payloads. Its table identifies each task
+and message type, sorted by encoded bytes, with capture counts, share of payload
+storage, mean size, and size range. Payload sizes exclude CopperList metadata.
+
+## Rust and Python
+
+Experimental Rust APIs in `cu29_export::catalog`:
+
+```rust,ignore
+let catalog = read_value_decode_catalog(path, Some(1))?;
+for entry in copperlist_values_reader(path, Some(1))? {
+    let entry = entry?; // CuDecodedCopperList with CuDecodedLogSlot messages
+}
+```
+
+Both `python` and `self-describing-logs` enable registration-free Python access:
+
+```python
+import libcu29_export as cu
+
+catalog = cu.value_decode_catalog_unified("logs/robot.copper", run=1)
+for cl in cu.copperlist_value_iterator_unified("logs/robot.copper", run=1):
+    print(cl["id"], cl["msgs"][0]["payload"])
+```
+
+Payload integers retain their full precision and floats remain native Python
+floats. Corruption raises `IOError`; iteration stops after the first failure.
+
+## Bounds and verification
+
+Catalog compressed/decompressed bodies and an individual CL's encoded input are
+limited to 16 MiB. Payload trees share a 16 MiB conservative output budget per CL,
+charging nodes, strings, bytes and copied schema/variant names before allocation.
+`ValueDecodeLimits` also bounds depth, node count and collection lengths. Compact
+status backreferences have a shared byte budget, and offline catalogs allow at
+most 65,536 slots. These costs apply only to offline readers.
+
+`just self-describing-logs-check` covers native agreement, packaging, startup/run
+retention, both envelope layouts, standalone CLI process failures and feature
+isolation. `just self-describing-logs-python-check` checks the Python iterator,
+exceptions and extension build. Unsupported producer codecs/types continue to
+fail through the existing compile-time description checks.

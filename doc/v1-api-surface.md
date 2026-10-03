@@ -114,6 +114,11 @@ option select recorded runs identified by `Instantiated` lifecycle records.
 - `cu29_build::catalog::write_value_decode_catalog` with `self-describing-logs`:
   build-host serialization/compression and generated static source. Generated
   builders expose `with_value_decode_catalog` for startup recording.
+- `cu29_export::catalog`: experimental run-scoped catalog loading and fallible
+  standalone CopperList value readers. `ValueDecodeDescription::validate` checks
+  complete graphs; `decode_at` decodes selected bindings without graph copies.
+  Catalog CLI formats/decoder selection and registration-free Python catalog
+  functions are experimental. Internal shared allocation budgets are hidden.
 - Standard `ValueDecode` implementations for Copper time, compact strings,
   quantities, `CuArray`, `CuArrayVec`, and pooled buffer handles.
 

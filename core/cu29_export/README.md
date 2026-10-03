@@ -17,6 +17,47 @@ see
 - profile-guided scheduling from a recorded run
 - optional Python bindings for iterating logs without going through JSON first
 
+Opaque payloads use their static bincode encoding recipes for field and variant
+names. Host catalog generation can register additional reflected dependencies with
+`cumsgs::value_decode_catalog_with(|builder| builder.register::<Dependency>())`.
+Registration adds schema information while preserving the generated log-slot order.
+Catalog configuration checks compare mission declarations by identity and retain
+configured values, topology, and plain graph declaration order.
+
+## Standalone catalog tools
+
+Build `cu29-logextract` with `self-describing-logs`, or use the workspace helper:
+
+```sh
+just logextract logs/robot.copper list-runs
+just logextract logs/robot.copper --run 1 catalog
+just logextract logs/robot.copper --run 1 catalog --export-format ron > catalog.ron
+just logextract logs/robot.copper --run 1 catalog --export-format json > catalog.json
+just logextract logs/robot.copper --run 1 extract-copperlists --export-format jsonl > samples.jsonl
+just logextract logs/robot.copper --run 1 fsck --deep
+```
+
+The catalog supplies payload descriptions and both Compact/Flat metadata layouts.
+The standalone reader needs the recorded slabs and catalog. `catalog` shows slot,
+schema and storage-unit information, with Catppuccin Mocha colors controlled by
+`--color auto|always|never`. RON/JSON output contains the complete catalog graph and
+canonical config. Record output supports a streamed JSON array, JSONL and escaped
+CSV. Machine output stays clean; diagnostics use stderr.
+
+Deep fsck requires a catalog and decodes every captured payload to exact section
+exhaustion. Invalid/truncated records return an error with their recorded location.
+Plain standalone fsck checks structure and common streams and reports the number
+and compressed size of embedded catalogs. Deep validation adds decoded CopperList
+and captured-payload counts and encoded payload bytes. A table lists every captured
+task and message type, sorted by total bytes, with counts, share of payload storage,
+mean size, and size range.
+Payload sizes count native payload bytes, excluding CopperList metadata.
+
+App logreaders retain typed defaults; `extract-copperlists --decoder catalog` selects
+the standalone decoder when built with `self-describing-logs`. Read the
+[self-describing log contract](../../doc/self-describing-logs.md) for output shapes,
+bounds and Rust APIs. Try `just` in `examples/cu_self_describing_logs`.
+
 ## Profile-Guided Scheduling
 
 The typed logreader also turns a representative run into ranked, exact `CuPlan`
@@ -77,7 +118,7 @@ An ID reset at the next `Instantiated` belongs to that next run.
 Python support lives behind the `python` feature and is not supported on macOS in
 this workspace.
 
-There are two Python-facing patterns:
+Python provides these offline reading paths:
 
 ### 1. Generic structured log reading
 
@@ -111,8 +152,25 @@ and
 [`examples/cu_flight_controller/python/print_gnss_from_log.py`](https://github.com/copper-project/extra-examples/blob/master/examples/cu_flight_controller/python/print_gnss_from_log.py)
 for the reference implementation.
 
+### 3. Catalog-based Python reading
+
+Enable `python` and `self-describing-logs` for complete offline dictionaries:
+
+```python
+import libcu29_export as cu
+
+catalog = cu.value_decode_catalog_unified("logs/robot.copper", run=1)
+for cl in cu.copperlist_value_iterator_unified("logs/robot.copper", run=1):
+    print(cl["id"], cl["msgs"][0]["payload"])
+```
+
+These functions load the selected catalog directly. Integers keep their full
+precision, and corrupt records raise `IOError`. The Rust equivalents are
+`catalog::read_value_decode_catalog` and `catalog::copperlist_values_reader`.
+
 ## Feature Flags
 
+- `self-describing-logs`: standalone catalog reader, `cu29-logextract`, and deep fsck
 - `python`: Rust-side helpers for embedding/exposing Python log readers
 - `python-extension-module`: only for building the Python extension itself
 - `mcap`: MCAP export support
