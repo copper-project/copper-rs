@@ -947,6 +947,12 @@ impl defmt::Format for CuCompactString {
     }
 }
 
+#[cfg(feature = "self-describing-logs")]
+impl bincode::ValueDecode for CuCompactString {
+    const DECODE: &'static bincode::ValueDecodeSpec =
+        <alloc::string::String as bincode::ValueDecode>::DECODE;
+}
+
 #[cfg(test)]
 mod tests {
     use crate::CuCompactString;

@@ -739,7 +739,30 @@ struct CuHandleCell<T: Debug + Send + Sync> {
 ///
 /// When `T: ArrayLike`, the handle also participates in Copper's buffer pool APIs.
 #[derive(Debug)]
+#[cfg_attr(
+    all(feature = "self-describing-logs", feature = "reflect"),
+    derive(bevy_reflect::Reflect)
+)]
+#[cfg_attr(
+    all(feature = "self-describing-logs", feature = "reflect"),
+    reflect(opaque, from_reflect = false, type_path = false)
+)]
 pub struct CuHandle<T: Debug + Send + Sync>(Arc<CuHandleCell<T>>);
+
+#[cfg(all(feature = "self-describing-logs", feature = "reflect"))]
+impl<T: Debug + Send + Sync + 'static> bevy_reflect::TypePath for CuHandle<T> {
+    fn type_path() -> &'static str {
+        core::any::type_name::<Self>()
+    }
+    fn short_type_path() -> &'static str {
+        Self::type_path()
+    }
+}
+
+#[cfg(feature = "self-describing-logs")]
+impl<T: Debug + Send + Sync + bincode::ValueDecode> bincode::ValueDecode for CuHandle<T> {
+    const DECODE: &'static bincode::ValueDecodeSpec = T::DECODE;
+}
 
 impl<T: Debug + Send + Sync> Clone for CuHandle<T> {
     fn clone(&self) -> Self {
@@ -1586,6 +1609,27 @@ impl<E: ElementType> Drop for AlignedBuffer<E> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "self-describing-logs")]
+    #[test]
+    fn test_catalog_decodes_native_handle_buffer() {
+        use cu29_value::Value;
+        use cu29_value::decode::{ValueDecodeDescription, ValueDecodeLimits};
+
+        let handle = CuHandle::new_detached(vec![1u16, 300, 65535]);
+        let config = bincode::config::standard();
+        let bytes = bincode::encode_to_vec(&handle, config).unwrap();
+        let description = ValueDecodeDescription::from_type::<CuHandle<Vec<u16>>>().unwrap();
+        let (decoded, used) = description
+            .decode(&bytes, config, ValueDecodeLimits::default())
+            .unwrap();
+        assert_eq!(used, bytes.len());
+        assert_eq!(
+            decoded,
+            Value::Seq(vec![Value::U16(1), Value::U16(300), Value::U16(65535)])
+        );
+        assert!(!handle.was_touched());
+    }
 
     #[test]
     fn test_handle_touched_flag_defaults_false() {

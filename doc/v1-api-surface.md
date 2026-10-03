@@ -101,6 +101,15 @@ option select recorded runs identified by `Instantiated` lifecycle records.
 
 ## Experimental
 
+- `self-describing-logs` feature, `cu29::value_decode`, and
+  `cu29_value::decode`: `ValueDecodeDescription` builds portable wire/schema
+  descriptions and decodes native payload bytes to `Value` trees offline.
+- `cu29::prelude::{ValueDecode, ValueDecodeSpec, ValueDecodeDescription,
+  ValueDecodeLimits}` with `self-describing-logs` enabled. The companion trait and
+  static wire recipes are supplied by `cu-bincode`.
+- Standard `ValueDecode` implementations for Copper time, compact strings,
+  quantities, `CuArray`, `CuArrayVec`, and pooled buffer handles.
+
 - Background empty-input dispatch policy: `background_process_empty` and the defaulted
   `CuAsyncTask<T, O, const PROCESS_EMPTY: bool = false>` parameter.
   Empty inputs are now skipped by default while completed results are collected once.
