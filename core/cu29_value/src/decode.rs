@@ -36,8 +36,8 @@ use cu29_clock::CuTime;
 ///
 /// Wire operations are shared independently of schemas, preserving the identity
 /// and coherent storage unit of quantities that share a scalar representation.
-/// The description's serialization is a prototype for build packaging, not yet
-/// a versioned on-disk catalogue format.
+/// Versioned transport is supplied by `ValueDecodeCatalog` when the
+/// `decode-catalog` feature is enabled.
 #[derive(Clone, Debug, Encode, Decode)]
 pub struct ValueDecodeDescription {
     /// Binding for the described payload.
@@ -45,16 +45,16 @@ pub struct ValueDecodeDescription {
     /// Typed associations between wire operations and schemas.
     pub bindings: Vec<ValueDecodeBinding>,
     /// Deduplicated wire operations.
-    pub recipes: Vec<ValueDecodeRecipe>,
+    pub operations: Vec<ValueDecodeOp>,
     /// Original type and field information.
     pub schemas: Vec<ValueDecodeSchema>,
 }
 
-/// A wire recipe bound to its original logical schema.
+/// A wire operation bound to its original logical schema.
 #[derive(Clone, Debug, Encode, Decode)]
 pub struct ValueDecodeBinding {
-    /// Index into the recipe table.
-    pub recipe: usize,
+    /// Index into the operation table.
+    pub operation: usize,
     /// Index into the schema table.
     pub schema: usize,
 }
@@ -161,7 +161,7 @@ pub struct ValueDecodeBranch {
 /// Portable wire operations. Codec integer settings and endianness are supplied
 /// to [`ValueDecodeDescription::decode`] exactly as used by the producer.
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
-pub enum ValueDecodeRecipe {
+pub enum ValueDecodeOp {
     /// No bytes.
     Unit,
     /// One scalar using the producer codec settings.
@@ -235,7 +235,7 @@ impl Default for ValueDecodeLimits {
 }
 
 impl ValueDecodeDescription {
-    /// Bind generated wire recipes to reflection and Copper standard quantities.
+    /// Bind generated wire operations to reflection and Copper standard quantities.
     /// Encoded fields hidden from reflection produce an error naming that field.
     ///
     /// ```
@@ -259,6 +259,14 @@ impl ValueDecodeDescription {
     /// Build using an existing registry. Bindings are checked by native type identity,
     /// field name and tuple declaration index, rather than reflected field position.
     pub fn from_registry<T: ValueDecode>(registry: &TypeRegistry) -> Result<Self, DecodeError> {
+        let (description, _) = Self::from_registry_roots(registry, &[ValueDecodeRef::of::<T>()])?;
+        Ok(description)
+    }
+
+    pub(crate) fn from_registry_roots(
+        registry: &TypeRegistry,
+        roots: &[ValueDecodeRef],
+    ) -> Result<(Self, Vec<usize>), DecodeError> {
         let mut quantities = cu29_units::value_decode_quantities();
         for type_id in [TypeId::of::<CuTime>(), TypeId::of::<CuDuration>()] {
             quantities.push(cu29_units::ValueDecodeQuantity {
@@ -271,19 +279,23 @@ impl ValueDecodeDescription {
             description: Self {
                 root: 0,
                 bindings: Vec::new(),
-                recipes: Vec::new(),
+                operations: Vec::new(),
                 schemas: Vec::new(),
             },
             types: BTreeMap::new(),
             registry,
             quantities,
         };
-        builder.description.root = builder.bind(ValueDecodeRef::of::<T>(), 0)?;
-        Ok(builder.description)
+        let roots = roots
+            .iter()
+            .map(|root| builder.bind(*root, 0))
+            .collect::<Result<Vec<_>, _>>()?;
+        builder.description.root = roots.first().copied().unwrap_or(0);
+        Ok((builder.description, roots))
     }
 
     /// Read one native value, returning the exact number of consumed bytes.
-    /// Slice the input at that offset to read a consecutive value. Invalid recipes,
+    /// Slice the input at that offset to read a consecutive value. Invalid operations,
     /// invalid tags, truncated bytes and exceeded limits return an error.
     pub fn decode<C: Config>(
         &self,
@@ -318,23 +330,23 @@ impl ValueDecodeDescription {
             .schemas
             .get(binding.schema)
             .ok_or(DecodeError::Other("invalid ValueDecode schema index"))?;
-        let recipe = self
-            .recipes
-            .get(binding.recipe)
-            .ok_or(DecodeError::Other("invalid ValueDecode recipe index"))?;
+        let operation = self
+            .operations
+            .get(binding.operation)
+            .ok_or(DecodeError::Other("invalid ValueDecode operation index"))?;
         let child = |id, decoder: &mut D, remaining: &mut usize| {
             self.decode_binding(id, decoder, limits, remaining, depth + 1)
         };
-        Ok(match recipe {
-            ValueDecodeRecipe::Unit => Value::Unit,
-            ValueDecodeRecipe::Scalar(scalar) => decode_scalar(*scalar, decoder)?,
-            ValueDecodeRecipe::String | ValueDecodeRecipe::Bytes => {
+        Ok(match operation {
+            ValueDecodeOp::Unit => Value::Unit,
+            ValueDecodeOp::Scalar(scalar) => decode_scalar(*scalar, decoder)?,
+            ValueDecodeOp::String | ValueDecodeOp::Bytes => {
                 let len = checked_len(u64::decode(decoder)?, limits.max_collection_len)?;
                 decoder.claim_bytes_read(len)?;
                 // Read before constructing the tree; truncation is reported by the bounded reader.
                 let mut bytes = alloc::vec![0; len];
                 decoder.reader().read(&mut bytes)?;
-                if matches!(recipe, ValueDecodeRecipe::String) {
+                if matches!(operation, ValueDecodeOp::String) {
                     Value::String(String::from_utf8(bytes).map_err(|error| DecodeError::Utf8 {
                         inner: error.utf8_error(),
                     })?)
@@ -342,7 +354,7 @@ impl ValueDecodeDescription {
                     Value::Bytes(bytes)
                 }
             }
-            ValueDecodeRecipe::Record { shape, fields } => self.decode_record(
+            ValueDecodeOp::Record { shape, fields } => self.decode_record(
                 ValueDecodeRecord {
                     shape: *shape,
                     fields,
@@ -353,7 +365,7 @@ impl ValueDecodeDescription {
                 remaining,
                 depth,
             )?,
-            ValueDecodeRecipe::Array { element, len } => {
+            ValueDecodeOp::Array { element, len } => {
                 check_count(*len, limits, *remaining)?;
                 let mut values = Vec::new();
                 for _ in 0..*len {
@@ -361,7 +373,7 @@ impl ValueDecodeDescription {
                 }
                 Value::Seq(values)
             }
-            ValueDecodeRecipe::Sequence {
+            ValueDecodeOp::Sequence {
                 element,
                 count,
                 capacity,
@@ -380,7 +392,7 @@ impl ValueDecodeDescription {
                 }
                 Value::Seq(values)
             }
-            ValueDecodeRecipe::Map { key, value } => {
+            ValueDecodeOp::Map { key, value } => {
                 let len = checked_len(u64::decode(decoder)?, limits.max_collection_len)?;
                 check_count(
                     len.checked_mul(2)
@@ -400,13 +412,13 @@ impl ValueDecodeDescription {
                 }
                 Value::Map(values)
             }
-            ValueDecodeRecipe::Delegate(element) => child(*element, decoder, remaining)?,
-            ValueDecodeRecipe::Option(element) => match u8::decode(decoder)? {
+            ValueDecodeOp::Delegate(element) => child(*element, decoder, remaining)?,
+            ValueDecodeOp::Option(element) => match u8::decode(decoder)? {
                 0 => Value::Option(None),
                 1 => Value::Option(Some(Box::new(child(*element, decoder, remaining)?))),
                 _ => return Err(DecodeError::Other("invalid ValueDecode option tag")),
             },
-            ValueDecodeRecipe::Enum { tag, branches } => {
+            ValueDecodeOp::Enum { tag, branches } => {
                 let tag = decode_count(*tag, decoder)?;
                 let (index, branch) = branches
                     .iter()
@@ -605,7 +617,7 @@ impl DescriptionBuilder<'_> {
         let id = self.description.bindings.len();
         self.types.insert(ty.type_id, id);
         self.description.bindings.push(ValueDecodeBinding {
-            recipe: 0,
+            operation: 0,
             schema: id,
         });
         let info = self.registry.get_type_info(ty.type_id);
@@ -623,21 +635,21 @@ impl DescriptionBuilder<'_> {
             fields: Vec::new(),
             variants: Vec::new(),
         });
-        let recipe = match ty.spec {
-            ValueDecodeSpec::Unit => ValueDecodeRecipe::Unit,
-            ValueDecodeSpec::Scalar(scalar) => ValueDecodeRecipe::Scalar(scalar_kind(*scalar)),
-            ValueDecodeSpec::String => ValueDecodeRecipe::String,
-            ValueDecodeSpec::Bytes => ValueDecodeRecipe::Bytes,
+        let operation = match ty.spec {
+            ValueDecodeSpec::Unit => ValueDecodeOp::Unit,
+            ValueDecodeSpec::Scalar(scalar) => ValueDecodeOp::Scalar(scalar_kind(*scalar)),
+            ValueDecodeSpec::String => ValueDecodeOp::String,
+            ValueDecodeSpec::Bytes => ValueDecodeOp::Bytes,
             ValueDecodeSpec::Record { shape, fields } => {
                 let (children, fields) =
                     self.bind_fields(fields, info, None, ty.type_name, depth)?;
                 self.description.schemas[id].fields = fields;
-                ValueDecodeRecipe::Record {
+                ValueDecodeOp::Record {
                     shape: record_shape(*shape),
                     fields: children,
                 }
             }
-            ValueDecodeSpec::Array { element, len } => ValueDecodeRecipe::Array {
+            ValueDecodeSpec::Array { element, len } => ValueDecodeOp::Array {
                 element: self.bind(*element, depth + 1)?,
                 len: *len,
             },
@@ -645,20 +657,20 @@ impl DescriptionBuilder<'_> {
                 element,
                 count,
                 capacity,
-            } => ValueDecodeRecipe::Sequence {
+            } => ValueDecodeOp::Sequence {
                 element: self.bind(*element, depth + 1)?,
                 count: scalar_kind(*count),
                 capacity: *capacity,
             },
-            ValueDecodeSpec::Map { key, value } => ValueDecodeRecipe::Map {
+            ValueDecodeSpec::Map { key, value } => ValueDecodeOp::Map {
                 key: self.bind(*key, depth + 1)?,
                 value: self.bind(*value, depth + 1)?,
             },
             ValueDecodeSpec::Delegate(element) => {
-                ValueDecodeRecipe::Delegate(self.bind(*element, depth + 1)?)
+                ValueDecodeOp::Delegate(self.bind(*element, depth + 1)?)
             }
             ValueDecodeSpec::Option(element) => {
-                ValueDecodeRecipe::Option(self.bind(*element, depth + 1)?)
+                ValueDecodeOp::Option(self.bind(*element, depth + 1)?)
             }
             ValueDecodeSpec::Enum { tag, variants } => {
                 let mut branches = Vec::new();
@@ -687,23 +699,23 @@ impl DescriptionBuilder<'_> {
                         fields: children,
                     });
                 }
-                ValueDecodeRecipe::Enum {
+                ValueDecodeOp::Enum {
                     tag: scalar_kind(*tag),
                     branches,
                 }
             }
         };
-        let recipe_id = self
+        let operation_id = self
             .description
-            .recipes
+            .operations
             .iter()
-            .position(|candidate| candidate == &recipe)
+            .position(|candidate| candidate == &operation)
             .unwrap_or_else(|| {
-                let id = self.description.recipes.len();
-                self.description.recipes.push(recipe);
+                let id = self.description.operations.len();
+                self.description.operations.push(operation);
                 id
             });
-        self.description.bindings[id].recipe = recipe_id;
+        self.description.bindings[id].operation = operation_id;
         Ok(id)
     }
 

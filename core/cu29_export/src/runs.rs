@@ -192,7 +192,15 @@ fn startup_reservations(sections: &[(LogPosition, UnifiedLogType, u32)]) -> Opti
                 .zip(types)
                 .all(|((_, kind, _), expected)| kind == expected)
             {
-                return Some(tail[0].0);
+                let start = sections.len() - types.len();
+                // Catalogs are written immediately before runtime stream reservations.
+                return Some(
+                    if start > 0 && sections[start - 1].1 == UnifiedLogType::ValueDecodeCatalog {
+                        sections[start - 1].0
+                    } else {
+                        tail[0].0
+                    },
+                );
             }
         }
     }
@@ -499,6 +507,43 @@ mod tests {
                     _ => unreachable!(),
                 }
             }
+        }
+    }
+
+    #[test]
+    fn test_appended_runs_retain_their_startup_catalog() {
+        let dir = TempDir::new_in(env!("CARGO_MANIFEST_DIR")).unwrap();
+        let path = dir.path().join("catalogs.copper");
+        for (index, bytes) in [b"first-catalog".as_slice(), b"second-catalog".as_slice()]
+            .into_iter()
+            .enumerate()
+        {
+            let logger = writer(&path, index != 0);
+            cu29::prelude::write_value_decode_catalog(logger.clone(), bytes).unwrap();
+            write_run(&logger, 17, "drive");
+            drop(logger);
+        }
+        let runs = discover(&path).unwrap();
+        assert_eq!(runs.len(), 2);
+        for (index, expected) in [b"first-catalog".as_slice(), b"second-catalog".as_slice()]
+            .into_iter()
+            .enumerate()
+        {
+            let run = select(&runs, Some(index)).unwrap();
+            let mut reader = run.reader(&path).unwrap();
+            assert_eq!(
+                reader
+                    .read_next_section_type(UnifiedLogType::ValueDecodeCatalog)
+                    .unwrap()
+                    .as_deref(),
+                Some(expected)
+            );
+            assert!(
+                reader
+                    .read_next_section_type(UnifiedLogType::ValueDecodeCatalog)
+                    .unwrap()
+                    .is_none()
+            );
         }
     }
 

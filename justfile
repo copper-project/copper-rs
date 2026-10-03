@@ -29,12 +29,17 @@ tuimon-check:
 	cargo clippy -p cu-tuimon -p cu-consolemon -p cu-bevymon --all-targets -- --deny warnings
 	cargo test -p cu-consolemon
 
-# Verify the experimental native-bytes-to-value API and its user-facing payload examples.
+# Verify native decoding, host packaging, startup recording and run catalog retention.
 self-describing-logs-check:
-	cargo test -p cu29-value --features self-describing-logs
+	cargo test -p cu29-value --features decode-catalog-build
 	cargo test -p cu29 --features self-describing-logs --test value_decode
-	cargo clippy -p cu29-value -p cu29-units --all-targets --features cu29-value/self-describing-logs -- --deny warnings
+	cargo test -p cu-self-describing-logs --features self-describing-logs
+	cargo test -p cu-self-describing-logs --features self-describing-logs,flat-copperlist-encoding
+	cargo test -p cu29-export --lib runs::tests
+	cargo clippy -p cu29-value -p cu29-units -p cu29-build --all-targets --features cu29-value/decode-catalog-build,cu29-build/self-describing-logs -- --deny warnings
 	cargo clippy -p cu29 --lib --test value_decode --features self-describing-logs -- --deny warnings
+	cargo clippy -p cu-self-describing-logs --all-targets --features self-describing-logs -- --deny warnings
+	cargo check -p cu29-export --features self-describing-logs
 	cargo check -p cu29 -p cu29-value --no-default-features
 
 # Replace logs/vit-extracted with replayable VitFly tensors and UI-style previews.
@@ -112,6 +117,7 @@ publish:
 # Compile fixtures: error codes/messages and successful downstream applications.
 compile-tests toolchain="stable":
     cargo +{{toolchain}} test -p cu29-derive --lib test_compile_fail -- --nocapture
+    cargo +{{toolchain}} test -p cu29-value --features self-describing-logs --test value_decode_compile -- --nocapture
 
 # Formatting, typo, and clippy checks.
 lint:

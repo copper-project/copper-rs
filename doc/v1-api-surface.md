@@ -106,7 +106,14 @@ option select recorded runs identified by `Instantiated` lifecycle records.
   descriptions and decodes native payload bytes to `Value` trees offline.
 - `cu29::prelude::{ValueDecode, ValueDecodeSpec, ValueDecodeDescription,
   ValueDecodeLimits}` with `self-describing-logs` enabled. The companion trait and
-  static wire recipes are supplied by `cu-bincode`.
+  static wire operations are supplied by `cu-bincode`.
+- `cu29::value_decode_catalog` and `cu29_value::catalog`: versioned payload catalogs,
+  host graph construction and offline decompression. `ValueDecodeCatalogBuilder::register`
+  registers reflected dependencies of opaque payloads without adding log slots. The header contains magic and
+  version; V1 fixes bincode standard encoding and Brotli compression.
+- `cu29_build::catalog::write_value_decode_catalog` with `self-describing-logs`:
+  build-host serialization/compression and generated static source. Generated
+  builders expose `with_value_decode_catalog` for startup recording.
 - Standard `ValueDecode` implementations for Copper time, compact strings,
   quantities, `CuArray`, `CuArrayVec`, and pooled buffer handles.
 

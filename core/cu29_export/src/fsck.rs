@@ -442,6 +442,17 @@ where
                             remaining = &remaining[used..];
                         }
                     }
+                    UnifiedLogType::ValueDecodeCatalog => {
+                        #[cfg(feature = "self-describing-logs")]
+                        cu29::prelude::ValueDecodeCatalog::from_blob(&content).map_err(
+                            |error| {
+                                CuError::new_with_cause("Invalid ValueDecodeCatalog section", error)
+                            },
+                        )?;
+                        if verbose > 0 {
+                            println!("    ValueDecodeCatalog: {} bytes", content.len());
+                        }
+                    }
                     UnifiedLogType::LastEntry => {
                         if header.is_open {
                             break Err(CuError::from(

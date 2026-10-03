@@ -452,13 +452,14 @@ pub trait WriteStream<E: Encode>: Debug + Send + Sync {
 /// Defines the types of what can be logged in the unified logger.
 #[derive(dEncode, dDecode, Copy, Clone, Debug, PartialEq)]
 pub enum UnifiedLogType {
-    Empty,             // Dummy default used as a debug marker
-    StructuredLogLine, // This is for the structured logs (ie. debug! etc..)
-    CopperList,        // This is the actual data log storing activities between tasks.
-    FrozenTasks,       // Log of all frozen state of the tasks.
-    LastEntry,         // This is a special entry that is used to signal the end of the log.
-    RuntimeLifecycle,  // Runtime lifecycle events (mission/config/stack context).
-    StreamContinuity,  // Received archive provenance, gaps and verified restart boundaries.
+    Empty,              // Dummy default used as a debug marker
+    StructuredLogLine,  // This is for the structured logs (ie. debug! etc..)
+    CopperList,         // This is the actual data log storing activities between tasks.
+    FrozenTasks,        // Log of all frozen state of the tasks.
+    LastEntry,          // This is a special entry that is used to signal the end of the log.
+    RuntimeLifecycle,   // Runtime lifecycle events (mission/config/stack context).
+    StreamContinuity,   // Received archive provenance, gaps and verified restart boundaries.
+    ValueDecodeCatalog, // Embedded descriptions of captured payload encodings.
 }
 /// Represent the minimum set of traits to be usable as Metadata in Copper.
 pub trait Metadata: Default + Debug + Clone + Encode + Decode<()> + Serialize {}

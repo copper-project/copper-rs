@@ -804,6 +804,67 @@ fn gen_culist_support(
         })
         .collect();
 
+    let value_decode_catalog_fn = if cfg!(feature = "self-describing-logs") {
+        let mut registrations = Vec::new();
+        let mut unsupported_codec = None;
+        for (index, (task_id, msg_type, payload_type)) in task_output_specs.iter().enumerate() {
+            let captured = cuconfig
+                .logging
+                .as_ref()
+                .is_none_or(|logging| logging.enable_task_logging)
+                && cuconfig
+                    .find_task_node(mission_label, task_id)
+                    .is_none_or(|node| node.is_logging_enabled());
+            if !captured {
+                registrations.push(quote! { builder.add_uncaptured(#task_id, #msg_type); });
+            } else if let Some(codec) = &flat_codec_bindings[index] {
+                let error = format!(
+                    "Task '{task_id}' output '{msg_type}' uses logging codec '{}', which needs a catalog description of its encoded representation.",
+                    codec.codec_type_path
+                );
+                unsupported_codec = Some(error);
+                break;
+            } else {
+                registrations.push(quote! { builder.add::<#payload_type>(#task_id, #msg_type); });
+            }
+        }
+        let mission = mission_label.unwrap_or(DEFAULT_MISSION_ID);
+        let layout = if cfg!(feature = "flat-copperlist-encoding") {
+            quote! { cu29::prelude::ValueDecodeCatalogLayout::Flat }
+        } else {
+            quote! { cu29::prelude::ValueDecodeCatalogLayout::Compact }
+        };
+        let catalog_body = if let Some(error) = unsupported_codec {
+            quote! { Err(cu29::prelude::CuError::from(#error)) }
+        } else {
+            quote! {
+                let mut builder = cu29::prelude::ValueDecodeCatalogBuilder::default();
+                register(&mut builder);
+                #(#registrations)*
+                builder.finish(#default_config_ron_lit, #mission, #layout)
+                    .map_err(|error| cu29::prelude::CuError::new_with_cause("Could not describe captured payloads", error))
+            }
+        };
+        // Keep the callable host entry separate from the runtime recording path.
+        quote! {
+            /// Build the payload catalog on the host, using generated slot order.
+            #[allow(dead_code)]
+            pub fn value_decode_catalog() -> cu29::prelude::CuResult<cu29::prelude::ValueDecodeCatalog> {
+                value_decode_catalog_with(|_| {})
+            }
+
+            /// Build a host catalog with extra reflected dependencies for opaque payloads.
+            #[allow(dead_code)]
+            pub fn value_decode_catalog_with(
+                #[allow(unused_variables)] register: impl FnOnce(&mut cu29::prelude::ValueDecodeCatalogBuilder),
+            ) -> cu29::prelude::CuResult<cu29::prelude::ValueDecodeCatalog> {
+                #catalog_body
+            }
+        }
+    } else {
+        quote! {}
+    };
+
     // Generate bridge channel getter methods
     for spec in bridge_specs {
         for channel in &spec.rx_channels {
@@ -840,6 +901,7 @@ fn gen_culist_support(
     // This generates a way to get the metadata of every single message of a culist at low cost
     quote! {
         #capture_support
+        #value_decode_catalog_fn
         #collect_metadata_function
         #compute_payload_bytes_fn
         #default_config_ron_const

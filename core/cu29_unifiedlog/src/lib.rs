@@ -236,6 +236,28 @@ pub fn stream_write<E: Encode, S: SectionStorage>(
     LogStream::new(entry_type, logger, minimum_allocation_amount)
 }
 
+/// Copy a prepared catalog verbatim into a dedicated section at startup.
+/// Generated application builders validate the catalog before calling this.
+#[doc(hidden)]
+pub fn write_value_decode_catalog<S: SectionStorage, L: UnifiedLogWrite<S>>(
+    logger: Arc<Mutex<L>>,
+    bytes: &[u8],
+) -> CuResult<()> {
+    struct CatalogBytes<'a>(&'a [u8]);
+    impl Encode for CatalogBytes<'_> {
+        fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+            bincode::enc::write::Writer::write(encoder.writer(), self.0)
+        }
+    }
+    let allocation = bytes
+        .len()
+        .checked_add(usize::from(SECTION_HEADER_COMPACT_SIZE))
+        .ok_or(CuError::from("ValueDecodeCatalog section size overflow"))?;
+    let mut stream = stream_write(logger, UnifiedLogType::ValueDecodeCatalog, allocation)?;
+    stream.log(&CatalogBytes(bytes))?;
+    Ok(())
+}
+
 /// A wrapper around the unifiedlogger that implements the Write trait.
 pub struct LogStream<S: SectionStorage, L: UnifiedLogWrite<S>> {
     entry_type: UnifiedLogType,
