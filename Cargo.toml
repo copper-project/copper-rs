@@ -1,5 +1,8 @@
 [workspace]
 
+# Compile fixtures use their own codec features without enabling them workspace-wide.
+exclude = ["core/cu29_value/tests/dependencies"]
+
 members = [
   "core/cu_bincode",
   "core/cu_bincode_derive",
@@ -19,7 +22,6 @@ members = [
   "core/cu29_clock",
   "core/cu29_derive",
   "core/cu29_derive/tests/dependencies",
-  "core/cu29_value/tests/dependencies",
   "core/cu29_export",
   "core/cu29_helpers",
   "core/cu29_intern_strs",

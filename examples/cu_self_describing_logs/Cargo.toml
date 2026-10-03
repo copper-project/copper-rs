@@ -13,18 +13,25 @@ path = "src/main.rs"
 required-features = ["self-describing-logs"]
 
 [dependencies]
-cu-self-describing-payloads = { path = "payloads", optional = true, features = ["self-describing-logs"] }
-cu29 = { workspace = true, optional = true, features = ["self-describing-logs"] }
+cu-self-describing-payloads = { path = "payloads", optional = true }
+cu29 = { workspace = true, optional = true }
 
 [build-dependencies]
-cu-self-describing-payloads = { path = "payloads", optional = true, features = ["self-describing-logs"] }
-cu29 = { workspace = true, optional = true, features = ["self-describing-logs"] }
-cu29-build = { workspace = true, optional = true, features = ["self-describing-logs"] }
+cu-self-describing-payloads = { path = "payloads", optional = true }
+cu29 = { workspace = true, optional = true }
+cu29-build = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
 
 [features]
 default = []
-self-describing-logs = ["dep:cu29", "dep:cu29-build", "dep:cu-self-describing-payloads"]
+self-describing-logs = [
+  "dep:cu29",
+  "dep:cu29-build",
+  "dep:cu-self-describing-payloads",
+  "cu29/self-describing-logs",
+  "cu29-build/self-describing-logs",
+  "cu-self-describing-payloads/self-describing-logs",
+]
 flat-copperlist-encoding = ["cu29?/flat-copperlist-encoding"]
