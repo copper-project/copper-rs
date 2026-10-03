@@ -111,7 +111,10 @@ bandwidth. Try the <a href="examples/cu_logstream_demo#native-telemetry-screen">
     <td><strong>Community</strong></td>
     <td><a href="https://github.com/copper-project/copper-rs/blob/master/CONTRIBUTING.md">Contributing</a> · <a href="https://github.com/copper-project/copper-rs/discussions">GitHub Discussions</a> · <a href="https://discord.gg/VkCG7Sb9Kw">Discord</a></td>
   </tr>
-</table></div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="app/index.html" title="mod cu29_runtime::app">app</a></dt><dt><a class="mod" href="config/index.html" title="mod cu29_runtime::config">config</a></dt><dd>This module defines the configuration of the copper runtime.
+</table>
+<p>Codec, ZED camera, and ViTFly inference crates are maintained in this workspace.
+See <a href="doc/monorepo-components.md">in-tree crates and verification</a>.</p>
+</div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="app/index.html" title="mod cu29_runtime::app">app</a></dt><dt><a class="mod" href="config/index.html" title="mod cu29_runtime::config">config</a></dt><dd>This module defines the configuration of the copper runtime.
 The configuration is a directed graph where nodes are tasks and edges are connections between tasks.
 The configuration is serialized in the RON format.
 The configuration is used to generate the runtime code at compile time.</dd><dt><a class="mod" href="context/index.html" title="mod cu29_runtime::context">context</a></dt><dd>User-facing execution context passed to task and bridge process callbacks.</dd><dt><a class="mod" href="continuity/index.html" title="mod cu29_runtime::continuity">continuity</a></dt><dd>Native received-log provenance and continuity, independent of packet transports.</dd><dt><a class="mod" href="copperlist/index.html" title="mod cu29_runtime::copperlist">copperlist</a></dt><dd>CopperList is the main data structure used by Copper to communicate between tasks.
