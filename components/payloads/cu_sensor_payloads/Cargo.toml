@@ -35,6 +35,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 
 [features]
+self-describing-logs = ["cu29/self-describing-logs"]
 default = ["std"]
 std = ["cu29/std", "cu29-clock/std"]
 textlogs = ["cu29/textlogs"]

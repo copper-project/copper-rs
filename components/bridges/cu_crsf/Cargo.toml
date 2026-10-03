@@ -26,6 +26,7 @@ bincode = { workspace = true, features = ["alloc", "derive"] }
 cu-linux-resources = { workspace = true, optional = true }
 
 [features]
+self-describing-logs = ["cu29/self-describing-logs"]
 default = ["std"]
 std = ["cu29/std", "embedded-io/std", "dep:cu-linux-resources"]
 defmt = ["cu29/defmt"]

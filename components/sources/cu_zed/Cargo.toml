@@ -18,6 +18,10 @@ environments = ["host"]
 host_os = ["linux"]
 
 [features]
+self-describing-logs = [
+  "cu29/self-describing-logs",
+  "cu-sensor-payloads/self-describing-logs",
+]
 zed-rerun-demo = []
 
 [dependencies]
