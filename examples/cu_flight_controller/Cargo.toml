@@ -182,6 +182,13 @@ forest-world = []
 urban-world = []
 autonomous-demo = []
 sim_core = [
+  "dep:cu-flight-controller-catalog",
+  "cu29/self-describing-logs",
+  "cu-sensor-payloads/self-describing-logs",
+  "cu-zed/self-describing-logs",
+  "cu-crsf/self-describing-logs",
+  "cu-msp-bridge/self-describing-logs",
+  "cu-flight-controller-catalog/compute",
   "dep:cu29",
   "cu29/std",
   "cu29/sysclock-perf",
@@ -240,6 +247,14 @@ firmware = [
   "cu-logmon/defmt",
 ]
 end2end = [
+  "dep:cu-flight-controller-catalog",
+  "cu29/self-describing-logs",
+  "cu-sensor-payloads/self-describing-logs",
+  "cu-zed/self-describing-logs",
+  "cu-crsf/self-describing-logs",
+  "cu-msp-bridge/self-describing-logs",
+  "cu-flight-controller-catalog/end2end",
+  "cu-flight-controller-catalog/compute",
   "dep:cu29",
   "cu29/std",
   "cu29/signal-handler",
@@ -282,6 +297,7 @@ python-bindings = [
   "dep:pyo3",
 ]
 sim = [
+  "cu-flight-controller-catalog/sim",
   "sim_core",
   "dep:cu-vitfly",
   "dep:cu-zenoh-bridge",
@@ -296,6 +312,7 @@ sim = [
 vitfly-cuda = ["sim", "cu-vitfly/cuda"]
 sim-debug = ["sim", "cu29/reflect", "cu29/remote-debug"]
 bevymon = [
+  "cu-flight-controller-catalog/bevymon",
   "sim_core",
   "dep:cu-bevymon",
   "dep:cached-path",
@@ -366,8 +383,9 @@ path = "tests/config_matrix.rs"
 required-features = ["logreader"]
 
 [dev-dependencies]
-cu29-export = { workspace = true }
+cu29-export = { workspace = true, features = ["self-describing-logs"] }
 tempfile = { workspace = true }
 
 [build-dependencies]
 cu29-build = { workspace = true }
+cu-flight-controller-catalog = { path = "catalog", optional = true }

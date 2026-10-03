@@ -166,6 +166,31 @@ The replay target uses the standardized replay contract:
 If you are building another replay target, follow the same pattern with
 `cu29::replay::{ReplayCli, ReplayDefaults, per_session_replay_log_base, serve_remote_debug}`.
 
+### Embedded payload catalogs
+
+The simulator and host compute runtime record a compressed payload catalog at startup.
+Catalog generation runs on the build host using the selected MCU and compute graphs.
+The local `cu-zed` dependency enables its `self-describing-logs` feature for raster
+payload descriptions.
+
+Run these commands from this directory. `demo` exits cleanly and finalizes both logs.
+Use `just catalog-smoke` for a headless recording and catalog-decoding check.
+
+```bash
+just demo
+just catalog
+just catalog logs/flight_compute_sim.copper
+just extract > logs/mcu.jsonl
+just extract logs/flight_compute_sim.copper > logs/compute.jsonl
+just deep-fsck
+just deep-fsck logs/flight_compute_sim.copper
+```
+
+Use `just catalog logs/flight_controller_sim.copper --export-format ron` for the full
+catalog, or `just logextract logs/flight_controller_sim.copper list-runs` to inspect
+appended runs. Select a run with
+`just logextract logs/flight_controller_sim.copper --run 0 catalog`.
+
 ### Python GNSS Extraction
 
 You can use the PyO3 bindings to iterate CopperLists directly from Python and
