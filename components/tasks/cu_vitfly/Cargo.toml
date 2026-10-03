@@ -9,6 +9,11 @@ homepage = "https://github.com/copper-project"
 repository.workspace = true
 documentation = "https://docs.rs/cu-vitfly"
 
+[package.metadata.copper]
+kind = "task"
+domains = ["algorithm/perception", "algorithm/planning"]
+environments = ["host"]
+
 [features]
 default = []
 cuda = ["candle-core/cuda", "candle-nn/cuda"]
@@ -19,11 +24,7 @@ candle-nn = { workspace = true }
 cached-path = { workspace = true, features = ["progress-bar", "rustls-tls"] }
 cu-ahrs = { workspace = true }
 cu-zed = { workspace = true }
-cu29 = { workspace = true, default-features = false, features = [
-  "reflect",
-  "std",
-  "units",
-] }
+cu29 = { workspace = true, features = ["reflect", "std", "units"] }
 
 [dev-dependencies]
 anyhow = { workspace = true, features = ["std"] }
