@@ -446,7 +446,7 @@ docs:
 		exit 1
 	fi
 
-	RUSTDOCFLAGS="--enable-index-page -Zunstable-options" cargo +{{PUBLIC_API_TOOLCHAIN}} doc --no-deps
+	RUSTDOCFLAGS="--enable-index-page -Zunstable-options" cargo +nightly doc --no-deps
 	python3 support/ci/wiki_site.py
 	mkdocs build -f build/wiki/mkdocs.yml
 
