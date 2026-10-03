@@ -33,6 +33,17 @@ tuimon-check:
 vit-extract:
 	just --justfile "{{ROOT}}/examples/cu_flight_controller/justfile" vit-extract
 
+# Verify the in-tree codec, ZED wrappers, and CPU inference task.
+monorepo-crates-check:
+	cargo +stable metadata --format-version 1 --all-features --filter-platform x86_64-unknown-linux-gnu > /dev/null
+	cargo +stable clippy -p cu-bincode -p cu-bincode-derive -p cu-zed -p zed-sdk -p zed-sdk-sys -p cu-vitfly --all-targets -- --deny warnings
+	cargo +stable nextest run -p cu-bincode -p cu-bincode-derive -p cu-zed -p zed-sdk -p zed-sdk-sys -p cu-vitfly --all-targets
+	cargo +stable clippy -p cu-bincode -p cu-bincode-derive --all-targets --all-features -- --deny warnings
+	cargo +stable nextest run -p cu-bincode -p cu-bincode-derive --all-targets --all-features
+	cargo +stable test -p cu-bincode -p cu-bincode-derive --doc --all-features
+	cargo +stable check -p cu-bincode --no-default-features
+	cargo +stable check -p cu-bincode --no-default-features --features alloc,derive,serde
+
 # Local PR pipeline: format, lint, then tests.
 pr-check:
 	just fmt

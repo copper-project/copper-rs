@@ -1,0 +1,37 @@
+[package]
+name = "cu-vitfly"
+version.workspace = true
+edition.workspace = true
+license = "MIT OR Apache-2.0"
+description = "Standalone Candle inference for the ViTFly ViT+LSTM depth policy"
+readme = "README.md"
+homepage = "https://github.com/copper-project"
+repository.workspace = true
+documentation = "https://docs.rs/cu-vitfly"
+
+[features]
+default = []
+cuda = ["candle-core/cuda", "candle-nn/cuda"]
+
+[dependencies]
+candle-core = { workspace = true }
+candle-nn = { workspace = true }
+cached-path = { workspace = true, features = ["progress-bar", "rustls-tls"] }
+cu-ahrs = { workspace = true }
+cu-zed = { workspace = true }
+cu29 = { workspace = true, default-features = false, features = [
+  "reflect",
+  "std",
+  "units",
+] }
+
+[dev-dependencies]
+anyhow = { workspace = true, features = ["std"] }
+
+[[example]]
+name = "synthetic_depth"
+path = "examples/synthetic_depth.rs"
+
+[[example]]
+name = "benchmark"
+path = "examples/benchmark.rs"

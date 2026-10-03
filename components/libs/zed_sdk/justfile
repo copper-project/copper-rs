@@ -1,0 +1,11 @@
+default:
+	just neural-light
+
+performance:
+	cargo run -p zed-sdk --bin zed_viz_demo --release --features demo -- PERFORMANCE
+
+neural-light:
+	cargo run -p zed-sdk --bin zed_viz_demo --release --features demo -- NEURAL_LIGHT
+
+neural:
+	cargo run -p zed-sdk --bin zed_viz_demo --release --features demo -- NEURAL

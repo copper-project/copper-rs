@@ -1,0 +1,30 @@
+[package]
+name = "cu-bincode-derive"
+version = "2.2.0-beta"
+authors = [
+  "Guillaume Binet <gbin@copper-robotics.com>",
+  "Zoey Riordan <zoey@dos.cafe>",
+  "Victor Koenders <bincode@trangar.com>",
+]
+edition = "2024"
+rust-version = "1.92"
+
+repository = "https://github.com/copper-project/copper-rs"
+documentation = "https://docs.rs/cu_bincode_derive"
+readme = "./README.md"
+categories = ["encoding", "network-programming"]
+keywords = ["binary", "encode", "decode", "serialize", "deserialize"]
+license = "MIT"
+description = "Implementation of #[derive(Encode, Decode)] for bincode"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+virtue = "0.0"
+
+[features]
+self-describing = []
+
+[package.metadata.workspaces]
+independent = true

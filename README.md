@@ -135,3 +135,6 @@ bandwidth. Try the [telemetry demo](examples/cu_logstream_demo#native-telemetry-
     <td><a href="https://github.com/copper-project/copper-rs/blob/master/CONTRIBUTING.md">Contributing</a> · <a href="https://github.com/copper-project/copper-rs/discussions">GitHub Discussions</a> · <a href="https://discord.gg/VkCG7Sb9Kw">Discord</a></td>
   </tr>
 </table>
+
+Codec, ZED camera, and ViTFly inference crates are maintained in this workspace.
+See [in-tree crates and verification](doc/monorepo-components.md).

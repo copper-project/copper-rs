@@ -1,0 +1,45 @@
+default: build
+
+_vendor-check:
+	test -f "{{justfile_directory()}}/vendor/zed-c-api/CMakeLists.txt"
+
+_require-sdk:
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	if [[ -d /usr/local/zed/include && -d /usr/local/zed/lib ]]; then
+		exit 0
+	fi
+
+	if [[ -d /opt/zed-sdk/include && -d /opt/zed-sdk/lib ]]; then
+		exit 0
+	fi
+
+	echo "Missing ZED SDK install under /usr/local/zed or /opt/zed-sdk" >&2
+	exit 1
+
+build:
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	crate_dir="$(cd "{{justfile_directory()}}" && pwd)"
+
+	cargo build --manifest-path "$crate_dir/Cargo.toml" --lib
+
+build-demo: _vendor-check _require-sdk
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	crate_dir="$(cd "{{justfile_directory()}}" && pwd)"
+
+	cargo build --manifest-path "$crate_dir/Cargo.toml" --features demo --bin zed_lowlevel_demo
+
+demo depth_mode="NEURAL_LIGHT": _vendor-check _require-sdk
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	crate_dir="$(cd "{{justfile_directory()}}" && pwd)"
+
+	cargo run --manifest-path "$crate_dir/Cargo.toml" --features demo --bin zed_lowlevel_demo -- "{{depth_mode}}"
+
+run-demo: demo
