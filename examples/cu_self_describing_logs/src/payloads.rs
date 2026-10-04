@@ -1,4 +1,4 @@
-//! Payload definitions shared by the host packager and target application.
+//! Application payloads described by their native encoding derives.
 
 use cu29::bincode::Decode;
 use cu29::bincode::Encode;

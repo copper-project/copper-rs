@@ -23,7 +23,8 @@
 //! - `std`: host/runtime support that is also safe to compile for browser targets
 //! - `signal-handler`: desktop Ctrl-C integration for generated `run()` loops
 //! - `reflect`: reflection support for runtime and units types
-//! - `self-describing-logs`: experimental native-payload descriptions and offline value decoding; enables `std` and `reflect`
+//! - `self-describing-logs`: experimental automatic startup catalogs with fixed-memory compression; supports `no_std`
+//! - `decode-catalog`: host-side catalog inspection and payload decoding; enables `std` and `reflect`
 //! - `textlogs`: text logging derive support
 //! - `remote-debug`: remote debug transport support
 //! - `sysclock-perf`: use a host/system clock for runtime perf timing while keeping robot time for `tov` and `rate_target_hz`
@@ -171,7 +172,7 @@ pub use bincode;
 pub use cu29_clock as clock;
 #[cfg(feature = "units")]
 pub use cu29_units as units;
-#[cfg(feature = "self-describing-logs")]
+#[cfg(feature = "decode-catalog")]
 pub use cu29_value::decode as value_decode;
 #[doc(hidden)]
 pub use serde;
@@ -301,6 +302,9 @@ pub mod prelude {
     pub use cu29_reflect_derive::Reflect;
     pub use cu29_runtime::app;
     pub use cu29_runtime::app::*;
+    #[cfg(feature = "self-describing-logs")]
+    #[doc(hidden)]
+    pub use cu29_runtime::catalog::record_value_decode_catalog;
     pub use cu29_runtime::config::*;
     pub use cu29_runtime::context::*;
     pub use cu29_runtime::copperlist::*;
@@ -349,12 +353,11 @@ pub mod prelude {
     #[cfg(feature = "std")]
     pub use cu29_unifiedlog::memmap;
     pub use cu29_unifiedlog::*;
+    #[cfg(feature = "decode-catalog")]
+    pub use cu29_value::catalog::{ValueDecodeCatalog, ValueDecodeCatalogBuilder};
     #[cfg(feature = "self-describing-logs")]
-    pub use cu29_value::catalog::{
-        ValueDecodeCatalog, ValueDecodeCatalogBuilder, ValueDecodeCatalogHeader,
-        ValueDecodeCatalogLayout,
-    };
-    #[cfg(feature = "self-describing-logs")]
+    pub use cu29_value::catalog_header::{ValueDecodeCatalogHeader, ValueDecodeCatalogLayout};
+    #[cfg(feature = "decode-catalog")]
     pub use cu29_value::decode::{ValueDecodeDescription, ValueDecodeLimits};
     pub use cu29_value::to_value;
     pub use cu29_value::{
@@ -364,8 +367,12 @@ pub mod prelude {
 }
 
 /// Versioned self-describing payload catalogs (experimental).
-#[cfg(feature = "self-describing-logs")]
+#[cfg(feature = "decode-catalog")]
 pub use cu29_value::catalog as value_decode_catalog;
+
+#[cfg(feature = "self-describing-logs")]
+#[doc(hidden)]
+pub use cu29_value::catalog_stream;
 
 #[cfg(all(test, feature = "std"))]
 mod tests {

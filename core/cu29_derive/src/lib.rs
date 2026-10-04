@@ -804,7 +804,56 @@ fn gen_culist_support(
         })
         .collect();
 
-    let value_decode_catalog_fn = if cfg!(feature = "self-describing-logs") {
+    let catalog_description = if cfg!(feature = "self-describing-logs") {
+        let mut slots = Vec::new();
+        let mut error = None;
+        for (index, (task_id, msg_type, payload_type)) in task_output_specs.iter().enumerate() {
+            let captured = cuconfig
+                .logging
+                .as_ref()
+                .is_none_or(|logging| logging.enable_task_logging)
+                && cuconfig
+                    .find_task_node(mission_label, task_id)
+                    .is_none_or(|node| node.is_logging_enabled());
+            let payload = if !captured {
+                quote! { None }
+            } else if let Some(codec) = &flat_codec_bindings[index] {
+                error = Some(format!(
+                    "Task '{task_id}' output '{msg_type}' uses logging codec '{}', which needs a catalog description of its encoded representation.",
+                    codec.codec_type_path
+                ));
+                quote! { None }
+            } else {
+                quote! { Some(cu29::bincode::value_decode::ValueDecodeRef::of::<#payload_type>()) }
+            };
+            slots.push(quote! { cu29::catalog_stream::CatalogSlot { task_id: #task_id, msg_type: #msg_type, payload: #payload } });
+        }
+        let mission = mission_label.unwrap_or(DEFAULT_MISSION_ID);
+        let layout = if cfg!(feature = "flat-copperlist-encoding") {
+            quote! { Flat }
+        } else {
+            quote! { Compact }
+        };
+        let error = match error {
+            Some(error) => quote! { Some(#error) },
+            None => quote! { None },
+        };
+        quote! {
+            #[allow(dead_code)]
+            pub static VALUE_DECODE_CATALOG_DESCRIPTION: cu29::catalog_stream::CatalogDescription = cu29::catalog_stream::CatalogDescription {
+                mission: #mission,
+                config_ron: #default_config_ron_lit,
+                layout: cu29::prelude::ValueDecodeCatalogLayout::#layout,
+                slots: &[#(#slots),*],
+            };
+            #[allow(dead_code)]
+            pub const VALUE_DECODE_CATALOG_ERROR: Option<&'static str> = #error;
+        }
+    } else {
+        quote! {}
+    };
+
+    let value_decode_catalog_fn = if cfg!(feature = "decode-catalog") {
         let mut registrations = Vec::new();
         let mut unsupported_codec = None;
         for (index, (task_id, msg_type, payload_type)) in task_output_specs.iter().enumerate() {
@@ -901,6 +950,7 @@ fn gen_culist_support(
     // This generates a way to get the metadata of every single message of a culist at low cost
     quote! {
         #capture_support
+        #catalog_description
         #value_decode_catalog_fn
         #collect_metadata_function
         #compute_payload_bytes_fn

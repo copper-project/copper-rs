@@ -2,10 +2,10 @@ import "../../support/just/viewers.just"
 
 default: run
 
-# Build the catalog on the host and record it with ten wheel samples.
+# Record a startup catalog and ten wheel samples.
 run:
     cargo run --features self-describing-logs
 
-# Exercise packaging, startup recording and catalog rejection.
+# Exercise automatic startup recording and catalog rejection.
 check:
     cargo test --features self-describing-logs

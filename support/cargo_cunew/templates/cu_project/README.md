@@ -65,3 +65,10 @@ monitor: (
 
 Build with `cargo run --features memmon`. See the `cu_memmon` crate README
 for tuning knobs and output format.
+
+## Self-describing logs
+
+Run `cargo run --features self-describing-logs` to include a compressed payload
+catalog in the application log. The normal builder writes it at startup using
+the existing payload `Encode` derives, including payloads from dependencies.
+Custom encoders provide a matching `cu29::bincode::ValueDecode` implementation.

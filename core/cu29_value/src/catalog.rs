@@ -13,27 +13,20 @@ use bincode::error::DecodeError;
 #[cfg(feature = "decode-catalog-build")]
 use bincode::error::EncodeError;
 use bincode::value_decode::ValueDecodeRef;
+use serde::{Deserialize, Serialize};
 use std::io::Read;
 #[cfg(feature = "decode-catalog-build")]
 use std::io::Write;
 
-const MAGIC: &[u8; 8] = b"CUVDCAT\0";
+use crate::catalog_header::{HEADER_LEN, MAGIC};
+pub use crate::catalog_header::{
+    VALUE_DECODE_CATALOG_MAX_BYTES, ValueDecodeCatalogHeader, ValueDecodeCatalogLayout,
+};
+#[cfg(feature = "decode-catalog-build")]
 const VERSION: u16 = 1;
-const HEADER_LEN: usize = 10;
-/// Maximum uncompressed catalog size accepted by the V1 reader (16 MiB).
-pub const VALUE_DECODE_CATALOG_MAX_BYTES: usize = 16 * 1024 * 1024;
-
-/// The generated CopperList layout whose payload slots this catalog describes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode)]
-pub enum ValueDecodeCatalogLayout {
-    /// Shared presence/capture planes and delta-coded common metadata.
-    Compact,
-    /// Each message is encoded with its own metadata envelope.
-    Flat,
-}
 
 /// A recorded output slot in native CopperList encoding order.
-#[derive(Clone, Debug, Encode, Decode)]
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct ValueDecodeCatalogSlot {
     /// Task or bridge/channel identity from the generated output map.
     pub task_id: String,
@@ -47,9 +40,9 @@ pub struct ValueDecodeCatalogSlot {
 ///
 /// V1 uses bincode's standard configuration (little-endian, variable integers)
 /// for both the catalog body and the recorded native payloads. Common CopperList
-/// metadata is identified by `layout`; its standalone interpretation is a later
-/// extension of the catalog format.
-#[derive(Clone, Debug, Encode, Decode)]
+/// metadata is identified by `layout`. V1 fixes the Compact and Flat envelope
+/// rules as well as payload encoding; changing either requires a new version.
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct ValueDecodeCatalog {
     /// Mission selected by runtime generation.
     pub mission: String,
@@ -63,33 +56,16 @@ pub struct ValueDecodeCatalog {
     pub slots: Vec<ValueDecodeCatalogSlot>,
 }
 
-/// Bootstrap information obtained without decompression.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ValueDecodeCatalogHeader {
-    /// Catalog wire version; fixes the bincode configuration and Brotli compression.
-    pub version: u16,
-}
-
-impl ValueDecodeCatalogHeader {
-    /// Check the magic and version without allocating or decompressing the body.
-    pub fn read(bytes: &[u8]) -> Result<Self, DecodeError> {
-        let header = bytes
-            .get(..HEADER_LEN)
-            .ok_or(DecodeError::Other("truncated ValueDecodeCatalog header"))?;
-        if &header[..8] != MAGIC || header[8..10] != VERSION.to_le_bytes() {
-            return Err(DecodeError::Other("unsupported ValueDecodeCatalog format"));
-        }
-        if bytes.len() > HEADER_LEN + VALUE_DECODE_CATALOG_MAX_BYTES {
-            return Err(DecodeError::Other("ValueDecodeCatalog exceeds 16 MiB"));
-        }
-        Ok(Self { version: VERSION })
-    }
-}
-
 impl ValueDecodeCatalog {
     /// Decompress and read a catalog offline, enforcing the fixed size limit.
     pub fn from_blob(bytes: &[u8]) -> Result<Self, DecodeError> {
-        ValueDecodeCatalogHeader::read(bytes)?;
+        if bytes.starts_with(crate::catalog_header::CATALOG_CHUNK_MAGIC) {
+            return Self::from_framed_blob(bytes);
+        }
+        let header = ValueDecodeCatalogHeader::read(bytes)?;
+        if header.version == 2 {
+            return Self::from_stream_blob(bytes);
+        }
         let mut raw = Vec::new();
         let mut reader = brotli::Decompressor::new(&bytes[HEADER_LEN..], 4096);
         reader
@@ -118,6 +94,130 @@ impl ValueDecodeCatalog {
         if used != raw.len() {
             return Err(DecodeError::Other("trailing ValueDecodeCatalog body bytes"));
         }
+        catalog.description.validate()?;
+        for slot in &catalog.slots {
+            if slot
+                .binding
+                .is_some_and(|binding| binding >= catalog.description.bindings.len())
+            {
+                return Err(DecodeError::Other(
+                    "invalid ValueDecodeCatalog slot binding",
+                ));
+            }
+        }
+        Ok(catalog)
+    }
+
+    fn from_framed_blob(mut bytes: &[u8]) -> Result<Self, DecodeError> {
+        let mut blob = Vec::new();
+        let mut expected = 0u32;
+        while !bytes.is_empty() {
+            let header = bytes
+                .get(..14)
+                .ok_or(DecodeError::Other("truncated catalog chunk"))?;
+            if &header[..8] != crate::catalog_header::CATALOG_CHUNK_MAGIC {
+                return Err(DecodeError::Other("invalid catalog continuation"));
+            }
+            let sequence = u32::from_le_bytes(
+                header[8..12]
+                    .try_into()
+                    .map_err(|_| DecodeError::Other("invalid chunk sequence"))?,
+            );
+            if sequence != expected {
+                return Err(DecodeError::Other(
+                    "duplicate, missing or out-of-order catalog chunk",
+                ));
+            }
+            let len = usize::from(u16::from_le_bytes([header[12], header[13]]));
+            if len == 0 || len > 128 {
+                return Err(DecodeError::Other("invalid catalog chunk length"));
+            }
+            let data = bytes
+                .get(14..14 + len)
+                .ok_or(DecodeError::Other("truncated catalog chunk data"))?;
+            if blob.len() + len
+                > HEADER_LEN
+                    + VALUE_DECODE_CATALOG_MAX_BYTES
+                    + VALUE_DECODE_CATALOG_MAX_BYTES / 8
+                    + 8
+            {
+                return Err(DecodeError::Other("ValueDecodeCatalog exceeds 16 MiB"));
+            }
+            blob.extend_from_slice(data);
+            bytes = &bytes[14 + len..];
+            expected += 1;
+        }
+        if !blob.starts_with(MAGIC) {
+            return Err(DecodeError::Other("invalid catalog bootstrap"));
+        }
+        Self::from_blob(&blob)
+    }
+
+    fn from_stream_blob(bytes: &[u8]) -> Result<Self, DecodeError> {
+        use heatshrink::{Poll, SinkError};
+        let end = bytes
+            .len()
+            .checked_sub(8)
+            .filter(|end| *end >= HEADER_LEN)
+            .ok_or(DecodeError::Other("truncated streaming catalog footer"))?;
+        let footer = &bytes[end..];
+        let raw_len = u32::from_le_bytes(
+            footer[..4]
+                .try_into()
+                .map_err(|_| DecodeError::Other("invalid catalog length"))?,
+        ) as usize;
+        let checksum = u32::from_le_bytes(
+            footer[4..]
+                .try_into()
+                .map_err(|_| DecodeError::Other("invalid catalog checksum"))?,
+        );
+        if raw_len > VALUE_DECODE_CATALOG_MAX_BYTES {
+            return Err(DecodeError::Other("ValueDecodeCatalog exceeds 16 MiB"));
+        }
+        let mut raw = Vec::with_capacity(raw_len);
+        let mut decoder = heatshrink::decoder::HeatshrinkDecoder::<10, 5, 32, 1024>::new();
+        let compressed = &bytes[HEADER_LEN..end];
+        let mut offset = 0;
+        let mut buffer = [0; 256];
+        loop {
+            let before = offset;
+            if offset < compressed.len() {
+                match decoder.sink(&compressed[offset..]) {
+                    Ok(consumed) => offset += consumed,
+                    Err(SinkError::Full) => {}
+                    Err(SinkError::Misuse) => {
+                        return Err(DecodeError::Other("invalid compressed catalog"));
+                    }
+                }
+            }
+            let result = decoder
+                .poll(&mut buffer)
+                .map_err(|_| DecodeError::Other("invalid compressed catalog"))?;
+            let count = result.bytes_written();
+            if raw.len() + count > raw_len {
+                return Err(DecodeError::Other("streaming catalog length mismatch"));
+            }
+            raw.extend_from_slice(&buffer[..count]);
+            if matches!(result, Poll::Empty(_)) && offset == compressed.len() {
+                break;
+            }
+            if offset == before && count == 0 {
+                return Err(DecodeError::Other("invalid compressed catalog"));
+            }
+        }
+        if raw.len() != raw_len || !crate::catalog_stream::crc32(u32::MAX, &raw) != checksum {
+            return Err(DecodeError::Other(
+                "streaming catalog checksum or length mismatch",
+            ));
+        }
+        let (catalog, consumed): (Self, _) = bincode::decode_from_slice(
+            &raw,
+            bincode::config::standard().with_limit::<VALUE_DECODE_CATALOG_MAX_BYTES>(),
+        )?;
+        if consumed != raw.len() {
+            return Err(DecodeError::Other("trailing ValueDecodeCatalog body bytes"));
+        }
+        catalog.description.validate()?;
         for slot in &catalog.slots {
             if slot
                 .binding

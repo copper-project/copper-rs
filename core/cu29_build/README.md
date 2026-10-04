@@ -5,9 +5,11 @@ Shared build-script setup for Copper crates and applications.
 Call `cu29_build::setup()` once from `build.rs`. It configures Copper's logging
 macros and forwards the crate's active Cargo features to Copper code generation.
 
-Enable `self-describing-logs` to package a `ValueDecodeCatalog` on the host with
-`catalog::write_value_decode_catalog("catalog.rs", &catalog)`. The helper emits a
-Rust static byte array into Cargo's `OUT_DIR`. Include the generated file in the
-application and pass `VALUE_DECODE_CATALOG` to the generated builder's
-`with_value_decode_catalog` method. See `examples/cu_self_describing_logs` for a
-shared payload crate, generated slot registrations and startup recording.
+Applications enable `cu29/self-describing-logs` to record a compressed catalog
+through the normal generated builder. The usual `cu29_build::setup()` call is
+sufficient; see `examples/cu_self_describing_logs`.
+
+For explicit host packaging, this crate's `self-describing-logs` feature provides
+`catalog::write_value_decode_catalog("catalog.rs", &catalog)`. It emits a V1 Brotli
+blob into Cargo's `OUT_DIR`, usable as an override with the generated builder's
+`with_value_decode_catalog` method. Host schema construction uses `cu29/decode-catalog`.

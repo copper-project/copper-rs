@@ -38,7 +38,12 @@ use serde::Deserialize;
 
 #[cfg(feature = "decode-catalog")]
 pub mod catalog;
-#[cfg(feature = "self-describing-logs")]
+#[cfg(any(feature = "self-describing-logs", feature = "decode-catalog"))]
+pub mod catalog_header;
+#[cfg(any(feature = "self-describing-logs", feature = "decode-catalog"))]
+#[doc(hidden)]
+pub mod catalog_stream;
+#[cfg(feature = "decode-catalog")]
 pub mod decode;
 #[cfg(feature = "self-describing-logs")]
 mod metadata;
@@ -1262,5 +1267,5 @@ mod tests {
     }
 }
 
-#[cfg(all(test, feature = "self-describing-logs"))]
+#[cfg(all(test, feature = "decode-catalog-build"))]
 mod decode_tests;

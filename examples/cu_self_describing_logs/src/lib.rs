@@ -1,12 +1,10 @@
-//! Host packaging and startup-recording integration example.
+//! Automatic startup catalog recording in a single-crate application.
 #![cfg(feature = "self-describing-logs")]
 
-pub use cu_self_describing_payloads as payloads;
+pub mod payloads;
 
 use cu29::prelude::*;
 use payloads::WheelSample;
-
-include!(concat!(env!("OUT_DIR"), "/catalog.rs"));
 
 #[derive(Reflect)]
 pub struct WheelSource;
@@ -75,30 +73,14 @@ pub use default::WheelApplication as Application;
 mod tests {
     use super::*;
     use cu29::bincode;
+    use cu29_value::catalog::ValueDecodeCatalog;
+    use cu29_value::decode::ValueDecodeLimits;
 
     #[test]
-    fn test_generated_catalog_registration_preserves_log_slots() {
-        let mut called = false;
-        let registered = default::value_decode_catalog_with(|builder| {
-            called = true;
-            builder.register::<WheelSample>();
-        })
-        .unwrap();
-        assert!(called);
-        let original = default::value_decode_catalog().unwrap();
-        let config = bincode::config::standard();
-        assert_eq!(
-            bincode::encode_to_vec(&registered, config).unwrap(),
-            bincode::encode_to_vec(&original, config).unwrap()
-        );
-    }
-
-    #[test]
-    fn test_host_embedded_catalog_is_recorded_verbatim_once_at_startup() {
+    fn test_catalog_is_recorded_automatically_at_startup() {
         let dir = tempfile::tempdir_in(env!("CARGO_MANIFEST_DIR")).unwrap();
         let path = dir.path().join("wheel.copper");
         let app = WheelApplication::builder()
-            .with_value_decode_catalog(VALUE_DECODE_CATALOG)
             .with_log_path(&path, Some(32 * 1024 * 1024))
             .unwrap()
             .with_resources(|_| Ok(ResourceManager::new(&[])))
@@ -115,17 +97,13 @@ mod tests {
         let UnifiedLogger::Read(mut reader) = logger else {
             panic!("read logger")
         };
-        let recorded = reader
+        let mut recorded = Vec::new();
+        while let Some(section) = reader
             .read_next_section_type(UnifiedLogType::ValueDecodeCatalog)
             .unwrap()
-            .unwrap();
-        assert_eq!(recorded, VALUE_DECODE_CATALOG);
-        assert!(
-            reader
-                .read_next_section_type(UnifiedLogType::ValueDecodeCatalog)
-                .unwrap()
-                .is_none()
-        );
+        {
+            recorded.extend_from_slice(&section);
+        }
         let catalog = ValueDecodeCatalog::from_blob(&recorded).unwrap();
         let wheel = catalog
             .slots
@@ -143,7 +121,7 @@ mod tests {
                 .description
                 .schemas
                 .iter()
-                .any(|schema| schema.type_path == "cu_self_describing_payloads::WheelSample")
+                .any(|schema| schema.type_path == "cu_self_describing_logs::payloads::WheelSample")
         );
         let payload = WheelSample {
             ticks: 42,
@@ -178,7 +156,7 @@ mod tests {
     #[test]
     fn test_startup_rejects_truncated_header_and_unsupported_version() {
         let result = WheelApplication::builder()
-            .with_value_decode_catalog(&VALUE_DECODE_CATALOG[..8])
+            .with_value_decode_catalog(b"CUVDCAT\0")
             .build();
         assert!(
             result
@@ -187,7 +165,7 @@ mod tests {
                 .to_string()
                 .contains("Invalid embedded")
         );
-        static BAD_VERSION: &[u8] = b"CUVDCAT\0\x02\x00";
+        static BAD_VERSION: &[u8] = b"CUVDCAT\0\xff\x00";
         let result = WheelApplication::builder()
             .with_value_decode_catalog(BAD_VERSION)
             .build();

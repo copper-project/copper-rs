@@ -101,19 +101,28 @@ option select recorded runs identified by `Instantiated` lifecycle records.
 
 ## Experimental
 
-- `self-describing-logs` feature, `cu29::value_decode`, and
+- `self-describing-logs` feature for automatic startup catalog recording;
+  `decode-catalog` for host-side `cu29::value_decode`, and
   `cu29_value::decode`: `ValueDecodeDescription` builds portable wire/schema
   descriptions and decodes native payload bytes to `Value` trees offline.
-- `cu29::prelude::{ValueDecode, ValueDecodeSpec, ValueDecodeDescription,
-  ValueDecodeLimits}` with `self-describing-logs` enabled. The companion trait and
-  static wire operations are supplied by `cu-bincode`.
+- `cu29::prelude::{ValueDecode, ValueDecodeSpec}` are always available. The
+  companion trait and static wire operations are supplied by `cu-bincode`;
+  `#[bincode(describe)]` generates descriptions for individual `Encode` types.
+  `cu29::prelude::{ValueDecodeDescription, ValueDecodeLimits}` requires
+  `decode-catalog` for offline tooling.
 - `cu29::value_decode_catalog` and `cu29_value::catalog`: versioned payload catalogs,
   host graph construction and offline decompression. `ValueDecodeCatalogBuilder::register`
   registers reflected dependencies of opaque payloads without adding log slots. The header contains magic and
-  version; V1 fixes bincode standard encoding and Brotli compression.
+  version; V2 uses fixed-memory Heatshrink compression and continuation framing.
+  Offline readers retain V1 Brotli compatibility.
 - `cu29_build::catalog::write_value_decode_catalog` with `self-describing-logs`:
   build-host serialization/compression and generated static source. Generated
-  builders expose `with_value_decode_catalog` for startup recording.
+  builders expose `with_value_decode_catalog` as an optional override.
+- `cu29_export::catalog`: experimental run-scoped catalog loading and fallible
+  standalone CopperList value readers. `ValueDecodeDescription::validate` checks
+  complete graphs; `decode_at` decodes selected bindings without graph copies.
+  Catalog CLI formats/decoder selection and registration-free Python catalog
+  functions are experimental. Internal shared allocation budgets are hidden.
 - `cu29-value-types` and its `cu29_value` / `cu29::prelude` re-exports:
   `Quantity`, `QuantityMetadata`, `StorageUnit`, `TimeStorageUnit`, and
   `ValueMetadata`. `ValueDecode::METADATA` attaches the Copper-owned vocabulary

@@ -23,13 +23,14 @@ self-describing-logs-check:
 	cargo test -p cu29-value-types --all-features
 	cargo test -p cu-bincode --test describe
 	cargo test -p cu-bincode --test describe --features self-describing
+	cargo check -p cu29 --no-default-features --features self-describing-logs --target thumbv7em-none-eabihf
 	cargo test -p cu29-value --features decode-catalog-build
-	cargo test -p cu29 --features self-describing-logs --test value_decode
+	cargo test -p cu29 --features decode-catalog --test value_decode
 	cargo test -p cu-self-describing-logs --features self-describing-logs
 	cargo test -p cu-self-describing-logs --features self-describing-logs,flat-copperlist-encoding
 	cargo test -p cu29-export --lib runs::tests
 	cargo clippy -p cu29-value -p cu29-value-types -p cu29-units -p cu29-build --all-targets --features cu29-value/decode-catalog-build,cu29-build/self-describing-logs -- --deny warnings
-	cargo clippy -p cu29 --lib --test value_decode --features self-describing-logs -- --deny warnings
+	cargo clippy -p cu29 --lib --test value_decode --features decode-catalog -- --deny warnings
 	cargo clippy -p cu-self-describing-logs --all-targets --features self-describing-logs -- --deny warnings
 	cargo check -p cu29-export --features self-describing-logs
 	cargo check -p cu29 -p cu29-value -p cu29-value-types --no-default-features
