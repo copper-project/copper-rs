@@ -178,17 +178,12 @@ bevy = { workspace = true, default-features = false, features = [
 
 [features]
 default = ["sim", "forest-world"]
+self-describing-logs = ["cu29?/self-describing-logs"]
 forest-world = []
 urban-world = []
 autonomous-demo = []
 sim_core = [
-  "dep:cu-flight-controller-catalog",
-  "cu29/self-describing-logs",
-  "cu-sensor-payloads/self-describing-logs",
-  "cu-zed/self-describing-logs",
-  "cu-crsf/self-describing-logs",
-  "cu-msp-bridge/self-describing-logs",
-  "cu-flight-controller-catalog/compute",
+  "self-describing-logs",
   "dep:cu29",
   "cu29/std",
   "cu29/sysclock-perf",
@@ -212,6 +207,7 @@ textlogs = [
 
 
 firmware = [
+  "self-describing-logs",
   "dep:cu29",
   "cu29/defmt",
   "dep:defmt",
@@ -247,14 +243,7 @@ firmware = [
   "cu-logmon/defmt",
 ]
 end2end = [
-  "dep:cu-flight-controller-catalog",
-  "cu29/self-describing-logs",
-  "cu-sensor-payloads/self-describing-logs",
-  "cu-zed/self-describing-logs",
-  "cu-crsf/self-describing-logs",
-  "cu-msp-bridge/self-describing-logs",
-  "cu-flight-controller-catalog/end2end",
-  "cu-flight-controller-catalog/compute",
+  "self-describing-logs",
   "dep:cu29",
   "cu29/std",
   "cu29/signal-handler",
@@ -297,12 +286,12 @@ python-bindings = [
   "dep:pyo3",
 ]
 sim = [
-  "cu-flight-controller-catalog/sim",
   "sim_core",
   "dep:cu-vitfly",
   "dep:cu-zenoh-bridge",
   "dep:cu-ratelimit",
   "cu29/reflect",
+  "cu-msp-bridge/reflect",
   "dep:cu-consolemon",
   "dep:cached-path",
   "dep:evdev",
@@ -312,7 +301,6 @@ sim = [
 vitfly-cuda = ["sim", "cu-vitfly/cuda"]
 sim-debug = ["sim", "cu29/reflect", "cu29/remote-debug"]
 bevymon = [
-  "cu-flight-controller-catalog/bevymon",
   "sim_core",
   "dep:cu-bevymon",
   "dep:cached-path",
@@ -388,4 +376,3 @@ tempfile = { workspace = true }
 
 [build-dependencies]
 cu29-build = { workspace = true }
-cu-flight-controller-catalog = { path = "catalog", optional = true }

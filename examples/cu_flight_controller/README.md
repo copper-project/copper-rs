@@ -168,10 +168,12 @@ If you are building another replay target, follow the same pattern with
 
 ### Embedded payload catalogs
 
-The simulator and host compute runtime record a compressed payload catalog at startup.
-Catalog generation runs on the build host using the selected MCU and compute graphs.
-The local `cu-zed` dependency enables its `self-describing-logs` feature for raster
-payload descriptions.
+The `self-describing-logs` feature records a compressed payload catalog automatically
+when the generated runtime is built. Simulation, host compute, and firmware enable
+this feature. Schema serialization and Heatshrink compression run once at startup
+with bounded memory, including on `no_std` targets.
+Payload dependencies supply their encoding recipes directly; the application
+enables `cu29/self-describing-logs` once.
 
 Choose the decoder explicitly:
 

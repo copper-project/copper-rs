@@ -20,6 +20,4 @@ fn main() {
     }
 
     cu29_build::setup();
-    #[cfg(any(feature = "sim_core", feature = "end2end"))]
-    cu_flight_controller_catalog::write();
 }

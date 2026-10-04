@@ -123,8 +123,6 @@ where
 mod mcu_copper {
     use super::*;
 
-    include!(concat!(env!("OUT_DIR"), "/mcu_catalog.rs"));
-
     pub mod tasks {
         pub use crate::tasks::*;
     }
@@ -152,7 +150,6 @@ mod mcu_copper {
                 .with_clock(clock.clone())
                 .with_log_path(PathBuf::from(logger_path), log_slab_size)
                 .expect("failed to create logger")
-                .with_value_decode_catalog(VALUE_DECODE_CATALOG)
                 .with_sim_callback(&mut default_callback)
                 .build()
                 .expect("failed to create runtime")
@@ -179,7 +176,6 @@ mod mcu_copper {
             let app = default::FlightControllerSim::builder()
                 .with_clock(clock.clone())
                 .with_logger::<BevyMonSectionStorage, BevyMonUnifiedLogger>(logger)
-                .with_value_decode_catalog(VALUE_DECODE_CATALOG)
                 .with_sim_callback(&mut default_callback)
                 .build()
                 .expect("failed to create runtime")
@@ -341,8 +337,6 @@ mod mcu_copper {
 mod compute_copper {
     use super::*;
 
-    include!(concat!(env!("OUT_DIR"), "/compute_catalog.rs"));
-
     pub mod tasks {
         pub use crate::compute_tasks::*;
     }
@@ -375,7 +369,6 @@ mod compute_copper {
                 .with_clock(clock.clone())
                 .with_log_path(PathBuf::from(logger_path), log_slab_size)
                 .expect("failed to create compute logger")
-                .with_value_decode_catalog(VALUE_DECODE_CATALOG)
                 .with_sim_callback(&mut default_callback)
                 .build()
                 .expect("failed to create compute runtime")

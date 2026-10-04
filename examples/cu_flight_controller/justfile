@@ -190,7 +190,7 @@ catalog-check:
   #!/usr/bin/env bash
   set -euo pipefail
   cd "{{ROOT}}"
-  cargo test -p cu-crsf -p cu-msp-bridge -p cu-sensor-payloads --lib --features cu-crsf/self-describing-logs,cu-msp-bridge/self-describing-logs,cu-sensor-payloads/self-describing-logs catalog_decodes_native
+  cargo test -p cu-crsf -p cu-msp-bridge -p cu-sensor-payloads --lib catalog_decodes_native
   cargo check -p cu-flight-controller --no-default-features --features sim,forest-world --bin quad-sim
 
 # Record and catalog-decode both subsystem logs without opening a window.
