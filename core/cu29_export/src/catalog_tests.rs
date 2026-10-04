@@ -192,3 +192,56 @@ fn test_oversized_catalog_is_rejected_before_loading_its_body() {
     assert!(error.contains("catalog discovery"), "{error}");
     assert!(error.contains("exceeds 16 MiB"), "{error}");
 }
+
+#[test]
+fn test_appended_runs_keep_all_streaming_catalog_sections() {
+    use bincode::value_decode::ValueDecodeRef;
+    use cu29::catalog_stream::{CatalogDescription, CatalogSlot};
+    let dir = tempfile::tempdir_in(env!("CARGO_MANIFEST_DIR")).unwrap();
+    let path = dir.path().join("streaming-runs.copper");
+    let mut state = 11u32;
+    let noise: String = (0..64 * 1024)
+        .map(|_| {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            char::from(b'a' + (state % 26) as u8)
+        })
+        .collect();
+    let config = Box::leak(format!("() /*{noise}*/").into_boxed_str());
+    static DRIVE: &[CatalogSlot] = &[CatalogSlot {
+        task_id: "drive",
+        msg_type: "u32",
+        payload: Some(ValueDecodeRef::of::<u32>()),
+    }];
+    static PARK: &[CatalogSlot] = &[CatalogSlot {
+        task_id: "park",
+        msg_type: "u32",
+        payload: Some(ValueDecodeRef::of::<u32>()),
+    }];
+    for (index, (mission, value, slots)) in [("drive", 300, DRIVE), ("park", 42, PARK)]
+        .into_iter()
+        .enumerate()
+    {
+        let logger = writer(&path, index != 0);
+        let description = CatalogDescription {
+            mission,
+            config_ron: config,
+            layout: ValueDecodeCatalogLayout::Compact,
+            slots,
+        };
+        record_value_decode_catalog(logger.clone(), &description).unwrap();
+        write_run(&logger, value, mission, false, false);
+        drop(logger);
+    }
+    for (index, (mission, value)) in [("drive", 300), ("park", 42)].into_iter().enumerate() {
+        let catalog = crate::catalog::read_value_decode_catalog(&path, Some(index)).unwrap();
+        assert_eq!(catalog.mission, mission);
+        let entries = copperlist_values_reader(&path, Some(index))
+            .unwrap()
+            .collect::<CuResult<Vec<_>>>()
+            .unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].msgs[0].payload, Some(Value::U32(value)));
+    }
+}
