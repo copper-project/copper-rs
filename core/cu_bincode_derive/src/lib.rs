@@ -1,7 +1,6 @@
 mod attribute;
 mod derive_enum;
 mod derive_struct;
-#[cfg(feature = "self-describing")]
 mod value_decode;
 
 use attribute::ContainerAttributes;

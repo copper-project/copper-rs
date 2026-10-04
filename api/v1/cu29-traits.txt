@@ -61,6 +61,8 @@ impl core::fmt::Debug for cu29_traits::CuCompactString
 pub fn cu29_traits::CuCompactString::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl cu_bincode::enc::Encode for cu29_traits::CuCompactString
 pub fn cu29_traits::CuCompactString::encode<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
+impl cu_bincode::value_decode::ValueDecode for cu29_traits::CuCompactString
+pub const cu29_traits::CuCompactString::DECODE: &'static cu_bincode::value_decode::ValueDecodeSpec
 impl<'de, Context> cu_bincode::de::BorrowDecode<'de, Context> for cu29_traits::CuCompactString
 pub fn cu29_traits::CuCompactString::borrow_decode<D: cu_bincode::de::BorrowDecoder<'de>>(decoder: &mut D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
 impl<Context> cu_bincode::de::Decode<Context> for cu29_traits::CuCompactString

@@ -289,7 +289,6 @@ pub mod prelude {
     pub use crate::{safety_case, safety_check, safety_check_eq};
     #[cfg(feature = "reflect")]
     pub use bevy_reflect_derive::Reflect;
-    #[cfg(feature = "self-describing-logs")]
     pub use bincode::{ValueDecode, ValueDecodeSpec};
     #[cfg(feature = "signal-handler")]
     pub use ctrlc;

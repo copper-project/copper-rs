@@ -1,23 +1,28 @@
 //! Static recipes for reading native Encode bytes without the native Rust type.
 //! Recipes allocate nothing and are evaluated only by offline readers. Enable
-//! `self-describing` to generate a companion implementation alongside Encode.
+//! `self-describing` to generate companion implementations alongside Encode, or
+//! use `#[bincode(describe)]` on individual Encode types for unconditional support.
 
 use core::any::{TypeId, type_name};
 
 /// Describes the encoded representation, independently of reflection and memory layout.
 /// A handwritten encoder can delegate to the type it actually writes:
 /// ```
-/// # #[cfg(feature = "self-describing")] {
 /// use cu_bincode::{ValueDecode, ValueDecodeSpec};
 /// struct Orientation([f32; 4]);
 /// impl ValueDecode for Orientation {
 ///     const DECODE: &'static ValueDecodeSpec = <[f32; 4] as ValueDecode>::DECODE;
 /// }
-/// # }
 /// ```
 pub trait ValueDecode: 'static + Sized {
     /// Complete wire recipe for this encoding.
     const DECODE: &'static ValueDecodeSpec;
+
+    /// Static logical metadata retained alongside the wire recipe.
+    ///
+    /// Metadata is borrowed from the image and never changes payload encoding.
+    /// Copper uses `quantity` and `storage_unit` to describe physical quantities.
+    const ATTRIBUTES: &'static [(&'static str, &'static str)] = &[];
 
     /// Typed lazy reference for generated field bindings.
     #[doc(hidden)]
@@ -47,6 +52,7 @@ fn describe<T: ValueDecode>() -> ValueDecodeType {
         type_id: TypeId::of::<T>(),
         type_name: type_name::<T>(),
         spec: T::DECODE,
+        attributes: T::ATTRIBUTES,
     }
 }
 
@@ -59,6 +65,8 @@ pub struct ValueDecodeType {
     pub type_name: &'static str,
     /// Encoded representation.
     pub spec: &'static ValueDecodeSpec,
+    /// Borrowed logical metadata emitted with this type's description.
+    pub attributes: &'static [(&'static str, &'static str)],
 }
 
 /// Scalar width and signedness. Integer encoding and endianness come from the codec configuration.

@@ -97,6 +97,8 @@ pub use cu29::prelude::TypePath
 pub use cu29::prelude::TypeRegistry
 pub use cu29::prelude::UnifiedLogType
 pub use cu29::prelude::Value
+pub use cu29::prelude::ValueDecode
+pub use cu29::prelude::ValueDecodeSpec
 pub use cu29::prelude::WriteStream
 pub use cu29::prelude::abort_observed_encode
 pub use cu29::prelude::app

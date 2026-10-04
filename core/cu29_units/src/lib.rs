@@ -13,23 +13,24 @@ extern crate alloc;
 pub use uom;
 
 // Dimensionless quantities retain their coherent named storage units.
-#[cfg(feature = "self-describing-logs")]
 macro_rules! storage_unit {
     (angle) => {
-        alloc::string::String::from("rad")
+        "rad"
     };
     (solid_angle) => {
-        alloc::string::String::from("sr")
+        "sr"
     };
     (information) => {
-        alloc::string::String::from("bit")
+        "bit"
     };
     (information_rate) => {
-        alloc::string::String::from("bit s^-1")
+        "bit s^-1"
     };
-    ($quantity:ident) => {
-        crate::coherent_storage_unit::<uom::si::$quantity::Dimension>()
-    };
+    ($quantity:ident) => {{
+        const UNIT: crate::StorageUnit =
+            crate::static_storage_unit::<uom::si::$quantity::Dimension>();
+        UNIT.as_str()
+    }};
 }
 
 macro_rules! define_storage_wrappers {
@@ -204,9 +205,12 @@ macro_rules! define_storage_wrappers {
                         }
                     }
 
-                    #[cfg(feature = "self-describing-logs")]
                     impl bincode::ValueDecode for $quantity_name {
                         const DECODE: &'static bincode::ValueDecodeSpec = <$storage_ty as bincode::ValueDecode>::DECODE;
+                        const ATTRIBUTES: &'static [(&'static str, &'static str)] = &[
+                            ("quantity", stringify!($unit_mod_name)),
+                            ("storage_unit", storage_unit!($unit_mod_name)),
+                        ];
                     }
 
                     impl bincode::Encode for $quantity_name {
@@ -254,12 +258,12 @@ macro_rules! define_storage_wrappers {
 
             $(define_quantity!($unit_mod, $quantity);)+
 
-            #[cfg(feature = "self-describing-logs")]
+            #[cfg(any(feature = "self-describing-logs", feature = "reflect"))]
             pub(crate) fn value_decode_quantities() -> alloc::vec::Vec<crate::ValueDecodeQuantity> {
                 alloc::vec![$(crate::ValueDecodeQuantity {
                     type_id: core::any::TypeId::of::<$quantity>(),
                     quantity: stringify!($unit_mod),
-                    storage_unit: storage_unit!($unit_mod),
+                    storage_unit: alloc::string::String::from(storage_unit!($unit_mod)),
                 }),+]
             }
         }
@@ -895,7 +899,7 @@ mod tests {
 }
 
 /// Typed storage metadata for offline self-description packaging.
-#[cfg(feature = "self-describing-logs")]
+#[cfg(any(feature = "self-describing-logs", feature = "reflect"))]
 pub struct ValueDecodeQuantity {
     /// Original quantity type, including scalar width.
     pub type_id: core::any::TypeId,
@@ -906,43 +910,91 @@ pub struct ValueDecodeQuantity {
 }
 
 /// Register every supported quantity in both scalar widths.
-#[cfg(feature = "self-describing-logs")]
+#[cfg(any(feature = "self-describing-logs", feature = "reflect"))]
 pub fn value_decode_quantities() -> Vec<ValueDecodeQuantity> {
     let mut quantities = si::f32::value_decode_quantities();
     quantities.extend(si::f64::value_decode_quantities());
     quantities
 }
 
-#[cfg(feature = "self-describing-logs")]
-fn coherent_storage_unit<D: uom::si::Dimension + ?Sized>() -> alloc::string::String {
-    use uom::typenum::Integer;
-    let exponents = [
-        D::L::to_i32(),
-        D::M::to_i32(),
-        D::T::to_i32(),
-        D::I::to_i32(),
-        D::Th::to_i32(),
-        D::N::to_i32(),
-        D::J::to_i32(),
-    ];
-    let mut result = alloc::string::String::new();
-    for (symbol, exponent) in ["m", "kg", "s", "A", "K", "mol", "cd"]
-        .into_iter()
-        .zip(exponents)
-    {
-        if exponent == 0 {
-            continue;
-        }
-        if !result.is_empty() {
-            result.push(' ');
-        }
-        result.push_str(symbol);
-        if exponent != 1 {
-            result.push_str(&alloc::format!("^{exponent}"));
+/// Compile-time formatting keeps coherent unit symbols borrowed on embedded targets.
+struct StorageUnit {
+    bytes: [u8; 128],
+    len: usize,
+}
+
+impl StorageUnit {
+    const fn push(&mut self, bytes: &[u8]) {
+        let mut index = 0;
+        while index < bytes.len() {
+            self.bytes[self.len] = bytes[index];
+            self.len += 1;
+            index += 1;
         }
     }
-    if result.is_empty() {
-        result.push('1');
+
+    const fn exponent(&mut self, value: i32) {
+        self.push(b"^");
+        if value < 0 {
+            self.push(b"-");
+        }
+        let mut number = value.unsigned_abs();
+        let mut digits = [0; 10];
+        let mut count = 0;
+        loop {
+            digits[count] = b'0' + (number % 10) as u8;
+            count += 1;
+            number /= 10;
+            if number == 0 {
+                break;
+            }
+        }
+        while count > 0 {
+            count -= 1;
+            self.push(&[digits[count]]);
+        }
+    }
+
+    const fn as_str(&self) -> &str {
+        match core::str::from_utf8(self.bytes.split_at(self.len).0) {
+            Ok(symbol) => symbol,
+            Err(_) => panic!("Storage unit must be ASCII"),
+        }
+    }
+}
+
+const fn static_storage_unit<D: uom::si::Dimension + ?Sized>() -> StorageUnit {
+    use uom::typenum::Integer;
+    let exponents = [
+        D::L::I32,
+        D::M::I32,
+        D::T::I32,
+        D::I::I32,
+        D::Th::I32,
+        D::N::I32,
+        D::J::I32,
+    ];
+    let symbols: [&[u8]; 7] = [b"m", b"kg", b"s", b"A", b"K", b"mol", b"cd"];
+    let mut result = StorageUnit {
+        bytes: [0; 128],
+        len: 0,
+    };
+    let mut index = 0;
+    while index < exponents.len() {
+        let exponent = exponents[index];
+        if exponent != 0 {
+            if result.len > 0 {
+                result.push(b" ");
+            }
+            result.push(symbols[index]);
+            if exponent != 1 {
+                result.exponent(exponent);
+            }
+        }
+        index += 1;
+    }
+    if result.len == 0 {
+        result.push(b"1");
     }
     result
 }

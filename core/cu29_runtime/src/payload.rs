@@ -333,7 +333,6 @@ impl<T: Clone> CuLatchedState<T> {
     }
 }
 
-#[cfg(feature = "self-describing-logs")]
 impl<T: Clone + bincode::ValueDecode, const N: usize> bincode::ValueDecode for CuArray<T, N> {
     const DECODE: &'static bincode::ValueDecodeSpec = &bincode::ValueDecodeSpec::Sequence {
         element: bincode::value_decode::ValueDecodeRef::of::<T>(),
@@ -342,7 +341,6 @@ impl<T: Clone + bincode::ValueDecode, const N: usize> bincode::ValueDecode for C
     };
 }
 
-#[cfg(feature = "self-describing-logs")]
 impl<T: Clone + bincode::ValueDecode, const N: usize> bincode::ValueDecode for CuArrayVec<T, N> {
     const DECODE: &'static bincode::ValueDecodeSpec = &bincode::ValueDecodeSpec::Sequence {
         element: bincode::value_decode::ValueDecodeRef::of::<T>(),

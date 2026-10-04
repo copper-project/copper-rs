@@ -8,8 +8,13 @@ pub(crate) struct DeriveStruct {
 
 impl DeriveStruct {
     pub fn generate_encode(self, generator: &mut Generator) -> Result<()> {
-        #[cfg(feature = "self-describing")]
-        crate::value_decode::generate_struct(generator, &self.attributes, self.fields.as_ref())?;
+        if self.attributes.describe || cfg!(feature = "self-describing") {
+            crate::value_decode::generate_struct(
+                generator,
+                &self.attributes,
+                self.fields.as_ref(),
+            )?;
+        }
         let field_bounds = FieldBounds::new(self.fields.iter())?;
         let crate_name = &self.attributes.crate_name;
         generator

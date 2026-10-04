@@ -739,17 +739,14 @@ struct CuHandleCell<T: Debug + Send + Sync> {
 ///
 /// When `T: ArrayLike`, the handle also participates in Copper's buffer pool APIs.
 #[derive(Debug)]
+#[cfg_attr(feature = "reflect", derive(bevy_reflect::Reflect))]
 #[cfg_attr(
-    all(feature = "self-describing-logs", feature = "reflect"),
-    derive(bevy_reflect::Reflect)
-)]
-#[cfg_attr(
-    all(feature = "self-describing-logs", feature = "reflect"),
+    feature = "reflect",
     reflect(opaque, from_reflect = false, type_path = false)
 )]
 pub struct CuHandle<T: Debug + Send + Sync>(Arc<CuHandleCell<T>>);
 
-#[cfg(all(feature = "self-describing-logs", feature = "reflect"))]
+#[cfg(feature = "reflect")]
 impl<T: Debug + Send + Sync + 'static> bevy_reflect::TypePath for CuHandle<T> {
     fn type_path() -> &'static str {
         core::any::type_name::<Self>()
@@ -759,7 +756,6 @@ impl<T: Debug + Send + Sync + 'static> bevy_reflect::TypePath for CuHandle<T> {
     }
 }
 
-#[cfg(feature = "self-describing-logs")]
 impl<T: Debug + Send + Sync + bincode::ValueDecode> bincode::ValueDecode for CuHandle<T> {
     const DECODE: &'static bincode::ValueDecodeSpec = T::DECODE;
 }
