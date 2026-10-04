@@ -69,7 +69,7 @@ struct WheelSample {
 }
 
 #[test]
-fn test_native_quantities_and_shared_scalar_recipes() {
+fn test_native_quantities_and_shared_scalar_operations() {
     let sample = WheelSample {
         ticks: 42,
         distance: Length::new::<centimeter>(125.0),
@@ -117,7 +117,7 @@ fn test_native_quantities_and_shared_scalar_recipes() {
     assert!(
         quantity_bindings
             .iter()
-            .all(|binding| binding.recipe == quantity_bindings[0].recipe)
+            .all(|binding| binding.operation == quantity_bindings[0].operation)
     );
     assert_ne!(quantity_bindings[0].schema, quantity_bindings[1].schema);
     assert!(
@@ -280,7 +280,7 @@ struct Attitude {
 }
 
 #[test]
-fn test_manual_recipe_delegation_and_consecutive_native_values() {
+fn test_manual_operation_delegation_and_consecutive_native_values() {
     let sample = Attitude {
         orientation: Orientation([0.0, 0.5, -0.5, 1.0]),
         valid: true,
@@ -374,7 +374,7 @@ fn test_skip_attributes_and_reflection_identity_checks() {
 }
 
 #[test]
-fn test_invalid_truncated_data_recipes_and_limits() {
+fn test_invalid_truncated_data_operations_and_limits() {
     let sample = Attitude {
         orientation: Orientation([1.0, 2.0, 3.0, 4.0]),
         valid: true,
@@ -482,7 +482,7 @@ fn test_invalid_truncated_data_recipes_and_limits() {
 }
 
 #[test]
-fn test_recursive_recipe_and_execution_limits() {
+fn test_recursive_operation_and_execution_limits() {
     #[derive(Clone, Debug, PartialEq, Encode, Decode, Reflect)]
     #[reflect(no_field_bounds)]
     struct Node {
@@ -535,7 +535,7 @@ fn test_tuple_declaration_indices_and_ambiguous_reflection() {
 }
 
 #[test]
-fn test_explicit_bytes_recipe_and_manual_type_identity() {
+fn test_explicit_bytes_operation_and_manual_type_identity() {
     #[derive(Clone, Debug, PartialEq, Decode, Reflect)]
     #[reflect(opaque)]
     struct OpaqueBytes(Vec<u8>);
@@ -633,6 +633,85 @@ fn test_quantity_registrations_cover_both_widths_and_named_dimensionless_units()
             unit
         );
     }
+}
+
+#[test]
+fn test_shared_output_budget_is_not_reset_between_bindings() {
+    let description = ValueDecodeDescription::from_type::<String>().unwrap();
+    let bytes = bincode::encode_to_vec("x".repeat(1_000_000), bincode::config::standard()).unwrap();
+    let limits = ValueDecodeLimits::default();
+    let mut budget = ValueDecodeBudget::new(limits);
+    description
+        .decode_at_with_budget(
+            description.root,
+            &bytes,
+            bincode::config::standard(),
+            limits,
+            &mut budget,
+        )
+        .unwrap();
+    for _ in 0..32 {
+        match description.decode_at_with_budget(
+            description.root,
+            &bytes,
+            bincode::config::standard(),
+            limits,
+            &mut budget,
+        ) {
+            Ok(_) => {}
+            Err(error) => {
+                assert!(error.to_string().contains("output byte limit"));
+                return;
+            }
+        }
+    }
+    panic!("Shared output budget was reset between bindings");
+}
+
+#[test]
+fn test_repeated_field_names_are_charged_to_output_budget() {
+    #[derive(Encode, Reflect)]
+    struct Named {
+        value: (),
+    }
+    let mut description = ValueDecodeDescription::from_type::<Vec<Named>>().unwrap();
+    let field = description
+        .schemas
+        .iter_mut()
+        .flat_map(|schema| &mut schema.fields)
+        .find(|field| field.name.as_deref() == Some("value"))
+        .unwrap();
+    field.name = Some("x".repeat(1024));
+    let samples = (0..20_000).map(|_| Named { value: () }).collect::<Vec<_>>();
+    let bytes = bincode::encode_to_vec(samples, bincode::config::standard()).unwrap();
+    let error = description
+        .decode(
+            &bytes,
+            bincode::config::standard(),
+            ValueDecodeLimits::default(),
+        )
+        .unwrap_err();
+    assert!(error.to_string().contains("output byte limit"));
+}
+
+#[test]
+fn test_unused_wire_operations_are_validated() {
+    let mut description = ValueDecodeDescription::from_type::<u32>().unwrap();
+    description.operations.push(ValueDecodeOp::Record {
+        shape: ValueDecodeShape::Newtype,
+        fields: Vec::new(),
+    });
+    assert!(description.validate().is_err());
+    description.operations.pop();
+    description.operations.push(ValueDecodeOp::Enum {
+        tag: ValueDecodeScalar::U8,
+        branches: vec![ValueDecodeBranch {
+            tag: 256,
+            shape: ValueDecodeShape::Unit,
+            fields: Vec::new(),
+        }],
+    });
+    assert!(description.validate().is_err());
 }
 
 #[test]

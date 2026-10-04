@@ -31,36 +31,37 @@ use bincode::value_decode::ValueDecodeRef;
 use core::any::TypeId;
 use cu29_clock::CuDuration;
 use cu29_clock::CuTime;
+use serde::{Deserialize, Serialize};
 
 /// A portable description of native encoded bytes. This API is experimental.
 ///
 /// Wire operations are shared independently of schemas, preserving the identity
 /// and coherent storage unit of quantities that share a scalar representation.
-/// The description's serialization is a prototype for build packaging, not yet
-/// a versioned on-disk catalogue format.
-#[derive(Clone, Debug, Encode, Decode)]
+/// Versioned transport is supplied by `ValueDecodeCatalog` when the
+/// `decode-catalog` feature is enabled.
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct ValueDecodeDescription {
     /// Binding for the described payload.
     pub root: usize,
     /// Typed associations between wire operations and schemas.
     pub bindings: Vec<ValueDecodeBinding>,
     /// Deduplicated wire operations.
-    pub recipes: Vec<ValueDecodeRecipe>,
+    pub operations: Vec<ValueDecodeOp>,
     /// Original type and field information.
     pub schemas: Vec<ValueDecodeSchema>,
 }
 
-/// A wire recipe bound to its original logical schema.
-#[derive(Clone, Debug, Encode, Decode)]
+/// A wire operation bound to its original logical schema.
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct ValueDecodeBinding {
-    /// Index into the recipe table.
-    pub recipe: usize,
+    /// Index into the operation table.
+    pub operation: usize,
     /// Index into the schema table.
     pub schema: usize,
 }
 
 /// Original type identity and names, retained separately from wire operations.
-#[derive(Clone, Debug, Encode, Decode)]
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct ValueDecodeSchema {
     /// Reflected type path, or the native name for a standard wire type.
     pub type_path: String,
@@ -73,7 +74,7 @@ pub struct ValueDecodeSchema {
 }
 
 /// Canonical storage metadata; independent of debugger display preferences.
-#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, Serialize, Deserialize)]
 pub struct ValueDecodeQuantity {
     /// Quantity identity such as `length` or `mass`.
     pub quantity: String,
@@ -82,7 +83,7 @@ pub struct ValueDecodeQuantity {
 }
 
 /// A logical field bound by name or original declaration index.
-#[derive(Clone, Debug, Encode, Decode)]
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct ValueDecodeSchemaField {
     /// Named fields use their reflected name; tuple fields have no name.
     pub name: Option<String>,
@@ -93,7 +94,7 @@ pub struct ValueDecodeSchemaField {
 }
 
 /// A logical enum branch matched to its encoded tag.
-#[derive(Clone, Debug, Encode, Decode)]
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct ValueDecodeSchemaVariant {
     /// Original variant name.
     pub name: String,
@@ -102,7 +103,7 @@ pub struct ValueDecodeSchemaVariant {
 }
 
 /// Portable native scalar encoding. Widths are preserved in the value tree.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, Serialize, Deserialize)]
 pub enum ValueDecodeScalar {
     /// Native `bool` encoding.
     Bool,
@@ -135,7 +136,7 @@ pub enum ValueDecodeScalar {
 }
 
 /// Aggregate shape, independent of the native Rust memory layout.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, Serialize, Deserialize)]
 pub enum ValueDecodeShape {
     /// A unit record.
     Unit,
@@ -148,7 +149,7 @@ pub enum ValueDecodeShape {
 }
 
 /// One portable branch of a tagged encoding.
-#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, Serialize, Deserialize)]
 pub struct ValueDecodeBranch {
     /// Wire tag.
     pub tag: u32,
@@ -160,8 +161,8 @@ pub struct ValueDecodeBranch {
 
 /// Portable wire operations. Codec integer settings and endianness are supplied
 /// to [`ValueDecodeDescription::decode`] exactly as used by the producer.
-#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
-pub enum ValueDecodeRecipe {
+#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, Serialize, Deserialize)]
+pub enum ValueDecodeOp {
     /// No bytes.
     Unit,
     /// One scalar using the producer codec settings.
@@ -234,8 +235,181 @@ impl Default for ValueDecodeLimits {
     }
 }
 
+/// Internal allocation budget shared across payload slots in an offline CopperList.
+#[doc(hidden)]
+pub struct ValueDecodeBudget {
+    values: usize,
+    bytes: usize,
+}
+impl ValueDecodeBudget {
+    pub fn new(limits: ValueDecodeLimits) -> Self {
+        Self {
+            values: limits.max_values,
+            bytes: 16 * 1024 * 1024,
+        }
+    }
+    fn spend_values(&mut self, count: usize) -> Result<(), DecodeError> {
+        spend(&mut self.values, count)?;
+        let bytes = count
+            .checked_mul(2 * core::mem::size_of::<Value>())
+            .ok_or(DecodeError::Other("ValueDecode output size overflow"))?;
+        self.spend_bytes(bytes)
+    }
+    fn spend_bytes(&mut self, count: usize) -> Result<(), DecodeError> {
+        self.bytes = self
+            .bytes
+            .checked_sub(count)
+            .ok_or(DecodeError::Other("ValueDecode output byte limit exceeded"))?;
+        Ok(())
+    }
+}
+
 impl ValueDecodeDescription {
-    /// Bind generated wire recipes to reflection and Copper standard quantities.
+    /// Validate all graph references and aggregate shapes, including unused branches.
+    /// Empty graphs represent catalogs containing only uncaptured slots.
+    pub fn validate(&self) -> Result<(), DecodeError> {
+        if self.bindings.is_empty() {
+            return if self.root == 0 && self.operations.is_empty() && self.schemas.is_empty() {
+                Ok(())
+            } else {
+                Err(DecodeError::Other("invalid empty ValueDecode graph"))
+            };
+        }
+        let binding = |id: usize| {
+            self.bindings
+                .get(id)
+                .ok_or(DecodeError::Other("invalid ValueDecode binding reference"))
+        };
+        binding(self.root)?;
+        let count = |scalar| match scalar {
+            ValueDecodeScalar::U8
+            | ValueDecodeScalar::U16
+            | ValueDecodeScalar::U32
+            | ValueDecodeScalar::U64 => Ok(()),
+            _ => Err(DecodeError::Other(
+                "ValueDecode count/tag must be an unsigned integer",
+            )),
+        };
+        let record = |shape, fields: &[usize], schema: &[ValueDecodeSchemaField]| {
+            if fields.len() != schema.len()
+                || (shape == ValueDecodeShape::Unit && !fields.is_empty())
+                || (shape == ValueDecodeShape::Newtype && fields.len() != 1)
+            {
+                return Err(DecodeError::Other(
+                    "ValueDecode record/schema shape mismatch",
+                ));
+            }
+            let mut names = alloc::collections::BTreeSet::new();
+            for (id, field) in fields.iter().zip(schema) {
+                if binding(*id)?.schema != field.schema {
+                    return Err(DecodeError::Other("ValueDecode child/schema mismatch"));
+                }
+                if shape == ValueDecodeShape::Struct {
+                    let name = field
+                        .name
+                        .as_ref()
+                        .ok_or(DecodeError::Other("missing ValueDecode field name"))?;
+                    if !names.insert(name) {
+                        return Err(DecodeError::Other("duplicate ValueDecode field name"));
+                    }
+                }
+            }
+            Ok(())
+        };
+        for schema in &self.schemas {
+            for field in schema
+                .fields
+                .iter()
+                .chain(schema.variants.iter().flat_map(|variant| &variant.fields))
+            {
+                if field.schema >= self.schemas.len() {
+                    return Err(DecodeError::Other("invalid ValueDecode schema reference"));
+                }
+            }
+        }
+        for operation in &self.operations {
+            match operation {
+                ValueDecodeOp::Record { shape, fields } => {
+                    check_shape(*shape, fields.len())?;
+                    for id in fields {
+                        binding(*id)?;
+                    }
+                }
+                ValueDecodeOp::Array { element, .. }
+                | ValueDecodeOp::Option(element)
+                | ValueDecodeOp::Delegate(element) => {
+                    binding(*element)?;
+                }
+                ValueDecodeOp::Sequence {
+                    element,
+                    count: scalar,
+                    ..
+                } => {
+                    binding(*element)?;
+                    count(*scalar)?;
+                }
+                ValueDecodeOp::Map { key, value } => {
+                    binding(*key)?;
+                    binding(*value)?;
+                }
+                ValueDecodeOp::Enum { tag, branches } => {
+                    count(*tag)?;
+                    let mut tags = alloc::collections::BTreeSet::new();
+                    for branch in branches {
+                        check_shape(branch.shape, branch.fields.len())?;
+                        let maximum = match tag {
+                            ValueDecodeScalar::U8 => u32::from(u8::MAX),
+                            ValueDecodeScalar::U16 => u32::from(u16::MAX),
+                            _ => u32::MAX,
+                        };
+                        if branch.tag > maximum {
+                            return Err(DecodeError::Other(
+                                "ValueDecode enum tag exceeds its wire width",
+                            ));
+                        }
+                        if !tags.insert(branch.tag) {
+                            return Err(DecodeError::Other("duplicate ValueDecode enum tag"));
+                        }
+                        for id in &branch.fields {
+                            binding(*id)?;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        for bound in &self.bindings {
+            let operation = self
+                .operations
+                .get(bound.operation)
+                .ok_or(DecodeError::Other(
+                    "invalid ValueDecode operation reference",
+                ))?;
+            let schema = self
+                .schemas
+                .get(bound.schema)
+                .ok_or(DecodeError::Other("invalid ValueDecode schema reference"))?;
+            match operation {
+                ValueDecodeOp::Record { shape, fields } => record(*shape, fields, &schema.fields)?,
+                ValueDecodeOp::Enum { branches, .. } => {
+                    if branches.len() != schema.variants.len() {
+                        return Err(DecodeError::Other("ValueDecode enum/schema mismatch"));
+                    }
+                    let mut names = alloc::collections::BTreeSet::new();
+                    for (branch, variant) in branches.iter().zip(&schema.variants) {
+                        if !names.insert(&variant.name) {
+                            return Err(DecodeError::Other("duplicate ValueDecode variant name"));
+                        }
+                        record(branch.shape, &branch.fields, &variant.fields)?;
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    /// Bind generated wire operations to reflection and Copper standard quantities.
     /// Encoded fields hidden from reflection produce an error naming that field.
     ///
     /// ```
@@ -259,6 +433,14 @@ impl ValueDecodeDescription {
     /// Build using an existing registry. Bindings are checked by native type identity,
     /// field name and tuple declaration index, rather than reflected field position.
     pub fn from_registry<T: ValueDecode>(registry: &TypeRegistry) -> Result<Self, DecodeError> {
+        let (description, _) = Self::from_registry_roots(registry, &[ValueDecodeRef::of::<T>()])?;
+        Ok(description)
+    }
+
+    pub(crate) fn from_registry_roots(
+        registry: &TypeRegistry,
+        roots: &[ValueDecodeRef],
+    ) -> Result<(Self, Vec<usize>), DecodeError> {
         let mut quantities = cu29_units::value_decode_quantities();
         for type_id in [TypeId::of::<CuTime>(), TypeId::of::<CuDuration>()] {
             quantities.push(cu29_units::ValueDecodeQuantity {
@@ -271,19 +453,23 @@ impl ValueDecodeDescription {
             description: Self {
                 root: 0,
                 bindings: Vec::new(),
-                recipes: Vec::new(),
+                operations: Vec::new(),
                 schemas: Vec::new(),
             },
             types: BTreeMap::new(),
             registry,
             quantities,
         };
-        builder.description.root = builder.bind(ValueDecodeRef::of::<T>(), 0)?;
-        Ok(builder.description)
+        let roots = roots
+            .iter()
+            .map(|root| builder.bind(*root, 0))
+            .collect::<Result<Vec<_>, _>>()?;
+        builder.description.root = roots.first().copied().unwrap_or(0);
+        Ok((builder.description, roots))
     }
 
     /// Read one native value, returning the exact number of consumed bytes.
-    /// Slice the input at that offset to read a consecutive value. Invalid recipes,
+    /// Slice the input at that offset to read a consecutive value. Invalid operations,
     /// invalid tags, truncated bytes and exceeded limits return an error.
     pub fn decode<C: Config>(
         &self,
@@ -291,10 +477,34 @@ impl ValueDecodeDescription {
         config: C,
         limits: ValueDecodeLimits,
     ) -> Result<(Value, usize), DecodeError> {
+        self.decode_at(self.root, bytes, config, limits)
+    }
+
+    /// Decode one binding from a shared catalog without cloning its graph.
+    pub fn decode_at<C: Config>(
+        &self,
+        binding: usize,
+        bytes: &[u8],
+        config: C,
+        limits: ValueDecodeLimits,
+    ) -> Result<(Value, usize), DecodeError> {
+        let mut budget = ValueDecodeBudget::new(limits);
+        self.decode_at_with_budget(binding, bytes, config, limits, &mut budget)
+    }
+
+    /// Shared allocation budget for offline CopperList readers.
+    #[doc(hidden)]
+    pub fn decode_at_with_budget<C: Config>(
+        &self,
+        binding: usize,
+        bytes: &[u8],
+        config: C,
+        limits: ValueDecodeLimits,
+        budget: &mut ValueDecodeBudget,
+    ) -> Result<(Value, usize), DecodeError> {
         let reader = ValueReader { bytes, offset: 0 };
         let mut decoder = bincode::de::DecoderImpl::new(reader, config, ());
-        let mut remaining = limits.max_values;
-        let value = self.decode_binding(self.root, &mut decoder, limits, &mut remaining, 1)?;
+        let value = self.decode_binding(binding, &mut decoder, limits, budget, 1)?;
         Ok((value, decoder.reader().offset))
     }
 
@@ -303,13 +513,13 @@ impl ValueDecodeDescription {
         id: usize,
         decoder: &mut D,
         limits: ValueDecodeLimits,
-        remaining: &mut usize,
+        budget: &mut ValueDecodeBudget,
         depth: usize,
     ) -> Result<Value, DecodeError> {
         if depth > limits.max_depth {
             return Err(DecodeError::Other("ValueDecode nesting limit exceeded"));
         }
-        spend(remaining, 1)?;
+        budget.spend_values(1)?;
         let binding = self
             .bindings
             .get(id)
@@ -318,23 +528,24 @@ impl ValueDecodeDescription {
             .schemas
             .get(binding.schema)
             .ok_or(DecodeError::Other("invalid ValueDecode schema index"))?;
-        let recipe = self
-            .recipes
-            .get(binding.recipe)
-            .ok_or(DecodeError::Other("invalid ValueDecode recipe index"))?;
-        let child = |id, decoder: &mut D, remaining: &mut usize| {
-            self.decode_binding(id, decoder, limits, remaining, depth + 1)
+        let operation = self
+            .operations
+            .get(binding.operation)
+            .ok_or(DecodeError::Other("invalid ValueDecode operation index"))?;
+        let child = |id, decoder: &mut D, budget: &mut ValueDecodeBudget| {
+            self.decode_binding(id, decoder, limits, budget, depth + 1)
         };
-        Ok(match recipe {
-            ValueDecodeRecipe::Unit => Value::Unit,
-            ValueDecodeRecipe::Scalar(scalar) => decode_scalar(*scalar, decoder)?,
-            ValueDecodeRecipe::String | ValueDecodeRecipe::Bytes => {
+        Ok(match operation {
+            ValueDecodeOp::Unit => Value::Unit,
+            ValueDecodeOp::Scalar(scalar) => decode_scalar(*scalar, decoder)?,
+            ValueDecodeOp::String | ValueDecodeOp::Bytes => {
                 let len = checked_len(u64::decode(decoder)?, limits.max_collection_len)?;
+                budget.spend_bytes(len)?;
                 decoder.claim_bytes_read(len)?;
                 // Read before constructing the tree; truncation is reported by the bounded reader.
                 let mut bytes = alloc::vec![0; len];
                 decoder.reader().read(&mut bytes)?;
-                if matches!(recipe, ValueDecodeRecipe::String) {
+                if matches!(operation, ValueDecodeOp::String) {
                     Value::String(String::from_utf8(bytes).map_err(|error| DecodeError::Utf8 {
                         inner: error.utf8_error(),
                     })?)
@@ -342,7 +553,7 @@ impl ValueDecodeDescription {
                     Value::Bytes(bytes)
                 }
             }
-            ValueDecodeRecipe::Record { shape, fields } => self.decode_record(
+            ValueDecodeOp::Record { shape, fields } => self.decode_record(
                 ValueDecodeRecord {
                     shape: *shape,
                     fields,
@@ -350,18 +561,18 @@ impl ValueDecodeDescription {
                 },
                 decoder,
                 limits,
-                remaining,
+                budget,
                 depth,
             )?,
-            ValueDecodeRecipe::Array { element, len } => {
-                check_count(*len, limits, *remaining)?;
+            ValueDecodeOp::Array { element, len } => {
+                check_count(*len, limits, budget.values)?;
                 let mut values = Vec::new();
                 for _ in 0..*len {
-                    values.push(child(*element, decoder, remaining)?);
+                    values.push(child(*element, decoder, budget)?);
                 }
                 Value::Seq(values)
             }
-            ValueDecodeRecipe::Sequence {
+            ValueDecodeOp::Sequence {
                 element,
                 count,
                 capacity,
@@ -373,14 +584,14 @@ impl ValueDecodeDescription {
                         .unwrap_or(usize::MAX)
                         .min(limits.max_collection_len),
                 )?;
-                check_count(len, limits, *remaining)?;
+                check_count(len, limits, budget.values)?;
                 let mut values = Vec::new();
                 for _ in 0..len {
-                    values.push(child(*element, decoder, remaining)?);
+                    values.push(child(*element, decoder, budget)?);
                 }
                 Value::Seq(values)
             }
-            ValueDecodeRecipe::Map { key, value } => {
+            ValueDecodeOp::Map { key, value } => {
                 let len = checked_len(u64::decode(decoder)?, limits.max_collection_len)?;
                 check_count(
                     len.checked_mul(2)
@@ -389,24 +600,24 @@ impl ValueDecodeDescription {
                         max_collection_len: usize::MAX,
                         ..limits
                     },
-                    *remaining,
+                    budget.values,
                 )?;
                 let mut values = BTreeMap::new();
                 for _ in 0..len {
                     values.insert(
-                        child(*key, decoder, remaining)?,
-                        child(*value, decoder, remaining)?,
+                        child(*key, decoder, budget)?,
+                        child(*value, decoder, budget)?,
                     );
                 }
                 Value::Map(values)
             }
-            ValueDecodeRecipe::Delegate(element) => child(*element, decoder, remaining)?,
-            ValueDecodeRecipe::Option(element) => match u8::decode(decoder)? {
+            ValueDecodeOp::Delegate(element) => child(*element, decoder, budget)?,
+            ValueDecodeOp::Option(element) => match u8::decode(decoder)? {
                 0 => Value::Option(None),
-                1 => Value::Option(Some(Box::new(child(*element, decoder, remaining)?))),
+                1 => Value::Option(Some(Box::new(child(*element, decoder, budget)?))),
                 _ => return Err(DecodeError::Other("invalid ValueDecode option tag")),
             },
-            ValueDecodeRecipe::Enum { tag, branches } => {
+            ValueDecodeOp::Enum { tag, branches } => {
                 let tag = decode_count(*tag, decoder)?;
                 let (index, branch) = branches
                     .iter()
@@ -417,6 +628,7 @@ impl ValueDecodeDescription {
                     .variants
                     .get(index)
                     .ok_or(DecodeError::Other("missing ValueDecode variant schema"))?;
+                budget.spend_bytes(variant.name.len())?;
                 // Serde-compatible externally tagged enum representation.
                 if branch.shape == ValueDecodeShape::Unit {
                     if !branch.fields.is_empty() {
@@ -424,9 +636,9 @@ impl ValueDecodeDescription {
                     }
                     Value::String(variant.name.clone())
                 } else {
-                    spend(remaining, 1)?;
+                    budget.spend_values(1)?;
                     if branch.shape != ValueDecodeShape::Newtype {
-                        spend(remaining, 1)?;
+                        budget.spend_values(1)?;
                     }
                     let value = self.decode_record(
                         ValueDecodeRecord {
@@ -436,7 +648,7 @@ impl ValueDecodeDescription {
                         },
                         decoder,
                         limits,
-                        remaining,
+                        budget,
                         depth,
                     )?;
                     let value = match value {
@@ -459,7 +671,7 @@ impl ValueDecodeDescription {
         record: ValueDecodeRecord<'_>,
         decoder: &mut D,
         limits: ValueDecodeLimits,
-        remaining: &mut usize,
+        budget: &mut ValueDecodeBudget,
         depth: usize,
     ) -> Result<Value, DecodeError> {
         let ValueDecodeRecord {
@@ -472,12 +684,12 @@ impl ValueDecodeDescription {
                 "ValueDecode record/schema field mismatch",
             ));
         }
-        check_count(fields.len(), limits, *remaining)?;
+        check_count(fields.len(), limits, budget.values)?;
         match shape {
             ValueDecodeShape::Unit if fields.is_empty() => Ok(Value::Unit),
             ValueDecodeShape::Unit => Err(DecodeError::Other("unit record has encoded fields")),
             ValueDecodeShape::Newtype if fields.len() == 1 => Ok(Value::Newtype(Box::new(
-                self.decode_binding(fields[0], decoder, limits, remaining, depth + 1)?,
+                self.decode_binding(fields[0], decoder, limits, budget, depth + 1)?,
             ))),
             ValueDecodeShape::Newtype => Err(DecodeError::Other(
                 "newtype record must have one encoded field",
@@ -485,19 +697,20 @@ impl ValueDecodeDescription {
             ValueDecodeShape::Tuple => {
                 let mut values = Vec::new();
                 for id in fields {
-                    values.push(self.decode_binding(*id, decoder, limits, remaining, depth + 1)?);
+                    values.push(self.decode_binding(*id, decoder, limits, budget, depth + 1)?);
                 }
                 Ok(Value::Seq(values))
             }
             ValueDecodeShape::Struct => {
                 let mut values = BTreeMap::new();
                 for (id, field) in fields.iter().zip(schema) {
-                    spend(remaining, 1)?;
+                    budget.spend_values(1)?;
                     let name = field
                         .name
                         .as_ref()
                         .ok_or(DecodeError::Other("missing ValueDecode field name"))?;
-                    let value = self.decode_binding(*id, decoder, limits, remaining, depth + 1)?;
+                    budget.spend_bytes(name.len())?;
+                    let value = self.decode_binding(*id, decoder, limits, budget, depth + 1)?;
                     if values.insert(Value::String(name.clone()), value).is_some() {
                         return Err(DecodeError::Other("duplicate ValueDecode field name"));
                     }
@@ -505,6 +718,16 @@ impl ValueDecodeDescription {
                 Ok(Value::Map(values))
             }
         }
+    }
+}
+
+fn check_shape(shape: ValueDecodeShape, count: usize) -> Result<(), DecodeError> {
+    if (shape == ValueDecodeShape::Unit && count != 0)
+        || (shape == ValueDecodeShape::Newtype && count != 1)
+    {
+        Err(DecodeError::Other("invalid ValueDecode record shape"))
+    } else {
+        Ok(())
     }
 }
 
@@ -605,7 +828,7 @@ impl DescriptionBuilder<'_> {
         let id = self.description.bindings.len();
         self.types.insert(ty.type_id, id);
         self.description.bindings.push(ValueDecodeBinding {
-            recipe: 0,
+            operation: 0,
             schema: id,
         });
         let info = self.registry.get_type_info(ty.type_id);
@@ -623,21 +846,21 @@ impl DescriptionBuilder<'_> {
             fields: Vec::new(),
             variants: Vec::new(),
         });
-        let recipe = match ty.spec {
-            ValueDecodeSpec::Unit => ValueDecodeRecipe::Unit,
-            ValueDecodeSpec::Scalar(scalar) => ValueDecodeRecipe::Scalar(scalar_kind(*scalar)),
-            ValueDecodeSpec::String => ValueDecodeRecipe::String,
-            ValueDecodeSpec::Bytes => ValueDecodeRecipe::Bytes,
+        let operation = match ty.spec {
+            ValueDecodeSpec::Unit => ValueDecodeOp::Unit,
+            ValueDecodeSpec::Scalar(scalar) => ValueDecodeOp::Scalar(scalar_kind(*scalar)),
+            ValueDecodeSpec::String => ValueDecodeOp::String,
+            ValueDecodeSpec::Bytes => ValueDecodeOp::Bytes,
             ValueDecodeSpec::Record { shape, fields } => {
                 let (children, fields) =
                     self.bind_fields(fields, info, None, ty.type_name, depth)?;
                 self.description.schemas[id].fields = fields;
-                ValueDecodeRecipe::Record {
+                ValueDecodeOp::Record {
                     shape: record_shape(*shape),
                     fields: children,
                 }
             }
-            ValueDecodeSpec::Array { element, len } => ValueDecodeRecipe::Array {
+            ValueDecodeSpec::Array { element, len } => ValueDecodeOp::Array {
                 element: self.bind(*element, depth + 1)?,
                 len: *len,
             },
@@ -645,20 +868,20 @@ impl DescriptionBuilder<'_> {
                 element,
                 count,
                 capacity,
-            } => ValueDecodeRecipe::Sequence {
+            } => ValueDecodeOp::Sequence {
                 element: self.bind(*element, depth + 1)?,
                 count: scalar_kind(*count),
                 capacity: *capacity,
             },
-            ValueDecodeSpec::Map { key, value } => ValueDecodeRecipe::Map {
+            ValueDecodeSpec::Map { key, value } => ValueDecodeOp::Map {
                 key: self.bind(*key, depth + 1)?,
                 value: self.bind(*value, depth + 1)?,
             },
             ValueDecodeSpec::Delegate(element) => {
-                ValueDecodeRecipe::Delegate(self.bind(*element, depth + 1)?)
+                ValueDecodeOp::Delegate(self.bind(*element, depth + 1)?)
             }
             ValueDecodeSpec::Option(element) => {
-                ValueDecodeRecipe::Option(self.bind(*element, depth + 1)?)
+                ValueDecodeOp::Option(self.bind(*element, depth + 1)?)
             }
             ValueDecodeSpec::Enum { tag, variants } => {
                 let mut branches = Vec::new();
@@ -687,23 +910,23 @@ impl DescriptionBuilder<'_> {
                         fields: children,
                     });
                 }
-                ValueDecodeRecipe::Enum {
+                ValueDecodeOp::Enum {
                     tag: scalar_kind(*tag),
                     branches,
                 }
             }
         };
-        let recipe_id = self
+        let operation_id = self
             .description
-            .recipes
+            .operations
             .iter()
-            .position(|candidate| candidate == &recipe)
+            .position(|candidate| candidate == &operation)
             .unwrap_or_else(|| {
-                let id = self.description.recipes.len();
-                self.description.recipes.push(recipe);
+                let id = self.description.operations.len();
+                self.description.operations.push(operation);
                 id
             });
-        self.description.bindings[id].recipe = recipe_id;
+        self.description.bindings[id].operation = operation_id;
         Ok(id)
     }
 
