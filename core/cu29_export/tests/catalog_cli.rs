@@ -107,3 +107,78 @@ fn test_machine_output_and_process_failure_contract() {
         }
     }
 }
+
+#[test]
+fn test_streaming_catalog_continues_across_sections_and_slabs() {
+    use bincode::value_decode::ValueDecodeRef;
+    use cu29::catalog_stream::{CatalogDescription, CatalogSlot};
+    let dir = tempfile::tempdir_in(env!("CARGO_MANIFEST_DIR")).unwrap();
+    let path = dir.path().join("stream.copper");
+    let mut state = 7u32;
+    let noise: String = (0..128 * 1024)
+        .map(|_| {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            char::from(b'a' + (state % 26) as u8)
+        })
+        .collect();
+    let config: &'static str =
+        Box::leak(format!("(tasks: [], cnx: []) /*{noise}*/").into_boxed_str());
+    static SLOTS: &[CatalogSlot] = &[CatalogSlot {
+        task_id: "source",
+        msg_type: "u32",
+        payload: Some(ValueDecodeRef::of::<u32>()),
+    }];
+    let description = CatalogDescription {
+        mission: "default",
+        config_ron: config,
+        layout: ValueDecodeCatalogLayout::Compact,
+        slots: SLOTS,
+    };
+    let UnifiedLogger::Write(logger) = UnifiedLoggerBuilder::new()
+        .file_base_name(&path)
+        .write(true)
+        .create(true)
+        .preallocated_size(16 * 1024)
+        .build()
+        .unwrap()
+    else {
+        panic!("writer")
+    };
+    let logger = Arc::new(Mutex::new(logger));
+    cu29::prelude::record_value_decode_catalog(logger.clone(), &description).unwrap();
+    drop(logger);
+    let catalog = cu29_export::catalog::read_value_decode_catalog(&path, None).unwrap();
+    assert_eq!(catalog.config_ron, config);
+    assert_eq!(catalog.slots[0].task_id, "source");
+    let output = run(&path, &["fsck", "--deep"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let UnifiedLogger::Read(mut reader) = UnifiedLoggerBuilder::new()
+        .file_base_name(&path)
+        .build()
+        .unwrap()
+    else {
+        panic!("reader")
+    };
+    let mut sections = Vec::new();
+    while let Some(section) = reader
+        .read_next_section_type(UnifiedLogType::ValueDecodeCatalog)
+        .unwrap()
+    {
+        sections.push(section);
+    }
+    assert!(sections.len() > 3);
+    assert!(ValueDecodeCatalog::from_blob(&sections.concat()).is_ok());
+    let missing = [&sections[..1], &sections[2..]].concat().concat();
+    assert!(ValueDecodeCatalog::from_blob(&missing).is_err());
+    sections.swap(0, 1);
+    assert!(ValueDecodeCatalog::from_blob(&sections.concat()).is_err());
+    sections.swap(0, 1);
+    sections.push(sections[0].clone());
+    assert!(ValueDecodeCatalog::from_blob(&sections.concat()).is_err());
+}

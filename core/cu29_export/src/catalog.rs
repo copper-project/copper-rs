@@ -99,39 +99,105 @@ fn configs_match(recorded: &str, described: &str) -> CuResult<bool> {
     Ok(document(recorded)? == document(described)?)
 }
 
+/// Assemble physical sections into one logical catalog, checking continuation order.
+#[derive(Default)]
+pub(crate) struct CatalogSections {
+    bytes: Vec<u8>,
+    sequence: Option<u32>,
+}
+impl CatalogSections {
+    pub(crate) fn push(&mut self, mut section: &[u8]) -> CuResult<()> {
+        const MAGIC: &[u8; 8] = b"CUVDCHNK";
+        const MAX: usize = 10 + 16 * 1024 * 1024 * 9 / 8 + 8;
+        if section.starts_with(MAGIC) {
+            if !self.bytes.is_empty() && self.sequence.is_none() {
+                return Err("Run contains multiple ValueDecodeCatalog sections".into());
+            }
+            while !section.is_empty() {
+                let header = section.get(..14).ok_or("Truncated catalog chunk")?;
+                if &header[..8] != MAGIC {
+                    return Err("Invalid catalog continuation".into());
+                }
+                let sequence = u32::from_le_bytes(header[8..12].try_into().unwrap());
+                if sequence != self.sequence.unwrap_or(0) {
+                    return Err("Run contains duplicate, missing or out-of-order catalog chunks (multiple ValueDecodeCatalog sections)".into());
+                }
+                let len = usize::from(u16::from_le_bytes([header[12], header[13]]));
+                if len == 0 || len > 128 {
+                    return Err("Invalid catalog chunk length".into());
+                }
+                let bytes = section
+                    .get(14..14 + len)
+                    .ok_or("Truncated catalog chunk data")?;
+                if self.bytes.len() + len > MAX {
+                    return Err("Catalog exceeds offline size limit".into());
+                }
+                self.bytes.extend_from_slice(bytes);
+                self.sequence = Some(sequence + 1);
+                section = &section[14 + len..];
+            }
+        } else {
+            if !self.bytes.is_empty() {
+                return Err("Run contains multiple ValueDecodeCatalog sections".into());
+            }
+            if section.len() > MAX {
+                return Err("Catalog exceeds offline size limit".into());
+            }
+            self.bytes.extend_from_slice(section);
+        }
+        Ok(())
+    }
+    pub(crate) fn finish(self) -> CuResult<ValueDecodeCatalog> {
+        ValueDecodeCatalog::from_blob(&self.bytes)
+            .map_err(|error| CuError::new_with_cause("Invalid ValueDecodeCatalog", error))
+    }
+}
+
 pub(crate) fn load_catalog(run: &runs::RecordedRun, path: &Path) -> CuResult<ValueDecodeCatalog> {
+    load_catalog_with_version(run, path).map(|(_, catalog)| catalog)
+}
+
+pub(crate) fn load_catalog_with_version(
+    run: &runs::RecordedRun,
+    path: &Path,
+) -> CuResult<(u16, ValueDecodeCatalog)> {
     let mut reader = run.reader(path)?;
-    let mut found = None;
+    let mut sections = CatalogSections::default();
+    let mut found = false;
     while let Some((position, bytes)) = reader
         .read_next_section_type_at(UnifiedLogType::ValueDecodeCatalog)
         .map_err(|error| CuError::from(format!("Run {} catalog discovery: {error}", run.index)))?
     {
-        if found.is_some() {
-            return Err(CuError::from(format!(
-                "Run {} contains multiple ValueDecodeCatalog sections",
-                run.index
-            )));
-        }
-        let catalog = ValueDecodeCatalog::from_blob(&bytes).map_err(|error| {
+        sections.push(&bytes).map_err(|error| {
             CuError::from(format!(
                 "Run {} catalog at slab {} offset {}: {error}",
                 run.index, position.slab_index, position.offset
             ))
         })?;
-        if catalog.slots.len() > MAX_SLOTS {
-            return Err("Catalog exceeds offline slot limit".into());
-        }
-        if let Some(config) = &run.config
-            && !configs_match(config, &catalog.config_ron)?
-        {
-            return Err("Catalog configuration does not match the selected run".into());
-        }
-        if !run.missions.is_empty() && !run.missions.contains(&catalog.mission) {
-            return Err("Catalog mission does not match the selected run".into());
-        }
-        found = Some(catalog);
+        found = true;
     }
-    found.ok_or_else(|| CuError::from(format!("Run {} has no ValueDecodeCatalog; catalog decoding and deep validation require a catalog", run.index)))
+    if !found {
+        return Err(CuError::from(format!(
+            "Run {} has no ValueDecodeCatalog; catalog decoding and deep validation require a catalog",
+            run.index
+        )));
+    }
+    let version = cu29::prelude::ValueDecodeCatalogHeader::read(&sections.bytes)
+        .map_err(|error| CuError::new_with_cause("Invalid ValueDecodeCatalog header", error))?
+        .version;
+    let catalog = sections.finish()?;
+    if catalog.slots.len() > MAX_SLOTS {
+        return Err("Catalog exceeds offline slot limit".into());
+    }
+    if let Some(config) = &run.config
+        && !configs_match(config, &catalog.config_ron)?
+    {
+        return Err("Catalog configuration does not match the selected run".into());
+    }
+    if !run.missions.is_empty() && !run.missions.contains(&catalog.mission) {
+        return Err("Catalog mission does not match the selected run".into());
+    }
+    Ok((version, catalog))
 }
 
 /// A fallible iterator that stops after the first malformed record. Experimental API.

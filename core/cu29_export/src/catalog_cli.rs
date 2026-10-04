@@ -2,6 +2,7 @@
 
 use crate::catalog::{
     copperlist_values_reader, decode_copperlist_with_payload_sizes, load_catalog,
+    load_catalog_with_version,
 };
 use crate::fsck::{CheckedCopperList, check_with};
 use crate::runs;
@@ -133,10 +134,11 @@ pub(crate) fn dump_catalog(
     color: ColorChoice,
     output: &mut impl Write,
 ) -> CuResult<()> {
+    let (catalog_version, catalog) = load_catalog_with_version(run, path)?;
     let document = CatalogDocument {
-        catalog_version: 1,
+        catalog_version,
         run: run.index,
-        catalog: load_catalog(run, path)?,
+        catalog,
     };
     match format {
         CatalogFormat::Ron => {

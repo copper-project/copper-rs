@@ -300,6 +300,8 @@ pub(crate) fn check_with(
     let mut sl_entries: usize = 0;
     let mut catalogs: usize = 0;
     let mut catalog_size: usize = 0;
+    #[cfg(feature = "self-describing-logs")]
+    let mut catalog_sections = crate::catalog::CatalogSections::default();
 
     let result = 'scan: loop {
         // for _ in 0..4 {
@@ -474,14 +476,10 @@ pub(crate) fn check_with(
                         }
                     }
                     UnifiedLogType::ValueDecodeCatalog => {
-                        catalogs += 1;
+                        catalogs = 1;
                         catalog_size += content.len();
                         #[cfg(feature = "self-describing-logs")]
-                        cu29::prelude::ValueDecodeCatalog::from_blob(&content).map_err(
-                            |error| {
-                                CuError::new_with_cause("Invalid ValueDecodeCatalog section", error)
-                            },
-                        )?;
+                        catalog_sections.push(&content)?;
                         if verbose > 0 {
                             println!("    ValueDecodeCatalog: {} bytes", content.len());
                         }
@@ -509,6 +507,14 @@ pub(crate) fn check_with(
             }
         }
     };
+
+    #[cfg(feature = "self-describing-logs")]
+    let result = result.and_then(|()| {
+        if catalogs != 0 {
+            catalog_sections.finish()?;
+        }
+        Ok(())
+    });
 
     let total_time_nanos = if !overall_first_ts.is_none() && !last_ts.is_none() {
         (last_ts.unwrap() - overall_first_ts.unwrap()).as_nanos() as f64
