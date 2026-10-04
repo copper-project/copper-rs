@@ -49,7 +49,6 @@ self-describing-payloads-check:
 	cargo clippy -p cu-crsf -p cu-msp-bridge -p cu-msp-lib -p cu-sensor-payloads --all-targets --features cu-msp-bridge/reflect -- --deny warnings
 	cargo check -p cu-crsf -p cu-msp-bridge -p cu-msp-lib -p cu-sensor-payloads --no-default-features --features cu-crsf/alloc,cu-msp-bridge/alloc,cu-msp-lib/bincode
 	cargo check -p cu29 -p cu-crsf -p cu-msp-bridge -p cu-msp-lib -p cu-sensor-payloads --target thumbv7em-none-eabihf --no-default-features --features cu-crsf/alloc,cu-msp-bridge/alloc,cu-msp-lib/bincode
-	cargo check -p cu-flight-controller-catalog --features sim,compute
 	cargo clippy -p cu-zed --all-targets --features cu29/self-describing-logs -- --deny warnings
 	cargo test -p cu-zed --features cu29/self-describing-logs
 

@@ -115,7 +115,6 @@ members = [
   "examples/cu_feetech_demo",
   "examples/cu_feature_gated_camera",
   "examples/cu_flight_controller",
-  "examples/cu_flight_controller/catalog",
   "examples/cu_config_gen",
   "examples/cu_config_constants",
   "examples/cu_config_variation",
