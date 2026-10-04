@@ -4,6 +4,7 @@
 use bincode::Encode;
 use bincode::enc::write::Writer;
 use cu29::prelude::*;
+use num_format::{Locale, ToFormattedString};
 use std::path::Path;
 use std::process::{Command, Output};
 use std::sync::{Arc, Mutex};
@@ -81,10 +82,20 @@ fn test_machine_output_and_process_failure_contract() {
     let basic = String::from_utf8(basic.stdout).unwrap();
     assert!(basic.contains("# of Catalogs"));
     let catalog_bytes = include_bytes!("../../cu29_value/tests/fixtures/catalog_v1.bin").len();
-    assert!(basic.contains(&format!("Catalog total size    -> {catalog_bytes} bytes")));
+    assert!(basic.contains(&format!("Catalog compressed    -> {catalog_bytes} bytes")));
+    let catalog = cu29_export::catalog::read_value_decode_catalog(&good, None).unwrap();
+    let decompressed_bytes = bincode::encode_to_vec(&catalog, bincode::config::standard())
+        .unwrap()
+        .len();
+    let decompressed_line = format!(
+        "Catalog decompressed  -> {} bytes",
+        decompressed_bytes.to_formatted_string(&Locale::en)
+    );
+    assert!(basic.contains(&decompressed_line));
     let deep = run(&good, &["fsck", "--deep"]);
     assert!(deep.status.success());
     let deep = String::from_utf8(deep.stdout).unwrap();
+    assert!(deep.contains(&decompressed_line));
     assert!(deep.contains("\n\n  Deep validation"));
     assert!(deep.contains("-> passed"));
     assert!(deep.contains("# of captured payloads -> 0"));
@@ -173,6 +184,19 @@ fn test_streaming_catalog_continues_across_sections_and_slabs() {
         sections.push(section);
     }
     assert!(sections.len() > 3);
+    let output = String::from_utf8(output.stdout).unwrap();
+    let compressed_bytes: usize = sections.iter().map(Vec::len).sum();
+    let decompressed_bytes = bincode::encode_to_vec(&catalog, bincode::config::standard())
+        .unwrap()
+        .len();
+    assert!(output.contains(&format!(
+        "Catalog compressed    -> {} bytes",
+        compressed_bytes.to_formatted_string(&Locale::en)
+    )));
+    assert!(output.contains(&format!(
+        "Catalog decompressed  -> {} bytes",
+        decompressed_bytes.to_formatted_string(&Locale::en)
+    )));
     assert!(ValueDecodeCatalog::from_blob(&sections.concat()).is_ok());
     let missing = [&sections[..1], &sections[2..]].concat().concat();
     assert!(ValueDecodeCatalog::from_blob(&missing).is_err());

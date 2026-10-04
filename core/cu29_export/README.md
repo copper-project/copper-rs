@@ -47,7 +47,9 @@ CSV. Machine output stays clean; diagnostics use stderr.
 Deep fsck requires a catalog and decodes every captured payload to exact section
 exhaustion. Invalid/truncated records return an error with their recorded location.
 Plain standalone fsck checks structure and common streams and reports the number
-and compressed size of embedded catalogs. Deep validation adds decoded CopperList
+and compressed and decompressed sizes of embedded catalogs. Compressed size includes
+catalog headers and continuation framing; decompressed size is the encoded catalog
+body before compression. Deep validation adds decoded CopperList
 and captured-payload counts and encoded payload bytes. A table lists every captured
 task and message type, sorted by total bytes, with counts, share of payload storage,
 mean size, and size range.

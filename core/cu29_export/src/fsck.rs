@@ -301,6 +301,8 @@ pub(crate) fn check_with(
     let mut catalogs: usize = 0;
     let mut catalog_size: usize = 0;
     #[cfg(feature = "self-describing-logs")]
+    let mut catalog_decompressed_size: Option<usize> = None;
+    #[cfg(feature = "self-describing-logs")]
     let mut catalog_sections = crate::catalog::CatalogSections::default();
 
     let result = 'scan: loop {
@@ -511,7 +513,16 @@ pub(crate) fn check_with(
     #[cfg(feature = "self-describing-logs")]
     let result = result.and_then(|()| {
         if catalogs != 0 {
-            catalog_sections.finish()?;
+            let catalog = catalog_sections.finish()?;
+            catalog_decompressed_size = Some(
+                bincode::encode_into_std_write(&catalog, &mut std::io::sink(), standard())
+                    .map_err(|error| {
+                        CuError::new_with_cause(
+                            "Could not measure decompressed catalog size",
+                            error,
+                        )
+                    })?,
+            );
         }
         Ok(())
     });
@@ -672,9 +683,17 @@ pub(crate) fn check_with(
         catalogs.to_formatted_string(l)
     );
     println!(
-        "  Catalog total size    -> {} bytes",
+        "  Catalog compressed    -> {} bytes",
         catalog_size.to_formatted_string(l)
     );
+    #[cfg(feature = "self-describing-logs")]
+    match catalog_decompressed_size {
+        Some(size) => println!(
+            "  Catalog decompressed  -> {} bytes",
+            size.to_formatted_string(l)
+        ),
+        None => println!("  Catalog decompressed  -> n/a"),
+    }
 
     result
 }
