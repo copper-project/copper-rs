@@ -21,7 +21,6 @@ uom = { workspace = true }
 bevy_reflect = { workspace = true, optional = true }
 
 [features]
-self-describing-logs = ["std", "reflect", "bincode/self-describing"]
 default = ["std"]
 std = ["uom/std"]
 # Compatibility shim for crates that forward the Copper textlogs feature.

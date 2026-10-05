@@ -11,6 +11,12 @@ checkout, using its existing parser and attribute handling. Copper supplies
 quantity storage registrations, time/string recipes, and fixed-capacity container
 recipes. `just self-describing-logs-check` verifies native byte/value agreement.
 
+Standard native recipes are available independently of the logging feature,
+including on `no_std` targets. `cu-bincode/self-describing` enables automatic
+companion generation for `Encode` derives; individual types can opt in with
+`#[bincode(describe)]`. Copper's `self-describing-logs` feature selects automatic
+generation and the host description API, whose unit schemas use `cu29-units/reflect`.
+
 This PR's owned wire/schema graph is an experimental packaging input. Its bincode
 serialization is finalized as a versioned `ValueDecodeCatalog` format in PR 2. Standard
 recipes currently cover the API's scalar, aggregate, array, sequence, map, optional,
@@ -54,7 +60,7 @@ Keep the companion trait named `ValueDecode`: it describes how an offline reader
 produces `Value` from the existing `Encode` bytes. The declaration is a wire recipe:
 
 ```rust
-// Available with self-describing-logs. Re-exported through the Copper prelude.
+// Available independently of self-describing-logs through the Copper prelude.
 pub trait ValueDecode: 'static + Sized {
     const DECODE: &'static ValueDecodeSpec;
 }

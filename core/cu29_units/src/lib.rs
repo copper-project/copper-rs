@@ -258,7 +258,7 @@ macro_rules! define_storage_wrappers {
 
             $(define_quantity!($unit_mod, $quantity);)+
 
-            #[cfg(any(feature = "self-describing-logs", feature = "reflect"))]
+            #[cfg(feature = "reflect")]
             pub(crate) fn value_decode_quantities() -> alloc::vec::Vec<crate::ValueDecodeQuantity> {
                 alloc::vec![$(crate::ValueDecodeQuantity {
                     type_id: core::any::TypeId::of::<$quantity>(),
@@ -899,7 +899,7 @@ mod tests {
 }
 
 /// Typed storage metadata for offline self-description packaging.
-#[cfg(any(feature = "self-describing-logs", feature = "reflect"))]
+#[cfg(feature = "reflect")]
 pub struct ValueDecodeQuantity {
     /// Original quantity type, including scalar width.
     pub type_id: core::any::TypeId,
@@ -910,7 +910,7 @@ pub struct ValueDecodeQuantity {
 }
 
 /// Register every supported quantity in both scalar widths.
-#[cfg(any(feature = "self-describing-logs", feature = "reflect"))]
+#[cfg(feature = "reflect")]
 pub fn value_decode_quantities() -> Vec<ValueDecodeQuantity> {
     let mut quantities = si::f32::value_decode_quantities();
     quantities.extend(si::f64::value_decode_quantities());
