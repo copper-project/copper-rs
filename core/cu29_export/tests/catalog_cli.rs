@@ -260,6 +260,16 @@ fn test_catalog_preserves_unicode_storage_symbols() {
             payload: Some(ValueDecodeRef::of::<f64::Acceleration>()),
         },
         CatalogSlot {
+            task_id: "voltage",
+            msg_type: "ElectricPotential",
+            payload: Some(ValueDecodeRef::of::<f64::ElectricPotential>()),
+        },
+        CatalogSlot {
+            task_id: "magnetometer",
+            msg_type: "MagneticFluxDensity",
+            payload: Some(ValueDecodeRef::of::<f32::MagneticFluxDensity>()),
+        },
+        CatalogSlot {
             task_id: "mass",
             msg_type: "Mass",
             payload: Some(ValueDecodeRef::of::<f32::Mass>()),
@@ -286,6 +296,17 @@ fn test_catalog_preserves_unicode_storage_symbols() {
     let logger = Arc::new(Mutex::new(logger));
     record_value_decode_catalog(logger.clone(), &description).unwrap();
     drop(logger);
+    let catalog = cu29_export::catalog::read_value_decode_catalog(&path, None).unwrap();
+    for (name, symbol) in [("electric_potential", "V"), ("magnetic_flux_density", "T")] {
+        let quantity = catalog
+            .description
+            .schemas
+            .iter()
+            .filter_map(|schema| schema.quantity())
+            .find(|quantity| quantity.quantity().name() == name)
+            .unwrap();
+        assert_eq!(quantity.storage_unit().symbol(), symbol);
+    }
     for (format, color) in [("human", "auto"), ("json", "always"), ("ron", "always")] {
         let output = run(
             &path,
@@ -298,7 +319,9 @@ fn test_catalog_preserves_unicode_storage_symbols() {
         );
         assert!(!output.stdout.contains(&0x1b));
         let text = String::from_utf8(output.stdout).unwrap();
-        for symbol in ["m·s⁻¹", "m·s⁻²", "kg"] {
+        assert!(!text.contains("kg·s⁻²·A⁻¹"));
+        assert!(!text.contains("m²·kg·s⁻³·A⁻¹"));
+        for symbol in ["m·s⁻¹", "m·s⁻²", "kg", "V", "T"] {
             assert!(text.contains(symbol), "{format}: {symbol}: {text}");
         }
     }
