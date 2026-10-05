@@ -4,7 +4,7 @@ use std::process::Command;
 
 #[cfg(unix)]
 #[test]
-fn reports_cargo_generate_identity_requirement_without_user_env() {
+fn generates_project_without_user_env() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let home = tempdir.path().join("home");
     let xdg = tempdir.path().join("xdg");
@@ -43,11 +43,11 @@ fn reports_cargo_generate_identity_requirement_without_user_env() {
         .output()
         .expect("run cargo-cunew");
 
-    assert!(!output.status.success());
     assert!(
-        String::from_utf8_lossy(&output.stderr).contains("could not determine the current user"),
-        "stderr:\n{}",
+        output.status.success(),
+        "stdout:\n{}\n\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
-    assert!(!project.join("Cargo.toml").exists());
+    assert!(project.join("Cargo.toml").is_file());
 }

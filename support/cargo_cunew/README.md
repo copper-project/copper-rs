@@ -9,7 +9,19 @@ cd my_robot
 cargo run
 ```
 
-By default it targets the latest stable Copper crates published on crates.io.
+By default it selects the latest stable version of each Copper dependency in the
+installed tool's minor release line. Generated requirements use `~` so patch
+updates remain compatible.
+
+Templates are bundled and rendered with Liquid. Registry queries use synchronous
+HTTPS with Rustls; installation needs a Rust toolchain and generation initializes
+a repository with `git` (or skips it with `--no-vcs`). The first installation and
+application build compile their dependencies; elapsed time depends on your
+machine and existing Cargo cache.
+
+Run `just cunew-check` to test generation, lint the tool, and enforce its
+dependency budget. Run `just released-template-check` to build both templates
+against crates.io and run their main applications.
 It also supports:
 
 - `--source git` for a git-based Copper dependency setup

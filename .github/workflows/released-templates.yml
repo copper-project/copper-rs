@@ -1,0 +1,48 @@
+name: Released Copper Templates
+
+on:
+  pull_request:
+    branches: ["release/**"]
+  push:
+    branches: ["release/**"]
+  release:
+    types: [published]
+  schedule:
+    - cron: "0 12 * * *"
+  workflow_dispatch:
+    inputs:
+      source:
+        description: Scaffold tool to verify
+        type: choice
+        options: [published, checkout]
+        default: published
+
+permissions:
+  contents: read
+
+concurrency:
+  group: released-templates-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  templates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2.87.22
+        with:
+          tool: just
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target/cunew-install
+            . -> target/released-template-build
+      - name: Verify the scaffold tool from this release checkout
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
+        run: |
+          just cunew-check
+          just released-template-check checkout
+      - name: Verify the installed crates.io tool and released dependencies
+        if: github.event_name != 'pull_request' && github.event_name != 'push'
+        run: just released-template-check "${{ inputs.source || 'published' }}"
