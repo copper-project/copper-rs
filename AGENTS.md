@@ -406,6 +406,10 @@ For offline analysis:
   - node-level `logging: (enabled: true)` where needed
 - If a bug is reproducible from a log, prefer replay/resim over speculative live debugging.
 
+## Console Policy
+
+Assume Unicode-capable terminals. Generate unit symbols once and reuse them across consumers. Use Unicode mathematical notation. Apply Catppuccin Mocha colors on interactive terminals; omit ANSI styling from recorded logs, machine exports, and redirected output by default.
+
 ## Design Biases
 
 - Always use the Catppuccin Mocha palette for UI colors, including prototypes and diagrams.

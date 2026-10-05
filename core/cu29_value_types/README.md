@@ -11,3 +11,6 @@ unit. `StorageUnit::symbol()` provides the presentation spelling.
 Copper owns the metadata vocabulary and its permanent numeric IDs. New catalogue
 entries receive new IDs; existing IDs retain their meaning. The `serde` feature
 enables serialization for the shared types.
+
+Coherent storage symbols use conventional Unicode SI notation, such as `V`, `T`,
+`N·m`, and `m·s⁻¹`, from the shared `cu29-value-types` catalogue.

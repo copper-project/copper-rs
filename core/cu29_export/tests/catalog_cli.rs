@@ -241,3 +241,65 @@ fn static_catalog_spans_backing_files_as_one_section() {
     assert!(ValueDecodeCatalog::from_blob(&bytes[..bytes.len() - 1]).is_err());
     assert!(ValueDecodeCatalog::from_blob(&[bytes.as_slice(), bytes.as_slice()].concat()).is_err());
 }
+
+#[test]
+fn test_catalog_preserves_unicode_storage_symbols() {
+    use bincode::value_decode::ValueDecodeRef;
+    use cu29::catalog_stream::{CatalogDescription, CatalogSlot};
+    use cu29::units::si::{f32, f64};
+
+    static SLOTS: &[CatalogSlot] = &[
+        CatalogSlot {
+            task_id: "velocity",
+            msg_type: "Velocity",
+            payload: Some(ValueDecodeRef::of::<f32::Velocity>()),
+        },
+        CatalogSlot {
+            task_id: "acceleration",
+            msg_type: "Acceleration",
+            payload: Some(ValueDecodeRef::of::<f64::Acceleration>()),
+        },
+        CatalogSlot {
+            task_id: "mass",
+            msg_type: "Mass",
+            payload: Some(ValueDecodeRef::of::<f32::Mass>()),
+        },
+    ];
+    let description = CatalogDescription {
+        mission: "default",
+        config_ron: "(tasks: [], cnx: [])",
+        layout: ValueDecodeCatalogLayout::Compact,
+        slots: SLOTS,
+    };
+    let dir = tempfile::tempdir_in(env!("CARGO_MANIFEST_DIR")).unwrap();
+    let path = dir.path().join("units.copper");
+    let UnifiedLogger::Write(logger) = UnifiedLoggerBuilder::new()
+        .file_base_name(&path)
+        .write(true)
+        .create(true)
+        .preallocated_size(64 * 1024)
+        .build()
+        .unwrap()
+    else {
+        panic!("writer")
+    };
+    let logger = Arc::new(Mutex::new(logger));
+    record_value_decode_catalog(logger.clone(), &description).unwrap();
+    drop(logger);
+    for (format, color) in [("human", "auto"), ("json", "always"), ("ron", "always")] {
+        let output = run(
+            &path,
+            &["catalog", "--export-format", format, "--color", color],
+        );
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(!output.stdout.contains(&0x1b));
+        let text = String::from_utf8(output.stdout).unwrap();
+        for symbol in ["m·s⁻¹", "m·s⁻²", "kg"] {
+            assert!(text.contains(symbol), "{format}: {symbol}: {text}");
+        }
+    }
+}

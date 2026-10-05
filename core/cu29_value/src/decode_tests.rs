@@ -596,7 +596,7 @@ fn test_derived_newtype_shape() {
 fn test_all_quantity_metadata_and_native_storage() {
     // Exercise every wrapper's actual native bytes, reflection, and metadata.
     macro_rules! check_quantities {
-        ([$(($id:literal, $module:ident, $ty:ident, $unit:literal),)+]) => {$({
+        ([$(($id:literal, $module:ident, $ty:ident, $unit:literal, $legacy:literal),)+]) => {$({
             let expected = QuantityMetadata::coherent(Quantity::$ty);
             let description = round_trip(
                 &cu29_units::si::f32::$ty { value: 1.25 },
@@ -637,7 +637,8 @@ fn test_all_quantity_metadata_and_native_storage() {
                     if parts.is_empty() { String::from("1") } else { parts.join(" ") }
                 }
             };
-            assert_eq!(expected.storage_unit().symbol(), symbol);
+            assert_eq!(Quantity::$ty.legacy_coherent_unit_symbol(), symbol);
+            assert_eq!(expected.storage_unit().symbol(), $unit);
         })+};
     }
     cu29_value_types::__quantity_catalogue!(check_quantities);
