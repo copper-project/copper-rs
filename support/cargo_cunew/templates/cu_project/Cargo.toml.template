@@ -4,10 +4,7 @@ version = "0.1.0"
 edition = "2024"
 default-run = "{{project-name|kebab_case}}"
 
-{% if copper_source == "local" %}
-{% comment %} We must be part of a root workspace if we're in the copper repo {% endcomment %}
 [workspace]
-{%endif %}
 
 [profile.debug-optimized]
 inherits = "dev"
@@ -60,11 +57,11 @@ pgs-candidate = []
 # memmon = ["dep:cu-memmon"]
 
 [dependencies]
-cu29 = { {%if copper_source == "crates.io" %} version = "{{copper_version}}" {%elsif copper_source == "git" %} git = "{{copper_git_url}}"{{copper_git_ref_snippet}} {%elsif copper_source == "local" %} path = "{{copper_root_path}}/core/cu29" {%endif %} }
+cu29 = { {%if copper_source == "crates.io" %} version = "~{{copper_version}}" {%elsif copper_source == "git" %} git = "{{copper_git_url}}"{{copper_git_ref_snippet}} {%elsif copper_source == "local" %} path = "{{copper_root_path}}/core/cu29" {%endif %} }
 serde = { version = "1.0", features = ["derive"] }
 clap = { version = "4.5", default-features = false, features = ["std", "derive", "help", "usage", "error-context"] }
-cu29-export = { {%if copper_source == "crates.io" %} version = "{{copper_export_version}}" {%elsif copper_source == "git" %} git = "{{copper_git_url}}"{{copper_git_ref_snippet}} {%elsif copper_source == "local" %} path = "{{copper_root_path}}/core/cu29_export" {%endif %}, optional = true }
-# cu-memmon = { {%if copper_source == "crates.io" %} version = "{{copper_version}}" {%elsif copper_source == "git" %} git = "{{copper_git_url}}"{{copper_git_ref_snippet}} {%elsif copper_source == "local" %} path = "{{copper_root_path}}/components/monitors/cu_memmon" {%endif %}, default-features = false, features = ["std", "memory_monitoring"], optional = true }
+cu29-export = { {%if copper_source == "crates.io" %} version = "~{{copper_export_version}}" {%elsif copper_source == "git" %} git = "{{copper_git_url}}"{{copper_git_ref_snippet}} {%elsif copper_source == "local" %} path = "{{copper_root_path}}/core/cu29_export" {%endif %}, optional = true }
+# cu-memmon = { {%if copper_source == "crates.io" %} version = "~{{copper_memmon_version}}" {%elsif copper_source == "git" %} git = "{{copper_git_url}}"{{copper_git_ref_snippet}} {%elsif copper_source == "local" %} path = "{{copper_root_path}}/components/monitors/cu_memmon" {%endif %}, default-features = false, features = ["std", "memory_monitoring"], optional = true }
 
 [build-dependencies]
-cu29-build = { {%if copper_source == "crates.io" %} version = "{{copper_version}}" {%elsif copper_source == "git" %} git = "{{copper_git_url}}"{{copper_git_ref_snippet}} {%elsif copper_source == "local" %} path = "{{copper_root_path}}/core/cu29_build" {%endif %} }
+cu29-build = { {%if copper_source == "crates.io" %} version = "~{{copper_build_version}}" {%elsif copper_source == "git" %} git = "{{copper_git_url}}"{{copper_git_ref_snippet}} {%elsif copper_source == "local" %} path = "{{copper_root_path}}/core/cu29_build" {%endif %} }

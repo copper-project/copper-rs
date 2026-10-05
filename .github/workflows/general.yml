@@ -506,6 +506,20 @@ jobs:
       toolchain: stable
       linux_runner_label: ubuntu-latest
 
+  cunew:
+    name: Project Bootstrap Tool
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: taiki-e/install-action@v2.87.22
+        with:
+          tool: just
+      - uses: Swatinem/rust-cache@v2
+      - run: just cunew-check
+
   ci-status:
     name: CI Status
     if: ${{ always() }}
@@ -525,6 +539,7 @@ jobs:
       - api
       - fmt
       - embedded
+      - cunew
     runs-on: ubuntu-latest
     steps:
       - name: Fail if a CI job failed or was cancelled
