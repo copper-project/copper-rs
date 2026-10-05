@@ -1,7 +1,7 @@
 [package]
 name = "cargo-cunew"
 description = "Bootstrap Copper projects from bundled templates."
-version.workspace = true
+version = "1.2.4"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -16,15 +16,15 @@ include = ["README.md", "src/**", "templates/**"]
 
 [dependencies]
 anyhow = { workspace = true, features = ["std"] }
-cargo-generate = "0.23.9"
-# Constrain Rhai's proc-macro dependency until upstream narrows its semver range.
-rhai_codegen = "=3.2.0"
+heck = "~0.5"
+liquid = "~0.26"
+liquid-core = "~0.26"
+liquid-derive = "~0.26"
+semver = "~1.0"
 clap = { workspace = true }
 include_dir = "0.7.4"
-libc = { workspace = true }
 pathdiff = "0.2.3"
-reqwest = { version = "0.13", default-features = false, features = [
-  "blocking",
+ureq = { version = "~3.4", default-features = false, features = [
   "json",
   "rustls",
 ] }

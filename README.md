@@ -82,7 +82,7 @@ cd hello_copper
 cargo run
 ```
 
-In about 30 seconds, you have a typed `source → task → sink` graph that prints its
+The generated app has a typed `source → task → sink` graph that prints its
 first messages and records `logs/hello-copper.copper`. Start with
 `copperconfig.ron`, `src/main.rs`, and `src/tasks.rs`; the generated `justfile`
 also provides helpers for logs, CopperLists, topology (`just dag`), the exact
