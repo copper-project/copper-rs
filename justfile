@@ -54,6 +54,16 @@ template-check toolchain="stable":
 	cargo +{{toolchain}} run -p cargo-cunew -- "$output/workspace" --template workspace --source local --copper-root "{{ROOT}}" --no-vcs
 	bash "{{ROOT}}/support/cargo_cunew/templates/smoke_generated.sh" "{{toolchain}}" "$output/project" "$output/workspace"
 
+# Verify the scaffold tool, including its cold-install dependency budget.
+cunew-check toolchain="stable":
+	cargo +{{toolchain}} test -p cargo-cunew
+	cargo +{{toolchain}} clippy -p cargo-cunew --all-targets -- --deny warnings
+	python3 support/ci/cunew_dependencies.py --toolchain {{toolchain}}
+
+# Install the tool and build/run both templates using published Copper crates.
+released-template-check source="published" toolchain="stable":
+	python3 support/ci/released_templates.py --toolchain {{toolchain}} --source {{source}}
+
 # Local PR pipeline: format, lint, then tests.
 pr-check:
 	just fmt
