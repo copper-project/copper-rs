@@ -343,11 +343,11 @@ mod tests {
         for (quantity, symbol) in [
             (Quantity::Length, "m"),
             (Quantity::Mass, "kg"),
-            (Quantity::Velocity, "m s^-1"),
+            (Quantity::Velocity, "m·s⁻¹"),
             (Quantity::Angle, "rad"),
             (Quantity::SolidAngle, "sr"),
             (Quantity::Information, "bit"),
-            (Quantity::InformationRate, "bit s^-1"),
+            (Quantity::InformationRate, "bit·s⁻¹"),
             (Quantity::Ratio, "1"),
         ] {
             let metadata = QuantityMetadata::coherent(quantity);

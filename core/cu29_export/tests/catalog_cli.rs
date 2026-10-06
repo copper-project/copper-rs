@@ -297,6 +297,16 @@ fn test_catalog_preserves_unicode_storage_symbols() {
     record_value_decode_catalog(logger.clone(), &description).unwrap();
     drop(logger);
     let catalog = cu29_export::catalog::read_value_decode_catalog(&path, None).unwrap();
+    let ron = ron::ser::to_string_pretty(
+        &catalog,
+        ron::ser::PrettyConfig::default().struct_names(true),
+    )
+    .unwrap();
+    let restored: cu29::prelude::ValueDecodeCatalog = ron::from_str(&ron).unwrap();
+    assert_eq!(
+        bincode::encode_to_vec(&restored, bincode::config::standard()).unwrap(),
+        bincode::encode_to_vec(&catalog, bincode::config::standard()).unwrap()
+    );
     for (name, symbol) in [("electric_potential", "V"), ("magnetic_flux_density", "T")] {
         let quantity = catalog
             .description
