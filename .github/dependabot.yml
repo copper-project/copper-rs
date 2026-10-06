@@ -5,8 +5,8 @@ updates:
     schedule:
       interval: "weekly"
     groups:
-      artifacts:
+      github-actions:
         patterns:
-          - "actions/*-artifact"
+          - "*"
 
 # Rust dependency updates are reviewed through the weekly dependency audit.

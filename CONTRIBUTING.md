@@ -80,6 +80,7 @@ Prefer the root `justfile` over copying long Cargo command lines:
 | --- | --- |
 | Most pull requests | `just` or `just pr-check` |
 | Formatting, typos, and clippy only | `just lint` |
+| Workflow configuration and change classification | `just ci-config-check` (requires `actionlint`) |
 | Host/runtime behavior across the std feature matrix | `just std-ci` |
 | Shared, embedded-facing, or `no_std` code | `just nostd-ci` |
 | Coverage-sensitive behavior | `just coverage` |
@@ -98,6 +99,18 @@ on every runner, or `ci_exclude_workspace_os = ["macos"]` to exclude it on speci
 runner operating systems (`linux`, `macos`, or `windows`). macOS checks include
 the portable `cu-zed` payload and projection code and exclude the native ZED SDK
 wrappers.
+
+Actions uses standard GitHub-hosted runners. Documentation-only changes run the
+formatting gate and CI status check; code and build-configuration changes run the
+full matrix and PR coverage. Docs publishing reuses an unexpired master coverage
+artifact for documentation-only changes and regenerates it when none is available.
+CI images refresh weekly and whenever their Docker inputs change. Actions
+dependency updates are grouped into one weekly pull request.
+
+Build-job summaries report elapsed time and sampled disk headroom, plus available
+memory on Linux. Samples run every 15 seconds after checkout through the final
+measurement step; container pulls and post-job cache saves are outside that window.
+Use the Actions job timestamps when comparing total job durations.
 
 ## Compile Tests
 

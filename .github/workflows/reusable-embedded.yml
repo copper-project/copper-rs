@@ -13,7 +13,7 @@ on:
       linux_runner_label:
         required: false
         type: string
-        default: "ubuntu-latest-m"
+        default: "ubuntu-latest"
 
 env:
   CARGO_NET_RETRY: "10"
@@ -27,6 +27,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+      - name: Start resource measurements
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: start
       - id: embedded_setup
         uses: ./.github/actions/embedded-rust-setup
         with:
@@ -38,6 +42,12 @@ jobs:
         run: cargo +${{ inputs.toolchain }} build --no-default-features
       - name: Unit tests of core with no-std
         run: cargo +${{ inputs.toolchain }} nextest run --no-default-features
+      - name: Report resource measurements
+        if: always()
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: finish
+
   embedded-crates:
     name: Embedded crates
     runs-on: ${{ inputs.linux_runner_label }}
@@ -46,6 +56,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+      - name: Start resource measurements
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: start
       - id: embedded_setup
         uses: ./.github/actions/embedded-rust-setup
         with:
@@ -57,6 +71,12 @@ jobs:
         run: python3 support/ci/embedded_crates.py run --action clippy --toolchain ${{ inputs.toolchain }}
       - name: Build embedded-only crates
         run: python3 support/ci/embedded_crates.py run --action build --toolchain ${{ inputs.toolchain }}
+      - name: Report resource measurements
+        if: always()
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: finish
+
   rp2350:
     name: RP2350 skeleton
     runs-on: ${{ inputs.linux_runner_label }}
@@ -65,6 +85,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+      - name: Start resource measurements
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: start
       - id: embedded_setup
         uses: ./.github/actions/embedded-rust-setup
         with:
@@ -88,3 +112,8 @@ jobs:
       - name: Build logreader (RP2350 host)
         working-directory: examples/cu_rp2350_skeleton
         run: cargo +${{ inputs.toolchain }} build --no-default-features --features host --bin blinky-logreader --target ${HOST_TARGET}
+      - name: Report resource measurements
+        if: always()
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: finish

@@ -6,14 +6,54 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 env:
   CARGO_TERM_COLOR: always
   CARGO_NET_RETRY: "10"
   DOCS_TOOLCHAIN: nightly
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  changes:
+    name: Classify docs and coverage changes
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.coverage.outputs.code }}
+      coverage_run: ${{ steps.coverage.outputs.coverage_run }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: changes
+        env:
+          BASE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: python3 support/ci/ci_changes.py
+      - id: coverage
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CODE_CHANGED: ${{ steps.changes.outputs.code }}
+        run: |
+          previous_run=""
+          if [[ "$CODE_CHANGED" != "true" ]]; then
+            previous_run="$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" --jq '[.artifacts[] | select(.name == "coverage-report" and .expired == false and .workflow_run.head_branch == "master") | .workflow_run.id][0] // empty')"
+          fi
+          if [[ "$CODE_CHANGED" == "true" || -z "$previous_run" ]]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            echo "coverage_run=$GITHUB_RUN_ID" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+            echo "coverage_run=$previous_run" >> "$GITHUB_OUTPUT"
+          fi
+
   coverage:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     name: Coverage
     uses: ./.github/workflows/reusable-coverage.yml
     secrets: inherit
@@ -21,10 +61,11 @@ jobs:
       toolchain: stable
       linux_cargo_paths: true
       linux_disk_workarounds: false
-      linux_runner_label: ubuntu-latest-m
+      linux_runner_label: ubuntu-latest
 
   build:
-    needs: coverage
+    needs: [changes, coverage]
+    if: ${{ always() && needs.changes.result == 'success' && (needs.coverage.result == 'success' || needs.coverage.result == 'skipped') }}
     runs-on: ubuntu-latest
 
     steps:
@@ -57,6 +98,8 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: coverage-report
+          github-token: ${{ github.token }}
+          run-id: ${{ needs.changes.outputs.coverage_run }}
           path: build/coverage-report
       - name: Stage coverage report
         run: |
