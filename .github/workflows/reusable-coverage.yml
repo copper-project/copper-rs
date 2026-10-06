@@ -29,6 +29,11 @@ on:
 
 env:
   CARGO_NET_RETRY: "10"
+  # Reusable workflows declare their own Cargo profile settings.
+  # Coverage instrumentation provides source mapping; omit bulky debug symbols.
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+  CARGO_INCREMENTAL: "0"
   # cargo-generate resolves an author even though cargo-cunew templates omit it.
   CARGO_NAME: "Copper Tests"
 
