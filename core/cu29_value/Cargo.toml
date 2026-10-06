@@ -18,6 +18,7 @@ license = "MIT"
 documentation = "https://docs.rs/cu29-value"
 
 [dependencies]
+cu29-value-types = { workspace = true, features = ["serde"] }
 bevy_reflect = { workspace = true, optional = true }
 cu29-units = { workspace = true, optional = true }
 cu29-clock = { workspace = true }
@@ -36,6 +37,7 @@ self-describing-logs = [
   "std",
   "bincode/self-describing",
   "dep:bevy_reflect",
+  "cu29-clock/reflect",
   "dep:cu29-units",
   "cu29-units/reflect",
 ]

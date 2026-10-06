@@ -4,6 +4,7 @@
 //! use `#[bincode(describe)]` on individual Encode types for unconditional support.
 
 use core::any::{TypeId, type_name};
+pub use cu29_value_types::{QuantityMetadata, TimeStorageUnit, ValueMetadata};
 
 /// Describes the encoded representation, independently of reflection and memory layout.
 /// A handwritten encoder can delegate to the type it actually writes:
@@ -21,8 +22,8 @@ pub trait ValueDecode: 'static + Sized {
     /// Static logical metadata retained alongside the wire recipe.
     ///
     /// Metadata is borrowed from the image and never changes payload encoding.
-    /// Copper uses `quantity` and `storage_unit` to describe physical quantities.
-    const ATTRIBUTES: &'static [(&'static str, &'static str)] = &[];
+    /// Copper owns the typed metadata vocabulary.
+    const METADATA: &'static [ValueMetadata] = &[];
 
     /// Typed lazy reference for generated field bindings.
     #[doc(hidden)]
@@ -52,7 +53,7 @@ fn describe<T: ValueDecode>() -> ValueDecodeType {
         type_id: TypeId::of::<T>(),
         type_name: type_name::<T>(),
         spec: T::DECODE,
-        attributes: T::ATTRIBUTES,
+        metadata: T::METADATA,
     }
 }
 
@@ -66,41 +67,10 @@ pub struct ValueDecodeType {
     /// Encoded representation.
     pub spec: &'static ValueDecodeSpec,
     /// Borrowed logical metadata emitted with this type's description.
-    pub attributes: &'static [(&'static str, &'static str)],
+    pub metadata: &'static [ValueMetadata],
 }
 
-/// Scalar width and signedness. Integer encoding and endianness come from the codec configuration.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Scalar {
-    /// Native bool encoding.
-    Bool,
-    /// Native u8 encoding.
-    U8,
-    /// Native u16 encoding.
-    U16,
-    /// Native u32 encoding.
-    U32,
-    /// Native u64 encoding.
-    U64,
-    /// Native u128 encoding.
-    U128,
-    /// Native i8 encoding.
-    I8,
-    /// Native i16 encoding.
-    I16,
-    /// Native i32 encoding.
-    I32,
-    /// Native i64 encoding.
-    I64,
-    /// Native i128 encoding.
-    I128,
-    /// Native f32 encoding.
-    F32,
-    /// Native f64 encoding.
-    F64,
-    /// Native char encoding.
-    Char,
-}
+pub use cu29_value_types::Scalar;
 
 /// Identity-based selector for a reflected field, preserving the declaration index for tuples.
 #[derive(Clone, Copy, Debug)]
@@ -127,18 +97,7 @@ pub struct ValueDecodeField {
     pub value: ValueDecodeRef,
 }
 
-/// Exported shape of an aggregate.
-#[derive(Clone, Copy, Debug)]
-pub enum RecordShape {
-    /// Unit record.
-    Unit,
-    /// Tuple record.
-    Tuple,
-    /// One-field tuple struct or enum branch.
-    Newtype,
-    /// Named record.
-    Struct,
-}
+pub use cu29_value_types::RecordShape;
 
 /// One encoded enum branch. Tags are declaration indices, regardless of Rust discriminants.
 #[derive(Clone, Copy, Debug)]
@@ -318,3 +277,60 @@ mod standard {
         };
     }
 }
+
+// The codec owns serialization for the shared description vocabulary.
+macro_rules! encode_description_kind {
+    ($ty:ident, {$($variant:ident = $id:literal,)+}) => {
+        impl crate::Encode for $ty {
+            fn encode<E: crate::enc::Encoder>(&self, encoder: &mut E) -> Result<(), crate::error::EncodeError> {
+                (*self as u32).encode(encoder)
+            }
+        }
+        impl<Context> crate::Decode<Context> for $ty {
+            fn decode<D: crate::de::Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, crate::error::DecodeError> {
+                match <u32 as crate::Decode<Context>>::decode(decoder)? {
+                    $($id => Ok(Self::$variant),)+
+                    found => Err(crate::error::DecodeError::UnexpectedVariant {
+                        type_name: core::any::type_name::<Self>(),
+                        allowed: &crate::error::AllowedEnumVariants::Allowed(&[$($id,)+]),
+                        found,
+                    }),
+                }
+            }
+        }
+        crate::impl_borrow_decode!($ty);
+        impl ValueDecode for $ty {
+            const DECODE: &'static ValueDecodeSpec = &ValueDecodeSpec::Enum {
+                tag: Scalar::U32,
+                variants: &[$(ValueDecodeVariant {
+                    tag: $id,
+                    name: stringify!($variant),
+                    shape: RecordShape::Unit,
+                    fields: &[],
+                },)+],
+            };
+        }
+    };
+}
+encode_description_kind!(Scalar, {
+    Bool = 0,
+    U8 = 1,
+    U16 = 2,
+    U32 = 3,
+    U64 = 4,
+    U128 = 5,
+    I8 = 6,
+    I16 = 7,
+    I32 = 8,
+    I64 = 9,
+    I128 = 10,
+    F32 = 11,
+    F64 = 12,
+    Char = 13,
+});
+encode_description_kind!(RecordShape, {
+    Unit = 0,
+    Tuple = 1,
+    Newtype = 2,
+    Struct = 3,
+});

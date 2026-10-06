@@ -12,29 +12,8 @@ extern crate alloc;
 
 pub use uom;
 
-// Dimensionless quantities retain their coherent named storage units.
-macro_rules! storage_unit {
-    (angle) => {
-        "rad"
-    };
-    (solid_angle) => {
-        "sr"
-    };
-    (information) => {
-        "bit"
-    };
-    (information_rate) => {
-        "bit s^-1"
-    };
-    ($quantity:ident) => {{
-        const UNIT: crate::StorageUnit =
-            crate::static_storage_unit::<uom::si::$quantity::Dimension>();
-        UNIT.as_str()
-    }};
-}
-
 macro_rules! define_storage_wrappers {
-    ($storage_mod:ident, $storage_ty:ty, [$(($unit_mod:ident, $quantity:ident),)+]) => {
+    ($storage_mod:ident, $storage_ty:ty, [$(($id:literal, $unit_mod:ident, $quantity:ident, $unit:literal),)+]) => {
         pub mod $storage_mod {
             use core::marker::PhantomData;
             use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -207,9 +186,12 @@ macro_rules! define_storage_wrappers {
 
                     impl bincode::ValueDecode for $quantity_name {
                         const DECODE: &'static bincode::ValueDecodeSpec = <$storage_ty as bincode::ValueDecode>::DECODE;
-                        const ATTRIBUTES: &'static [(&'static str, &'static str)] = &[
-                            ("quantity", stringify!($unit_mod_name)),
-                            ("storage_unit", storage_unit!($unit_mod_name)),
+                        const METADATA: &'static [bincode::value_decode::ValueMetadata] = &[
+                            bincode::value_decode::ValueMetadata::Quantity(
+                                cu29_value_types::QuantityMetadata::coherent(
+                                    cu29_value_types::Quantity::$quantity_name,
+                                ),
+                            ),
                         ];
                     }
 
@@ -258,14 +240,6 @@ macro_rules! define_storage_wrappers {
 
             $(define_quantity!($unit_mod, $quantity);)+
 
-            #[cfg(feature = "reflect")]
-            pub(crate) fn value_decode_quantities() -> alloc::vec::Vec<crate::ValueDecodeQuantity> {
-                alloc::vec![$(crate::ValueDecodeQuantity {
-                    type_id: core::any::TypeId::of::<$quantity>(),
-                    quantity: stringify!($unit_mod),
-                    storage_unit: alloc::string::String::from(storage_unit!($unit_mod)),
-                }),+]
-            }
         }
     };
 }
@@ -300,249 +274,9 @@ pub mod si {
         volumetric_number_rate, volumetric_power_density,
     };
 
-    define_storage_wrappers! {
-        f32,
-        f32,
-        [
-            (absement, Absement),
-            (acceleration, Acceleration),
-            (action, Action),
-            (amount_of_substance, AmountOfSubstance),
-            (angle, Angle),
-            (angular_absement, AngularAbsement),
-            (angular_acceleration, AngularAcceleration),
-            (angular_jerk, AngularJerk),
-            (angular_momentum, AngularMomentum),
-            (angular_velocity, AngularVelocity),
-            (area, Area),
-            (areal_density_of_states, ArealDensityOfStates),
-            (areal_heat_capacity, ArealHeatCapacity),
-            (areal_mass_density, ArealMassDensity),
-            (areal_number_density, ArealNumberDensity),
-            (areal_number_rate, ArealNumberRate),
-            (available_energy, AvailableEnergy),
-            (capacitance, Capacitance),
-            (catalytic_activity, CatalyticActivity),
-            (catalytic_activity_concentration, CatalyticActivityConcentration),
-            (curvature, Curvature),
-            (diffusion_coefficient, DiffusionCoefficient),
-            (dynamic_viscosity, DynamicViscosity),
-            (electric_charge, ElectricCharge),
-            (electric_charge_areal_density, ElectricChargeArealDensity),
-            (electric_charge_linear_density, ElectricChargeLinearDensity),
-            (electric_charge_volumetric_density, ElectricChargeVolumetricDensity),
-            (electric_current, ElectricCurrent),
-            (electric_current_density, ElectricCurrentDensity),
-            (electric_dipole_moment, ElectricDipoleMoment),
-            (electric_displacement_field, ElectricDisplacementField),
-            (electric_field, ElectricField),
-            (electric_flux, ElectricFlux),
-            (electric_permittivity, ElectricPermittivity),
-            (electric_potential, ElectricPotential),
-            (electric_quadrupole_moment, ElectricQuadrupoleMoment),
-            (electrical_conductance, ElectricalConductance),
-            (electrical_conductivity, ElectricalConductivity),
-            (electrical_mobility, ElectricalMobility),
-            (electrical_resistance, ElectricalResistance),
-            (electrical_resistivity, ElectricalResistivity),
-            (energy, Energy),
-            (force, Force),
-            (frequency, Frequency),
-            (frequency_drift, FrequencyDrift),
-            (heat_capacity, HeatCapacity),
-            (heat_flux_density, HeatFluxDensity),
-            (heat_transfer, HeatTransfer),
-            (inductance, Inductance),
-            (information, Information),
-            (information_rate, InformationRate),
-            (inverse_velocity, InverseVelocity),
-            (jerk, Jerk),
-            (kinematic_viscosity, KinematicViscosity),
-            (length, Length),
-            (linear_density_of_states, LinearDensityOfStates),
-            (linear_mass_density, LinearMassDensity),
-            (linear_number_density, LinearNumberDensity),
-            (linear_number_rate, LinearNumberRate),
-            (linear_power_density, LinearPowerDensity),
-            (luminance, Luminance),
-            (luminous_intensity, LuminousIntensity),
-            (magnetic_field_strength, MagneticFieldStrength),
-            (magnetic_flux, MagneticFlux),
-            (magnetic_flux_density, MagneticFluxDensity),
-            (magnetic_moment, MagneticMoment),
-            (magnetic_permeability, MagneticPermeability),
-            (mass, Mass),
-            (mass_concentration, MassConcentration),
-            (mass_density, MassDensity),
-            (mass_flux, MassFlux),
-            (mass_per_energy, MassPerEnergy),
-            (mass_rate, MassRate),
-            (molality, Molality),
-            (molar_concentration, MolarConcentration),
-            (molar_energy, MolarEnergy),
-            (molar_flux, MolarFlux),
-            (molar_heat_capacity, MolarHeatCapacity),
-            (molar_mass, MolarMass),
-            (molar_radioactivity, MolarRadioactivity),
-            (molar_volume, MolarVolume),
-            (moment_of_inertia, MomentOfInertia),
-            (momentum, Momentum),
-            (power, Power),
-            (power_rate, PowerRate),
-            (pressure, Pressure),
-            (radiant_exposure, RadiantExposure),
-            (radioactivity, Radioactivity),
-            (ratio, Ratio),
-            (reciprocal_length, ReciprocalLength),
-            (solid_angle, SolidAngle),
-            (specific_area, SpecificArea),
-            (specific_heat_capacity, SpecificHeatCapacity),
-            (specific_power, SpecificPower),
-            (specific_radioactivity, SpecificRadioactivity),
-            (specific_volume, SpecificVolume),
-            (surface_electric_current_density, SurfaceElectricCurrentDensity),
-            (surface_tension, SurfaceTension),
-            (temperature_coefficient, TemperatureCoefficient),
-            (temperature_gradient, TemperatureGradient),
-            (temperature_interval, TemperatureInterval),
-            (thermal_conductance, ThermalConductance),
-            (thermal_conductivity, ThermalConductivity),
-            (thermal_resistance, ThermalResistance),
-            (thermodynamic_temperature, ThermodynamicTemperature),
-            (time, Time),
-            (torque, Torque),
-            (velocity, Velocity),
-            (volume, Volume),
-            (volume_rate, VolumeRate),
-            (volumetric_density_of_states, VolumetricDensityOfStates),
-            (volumetric_heat_capacity, VolumetricHeatCapacity),
-            (volumetric_number_density, VolumetricNumberDensity),
-            (volumetric_number_rate, VolumetricNumberRate),
-            (volumetric_power_density, VolumetricPowerDensity),
-        ]
-    }
+    cu29_value_types::__quantity_catalogue!(define_storage_wrappers, f32, f32);
 
-    define_storage_wrappers! {
-        f64,
-        f64,
-        [
-            (absement, Absement),
-            (acceleration, Acceleration),
-            (action, Action),
-            (amount_of_substance, AmountOfSubstance),
-            (angle, Angle),
-            (angular_absement, AngularAbsement),
-            (angular_acceleration, AngularAcceleration),
-            (angular_jerk, AngularJerk),
-            (angular_momentum, AngularMomentum),
-            (angular_velocity, AngularVelocity),
-            (area, Area),
-            (areal_density_of_states, ArealDensityOfStates),
-            (areal_heat_capacity, ArealHeatCapacity),
-            (areal_mass_density, ArealMassDensity),
-            (areal_number_density, ArealNumberDensity),
-            (areal_number_rate, ArealNumberRate),
-            (available_energy, AvailableEnergy),
-            (capacitance, Capacitance),
-            (catalytic_activity, CatalyticActivity),
-            (catalytic_activity_concentration, CatalyticActivityConcentration),
-            (curvature, Curvature),
-            (diffusion_coefficient, DiffusionCoefficient),
-            (dynamic_viscosity, DynamicViscosity),
-            (electric_charge, ElectricCharge),
-            (electric_charge_areal_density, ElectricChargeArealDensity),
-            (electric_charge_linear_density, ElectricChargeLinearDensity),
-            (electric_charge_volumetric_density, ElectricChargeVolumetricDensity),
-            (electric_current, ElectricCurrent),
-            (electric_current_density, ElectricCurrentDensity),
-            (electric_dipole_moment, ElectricDipoleMoment),
-            (electric_displacement_field, ElectricDisplacementField),
-            (electric_field, ElectricField),
-            (electric_flux, ElectricFlux),
-            (electric_permittivity, ElectricPermittivity),
-            (electric_potential, ElectricPotential),
-            (electric_quadrupole_moment, ElectricQuadrupoleMoment),
-            (electrical_conductance, ElectricalConductance),
-            (electrical_conductivity, ElectricalConductivity),
-            (electrical_mobility, ElectricalMobility),
-            (electrical_resistance, ElectricalResistance),
-            (electrical_resistivity, ElectricalResistivity),
-            (energy, Energy),
-            (force, Force),
-            (frequency, Frequency),
-            (frequency_drift, FrequencyDrift),
-            (heat_capacity, HeatCapacity),
-            (heat_flux_density, HeatFluxDensity),
-            (heat_transfer, HeatTransfer),
-            (inductance, Inductance),
-            (information, Information),
-            (information_rate, InformationRate),
-            (inverse_velocity, InverseVelocity),
-            (jerk, Jerk),
-            (kinematic_viscosity, KinematicViscosity),
-            (length, Length),
-            (linear_density_of_states, LinearDensityOfStates),
-            (linear_mass_density, LinearMassDensity),
-            (linear_number_density, LinearNumberDensity),
-            (linear_number_rate, LinearNumberRate),
-            (linear_power_density, LinearPowerDensity),
-            (luminance, Luminance),
-            (luminous_intensity, LuminousIntensity),
-            (magnetic_field_strength, MagneticFieldStrength),
-            (magnetic_flux, MagneticFlux),
-            (magnetic_flux_density, MagneticFluxDensity),
-            (magnetic_moment, MagneticMoment),
-            (magnetic_permeability, MagneticPermeability),
-            (mass, Mass),
-            (mass_concentration, MassConcentration),
-            (mass_density, MassDensity),
-            (mass_flux, MassFlux),
-            (mass_per_energy, MassPerEnergy),
-            (mass_rate, MassRate),
-            (molality, Molality),
-            (molar_concentration, MolarConcentration),
-            (molar_energy, MolarEnergy),
-            (molar_flux, MolarFlux),
-            (molar_heat_capacity, MolarHeatCapacity),
-            (molar_mass, MolarMass),
-            (molar_radioactivity, MolarRadioactivity),
-            (molar_volume, MolarVolume),
-            (moment_of_inertia, MomentOfInertia),
-            (momentum, Momentum),
-            (power, Power),
-            (power_rate, PowerRate),
-            (pressure, Pressure),
-            (radiant_exposure, RadiantExposure),
-            (radioactivity, Radioactivity),
-            (ratio, Ratio),
-            (reciprocal_length, ReciprocalLength),
-            (solid_angle, SolidAngle),
-            (specific_area, SpecificArea),
-            (specific_heat_capacity, SpecificHeatCapacity),
-            (specific_power, SpecificPower),
-            (specific_radioactivity, SpecificRadioactivity),
-            (specific_volume, SpecificVolume),
-            (surface_electric_current_density, SurfaceElectricCurrentDensity),
-            (surface_tension, SurfaceTension),
-            (temperature_coefficient, TemperatureCoefficient),
-            (temperature_gradient, TemperatureGradient),
-            (temperature_interval, TemperatureInterval),
-            (thermal_conductance, ThermalConductance),
-            (thermal_conductivity, ThermalConductivity),
-            (thermal_resistance, ThermalResistance),
-            (thermodynamic_temperature, ThermodynamicTemperature),
-            (time, Time),
-            (torque, Torque),
-            (velocity, Velocity),
-            (volume, Volume),
-            (volume_rate, VolumeRate),
-            (volumetric_density_of_states, VolumetricDensityOfStates),
-            (volumetric_heat_capacity, VolumetricHeatCapacity),
-            (volumetric_number_density, VolumetricNumberDensity),
-            (volumetric_number_rate, VolumetricNumberRate),
-            (volumetric_power_density, VolumetricPowerDensity),
-        ]
-    }
+    cu29_value_types::__quantity_catalogue!(define_storage_wrappers, f64, f64);
 }
 
 /// Metadata and compile-time normalization support for constants declared in Copper RON files.
@@ -896,105 +630,4 @@ mod tests {
         assert_eq!(speed.value, 10.0);
         assert_eq!(speed.get::<meter_per_second>(), 10.0);
     }
-}
-
-/// Typed storage metadata for offline self-description packaging.
-#[cfg(feature = "reflect")]
-pub struct ValueDecodeQuantity {
-    /// Original quantity type, including scalar width.
-    pub type_id: core::any::TypeId,
-    /// Quantity identity.
-    pub quantity: &'static str,
-    /// Coherent SI storage unit, expressed in base units.
-    pub storage_unit: alloc::string::String,
-}
-
-/// Register every supported quantity in both scalar widths.
-#[cfg(feature = "reflect")]
-pub fn value_decode_quantities() -> Vec<ValueDecodeQuantity> {
-    let mut quantities = si::f32::value_decode_quantities();
-    quantities.extend(si::f64::value_decode_quantities());
-    quantities
-}
-
-/// Compile-time formatting keeps coherent unit symbols borrowed on embedded targets.
-struct StorageUnit {
-    bytes: [u8; 128],
-    len: usize,
-}
-
-impl StorageUnit {
-    const fn push(&mut self, bytes: &[u8]) {
-        let mut index = 0;
-        while index < bytes.len() {
-            self.bytes[self.len] = bytes[index];
-            self.len += 1;
-            index += 1;
-        }
-    }
-
-    const fn exponent(&mut self, value: i32) {
-        self.push(b"^");
-        if value < 0 {
-            self.push(b"-");
-        }
-        let mut number = value.unsigned_abs();
-        let mut digits = [0; 10];
-        let mut count = 0;
-        loop {
-            digits[count] = b'0' + (number % 10) as u8;
-            count += 1;
-            number /= 10;
-            if number == 0 {
-                break;
-            }
-        }
-        while count > 0 {
-            count -= 1;
-            self.push(&[digits[count]]);
-        }
-    }
-
-    const fn as_str(&self) -> &str {
-        match core::str::from_utf8(self.bytes.split_at(self.len).0) {
-            Ok(symbol) => symbol,
-            Err(_) => panic!("Storage unit must be ASCII"),
-        }
-    }
-}
-
-const fn static_storage_unit<D: uom::si::Dimension + ?Sized>() -> StorageUnit {
-    use uom::typenum::Integer;
-    let exponents = [
-        D::L::I32,
-        D::M::I32,
-        D::T::I32,
-        D::I::I32,
-        D::Th::I32,
-        D::N::I32,
-        D::J::I32,
-    ];
-    let symbols: [&[u8]; 7] = [b"m", b"kg", b"s", b"A", b"K", b"mol", b"cd"];
-    let mut result = StorageUnit {
-        bytes: [0; 128],
-        len: 0,
-    };
-    let mut index = 0;
-    while index < exponents.len() {
-        let exponent = exponents[index];
-        if exponent != 0 {
-            if result.len > 0 {
-                result.push(b" ");
-            }
-            result.push(symbols[index]);
-            if exponent != 1 {
-                result.exponent(exponent);
-            }
-        }
-        index += 1;
-    }
-    if result.len == 0 {
-        result.push(b"1");
-    }
-    result
 }

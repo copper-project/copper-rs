@@ -30,11 +30,16 @@ use core::cmp::Ordering;
 use core::fmt::{Display, Formatter};
 use core::hash::{Hash, Hasher};
 use cu29_clock::CuTime;
+pub use cu29_value_types::{
+    Quantity, QuantityMetadata, RecordShape, Scalar, StorageUnit, TimeStorageUnit, ValueMetadata,
+};
 use ordered_float::OrderedFloat;
 use serde::Deserialize;
 
 #[cfg(feature = "self-describing-logs")]
 pub mod decode;
+#[cfg(feature = "self-describing-logs")]
+mod metadata;
 
 mod bdec;
 mod benc;

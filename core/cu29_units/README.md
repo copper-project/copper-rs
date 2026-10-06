@@ -24,3 +24,11 @@ You can also depend on `cu29-units` directly:
 use cu29_units::si::f32::Length;
 use cu29_units::si::length::meter;
 ```
+
+## Value description metadata
+
+The quantity wrappers in both scalar widths declare typed `ValueDecode::METADATA`
+using the shared `cu29-value-types` catalogue. Each quantity records its coherent
+storage unit; named dimensionless quantities retain `rad`, `sr`, `bit`, or
+`bit s^-1`. The metadata is borrowed from static data and packaged by offline
+value-description tooling.

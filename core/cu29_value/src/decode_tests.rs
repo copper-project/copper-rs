@@ -91,28 +91,19 @@ fn test_native_quantities_and_shared_scalar_operations() {
     let quantities: Vec<_> = description
         .schemas
         .iter()
-        .filter_map(|schema| schema.quantity.as_ref())
+        .filter_map(|schema| schema.quantity())
         .collect();
     assert_eq!(quantities.len(), 3);
-    assert!(
-        quantities
-            .iter()
-            .any(|q| q.quantity == "length" && q.storage_unit == "m")
-    );
-    assert!(
-        quantities
-            .iter()
-            .any(|q| q.quantity == "velocity" && q.storage_unit == "m s^-1")
-    );
-    assert!(
-        quantities
-            .iter()
-            .any(|q| q.quantity == "mass" && q.storage_unit == "kg")
-    );
+    assert!(quantities.iter().any(|q| q.quantity() == Quantity::Length
+        && q.storage_unit() == StorageUnit::Coherent(Quantity::Length)));
+    assert!(quantities.iter().any(|q| q.quantity() == Quantity::Velocity
+        && q.storage_unit() == StorageUnit::Coherent(Quantity::Velocity)));
+    assert!(quantities.iter().any(|q| q.quantity() == Quantity::Mass
+        && q.storage_unit() == StorageUnit::Coherent(Quantity::Mass)));
     let quantity_bindings: Vec<_> = description
         .bindings
         .iter()
-        .filter(|binding| description.schemas[binding.schema].quantity.is_some())
+        .filter(|binding| description.schemas[binding.schema].quantity().is_some())
         .collect();
     assert!(
         quantity_bindings
@@ -602,37 +593,134 @@ fn test_derived_newtype_shape() {
 }
 
 #[test]
-fn test_quantity_registrations_cover_both_widths_and_named_dimensionless_units() {
-    use core::any::TypeId;
-    let registrations = cu29_units::value_decode_quantities();
-    let identities: alloc::collections::BTreeSet<_> = registrations
-        .iter()
-        .map(|registration| registration.type_id)
-        .collect();
-    assert_eq!(identities.len(), registrations.len());
-    assert!(registrations.len() > 200);
-    for (identity, unit) in [
-        (TypeId::of::<cu29_units::si::f32::Length>(), "m"),
-        (TypeId::of::<cu29_units::si::f64::Length>(), "m"),
-        (TypeId::of::<cu29_units::si::f32::Mass>(), "kg"),
-        (TypeId::of::<cu29_units::si::f64::Mass>(), "kg"),
-        (TypeId::of::<cu29_units::si::f32::Angle>(), "rad"),
-        (TypeId::of::<cu29_units::si::f64::SolidAngle>(), "sr"),
-        (TypeId::of::<cu29_units::si::f32::Information>(), "bit"),
-        (
-            TypeId::of::<cu29_units::si::f64::InformationRate>(),
-            "bit s^-1",
-        ),
-    ] {
-        assert_eq!(
-            registrations
-                .iter()
-                .find(|registration| registration.type_id == identity)
-                .unwrap()
-                .storage_unit,
-            unit
-        );
+fn test_all_quantity_metadata_and_native_storage() {
+    // Exercise every wrapper's actual native bytes, reflection, and metadata.
+    macro_rules! check_quantities {
+        ([$(($id:literal, $module:ident, $ty:ident, $unit:literal),)+]) => {$({
+            let expected = QuantityMetadata::coherent(Quantity::$ty);
+            let description = round_trip(
+                &cu29_units::si::f32::$ty { value: 1.25 },
+                Value::F32(1.25),
+                bincode::config::standard(),
+            );
+            assert_eq!(description.schemas[description.bindings[description.root].schema].quantity(), Some(expected));
+            let description = round_trip(
+                &cu29_units::si::f64::$ty { value: 1.25 },
+                Value::F64(1.25),
+                bincode::config::standard(),
+            );
+            assert_eq!(description.schemas[description.bindings[description.root].schema].quantity(), Some(expected));
+
+            // Catalogue presentation must agree with uom's actual dimensions.
+            use cu29_units::uom::si::Dimension;
+            use cu29_units::uom::typenum::Integer;
+            type D = cu29_units::uom::si::$module::Dimension;
+            let dimensions = [
+                <D as Dimension>::L::I32, <D as Dimension>::M::I32,
+                <D as Dimension>::T::I32, <D as Dimension>::I::I32,
+                <D as Dimension>::Th::I32, <D as Dimension>::N::I32,
+                <D as Dimension>::J::I32,
+            ];
+            let symbol = match Quantity::$ty {
+                Quantity::Angle => String::from("rad"),
+                Quantity::SolidAngle => String::from("sr"),
+                Quantity::Information => String::from("bit"),
+                Quantity::InformationRate => String::from("bit s^-1"),
+                _ => {
+                    let parts: Vec<_> = ["m", "kg", "s", "A", "K", "mol", "cd"]
+                        .into_iter().zip(dimensions)
+                        .filter(|(_, exponent)| *exponent != 0)
+                        .map(|(symbol, exponent)| if exponent == 1 {
+                            String::from(symbol)
+                        } else { alloc::format!("{symbol}^{exponent}") })
+                        .collect();
+                    if parts.is_empty() { String::from("1") } else { parts.join(" ") }
+                }
+            };
+            assert_eq!(expected.storage_unit().symbol(), symbol);
+        })+};
     }
+    cu29_value_types::__quantity_catalogue!(check_quantities);
+}
+
+#[derive(Clone, Debug, PartialEq, Reflect)]
+#[reflect(opaque)]
+struct CustomElapsed(u64);
+
+impl Encode for CustomElapsed {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        self.0.encode(encoder)
+    }
+}
+impl<Context> Decode<Context> for CustomElapsed {
+    fn decode<D: bincode::de::Decoder<Context = Context>>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        Ok(Self(u64::decode(decoder)?))
+    }
+}
+impl ValueDecode for CustomElapsed {
+    const DECODE: &'static ValueDecodeSpec = <u64 as ValueDecode>::DECODE;
+    const METADATA: &'static [ValueMetadata] = &[ValueMetadata::Quantity(QuantityMetadata::time(
+        TimeStorageUnit::Nanosecond,
+    ))];
+}
+
+#[test]
+fn test_custom_payload_uses_copper_metadata_directly() {
+    let value = CustomElapsed(12345);
+    let config = bincode::config::standard();
+    assert_eq!(
+        bincode::encode_to_vec(&value, config).unwrap(),
+        bincode::encode_to_vec(value.0, config).unwrap()
+    );
+    let description = round_trip(&value, Value::U64(12345), config);
+    assert_eq!(
+        description.schemas[description.bindings[description.root].schema].quantity(),
+        Some(QuantityMetadata::time(TimeStorageUnit::Nanosecond))
+    );
+}
+
+#[test]
+fn test_future_metadata_preserves_raw_payload_values() {
+    let config = bincode::config::standard();
+    let mut description = ValueDecodeDescription::from_type::<CustomElapsed>().unwrap();
+    // Simulate a future producer, without adding an authoring extension API.
+    let entries = [
+        (99u32, vec![1, 2, 3]),
+        (1, [u32::MAX.to_le_bytes(), 1u32.to_le_bytes()].concat()),
+        (
+            1,
+            [Quantity::Time.id().to_le_bytes(), u32::MAX.to_le_bytes()].concat(),
+        ),
+    ];
+    let root = description.bindings[description.root].schema;
+    description.schemas[root].metadata.clear();
+    for (kind, body) in entries {
+        let bytes = bincode::encode_to_vec((kind, body), config).unwrap();
+        let (entry, used): (ValueDecodeMetadata, _) =
+            bincode::decode_from_slice(&bytes, config).unwrap();
+        assert_eq!(used, bytes.len());
+        assert!(entry.known().is_none());
+        assert_eq!(bincode::encode_to_vec(&entry, config).unwrap(), bytes);
+        description.schemas[root].metadata.push(entry);
+    }
+    let bytes = bincode::encode_to_vec(&description, config).unwrap();
+    let (description, used): (ValueDecodeDescription, _) =
+        bincode::decode_from_slice(&bytes, config).unwrap();
+    assert_eq!(used, bytes.len());
+    assert_eq!(bincode::encode_to_vec(&description, config).unwrap(), bytes);
+    assert!(description.schemas[root].quantity().is_none());
+    let bytes = bincode::encode_to_vec(12345u64, config).unwrap();
+    assert_eq!(
+        description
+            .decode(&bytes, config, ValueDecodeLimits::default())
+            .unwrap(),
+        (Value::U64(12345), bytes.len())
+    );
 }
 
 #[test]
@@ -740,5 +828,31 @@ fn test_opaque_encoding_recipes_describe_enum_and_record_fields() {
         &Sample { channel: 300 },
         map(&[("channel", Value::U16(300))]),
         bincode::config::standard(),
+    );
+}
+
+#[test]
+fn test_clock_metadata_and_native_storage() {
+    let config = bincode::config::standard();
+    let expected = Some(QuantityMetadata::time(TimeStorageUnit::Nanosecond));
+    let time = cu29_clock::CuTime::from_nanos(12345);
+    let description = round_trip(&time, Value::U64(12345), config);
+    assert_eq!(
+        description.schemas[description.bindings[description.root].schema].quantity(),
+        expected
+    );
+    let duration = cu29_clock::CuDuration(12345);
+    let description = round_trip(&duration, Value::U64(12345), config);
+    assert_eq!(
+        description.schemas[description.bindings[description.root].schema].quantity(),
+        expected
+    );
+    assert_eq!(
+        bincode::encode_to_vec(time, config).unwrap(),
+        bincode::encode_to_vec(12345u64, config).unwrap()
+    );
+    assert_eq!(
+        bincode::encode_to_vec(duration, config).unwrap(),
+        bincode::encode_to_vec(12345u64, config).unwrap()
     );
 }

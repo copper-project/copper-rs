@@ -4,6 +4,7 @@
 //! it alongside the data. [`ValueDecodeDescription::decode`] needs only that description
 //! and the producer's bincode configuration; it never reconstructs the native payload.
 
+pub use super::metadata::ValueDecodeMetadata;
 use crate::Value;
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
@@ -24,13 +25,12 @@ use bincode::de::Decoder;
 use bincode::de::read::Reader;
 use bincode::error::DecodeError;
 use bincode::value_decode::FieldSelector;
-use bincode::value_decode::RecordShape;
-use bincode::value_decode::Scalar;
 use bincode::value_decode::ValueDecodeField;
 use bincode::value_decode::ValueDecodeRef;
 use core::any::TypeId;
-use cu29_clock::CuDuration;
-use cu29_clock::CuTime;
+pub use cu29_value_types::{
+    Quantity, QuantityMetadata, StorageUnit, TimeStorageUnit, ValueMetadata,
+};
 use serde::{Deserialize, Serialize};
 
 /// A portable description of native encoded bytes. This API is experimental.
@@ -65,21 +65,23 @@ pub struct ValueDecodeBinding {
 pub struct ValueDecodeSchema {
     /// Reflected type path, or the native name for a standard wire type.
     pub type_path: String,
-    /// Quantity identity and coherent storage unit, when registered.
-    pub quantity: Option<ValueDecodeQuantity>,
+    /// Copper-owned logical metadata, including preserved future entries.
+    pub metadata: Vec<ValueDecodeMetadata>,
     /// Encoded fields in wire order.
     pub fields: Vec<ValueDecodeSchemaField>,
     /// All supported enum branches.
     pub variants: Vec<ValueDecodeSchemaVariant>,
 }
 
-/// Canonical storage metadata; independent of debugger display preferences.
-#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, Serialize, Deserialize)]
-pub struct ValueDecodeQuantity {
-    /// Quantity identity such as `length` or `mass`.
-    pub quantity: String,
-    /// Storage unit such as `m`, `kg`, or `ns` for Copper clock values.
-    pub storage_unit: String,
+impl ValueDecodeSchema {
+    /// Recognized quantity metadata, when this reader understands its storage unit.
+    pub fn quantity(&self) -> Option<QuantityMetadata> {
+        self.metadata.iter().find_map(|entry| {
+            entry
+                .known()
+                .map(|ValueMetadata::Quantity(quantity)| quantity)
+        })
+    }
 }
 
 /// A logical field bound by name or original declaration index.
@@ -102,51 +104,9 @@ pub struct ValueDecodeSchemaVariant {
     pub fields: Vec<ValueDecodeSchemaField>,
 }
 
-/// Portable native scalar encoding. Widths are preserved in the value tree.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, Serialize, Deserialize)]
-pub enum ValueDecodeScalar {
-    /// Native `bool` encoding.
-    Bool,
-    /// Native `u8` encoding.
-    U8,
-    /// Native `u16` encoding.
-    U16,
-    /// Native `u32` encoding.
-    U32,
-    /// Native `u64` encoding.
-    U64,
-    /// Native `u128` encoding.
-    U128,
-    /// Native `i8` encoding.
-    I8,
-    /// Native `i16` encoding.
-    I16,
-    /// Native `i32` encoding.
-    I32,
-    /// Native `i64` encoding.
-    I64,
-    /// Native `i128` encoding.
-    I128,
-    /// Native `f32` encoding.
-    F32,
-    /// Native `f64` encoding.
-    F64,
-    /// Native `char` encoding.
-    Char,
-}
+pub use cu29_value_types::Scalar as ValueDecodeScalar;
 
-/// Aggregate shape, independent of the native Rust memory layout.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, Serialize, Deserialize)]
-pub enum ValueDecodeShape {
-    /// A unit record.
-    Unit,
-    /// An ordered tuple record.
-    Tuple,
-    /// A one-field tuple struct or variant.
-    Newtype,
-    /// A record with named fields.
-    Struct,
-}
+pub use cu29_value_types::RecordShape as ValueDecodeShape;
 
 /// One portable branch of a tagged encoding.
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, Serialize, Deserialize)]
@@ -441,14 +401,6 @@ impl ValueDecodeDescription {
         registry: &TypeRegistry,
         roots: &[ValueDecodeRef],
     ) -> Result<(Self, Vec<usize>), DecodeError> {
-        let mut quantities = cu29_units::value_decode_quantities();
-        for type_id in [TypeId::of::<CuTime>(), TypeId::of::<CuDuration>()] {
-            quantities.push(cu29_units::ValueDecodeQuantity {
-                type_id,
-                quantity: "time",
-                storage_unit: String::from("ns"),
-            });
-        }
         let mut builder = DescriptionBuilder {
             description: Self {
                 root: 0,
@@ -458,7 +410,6 @@ impl ValueDecodeDescription {
             },
             types: BTreeMap::new(),
             registry,
-            quantities,
         };
         let roots = roots
             .iter()
@@ -811,7 +762,6 @@ struct DescriptionBuilder<'a> {
     description: ValueDecodeDescription,
     types: BTreeMap<TypeId, usize>,
     registry: &'a TypeRegistry,
-    quantities: Vec<cu29_units::ValueDecodeQuantity>,
 }
 
 impl DescriptionBuilder<'_> {
@@ -832,23 +782,20 @@ impl DescriptionBuilder<'_> {
             schema: id,
         });
         let info = self.registry.get_type_info(ty.type_id);
-        let quantity = self
-            .quantities
-            .iter()
-            .find(|quantity| quantity.type_id == ty.type_id)
-            .map(|quantity| ValueDecodeQuantity {
-                quantity: quantity.quantity.to_string(),
-                storage_unit: quantity.storage_unit.clone(),
-            });
         self.description.schemas.push(ValueDecodeSchema {
             type_path: info.map_or(ty.type_name, TypeInfo::type_path).to_string(),
-            quantity,
+            metadata: ty
+                .metadata
+                .iter()
+                .copied()
+                .map(ValueDecodeMetadata::from)
+                .collect(),
             fields: Vec::new(),
             variants: Vec::new(),
         });
         let operation = match ty.spec {
             ValueDecodeSpec::Unit => ValueDecodeOp::Unit,
-            ValueDecodeSpec::Scalar(scalar) => ValueDecodeOp::Scalar(scalar_kind(*scalar)),
+            ValueDecodeSpec::Scalar(scalar) => ValueDecodeOp::Scalar(*scalar),
             ValueDecodeSpec::String => ValueDecodeOp::String,
             ValueDecodeSpec::Bytes => ValueDecodeOp::Bytes,
             ValueDecodeSpec::Record { shape, fields } => {
@@ -856,7 +803,7 @@ impl DescriptionBuilder<'_> {
                     self.bind_fields(fields, info, None, ty.type_name, depth)?;
                 self.description.schemas[id].fields = fields;
                 ValueDecodeOp::Record {
-                    shape: record_shape(*shape),
+                    shape: *shape,
                     fields: children,
                 }
             }
@@ -870,7 +817,7 @@ impl DescriptionBuilder<'_> {
                 capacity,
             } => ValueDecodeOp::Sequence {
                 element: self.bind(*element, depth + 1)?,
-                count: scalar_kind(*count),
+                count: *count,
                 capacity: *capacity,
             },
             ValueDecodeSpec::Map { key, value } => ValueDecodeOp::Map {
@@ -906,12 +853,12 @@ impl DescriptionBuilder<'_> {
                         });
                     branches.push(ValueDecodeBranch {
                         tag: variant.tag,
-                        shape: record_shape(variant.shape),
+                        shape: variant.shape,
                         fields: children,
                     });
                 }
                 ValueDecodeOp::Enum {
-                    tag: scalar_kind(*tag),
+                    tag: *tag,
                     branches,
                 }
             }
@@ -1016,20 +963,5 @@ impl DescriptionBuilder<'_> {
             });
         }
         Ok((children, schemas))
-    }
-}
-
-fn scalar_kind(scalar: Scalar) -> ValueDecodeScalar {
-    macro_rules! kinds { ($($kind:ident),*) => { match scalar { $(Scalar::$kind => ValueDecodeScalar::$kind),* } }; }
-    kinds!(
-        Bool, U8, U16, U32, U64, U128, I8, I16, I32, I64, I128, F32, F64, Char
-    )
-}
-fn record_shape(shape: RecordShape) -> ValueDecodeShape {
-    match shape {
-        RecordShape::Unit => ValueDecodeShape::Unit,
-        RecordShape::Tuple => ValueDecodeShape::Tuple,
-        RecordShape::Newtype => ValueDecodeShape::Newtype,
-        RecordShape::Struct => ValueDecodeShape::Struct,
     }
 }

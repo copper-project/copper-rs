@@ -39,10 +39,42 @@ producer's codec configuration. Decoding returns the exact number of consumed
 bytes, allowing sequential values to be read from one buffer.
 
 Descriptions preserve field names, original type identities, scalar widths, and
-quantity storage units. All supported `cu29-units` quantities have typed storage
-registrations in both scalar widths. Coherent units use SI base-unit expressions:
-length is `m`, velocity is `m s^-1`, and mass is `kg`. Copper clock values
-retain their nanosecond (`ns`) storage unit.
+quantity storage units. Each type declares a static, typed `ValueDecode::METADATA`
+slice using Copper's metadata vocabulary, shared through `cu29-value-types`.
+All supported quantities retain their coherent storage unit in both scalar widths:
+length is `m`, velocity is `m s^-1`, and mass is `kg`. Copper clock values retain
+nanosecond storage. Unit symbols are presentation output from typed storage units.
+
+A handwritten type can attach existing Copper metadata:
+
+```rust
+use cu29_value::{QuantityMetadata, TimeStorageUnit, ValueMetadata};
+use bincode::{ValueDecode, ValueDecodeSpec};
+
+struct Elapsed(u64);
+impl ValueDecode for Elapsed {
+    const DECODE: &'static ValueDecodeSpec = <u64 as ValueDecode>::DECODE;
+    const METADATA: &'static [ValueMetadata] = &[
+        ValueMetadata::Quantity(
+            QuantityMetadata::time(TimeStorageUnit::Nanosecond),
+        ),
+    ];
+}
+```
+
+Portable schemas contain `metadata` entries. `schema.quantity()` returns recognized
+quantity metadata; `entry.known()` returns recognized typed metadata. Entries use
+permanent numeric kind IDs and length-delimited bodies. Quantity kind `1` contains
+exactly eight bytes: a little-endian `u32` quantity ID followed by a little-endian
+`u32` storage alternative (`1` for coherent storage, `2` for nanoseconds).
+The outer kind and body length use the description's bincode configuration.
+Copper assigns new IDs when its vocabulary grows and retains existing meanings.
+
+An older reader preserves unknown kinds, quantities, and storage alternatives
+verbatim. It exposes the decoded payload value and leaves unsupported units
+uninterpreted. Invalid known combinations and malformed or truncated entries
+return a decoding error. Metadata framing supports evolving metadata alongside
+wire operations the reader already understands.
 
 For a handwritten encoder, implement `ValueDecode` by delegating to the type
 actually written. An opaque reflected wrapper encoding `[f32; 4]` declares:

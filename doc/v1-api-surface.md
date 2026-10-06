@@ -107,6 +107,12 @@ option select recorded runs identified by `Instantiated` lifecycle records.
 - `cu29::prelude::{ValueDecode, ValueDecodeSpec, ValueDecodeDescription,
   ValueDecodeLimits}` with `self-describing-logs` enabled. The companion trait and
   static wire recipes are supplied by `cu-bincode`.
+- `cu29-value-types` and its `cu29_value` / `cu29::prelude` re-exports:
+  `Quantity`, `QuantityMetadata`, `StorageUnit`, `TimeStorageUnit`, and
+  `ValueMetadata`. `ValueDecode::METADATA` attaches the Copper-owned vocabulary
+  to schemas; `ValueDecodeMetadata` preserves future IDs in portable descriptions.
+  `Scalar` and `RecordShape` are shared with the codec and retain their existing
+  `ValueDecodeScalar` and `ValueDecodeShape` aliases in `cu29_value::decode`.
 - Standard `ValueDecode` implementations for Copper time, compact strings,
   quantities, `CuArray`, `CuArrayVec`, and pooled buffer handles.
 

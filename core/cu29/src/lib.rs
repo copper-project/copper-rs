@@ -348,10 +348,12 @@ pub mod prelude {
     #[cfg(feature = "std")]
     pub use cu29_unifiedlog::memmap;
     pub use cu29_unifiedlog::*;
-    pub use cu29_value::Value;
     #[cfg(feature = "self-describing-logs")]
     pub use cu29_value::decode::{ValueDecodeDescription, ValueDecodeLimits};
     pub use cu29_value::to_value;
+    pub use cu29_value::{
+        Quantity, QuantityMetadata, StorageUnit, TimeStorageUnit, Value, ValueMetadata,
+    };
     pub use serde_derive::{Deserialize, Serialize};
 }
 

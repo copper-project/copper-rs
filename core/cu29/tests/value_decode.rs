@@ -53,8 +53,8 @@ fn test_native_copper_payload_user_api() {
     assert_eq!(value, expected);
     assert!(offline_description.schemas.iter().any(|schema| {
         schema.type_path.ends_with("CuTime")
-            && schema.quantity.as_ref().is_some_and(|quantity| {
-                quantity.quantity == "time" && quantity.storage_unit == "ns"
+            && schema.quantity().is_some_and(|quantity| {
+                quantity == QuantityMetadata::time(TimeStorageUnit::Nanosecond)
             })
     }));
     let (native, native_used): (SensorSample, _) =

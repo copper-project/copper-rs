@@ -986,14 +986,22 @@ pub trait ClockProvider {
 
 impl bincode::ValueDecode for CuTime {
     const DECODE: &'static bincode::ValueDecodeSpec = <u64 as bincode::ValueDecode>::DECODE;
-    const ATTRIBUTES: &'static [(&'static str, &'static str)] =
-        &[("quantity", "time"), ("storage_unit", "ns")];
+    const METADATA: &'static [bincode::value_decode::ValueMetadata] =
+        &[bincode::value_decode::ValueMetadata::Quantity(
+            bincode::value_decode::QuantityMetadata::time(
+                bincode::value_decode::TimeStorageUnit::Nanosecond,
+            ),
+        )];
 }
 
 impl bincode::ValueDecode for CuDuration {
     const DECODE: &'static bincode::ValueDecodeSpec = <u64 as bincode::ValueDecode>::DECODE;
-    const ATTRIBUTES: &'static [(&'static str, &'static str)] =
-        &[("quantity", "time"), ("storage_unit", "ns")];
+    const METADATA: &'static [bincode::value_decode::ValueMetadata] =
+        &[bincode::value_decode::ValueMetadata::Quantity(
+            bincode::value_decode::QuantityMetadata::time(
+                bincode::value_decode::TimeStorageUnit::Nanosecond,
+            ),
+        )];
 }
 
 #[cfg(test)]
