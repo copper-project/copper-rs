@@ -631,12 +631,12 @@ mod tests {
     }
 
     #[test]
-    fn test_deep_fsck_rejects_truncated_payload_and_legacy_log() {
+    fn test_deep_fsck_rejects_truncated_payload_and_missing_catalog() {
         let dir = tempfile::tempdir_in(env!("CARGO_MANIFEST_DIR")).unwrap();
         for (name, corrupt, catalog) in [
             ("good", false, true),
             ("corrupt", true, true),
-            ("legacy", false, false),
+            ("missing-catalog", false, false),
         ] {
             let path = dir.path().join(format!("{name}.copper"));
             crate::catalog_tests::fixture(&path, corrupt, catalog);
@@ -652,7 +652,7 @@ mod tests {
                         .contains("CopperList #1 slot 0")
                 );
             }
-            if name == "legacy" {
+            if name == "missing-catalog" {
                 check_with(&mut run.reader(&path).unwrap(), 0, false, None).unwrap();
             }
         }

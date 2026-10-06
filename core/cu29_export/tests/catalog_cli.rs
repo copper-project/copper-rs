@@ -1,4 +1,4 @@
-//! Exercise the installed CLI contract and process exit status against V1 fixtures.
+//! Exercise the installed CLI contract and process exit status against generated catalogs.
 #![cfg(feature = "self-describing-logs")]
 
 use bincode::Encode;
@@ -18,6 +18,13 @@ impl Encode for WireBytes {
         encoder.writer().write(&self.0)
     }
 }
+fn catalog_blob() -> Vec<u8> {
+    ValueDecodeCatalogBuilder::default()
+        .finish("()", "default", ValueDecodeCatalogLayout::Compact)
+        .unwrap()
+        .to_blob()
+        .unwrap()
+}
 fn fixture(path: &Path, catalog: bool, corrupt: bool, duplicate: bool) {
     let UnifiedLogger::Write(logger) = UnifiedLoggerBuilder::new()
         .file_base_name(path)
@@ -31,10 +38,10 @@ fn fixture(path: &Path, catalog: bool, corrupt: bool, duplicate: bool) {
     };
     let logger = Arc::new(Mutex::new(logger));
     if catalog {
-        let blob = include_bytes!("../../cu29_value/tests/fixtures/catalog_v1.bin");
-        write_value_decode_catalog(logger.clone(), blob).unwrap();
+        let blob = catalog_blob();
+        write_value_decode_catalog(logger.clone(), &blob).unwrap();
         if duplicate {
-            write_value_decode_catalog(logger.clone(), blob).unwrap();
+            write_value_decode_catalog(logger.clone(), &blob).unwrap();
         }
     }
     let mut cls = stream_write::<WireBytes, _>(logger, UnifiedLogType::CopperList, 1024).unwrap();
@@ -81,7 +88,7 @@ fn test_machine_output_and_process_failure_contract() {
     assert!(basic.status.success());
     let basic = String::from_utf8(basic.stdout).unwrap();
     assert!(basic.contains("# of Catalogs"));
-    let catalog_bytes = include_bytes!("../../cu29_value/tests/fixtures/catalog_v1.bin").len();
+    let catalog_bytes = catalog_blob().len();
     assert!(basic.contains(&format!("Catalog compressed    -> {catalog_bytes} bytes")));
     let catalog = cu29_export::catalog::read_value_decode_catalog(&good, None).unwrap();
     let decompressed_bytes = bincode::encode_to_vec(&catalog, bincode::config::standard())
@@ -102,7 +109,7 @@ fn test_machine_output_and_process_failure_contract() {
     assert!(deep.contains("Payload total size     -> 0 bytes"));
     assert!(!deep.contains("frozen task-state"));
     for (name, catalog, corrupt, duplicate) in [
-        ("legacy", false, false, false),
+        ("missing-catalog", false, false, false),
         ("corrupt", true, true, false),
         ("duplicate", true, false, true),
     ] {

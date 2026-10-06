@@ -1,7 +1,7 @@
-//! Offline, version-pinned CopperList decoding from embedded V1 catalogs.
+//! Offline, version-pinned CopperList decoding from embedded catalogs.
 //!
 //! The catalog version freezes both payload and envelope rules. These readers
-//! deliberately decode the V1 wire fields explicitly, independently of the
+//! deliberately decode the wire fields explicitly, independently of the
 //! application's generated tuple and the extractor's encoding features.
 
 use crate::runs;
@@ -288,7 +288,7 @@ impl Cursor<'_> {
             &self.bytes[self.offset..],
             bincode::config::standard().with_limit::<MAX_COPPERLIST_BYTES>(),
         )
-        .map_err(|error| CuError::new_with_cause("Invalid V1 CopperList envelope", error))?;
+        .map_err(|error| CuError::new_with_cause("Invalid CopperList envelope", error))?;
         self.offset += used;
         Ok(value)
     }
@@ -309,7 +309,7 @@ impl Cursor<'_> {
                 }
                 Ok(result)
             }
-            _ => Err("Invalid V1 CopperList presence-plane mode".into()),
+            _ => Err("Invalid CopperList presence-plane mode".into()),
         }
     }
     fn timestamp(&mut self, anchor: CuTime) -> CuResult<CuTime> {
@@ -443,7 +443,7 @@ pub(crate) fn decode_copperlist_with_payload_sizes(
                         start: cursor.time()?,
                         end: cursor.time()?,
                     }),
-                    _ => return Err("Invalid V1 TOV tag".into()),
+                    _ => return Err("Invalid TOV tag".into()),
                 };
                 msg.metadata.process_time = PartialCuTimeRange {
                     start: cursor.optional_time()?,
@@ -453,7 +453,7 @@ pub(crate) fn decode_copperlist_with_payload_sizes(
                 msg.metadata.origin = match cursor.read::<u8>()? {
                     0 => None,
                     1 => Some(cursor.origin()?),
-                    _ => return Err("Invalid V1 origin presence tag".into()),
+                    _ => return Err("Invalid origin presence tag".into()),
                 };
             }
             Ok(())

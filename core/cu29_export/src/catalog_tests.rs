@@ -4,7 +4,6 @@ use crate::catalog::copperlist_values_reader;
 use bincode::Encode;
 use bincode::enc::write::Writer;
 use cu29::prelude::*;
-use std::io::Write;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -49,7 +48,7 @@ fn write_run(
         let catalog = builder
             .finish("()", mission, ValueDecodeCatalogLayout::Compact)
             .unwrap();
-        write_value_decode_catalog(logger.clone(), &catalog_blob(&catalog)).unwrap();
+        write_value_decode_catalog(logger.clone(), &catalog.to_blob().unwrap()).unwrap();
     }
     let _text =
         stream_write::<CuLogEntry, _>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024)
@@ -148,7 +147,7 @@ fn test_corrupt_record_returns_context_and_ends_iterator() {
 #[test]
 fn test_missing_catalog_is_explicit() {
     let dir = tempfile::tempdir_in(env!("CARGO_MANIFEST_DIR")).unwrap();
-    let path = dir.path().join("legacy.copper");
+    let path = dir.path().join("missing-catalog.copper");
     fixture(&path, false, false);
     assert!(
         crate::catalog::read_value_decode_catalog(&path, None)
@@ -156,16 +155,6 @@ fn test_missing_catalog_is_explicit() {
             .to_string()
             .contains("require a catalog")
     );
-}
-
-fn catalog_blob(catalog: &ValueDecodeCatalog) -> Vec<u8> {
-    let raw = bincode::encode_to_vec(catalog, bincode::config::standard()).unwrap();
-    let mut blob = b"CUVDCAT\0\x01\x00".to_vec();
-    {
-        let mut compressed = brotli::CompressorWriter::new(&mut blob, 4096, 11, 24);
-        compressed.write_all(&raw).unwrap();
-    }
-    blob
 }
 
 #[test]
