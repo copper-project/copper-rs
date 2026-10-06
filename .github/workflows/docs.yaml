@@ -27,12 +27,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          fetch-depth: 1
       - id: changes
         env:
           BASE_SHA: ${{ github.event.before }}
           HEAD_SHA: ${{ github.sha }}
-          EVENT_NAME: ${{ github.event_name }}
         run: python3 support/ci/ci_changes.py
       - id: coverage
         env:

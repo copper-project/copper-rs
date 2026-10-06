@@ -22,11 +22,10 @@ def main():
     if not base or set(base) == {"0"}:
         code = True
     else:
-        # PRs compare against the merge base; pushes compare the previous tip.
-        comparison = f"{base}...{head}" if os.environ["EVENT_NAME"] == "pull_request" else base
-        args = ["git", "diff", "--name-only", "-z", comparison]
-        if os.environ["EVENT_NAME"] != "pull_request":
-            args.append(head)
+        # Checkout contains GitHub's PR merge commit (or the pushed commit).
+        # Compare it with the event's base without cloning the full history.
+        subprocess.run(["git", "fetch", "--no-tags", "--depth=1", "origin", base], check=True)
+        args = ["git", "diff", "--name-only", "-z", base, head]
         paths = subprocess.check_output(args).decode().rstrip("\0").split("\0")
         code = needs_code_checks(paths)
     value = str(code).lower()

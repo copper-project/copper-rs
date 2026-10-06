@@ -33,7 +33,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          fetch-depth: 1
       - name: Start resource measurements
         uses: ./.github/actions/ci-resources
         with:
@@ -41,8 +41,7 @@ jobs:
       - id: changes
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          EVENT_NAME: ${{ github.event_name }}
+          HEAD_SHA: ${{ github.sha }}
         run: python3 support/ci/ci_changes.py
       - name: Report resource measurements
         if: always()
@@ -604,7 +603,11 @@ jobs:
       - name: Install formatting tools
         uses: taiki-e/install-action@v2.87.22
         with:
-          tool: taplo-cli, fmtron@0.10.0, typos, actionlint
+          tool: taplo-cli, fmtron@0.10.0, typos
+      - name: Install actionlint
+        run: |
+          GOBIN="$GITHUB_WORKSPACE/target/ci-tools" go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.11
+          echo "$GITHUB_WORKSPACE/target/ci-tools" >> "$GITHUB_PATH"
       - name: Validate Actions workflows
         run: actionlint
       - name: Check Rust, TOML, RON formatting
