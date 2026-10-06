@@ -166,8 +166,8 @@ pub(crate) fn dump_catalog(
             let catalog = &document.catalog;
             writeln!(
                 output,
-                "{title}Catalog v1 · run {} · mission {} · {:?}{reset}",
-                document.run, catalog.mission, catalog.layout
+                "{title}Catalog v{} · run {} · mission {} · {:?}{reset}",
+                document.catalog_version, document.run, catalog.mission, catalog.layout
             )
             .map_err(output_error)?;
             writeln!(output, "slot  task  payload  binding").map_err(output_error)?;
@@ -197,11 +197,12 @@ pub(crate) fn dump_catalog(
                     schema.type_path
                 )
                 .map_err(output_error)?;
-                if let Some(quantity) = &schema.quantity {
+                if let Some(quantity) = schema.quantity() {
                     writeln!(
                         output,
                         "  {detail}{} · {}{reset}",
-                        quantity.quantity, quantity.storage_unit
+                        quantity.quantity().name(),
+                        quantity.storage_unit().symbol()
                     )
                     .map_err(output_error)?;
                 }
@@ -217,11 +218,12 @@ pub(crate) fn dump_catalog(
                         child.type_path
                     )
                     .map_err(output_error)?;
-                    if let Some(quantity) = &child.quantity {
+                    if let Some(quantity) = child.quantity() {
                         write!(
                             output,
                             " {detail}· {} · {}{reset}",
-                            quantity.quantity, quantity.storage_unit
+                            quantity.quantity().name(),
+                            quantity.storage_unit().symbol()
                         )
                         .map_err(output_error)?;
                     }
