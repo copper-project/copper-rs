@@ -113,8 +113,9 @@ option select recorded runs identified by `Instantiated` lifecycle records.
 - `cu29::value_decode_catalog` and `cu29_value::catalog`: versioned payload catalogs,
   host graph construction and offline decompression. `ValueDecodeCatalogBuilder::register`
   registers reflected dependencies of opaque payloads without adding log slots. The header contains magic and
-  version; V2 uses fixed-memory Heatshrink compression and continuation framing.
-  Offline readers retain V1 Brotli compatibility.
+  version; V4 streams typed metadata with fixed-memory Heatshrink compression and
+  continuation framing. V3 packages typed metadata with Brotli. Offline readers
+  retain V1/V2 string-metadata compatibility.
 - `cu29_build::catalog::write_value_decode_catalog` with `self-describing-logs`:
   build-host serialization/compression and generated static source. Generated
   builders expose `with_value_decode_catalog` as an optional override.

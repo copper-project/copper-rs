@@ -23,7 +23,7 @@ pub use crate::catalog_header::{
     VALUE_DECODE_CATALOG_MAX_BYTES, ValueDecodeCatalogHeader, ValueDecodeCatalogLayout,
 };
 #[cfg(feature = "decode-catalog-build")]
-const VERSION: u16 = 1;
+const VERSION: u16 = 3;
 
 /// A recorded output slot in native CopperList encoding order.
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
@@ -38,9 +38,9 @@ pub struct ValueDecodeCatalogSlot {
 
 /// A versioned payload description catalog. This API is experimental.
 ///
-/// V1 uses bincode's standard configuration (little-endian, variable integers)
+/// All versions use bincode's standard configuration (little-endian, variable integers)
 /// for both the catalog body and the recorded native payloads. Common CopperList
-/// metadata is identified by `layout`. V1 fixes the Compact and Flat envelope
+/// metadata is identified by `layout`. The format fixes the Compact and Flat envelope
 /// rules as well as payload encoding; changing either requires a new version.
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct ValueDecodeCatalog {
@@ -63,8 +63,8 @@ impl ValueDecodeCatalog {
             return Self::from_framed_blob(bytes);
         }
         let header = ValueDecodeCatalogHeader::read(bytes)?;
-        if header.version == 2 {
-            return Self::from_stream_blob(bytes);
+        if matches!(header.version, 2 | crate::catalog_header::STREAM_VERSION) {
+            return Self::from_stream_blob(bytes, header.version);
         }
         let mut raw = Vec::new();
         let mut reader = brotli::Decompressor::new(&bytes[HEADER_LEN..], 4096);
@@ -87,10 +87,7 @@ impl ValueDecodeCatalog {
                 "trailing compressed ValueDecodeCatalog bytes",
             ));
         }
-        let (catalog, used): (Self, _) = bincode::decode_from_slice(
-            &raw,
-            bincode::config::standard().with_limit::<VALUE_DECODE_CATALOG_MAX_BYTES>(),
-        )?;
+        let (catalog, used) = Self::decode_body(&raw, header.version)?;
         if used != raw.len() {
             return Err(DecodeError::Other("trailing ValueDecodeCatalog body bytes"));
         }
@@ -153,7 +150,7 @@ impl ValueDecodeCatalog {
         Self::from_blob(&blob)
     }
 
-    fn from_stream_blob(bytes: &[u8]) -> Result<Self, DecodeError> {
+    fn from_stream_blob(bytes: &[u8], version: u16) -> Result<Self, DecodeError> {
         use heatshrink::{Poll, SinkError};
         let end = bytes
             .len()
@@ -210,10 +207,7 @@ impl ValueDecodeCatalog {
                 "streaming catalog checksum or length mismatch",
             ));
         }
-        let (catalog, consumed): (Self, _) = bincode::decode_from_slice(
-            &raw,
-            bincode::config::standard().with_limit::<VALUE_DECODE_CATALOG_MAX_BYTES>(),
-        )?;
+        let (catalog, consumed) = Self::decode_body(&raw, version)?;
         if consumed != raw.len() {
             return Err(DecodeError::Other("trailing ValueDecodeCatalog body bytes"));
         }
@@ -229,6 +223,17 @@ impl ValueDecodeCatalog {
             }
         }
         Ok(catalog)
+    }
+
+    fn decode_body(raw: &[u8], version: u16) -> Result<(Self, usize), DecodeError> {
+        let config = bincode::config::standard().with_limit::<VALUE_DECODE_CATALOG_MAX_BYTES>();
+        if matches!(version, 1 | 2) {
+            let (legacy, used): (crate::legacy_catalog::LegacyCatalog, _) =
+                bincode::decode_from_slice(raw, config)?;
+            Ok((legacy.try_into()?, used))
+        } else {
+            bincode::decode_from_slice(raw, config)
+        }
     }
 
     /// Serialize and compress on the build host, using Brotli's maximum quality 11.
@@ -399,6 +404,45 @@ mod tests {
                 .unwrap(),
             (Value::U32(42), 1)
         );
+    }
+
+    #[test]
+    fn test_catalog_v2_legacy_stream_fixture() {
+        use heatshrink::{Finish, Poll};
+        let fixture = include_bytes!("../tests/fixtures/catalog_v1.bin");
+        let mut raw = Vec::new();
+        brotli::Decompressor::new(&fixture[HEADER_LEN..], 4096)
+            .read_to_end(&mut raw)
+            .unwrap();
+        let mut blob = MAGIC.to_vec();
+        blob.extend_from_slice(&2u16.to_le_bytes());
+        let mut compressor = heatshrink::encoder::HeatshrinkEncoder::<10, 5, 2048>::new();
+        let mut remaining = raw.as_slice();
+        let mut buffer = [0; 128];
+        while !remaining.is_empty() {
+            let consumed = compressor.sink(remaining).unwrap();
+            remaining = &remaining[consumed..];
+            loop {
+                let result = compressor.poll(&mut buffer).unwrap();
+                blob.extend_from_slice(&buffer[..result.bytes_written()]);
+                if matches!(result, Poll::Empty(_)) {
+                    break;
+                }
+            }
+        }
+        while compressor.finish() != Finish::Done {
+            let result = compressor.poll(&mut buffer).unwrap();
+            blob.extend_from_slice(&buffer[..result.bytes_written()]);
+        }
+        blob.extend_from_slice(&(raw.len() as u32).to_le_bytes());
+        blob.extend_from_slice(&(!crate::catalog_stream::crc32(u32::MAX, &raw)).to_le_bytes());
+        let loaded = ValueDecodeCatalog::from_blob(&blob).unwrap();
+        let legacy = ValueDecodeCatalog::from_blob(fixture).unwrap();
+        assert_eq!(
+            bincode::encode_to_vec(&loaded.description, bincode::config::standard()).unwrap(),
+            bincode::encode_to_vec(&legacy.description, bincode::config::standard()).unwrap()
+        );
+        assert_eq!(loaded.slots.len(), legacy.slots.len());
     }
 
     #[test]

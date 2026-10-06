@@ -334,3 +334,20 @@ encode_description_kind!(RecordShape, {
     Newtype = 2,
     Struct = 3,
 });
+
+impl crate::Encode for ValueMetadata {
+    fn encode<E: crate::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), crate::error::EncodeError> {
+        self.kind_id().encode(encoder)?;
+        match *self {
+            ValueMetadata::Quantity(quantity) => {
+                let mut bytes = [0; 8];
+                bytes[..4].copy_from_slice(&quantity.quantity().id().to_le_bytes());
+                bytes[4..].copy_from_slice(&quantity.storage_unit().id().to_le_bytes());
+                bytes.as_slice().encode(encoder)
+            }
+        }
+    }
+}

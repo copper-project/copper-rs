@@ -110,10 +110,9 @@ fn streams_external_and_recursive_types_without_allocating() {
             .any(|schema| schema.type_path.ends_with("::GnssFixSolution"))
     );
     assert!(catalog.description.schemas.iter().any(|schema| {
-        schema
-            .quantity
-            .as_ref()
-            .is_some_and(|quantity| quantity.quantity == "length" && quantity.storage_unit == "m")
+        schema.quantity().is_some_and(|quantity| {
+            quantity == cu29_value::QuantityMetadata::coherent(cu29_value::Quantity::Length)
+        })
     }));
     let sample = Sample {
         gnss: GnssFixSolution::default(),

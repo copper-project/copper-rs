@@ -10,7 +10,7 @@ use bincode::enc::Encoder;
 use bincode::enc::EncoderImpl;
 use bincode::enc::write::Writer;
 use bincode::error::EncodeError;
-use bincode::value_decode::{FieldSelector, RecordShape, Scalar, ValueDecodeField, ValueDecodeRef};
+use bincode::value_decode::{FieldSelector, ValueDecodeField, ValueDecodeRef};
 use heatshrink::{Finish, Poll, SinkError};
 
 // One function pointer per distinct native type; identities are never stored in the log.
@@ -152,13 +152,13 @@ impl Types {
             ValueDecodeSpec::Unit => 0u32.encode(encoder),
             ValueDecodeSpec::Scalar(scalar) => {
                 1u32.encode(encoder)?;
-                scalar_id(*scalar).encode(encoder)
+                scalar.encode(encoder)
             }
             ValueDecodeSpec::String => 2u32.encode(encoder),
             ValueDecodeSpec::Bytes => 3u32.encode(encoder),
             ValueDecodeSpec::Record { shape, fields } => {
                 4u32.encode(encoder)?;
-                shape_id(*shape).encode(encoder)?;
+                shape.encode(encoder)?;
                 self.operation_fields(fields, encoder)
             }
             ValueDecodeSpec::Array { element, len } => {
@@ -173,7 +173,7 @@ impl Types {
             } => {
                 6u32.encode(encoder)?;
                 self.reference(*element, encoder)?;
-                scalar_id(*count).encode(encoder)?;
+                count.encode(encoder)?;
                 capacity.encode(encoder)
             }
             ValueDecodeSpec::Map { key, value } => {
@@ -191,11 +191,11 @@ impl Types {
             }
             ValueDecodeSpec::Enum { tag, variants } => {
                 10u32.encode(encoder)?;
-                scalar_id(*tag).encode(encoder)?;
+                tag.encode(encoder)?;
                 variants.len().encode(encoder)?;
                 for variant in *variants {
                     variant.tag.encode(encoder)?;
-                    shape_id(variant.shape).encode(encoder)?;
+                    variant.shape.encode(encoder)?;
                     self.operation_fields(variant.fields, encoder)?;
                 }
                 Ok(())
@@ -227,17 +227,7 @@ impl Types {
         for reference in self.entries[..self.len].iter().flatten() {
             let ty = (reference.describe)();
             ty.type_name.encode(encoder)?;
-            let quantity = ty
-                .attributes
-                .iter()
-                .find(|(name, _)| *name == "quantity")
-                .map(|(_, value)| *value);
-            let unit = ty
-                .attributes
-                .iter()
-                .find(|(name, _)| *name == "storage_unit")
-                .map(|(_, value)| *value);
-            quantity.zip(unit).encode(encoder)?;
+            ty.metadata.encode(encoder)?;
             match ty.spec {
                 ValueDecodeSpec::Record { fields, .. } => {
                     self.schema_fields(fields, encoder)?;
@@ -265,33 +255,6 @@ impl Types {
             binding.encode(encoder)?;
         }
         Ok(())
-    }
-}
-
-fn scalar_id(scalar: Scalar) -> u32 {
-    match scalar {
-        Scalar::Bool => 0,
-        Scalar::U8 => 1,
-        Scalar::U16 => 2,
-        Scalar::U32 => 3,
-        Scalar::U64 => 4,
-        Scalar::U128 => 5,
-        Scalar::I8 => 6,
-        Scalar::I16 => 7,
-        Scalar::I32 => 8,
-        Scalar::I64 => 9,
-        Scalar::I128 => 10,
-        Scalar::F32 => 11,
-        Scalar::F64 => 12,
-        Scalar::Char => 13,
-    }
-}
-fn shape_id(shape: RecordShape) -> u32 {
-    match shape {
-        RecordShape::Unit => 0,
-        RecordShape::Tuple => 1,
-        RecordShape::Newtype => 2,
-        RecordShape::Struct => 3,
     }
 }
 

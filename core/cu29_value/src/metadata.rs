@@ -5,6 +5,7 @@
 //! Storage alternatives 1 and 2 mean coherent storage and nanoseconds respectively.
 //! Future IDs are retained verbatim; recognized malformed entries are rejected.
 
+use alloc::string::String;
 use alloc::vec::Vec;
 use bincode::Decode;
 use bincode::Encode;
@@ -76,6 +77,33 @@ impl ValueDecodeMetadata {
     }
 }
 
+impl ValueDecodeMetadata {
+    // V1/V2 used open strings. Translate that legacy boundary into Copper's
+    // vocabulary, retaining unsupported legacy pairs in reserved reader kind 0.
+    pub(crate) fn from_legacy_quantity(
+        quantity: String,
+        unit: String,
+    ) -> Result<Self, DecodeError> {
+        if let Some(known) = Quantity::ALL.iter().find(|known| known.name() == quantity) {
+            let metadata = if *known == Quantity::Time && unit == "ns" {
+                Some(QuantityMetadata::time(TimeStorageUnit::Nanosecond))
+            } else if QuantityMetadata::coherent(*known).storage_unit().symbol() == unit {
+                Some(QuantityMetadata::coherent(*known))
+            } else {
+                None
+            };
+            if let Some(metadata) = metadata {
+                return Ok(ValueMetadata::Quantity(metadata).into());
+            }
+        }
+        let bytes = bincode::encode_to_vec((quantity, unit), bincode::config::standard())
+            .map_err(|_| DecodeError::Other("Could not preserve legacy quantity metadata"))?;
+        Ok(Self {
+            value: MetadataValue::Unknown(MetadataWire { kind: 0, bytes }),
+        })
+    }
+}
+
 fn quantity_bytes(quantity: QuantityMetadata) -> [u8; 8] {
     let mut bytes = [0; 8];
     bytes[..4].copy_from_slice(&quantity.quantity().id().to_le_bytes());
@@ -134,12 +162,12 @@ impl TryFrom<MetadataWire> for ValueDecodeMetadata {
 
 impl Encode for ValueDecodeMetadata {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        self.kind_id().encode(encoder)?;
         match &self.value {
-            MetadataValue::Known(ValueMetadata::Quantity(quantity)) => {
-                quantity_bytes(*quantity).as_slice().encode(encoder)
+            MetadataValue::Known(value) => value.encode(encoder),
+            MetadataValue::Unknown(wire) => {
+                wire.kind.encode(encoder)?;
+                wire.bytes.encode(encoder)
             }
-            MetadataValue::Unknown(wire) => wire.bytes.encode(encoder),
         }
     }
 }
@@ -178,6 +206,28 @@ mod tests {
     use super::*;
     use alloc::vec;
     use bincode::config::Config;
+
+    #[test]
+    fn test_legacy_metadata_translation_preserves_unsupported_pairs() {
+        let known = ValueDecodeMetadata::from_legacy_quantity("length".into(), "m".into()).unwrap();
+        assert_eq!(
+            known.known(),
+            Some(ValueMetadata::Quantity(QuantityMetadata::coherent(
+                Quantity::Length
+            )))
+        );
+        let legacy =
+            ValueDecodeMetadata::from_legacy_quantity("future".into(), "custom".into()).unwrap();
+        assert_eq!(legacy.kind_id(), 0);
+        assert!(legacy.known().is_none());
+        let (pair, used): ((String, String), _) = bincode::decode_from_slice(
+            legacy.unknown_bytes().unwrap(),
+            bincode::config::standard(),
+        )
+        .unwrap();
+        assert_eq!(pair, ("future".into(), "custom".into()));
+        assert_eq!(used, legacy.unknown_bytes().unwrap().len());
+    }
 
     fn entry_bytes(kind: u32, bytes: Vec<u8>, config: impl Config) -> Vec<u8> {
         bincode::encode_to_vec((kind, bytes), config).unwrap()
