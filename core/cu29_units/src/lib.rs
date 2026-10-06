@@ -13,7 +13,7 @@ extern crate alloc;
 pub use uom;
 
 macro_rules! define_storage_wrappers {
-    ($storage_mod:ident, $storage_ty:ty, [$(($id:literal, $unit_mod:ident, $quantity:ident, $symbol:literal, $legacy:literal),)+]) => {
+    ($storage_mod:ident, $storage_ty:ty, [$(($id:literal, $unit_mod:ident, $quantity:ident, $symbol:literal),)+]) => {
         pub mod $storage_mod {
             use core::marker::PhantomData;
             use serde::{Deserialize, Deserializer, Serialize, Serializer};
