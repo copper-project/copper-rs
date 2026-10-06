@@ -25,10 +25,15 @@ on:
       linux_runner_label:
         required: false
         type: string
-        default: "ubuntu-latest-m"
+        default: "ubuntu-latest"
 
 env:
   CARGO_NET_RETRY: "10"
+  # Reusable workflows declare their own Cargo profile settings.
+  # Coverage instrumentation provides source mapping; omit bulky debug symbols.
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+  CARGO_INCREMENTAL: "0"
   # cargo-generate resolves an author even though cargo-cunew templates omit it.
   CARGO_NAME: "Copper Tests"
 
@@ -55,6 +60,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+      - name: Start resource measurements
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: start
       - id: rust_ci_setup
         uses: ./.github/actions/rust-ci-setup
         with:
@@ -87,6 +96,11 @@ jobs:
             target/llvm-cov/lcov.info
             target/llvm-cov/summary.json
             target/llvm-cov/summary.md
+      - name: Report resource measurements
+        if: always()
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: finish
 
   coverage-linux-host:
     if: inputs.linux_ci_image == ''
@@ -105,6 +119,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+      - name: Start resource measurements
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: start
       - id: rust_ci_setup
         uses: ./.github/actions/rust-ci-setup
         with:
@@ -136,3 +154,8 @@ jobs:
             target/llvm-cov/lcov.info
             target/llvm-cov/summary.json
             target/llvm-cov/summary.md
+      - name: Report resource measurements
+        if: always()
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: finish

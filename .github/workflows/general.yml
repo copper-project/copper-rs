@@ -25,9 +25,35 @@ env:
   MSRV: "1.95.0"
 
 jobs:
+  changes:
+    name: Classify changes
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.changes.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+      - name: Start resource measurements
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: start
+      - id: changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: python3 support/ci/ci_changes.py
+      - name: Report resource measurements
+        if: always()
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: finish
+
   linux-ci-image:
+    if: needs.changes.outputs.code == 'true'
+    needs: changes
     name: Linux CI Image
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -37,6 +63,10 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 1
+      - name: Start resource measurements
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: start
       - id: registry_access
         shell: bash
         run: |
@@ -118,10 +148,17 @@ jobs:
           tags: ${{ steps.image_ref.outputs.tags }}
           cache-from: type=gha,scope=linux-ci-image-ubuntu26
           cache-to: type=gha,mode=max,scope=linux-ci-image-ubuntu26
+      - name: Report resource measurements
+        if: always()
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: finish
 
   linux-cuda-ci-image:
+    if: needs.changes.outputs.code == 'true'
+    needs: changes
     name: Linux CUDA CI Image
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -131,6 +168,10 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 1
+      - name: Start resource measurements
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: start
       - id: registry_access
         shell: bash
         run: |
@@ -212,11 +253,16 @@ jobs:
           tags: ${{ steps.image_ref.outputs.tags }}
           cache-from: type=gha,scope=linux-cuda-ci-image-ubuntu24
           cache-to: type=gha,mode=max,scope=linux-cuda-ci-image-ubuntu24
+      - name: Report resource measurements
+        if: always()
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: finish
 
   msrv-container:
     name: MSRV Check
-    if: needs.linux-ci-image.outputs.image != ''
-    needs: linux-ci-image
+    if: needs.changes.outputs.code == 'true' && (needs.linux-ci-image.outputs.image != '')
+    needs: [changes, linux-ci-image]
     runs-on: ubuntu-latest
     container:
       image: ${{ needs.linux-ci-image.outputs.image }}
@@ -227,6 +273,10 @@ jobs:
       WORKSPACE_SCOPE: workspace
     steps:
       - uses: actions/checkout@v7
+      - name: Start resource measurements
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: start
       - id: rust_ci_setup
         uses: ./.github/actions/rust-ci-setup
         with:
@@ -245,16 +295,25 @@ jobs:
         run: cargo +${{ env.MSRV }} check --workspace --all-targets $WORKSPACE_EXCLUDES
       - name: Check no_std default members on MSRV
         run: cargo +${{ env.MSRV }} check --no-default-features
+      - name: Report resource measurements
+        if: always()
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: finish
 
   msrv-host:
     name: MSRV Check
-    if: needs.linux-ci-image.outputs.image == ''
-    needs: linux-ci-image
+    if: needs.changes.outputs.code == 'true' && (needs.linux-ci-image.outputs.image == '')
+    needs: [changes, linux-ci-image]
     runs-on: ubuntu-latest
     env:
       WORKSPACE_SCOPE: workspace
     steps:
       - uses: actions/checkout@v7
+      - name: Start resource measurements
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: start
       - id: rust_ci_setup
         uses: ./.github/actions/rust-ci-setup
         with:
@@ -273,8 +332,15 @@ jobs:
         run: cargo +${{ env.MSRV }} check --workspace --all-targets $WORKSPACE_EXCLUDES
       - name: Check no_std default members on MSRV
         run: cargo +${{ env.MSRV }} check --no-default-features
+      - name: Report resource measurements
+        if: always()
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: finish
 
   Unit-Tests-Other:
+    if: needs.changes.outputs.code == 'true'
+    needs: changes
     name: Unit Tests
     uses: ./.github/workflows/reusable-unit-tests.yml
     secrets: inherit
@@ -282,15 +348,16 @@ jobs:
       toolchain: stable
       linux_cargo_paths: true
       linux_disk_workarounds: false
-      linux_runner_label: ubuntu-latest-m
-      windows_runner_label: windows-latest-l
+      linux_runner_label: ubuntu-latest
+      windows_runner_label: windows-latest
       run_linux: false
       run_cuda: false
       run_other: true
 
   Unit-Tests-Linux:
+    if: needs.changes.outputs.code == 'true'
     name: Unit Tests
-    needs: linux-ci-image
+    needs: [changes, linux-ci-image]
     uses: ./.github/workflows/reusable-unit-tests.yml
     secrets: inherit
     with:
@@ -298,16 +365,17 @@ jobs:
       linux_cargo_paths: true
       linux_disk_workarounds: false
       linux_ci_image: ${{ needs.linux-ci-image.outputs.image }}
-      linux_runner_label: ubuntu-latest-m
+      linux_runner_label: ubuntu-latest
       linux_light_runner_label: ubuntu-latest
-      windows_runner_label: windows-latest-l
+      windows_runner_label: windows-latest
       run_linux: true
       run_cuda: false
       run_other: false
 
   Unit-Tests-CUDA:
+    if: needs.changes.outputs.code == 'true'
     name: Unit Tests
-    needs: linux-cuda-ci-image
+    needs: [changes, linux-cuda-ci-image]
     uses: ./.github/workflows/reusable-unit-tests.yml
     secrets: inherit
     with:
@@ -315,17 +383,17 @@ jobs:
       linux_cargo_paths: true
       linux_disk_workarounds: false
       linux_cuda_ci_image: ${{ needs.linux-cuda-ci-image.outputs.image }}
-      linux_runner_label: ubuntu-latest-m
-      windows_runner_label: windows-latest-l
+      linux_runner_label: ubuntu-latest
+      windows_runner_label: windows-latest
       run_linux: false
       run_cuda: true
       run_other: false
 
   extra-examples-container:
     name: Extra Examples
-    if: needs.linux-ci-image.outputs.image != ''
-    needs: linux-ci-image
-    runs-on: ubuntu-latest-m
+    if: needs.changes.outputs.code == 'true' && (needs.linux-ci-image.outputs.image != '')
+    needs: [changes, linux-ci-image]
+    runs-on: ubuntu-latest
     container:
       image: ${{ needs.linux-ci-image.outputs.image }}
       credentials:
@@ -335,6 +403,10 @@ jobs:
       WORKSPACE_SCOPE: core
     steps:
       - uses: actions/checkout@v7
+      - name: Start resource measurements
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: start
       - id: rust_ci_setup
         uses: ./.github/actions/rust-ci-setup
         with:
@@ -351,15 +423,25 @@ jobs:
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
+      - name: Report resource measurements
+        if: always()
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: finish
+
   extra-examples-host:
     name: Extra Examples
-    if: needs.linux-ci-image.outputs.image == ''
-    needs: linux-ci-image
-    runs-on: ubuntu-latest-m
+    if: needs.changes.outputs.code == 'true' && (needs.linux-ci-image.outputs.image == '')
+    needs: [changes, linux-ci-image]
+    runs-on: ubuntu-latest
     env:
       WORKSPACE_SCOPE: core
     steps:
       - uses: actions/checkout@v7
+      - name: Start resource measurements
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: start
       - id: rust_ci_setup
         uses: ./.github/actions/rust-ci-setup
         with:
@@ -376,11 +458,17 @@ jobs:
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
+      - name: Report resource measurements
+        if: always()
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: finish
+
   benchmarks-container:
     name: Benchmarks
-    if: needs.linux-ci-image.outputs.image != ''
-    needs: linux-ci-image
-    runs-on: ubuntu-latest-m
+    if: needs.changes.outputs.code == 'true' && (needs.linux-ci-image.outputs.image != '')
+    needs: [changes, linux-ci-image]
+    runs-on: ubuntu-latest
     container:
       image: ${{ needs.linux-ci-image.outputs.image }}
       credentials:
@@ -390,6 +478,10 @@ jobs:
       WORKSPACE_SCOPE: core
     steps:
       - uses: actions/checkout@v7
+      - name: Start resource measurements
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: start
       - id: rust_ci_setup
         uses: ./.github/actions/rust-ci-setup
         with:
@@ -404,15 +496,25 @@ jobs:
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
+      - name: Report resource measurements
+        if: always()
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: finish
+
   benchmarks-host:
     name: Benchmarks
-    if: needs.linux-ci-image.outputs.image == ''
-    needs: linux-ci-image
-    runs-on: ubuntu-latest-m
+    if: needs.changes.outputs.code == 'true' && (needs.linux-ci-image.outputs.image == '')
+    needs: [changes, linux-ci-image]
+    runs-on: ubuntu-latest
     env:
       WORKSPACE_SCOPE: core
     steps:
       - uses: actions/checkout@v7
+      - name: Start resource measurements
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: start
       - id: rust_ci_setup
         uses: ./.github/actions/rust-ci-setup
         with:
@@ -427,10 +529,16 @@ jobs:
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
+      - name: Report resource measurements
+        if: always()
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: finish
+
   coverage:
-    if: github.event_name == 'pull_request'
+    if: needs.changes.outputs.code == 'true' && (github.event_name == 'pull_request')
     name: Coverage
-    needs: [linux-ci-image]
+    needs: [changes, linux-ci-image]
     uses: ./.github/workflows/reusable-coverage.yml
     secrets: inherit
     with:
@@ -438,9 +546,11 @@ jobs:
       linux_cargo_paths: true
       linux_disk_workarounds: false
       linux_ci_image: ${{ needs.linux-ci-image.outputs.image }}
-      linux_runner_label: ubuntu-latest-m
+      linux_runner_label: ubuntu-latest
 
   api:
+    if: needs.changes.outputs.code == 'true'
+    needs: changes
     name: Public API Check
     runs-on: ubuntu-latest
     env:
@@ -448,6 +558,10 @@ jobs:
       PUBLIC_API_TOOLCHAIN: nightly-2026-06-25
     steps:
       - uses: actions/checkout@v7
+      - name: Start resource measurements
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: start
       - uses: dtolnay/rust-toolchain@stable
       - name: Install public API Rust toolchain
         run: rustup toolchain install "${PUBLIC_API_TOOLCHAIN}" --profile minimal
@@ -464,14 +578,25 @@ jobs:
           fi
       - name: Check public API snapshots
         run: support/ci/check_public_api.sh
+      - name: Report resource measurements
+        if: always()
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: finish
 
   fmt:
     name: Format Check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Start resource measurements
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: start
       - name: Check workspace CI exclusions
-        run: python3 -m unittest discover -s support/ci -p test_workspace_excludes.py
+        run: |
+          python3 -m unittest discover -s support/ci -p test_workspace_excludes.py
+          python3 -m unittest discover -s support/ci -p test_ci_changes.py
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
@@ -479,6 +604,13 @@ jobs:
         uses: taiki-e/install-action@v2.87.22
         with:
           tool: taplo-cli, fmtron@0.10.0, typos
+      - name: Install actionlint
+        run: |
+          GOBIN="$GITHUB_WORKSPACE/target/ci-tools" go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.11
+          echo "$GITHUB_WORKSPACE/target/ci-tools" >> "$GITHUB_PATH"
+      - name: Validate Actions workflows
+        # Existing Cargo flag lists expand to multiple shell arguments.
+        run: actionlint -ignore 'shellcheck reported issue.*SC2086'
       - name: Check Rust, TOML, RON formatting
         uses: j178/prek-action@v2
         with:
@@ -498,8 +630,15 @@ jobs:
             check-rust
             check-ron
             check-toml
+      - name: Report resource measurements
+        if: always()
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: finish
 
   embedded:
+    if: needs.changes.outputs.code == 'true'
+    needs: changes
     name: CI for embedded targets
     uses: ./.github/workflows/reusable-embedded.yml
     with:
@@ -507,10 +646,16 @@ jobs:
       linux_runner_label: ubuntu-latest
 
   cunew:
+    if: needs.changes.outputs.code == 'true'
+    needs: changes
     name: Project Bootstrap Tool
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Start resource measurements
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: start
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -519,11 +664,17 @@ jobs:
           tool: just
       - uses: Swatinem/rust-cache@v2
       - run: just cunew-check
+      - name: Report resource measurements
+        if: always()
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: finish
 
   ci-status:
     name: CI Status
     if: ${{ always() }}
     needs:
+      - changes
       - linux-ci-image
       - linux-cuda-ci-image
       - msrv-container
@@ -543,7 +694,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Fail if a CI job failed or was cancelled
-        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        if: ${{ needs.changes.result != 'success' || needs.fmt.result != 'success' || contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
         run: exit 1
       - name: Confirm CI succeeded
         run: echo "All CI jobs succeeded or were intentionally skipped."

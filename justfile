@@ -115,6 +115,12 @@ publish:
 compile-tests toolchain="stable":
     cargo +{{toolchain}} test -p cu29-derive --lib test_compile_fail -- --nocapture
 
+# Validate workflow expressions, shell snippets, YAML, and change classification.
+ci-config-check:
+	python3 -m unittest discover -s support/ci -p test_ci_changes.py
+	prek run --all-files check-yaml
+	actionlint -ignore 'shellcheck reported issue.*SC2086'
+
 # Formatting, typo, and clippy checks.
 lint:
 	just fmt-check

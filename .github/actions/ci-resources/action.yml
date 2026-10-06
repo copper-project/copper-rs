@@ -1,0 +1,13 @@
+name: CI resource measurements
+description: Sample workspace disk headroom and Linux available memory during a job.
+inputs:
+  phase:
+    description: Start sampling or finish and publish the summary.
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        RESOURCE_PHASE: ${{ inputs.phase }}
+      run: python3 support/ci/ci_resources.py "$RESOURCE_PHASE"
