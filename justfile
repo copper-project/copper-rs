@@ -119,7 +119,7 @@ compile-tests toolchain="stable":
 ci-config-check:
 	python3 -m unittest discover -s support/ci -p test_ci_changes.py
 	prek run --all-files check-yaml
-	actionlint
+	actionlint -ignore 'shellcheck reported issue.*SC2086'
 
 # Formatting, typo, and clippy checks.
 lint:

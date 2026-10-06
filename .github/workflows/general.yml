@@ -609,7 +609,8 @@ jobs:
           GOBIN="$GITHUB_WORKSPACE/target/ci-tools" go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.11
           echo "$GITHUB_WORKSPACE/target/ci-tools" >> "$GITHUB_PATH"
       - name: Validate Actions workflows
-        run: actionlint
+        # Existing Cargo flag lists expand to multiple shell arguments.
+        run: actionlint -ignore 'shellcheck reported issue.*SC2086'
       - name: Check Rust, TOML, RON formatting
         uses: j178/prek-action@v2
         with:
