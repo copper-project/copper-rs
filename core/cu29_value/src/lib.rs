@@ -46,8 +46,6 @@ pub mod catalog_stream;
 #[cfg(feature = "decode-catalog")]
 pub mod decode;
 #[cfg(feature = "decode-catalog")]
-mod legacy_catalog;
-#[cfg(feature = "decode-catalog")]
 mod metadata;
 
 mod bdec;

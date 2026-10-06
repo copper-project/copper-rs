@@ -1,7 +1,7 @@
 //! Borrowed catalog descriptions serialized once at startup with fixed working memory.
 
 use crate::catalog_header::{
-    HEADER_LEN, MAGIC, STREAM_VERSION, VALUE_DECODE_CATALOG_MAX_BYTES, ValueDecodeCatalogLayout,
+    HEADER_LEN, MAGIC, VALUE_DECODE_CATALOG_MAX_BYTES, VERSION, ValueDecodeCatalogLayout,
 };
 use bincode::Encode;
 use bincode::ValueDecodeSpec;
@@ -269,13 +269,26 @@ pub(crate) fn crc32(mut crc: u32, bytes: &[u8]) -> u32 {
     crc
 }
 
-struct CompressedWriter<W: Writer> {
+pub(crate) struct CompressedWriter<W: Writer> {
     compressor: Compressor,
     output: W,
     crc: u32,
     raw_len: usize,
 }
 impl<W: Writer> CompressedWriter<W> {
+    pub(crate) fn new(mut output: W) -> Result<Self, EncodeError> {
+        let mut header = [0; HEADER_LEN];
+        header[..8].copy_from_slice(MAGIC);
+        header[8..].copy_from_slice(&VERSION.to_le_bytes());
+        output.write(&header)?;
+        Ok(Self {
+            compressor: Compressor::new(),
+            output,
+            crc: u32::MAX,
+            raw_len: 0,
+        })
+    }
+
     fn drain(&mut self) -> Result<(), EncodeError> {
         let mut buffer = [0; 128];
         loop {
@@ -289,7 +302,7 @@ impl<W: Writer> CompressedWriter<W> {
             }
         }
     }
-    fn finish(mut self) -> Result<(), EncodeError> {
+    pub(crate) fn finish(mut self) -> Result<(), EncodeError> {
         while self.compressor.finish() != Finish::Done {
             self.drain()?;
         }
@@ -324,20 +337,11 @@ impl<W: Writer> Writer for CompressedWriter<W> {
 /// Validate reachable types, then stream the compressed catalog without heap allocation.
 /// The working set consists of 256 type references and a 2 KiB compressor window.
 pub fn write_catalog<W: Writer>(
-    mut output: W,
+    output: W,
     catalog: &CatalogDescription,
 ) -> Result<(), EncodeError> {
     let types = Types::collect(catalog)?;
-    let mut header = [0; HEADER_LEN];
-    header[..8].copy_from_slice(MAGIC);
-    header[8..].copy_from_slice(&STREAM_VERSION.to_le_bytes());
-    output.write(&header)?;
-    let writer = CompressedWriter {
-        compressor: Compressor::new(),
-        output,
-        crc: u32::MAX,
-        raw_len: 0,
-    };
+    let writer = CompressedWriter::new(output)?;
     let mut encoder = EncoderImpl::new(writer, standard());
     types.encode(catalog, &mut encoder)?;
     encoder.into_writer().finish()

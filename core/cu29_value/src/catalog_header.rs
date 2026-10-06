@@ -10,7 +10,7 @@ pub(crate) const HEADER_LEN: usize = 10;
 /// Framing marker for catalog entries that may continue in later sections.
 #[doc(hidden)]
 pub const CATALOG_CHUNK_MAGIC: &[u8; 8] = b"CUVDCHNK";
-pub(crate) const STREAM_VERSION: u16 = 4;
+pub(crate) const VERSION: u16 = 1;
 /// Maximum uncompressed catalog size accepted by the readers (16 MiB).
 pub const VALUE_DECODE_CATALOG_MAX_BYTES: usize = 16 * 1024 * 1024;
 
@@ -26,8 +26,7 @@ pub enum ValueDecodeCatalogLayout {
 /// Bootstrap information obtained without allocation or decompression.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ValueDecodeCatalogHeader {
-    /// V1/V2 contain legacy string metadata. V3 uses typed metadata with Brotli;
-    /// V4 uses typed metadata with streaming Heatshrink and a checksum.
+    /// Catalog format version: typed metadata with Heatshrink and a checksum.
     pub version: u16,
 }
 
@@ -38,7 +37,7 @@ impl ValueDecodeCatalogHeader {
             .get(..HEADER_LEN)
             .ok_or(DecodeError::Other("truncated ValueDecodeCatalog header"))?;
         let version = u16::from_le_bytes([header[8], header[9]]);
-        if &header[..8] != MAGIC || !matches!(version, 1 | 2 | 3 | STREAM_VERSION) {
+        if &header[..8] != MAGIC || version != VERSION {
             return Err(DecodeError::Other("unsupported ValueDecodeCatalog format"));
         }
         // Heatshrink literals can expand by one bit per byte.

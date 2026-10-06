@@ -14,16 +14,11 @@ use bincode::error::DecodeError;
 use bincode::error::EncodeError;
 use bincode::value_decode::ValueDecodeRef;
 use serde::{Deserialize, Serialize};
-use std::io::Read;
-#[cfg(feature = "decode-catalog-build")]
-use std::io::Write;
 
 use crate::catalog_header::{HEADER_LEN, MAGIC};
 pub use crate::catalog_header::{
     VALUE_DECODE_CATALOG_MAX_BYTES, ValueDecodeCatalogHeader, ValueDecodeCatalogLayout,
 };
-#[cfg(feature = "decode-catalog-build")]
-const VERSION: u16 = 3;
 
 /// A recorded output slot in native CopperList encoding order.
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
@@ -38,7 +33,7 @@ pub struct ValueDecodeCatalogSlot {
 
 /// A versioned payload description catalog. This API is experimental.
 ///
-/// All versions use bincode's standard configuration (little-endian, variable integers)
+/// The format uses bincode's standard configuration (little-endian, variable integers)
 /// for both the catalog body and the recorded native payloads. Common CopperList
 /// metadata is identified by `layout`. The format fixes the Compact and Flat envelope
 /// rules as well as payload encoding; changing either requires a new version.
@@ -62,47 +57,8 @@ impl ValueDecodeCatalog {
         if bytes.starts_with(crate::catalog_header::CATALOG_CHUNK_MAGIC) {
             return Self::from_framed_blob(bytes);
         }
-        let header = ValueDecodeCatalogHeader::read(bytes)?;
-        if matches!(header.version, 2 | crate::catalog_header::STREAM_VERSION) {
-            return Self::from_stream_blob(bytes, header.version);
-        }
-        let mut raw = Vec::new();
-        let mut reader = brotli::Decompressor::new(&bytes[HEADER_LEN..], 4096);
-        reader
-            .by_ref()
-            .take(VALUE_DECODE_CATALOG_MAX_BYTES as u64 + 1)
-            .read_to_end(&mut raw)
-            .map_err(|_| DecodeError::Other("invalid compressed ValueDecodeCatalog"))?;
-        if raw.len() > VALUE_DECODE_CATALOG_MAX_BYTES {
-            return Err(DecodeError::Other("ValueDecodeCatalog exceeds 16 MiB"));
-        }
-        let mut end = [0; 1];
-        if reader
-            .read(&mut end)
-            .map_err(|_| DecodeError::Other("trailing compressed ValueDecodeCatalog bytes"))?
-            != 0
-            || !reader.get_ref().is_empty()
-        {
-            return Err(DecodeError::Other(
-                "trailing compressed ValueDecodeCatalog bytes",
-            ));
-        }
-        let (catalog, used) = Self::decode_body(&raw, header.version)?;
-        if used != raw.len() {
-            return Err(DecodeError::Other("trailing ValueDecodeCatalog body bytes"));
-        }
-        catalog.description.validate()?;
-        for slot in &catalog.slots {
-            if slot
-                .binding
-                .is_some_and(|binding| binding >= catalog.description.bindings.len())
-            {
-                return Err(DecodeError::Other(
-                    "invalid ValueDecodeCatalog slot binding",
-                ));
-            }
-        }
-        Ok(catalog)
+        ValueDecodeCatalogHeader::read(bytes)?;
+        Self::from_stream_blob(bytes)
     }
 
     fn from_framed_blob(mut bytes: &[u8]) -> Result<Self, DecodeError> {
@@ -150,7 +106,7 @@ impl ValueDecodeCatalog {
         Self::from_blob(&blob)
     }
 
-    fn from_stream_blob(bytes: &[u8], version: u16) -> Result<Self, DecodeError> {
+    fn from_stream_blob(bytes: &[u8]) -> Result<Self, DecodeError> {
         use heatshrink::{Poll, SinkError};
         let end = bytes
             .len()
@@ -207,7 +163,10 @@ impl ValueDecodeCatalog {
                 "streaming catalog checksum or length mismatch",
             ));
         }
-        let (catalog, consumed) = Self::decode_body(&raw, version)?;
+        let (catalog, consumed) = bincode::decode_from_slice::<Self, _>(
+            &raw,
+            bincode::config::standard().with_limit::<VALUE_DECODE_CATALOG_MAX_BYTES>(),
+        )?;
         if consumed != raw.len() {
             return Err(DecodeError::Other("trailing ValueDecodeCatalog body bytes"));
         }
@@ -225,35 +184,20 @@ impl ValueDecodeCatalog {
         Ok(catalog)
     }
 
-    fn decode_body(raw: &[u8], version: u16) -> Result<(Self, usize), DecodeError> {
-        let config = bincode::config::standard().with_limit::<VALUE_DECODE_CATALOG_MAX_BYTES>();
-        if matches!(version, 1 | 2) {
-            let (legacy, used): (crate::legacy_catalog::LegacyCatalog, _) =
-                bincode::decode_from_slice(raw, config)?;
-            Ok((legacy.try_into()?, used))
-        } else {
-            bincode::decode_from_slice(raw, config)
-        }
-    }
-
-    /// Serialize and compress on the build host, using Brotli's maximum quality 11.
+    /// Serialize and compress on the build host using the catalog's Heatshrink format.
     #[cfg(feature = "decode-catalog-build")]
     pub fn to_blob(&self) -> Result<Vec<u8>, EncodeError> {
-        let raw = bincode::encode_to_vec(self, bincode::config::standard())?;
-        if raw.len() > VALUE_DECODE_CATALOG_MAX_BYTES {
-            return Err(EncodeError::Other("ValueDecodeCatalog exceeds 16 MiB"));
+        struct BlobWriter<'a>(&'a mut Vec<u8>);
+        impl bincode::enc::write::Writer for BlobWriter<'_> {
+            fn write(&mut self, bytes: &[u8]) -> Result<(), EncodeError> {
+                self.0.extend_from_slice(bytes);
+                Ok(())
+            }
         }
-        let mut compressed = Vec::new();
-        {
-            let mut writer = brotli::CompressorWriter::new(&mut compressed, 4096, 11, 24);
-            writer
-                .write_all(&raw)
-                .map_err(|inner| EncodeError::Io { inner, index: 0 })?;
-        }
-        let mut blob = Vec::with_capacity(HEADER_LEN + compressed.len());
-        blob.extend_from_slice(MAGIC);
-        blob.extend_from_slice(&VERSION.to_le_bytes());
-        blob.extend_from_slice(&compressed);
+        let mut blob = Vec::new();
+        let mut writer = crate::catalog_stream::CompressedWriter::new(BlobWriter(&mut blob))?;
+        bincode::encode_into_writer(self, &mut writer, bincode::config::standard())?;
+        writer.finish()?;
         Ok(blob)
     }
 }
@@ -360,6 +304,12 @@ mod tests {
     #[test]
     fn test_catalog_rejects_corruption_versions_and_lengths() {
         let bytes = catalog().to_blob().unwrap();
+        assert_eq!(ValueDecodeCatalogHeader::read(&bytes).unwrap().version, 1);
+        for version in [0u16, 2, 3, 4, u16::MAX] {
+            let mut unsupported = bytes.clone();
+            unsupported[8..HEADER_LEN].copy_from_slice(&version.to_le_bytes());
+            assert!(ValueDecodeCatalog::from_blob(&unsupported).is_err());
+        }
         for length in [0, 8, HEADER_LEN - 1, bytes.len() - 1] {
             assert!(ValueDecodeCatalog::from_blob(&bytes[..length]).is_err());
         }
@@ -374,75 +324,6 @@ mod tests {
         let mut extra = bytes;
         extra.push(0);
         assert!(ValueDecodeCatalog::from_blob(&extra).is_err());
-    }
-
-    #[test]
-    fn test_catalog_v1_fixture_decodes_without_producer_types() {
-        let bytes = include_bytes!("../tests/fixtures/catalog_v1.bin");
-        let catalog = ValueDecodeCatalog::from_blob(bytes).unwrap();
-        assert_eq!(ValueDecodeCatalogHeader::read(bytes).unwrap().version, 1);
-        assert!(
-            catalog
-                .description
-                .schemas
-                .iter()
-                .any(|schema| schema.type_path == "cu_self_describing_payloads::WheelSample")
-        );
-        let mut description = catalog.description;
-        description.root = description
-            .bindings
-            .iter()
-            .position(|binding| description.schemas[binding.schema].type_path == "u32")
-            .unwrap();
-        assert_eq!(
-            description
-                .decode(
-                    &[42],
-                    bincode::config::standard(),
-                    ValueDecodeLimits::default()
-                )
-                .unwrap(),
-            (Value::U32(42), 1)
-        );
-    }
-
-    #[test]
-    fn test_catalog_v2_legacy_stream_fixture() {
-        use heatshrink::{Finish, Poll};
-        let fixture = include_bytes!("../tests/fixtures/catalog_v1.bin");
-        let mut raw = Vec::new();
-        brotli::Decompressor::new(&fixture[HEADER_LEN..], 4096)
-            .read_to_end(&mut raw)
-            .unwrap();
-        let mut blob = MAGIC.to_vec();
-        blob.extend_from_slice(&2u16.to_le_bytes());
-        let mut compressor = heatshrink::encoder::HeatshrinkEncoder::<10, 5, 2048>::new();
-        let mut remaining = raw.as_slice();
-        let mut buffer = [0; 128];
-        while !remaining.is_empty() {
-            let consumed = compressor.sink(remaining).unwrap();
-            remaining = &remaining[consumed..];
-            loop {
-                let result = compressor.poll(&mut buffer).unwrap();
-                blob.extend_from_slice(&buffer[..result.bytes_written()]);
-                if matches!(result, Poll::Empty(_)) {
-                    break;
-                }
-            }
-        }
-        while compressor.finish() != Finish::Done {
-            let result = compressor.poll(&mut buffer).unwrap();
-            blob.extend_from_slice(&buffer[..result.bytes_written()]);
-        }
-        blob.extend_from_slice(&(raw.len() as u32).to_le_bytes());
-        blob.extend_from_slice(&(!crate::catalog_stream::crc32(u32::MAX, &raw)).to_le_bytes());
-        let loaded = ValueDecodeCatalog::from_blob(&blob).unwrap();
-        let legacy = ValueDecodeCatalog::from_blob(fixture).unwrap();
-        assert_eq!(
-            bincode::encode_to_vec(&loaded.description, bincode::config::standard()).unwrap(),
-            bincode::encode_to_vec(&legacy.description, bincode::config::standard()).unwrap()
-        );
-        assert_eq!(loaded.slots.len(), legacy.slots.len());
     }
 
     #[test]
