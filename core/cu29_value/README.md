@@ -96,8 +96,7 @@ custom codec recipes fail compilation with `self-describing-logs` enabled.
 Description construction and value decoding allocate in offline tooling. Native
 message encoding keeps its existing byte layout and encoding pass. The portable
 IR is experimental; compression, build embedding, and unified-log catalogue
-integration follow in later PRs. Run `just self-describing-logs-check` at the Copper
-workspace root to verify this API.
+integration follow in later PRs.
 
 ## Python Feature
 

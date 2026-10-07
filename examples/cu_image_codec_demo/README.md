@@ -28,6 +28,6 @@ stdout is not a TTY so it does not hang headless.
 
 ```bash
 just run-consolemon
-just fsck-consolemon
+just fsck logs/image_codec_demo_consolemon.copper
 just log-stats-consolemon
 ```

@@ -30,9 +30,3 @@ demo: _ffi-vendor-check
 	repo_root="$(cd "{{justfile_directory()}}/../../.." && pwd)"
 	cd "$repo_root"
 	cargo run -r -p cu-zed --example zed_rerun_demo --features zed-rerun-demo
-
-run: demo
-
-build-demo: build
-
-run-demo: demo

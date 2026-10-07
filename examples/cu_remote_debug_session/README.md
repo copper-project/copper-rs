@@ -49,7 +49,7 @@ The self-contained remote API smoke test is also available:
 just smoke
 ```
 
-`just demo` is an alias for the smoke flow.
+`just smoke` runs the complete smoke flow.
 
 If successful, output ends with:
 

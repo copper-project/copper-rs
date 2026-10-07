@@ -60,13 +60,3 @@ When you connect this driver to the rest of the system you need to use the `cu_r
 In this message the field current_power is the power that you want to apply to the motor.
 It is a value between -1.0f32 and 1.0f32.
 The negative values are for the reverse direction.
-
-## Justfile command
-
-- `just deploy-cu-sn754410-tests` — cross-compile tests for `arm-unknown-linux-musleabihf` and scp the test binary plus config to `copper7:testads7883`.
-
-
-
-
-
-

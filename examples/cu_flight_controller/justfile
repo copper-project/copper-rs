@@ -10,16 +10,6 @@ default: sim
 graph config="flight_controller.ron" output="graph.svg" mission="default" features="sim":
   cargo run --manifest-path "{{ROOT}}/Cargo.toml" -p cu29-graph-view -- "{{config}}" --base-dir "{{justfile_directory()}}" --output "{{output}}" --mission "{{mission}}" --features "{{features}}" --open
 
-# Compile both independent multi-Copper subsystem targets.
-subsystems-check: end2end-check
-
-# Validate every feature-selected MCU, compute, and deployment graph.
-config-matrix:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  cd "{{ROOT}}"
-  cargo test -p cu-flight-controller --no-default-features --features logreader --test config_matrix
-
 # Compile the ZED-enabled compute graph and the independent MCU firmware graph.
 end2end-check:
   #!/usr/bin/env bash
@@ -223,21 +213,8 @@ py log="logs/flight_controller_sim.copper": py-build
     log="${example_dir}/${log}"
   fi
   cd "{{ROOT}}"
-  cargo rustc -p cu-flight-controller --no-default-features --features python-bindings --lib --crate-type cdylib
   python3 "${example_dir}/python/print_gnss_from_log.py" "$log"
 
-# Print GNSS coordinates from a Copper log via the Python extension.
-py-gnss log="logs/flight_controller_sim.copper":
-  #!/usr/bin/env bash
-  set -euo pipefail
-  example_dir="{{justfile_directory()}}"
-  log="{{log}}"
-  if [[ "$log" != /* ]]; then
-    log="${example_dir}/${log}"
-  fi
-  cd "{{ROOT}}"
-  cargo rustc -p cu-flight-controller --no-default-features --features python-bindings --lib --crate-type cdylib
-  python3 "${example_dir}/python/print_gnss_from_log.py" "$log"
 # Run log reader fsck against a log file.
 fsck log="logs/flight_controller_sim.copper":
   #!/usr/bin/env bash

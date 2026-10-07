@@ -38,9 +38,6 @@ Topology and port labels are indexed once when the view is constructed. Runtime
 component IDs are resolved separately from topology order. Rendering reads current
 status and timing; errors stay visible until `MonitorModel::clear_component_error`.
 
-Run `just tuimon-check` for shared-library regressions, feature combinations, and
-monitor frontend checks.
-
 It does not implement `CuMonitor` itself. Instead, it provides:
 
 - `MonitorModel`: shared monitor state updated from Copper runtime data

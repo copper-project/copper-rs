@@ -41,5 +41,3 @@ demo depth_mode="NEURAL_LIGHT": _vendor-check _require-sdk
 	crate_dir="$(cd "{{justfile_directory()}}" && pwd)"
 
 	cargo run --manifest-path "$crate_dir/Cargo.toml" --features demo --bin zed_lowlevel_demo -- "{{depth_mode}}"
-
-run-demo: demo

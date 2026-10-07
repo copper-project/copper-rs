@@ -201,7 +201,8 @@ A mismatch suspends reconstructed frames until the next matching recovery point;
 recording continues.
 
 For regression checks, `just check` runs all six scenarios. From the repository
-root, `just logstream-demo-check` also builds and runs Clippy;
-`just logstream-twin-check` adds twin and verification coverage. Streaming is
+root, `just pr-check` also runs Clippy and streaming integration tests.
+`cargo test -p cu-logstream-demo --features demo,tui,verify-reconstruction`
+adds twin and verification coverage. Streaming is
 opt-in: this crate's `demo`, `tui`, and `replay` features enable the corresponding
 binaries and tools.

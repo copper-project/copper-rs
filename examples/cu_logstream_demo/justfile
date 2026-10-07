@@ -39,9 +39,6 @@ run scenario="clean": build
 
 check: (run "all")
 
-check-sender: build-sender
-    python3 run.py all --binary {{root}}/target/debug/cu-logstream-demo
-
 # Start these in separate terminals. Existing output logs are replaced on each run.
 sender remote="127.0.0.1:7447" log="logs/sender.copper" iterations="6000": build-sender
     {{root}}/target/debug/cu-logstream-demo sender --remote {{remote}} --log-base {{log}} --iterations {{iterations}}
