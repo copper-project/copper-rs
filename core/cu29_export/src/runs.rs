@@ -22,6 +22,7 @@ use std::path::Path;
 pub(crate) struct RecordedRun {
     pub index: usize,
     pub run_id: u64,
+    pub mission_index: u32,
     pub started_at: Option<CuTime>,
     pub stack: Option<RuntimeLifecycleStackInfo>,
     pub config: Option<String>,
@@ -36,6 +37,7 @@ impl RecordedRun {
         Self {
             index,
             run_id: 0,
+            mission_index: 0,
             started_at: None,
             stack: None,
             config: None,
@@ -49,9 +51,11 @@ impl RecordedRun {
     pub fn reader(&self, path: &Path) -> CuResult<RunReader> {
         let mut inner = build_read_logger(path)?;
         inner.seek(self.start)?;
+        let remaining = inner.raw_main_header().sections_end / 512 + 1;
         Ok(RunReader {
             inner,
             run_id: self.run_id,
+            remaining,
         })
     }
 }
@@ -62,9 +66,19 @@ pub(crate) fn discover(path: &Path) -> CuResult<Vec<RecordedRun>> {
     let metadata = reader.application_metadata()?;
     let beginning = reader.position();
     let mut runs = Vec::<RecordedRun>::new();
+    let mut remaining = reader.raw_main_header().sections_end / 512 + 1;
     loop {
+        remaining = remaining
+            .checked_sub(1)
+            .ok_or_else(|| CuError::from("Cyclic section links"))?;
         let position = reader.position();
-        let (header, content) = reader.raw_read_section()?;
+        let header = reader.raw_skip_section()?;
+        let content = if header.entry_type == UnifiedLogType::RuntimeLifecycle {
+            reader.seek(position)?;
+            reader.raw_read_section()?.1
+        } else {
+            Vec::new()
+        };
         if header.entry_type == UnifiedLogType::LastEntry {
             break;
         }
@@ -80,6 +94,7 @@ pub(crate) fn discover(path: &Path) -> CuResult<Vec<RecordedRun>> {
         } else {
             let mut run = RecordedRun::new(runs.len(), beginning);
             run.run_id = run_id;
+            run.mission_index = header.context.mission_index;
             if let Some(metadata) = &metadata {
                 run.config = Some(metadata.effective_config_ron.clone());
                 run.stack = Some(RuntimeLifecycleStackInfo {
@@ -97,6 +112,11 @@ pub(crate) fn discover(path: &Path) -> CuResult<Vec<RecordedRun>> {
         };
         let run = &mut runs[index];
         if let Some(metadata) = &metadata {
+            if run.run_id != 0 && run.mission_index != header.context.mission_index {
+                return Err(CuError::from(
+                    "Run contains inconsistent mission identities",
+                ));
+            }
             let mission = metadata
                 .missions
                 .get(header.context.mission_index as usize)
@@ -143,7 +163,12 @@ pub(crate) fn discover(path: &Path) -> CuResult<Vec<RecordedRun>> {
         }
     }
     if runs.is_empty() {
-        runs.push(RecordedRun::new(0, beginning));
+        let mut run = RecordedRun::new(0, beginning);
+        if let Some(metadata) = metadata {
+            run.config = Some(metadata.effective_config_ron);
+            run.missions.extend(metadata.missions.into_iter().take(1));
+        }
+        runs.push(run);
     }
     Ok(runs)
 }
@@ -170,6 +195,7 @@ pub(crate) fn select(runs: &[RecordedRun], requested: Option<usize>) -> CuResult
 pub(crate) struct RunReader {
     inner: UnifiedLoggerRead,
     run_id: u64,
+    remaining: u64,
 }
 
 impl RunReader {
@@ -180,8 +206,48 @@ impl RunReader {
         self.inner.raw_main_header()
     }
 
+    fn visit(&mut self) -> CuResult<()> {
+        self.remaining = self
+            .remaining
+            .checked_sub(1)
+            .ok_or_else(|| CuError::from("Cyclic section links"))?;
+        Ok(())
+    }
+    pub fn read_next_section_type_at(
+        &mut self,
+        kind: UnifiedLogType,
+    ) -> CuResult<Option<(LogPosition, Vec<u8>)>> {
+        loop {
+            let position = self.position();
+            self.visit()?;
+            let header = self.inner.raw_skip_section()?;
+            if header.entry_type == UnifiedLogType::LastEntry {
+                return Ok(None);
+            }
+            if header.entry_type == kind
+                && (header.context.run_id == self.run_id
+                    || matches!(
+                        kind,
+                        UnifiedLogType::ApplicationMetadata | UnifiedLogType::ValueDecodeCatalog
+                    ))
+            {
+                if kind == UnifiedLogType::ValueDecodeCatalog
+                    && header.used as usize > 16 * 1024 * 1024 * 9 / 8 + 8
+                {
+                    return Err("Catalog exceeds offline size limit".into());
+                }
+                self.inner.seek(position)?;
+                return self
+                    .inner
+                    .raw_read_section()
+                    .map(|(_, bytes)| Some((position, bytes)));
+            }
+        }
+    }
+
     pub fn raw_read_section(&mut self) -> CuResult<(SectionHeader, Vec<u8>)> {
         loop {
+            self.visit()?;
             let (header, content) = self.inner.raw_read_section()?;
             if header.entry_type == UnifiedLogType::LastEntry
                 || header.context.run_id == self.run_id

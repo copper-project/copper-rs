@@ -17,12 +17,10 @@ see
 - profile-guided scheduling from a recorded run
 - optional Python bindings for iterating logs without going through JSON first
 
-Opaque payloads use their static bincode encoding recipes for field and variant
-names. Host catalog generation can register additional reflected dependencies with
-`cumsgs::value_decode_catalog_with(|builder| builder.register::<Dependency>())`.
-Registration adds schema information while preserving the generated log-slot order.
-Catalog configuration checks compare mission declarations by identity and retain
-configured values, topology, and plain graph declaration order.
+Payload descriptions come from the native recipes saved by the application at
+startup. One static catalog shares its schema graph across compiled missions.
+Application metadata supplies configuration and mission names; each data section
+selects its run and numeric mission slot map.
 
 ## Standalone catalog tools
 
@@ -48,7 +46,7 @@ Deep fsck requires a catalog and decodes every captured payload to exact section
 exhaustion. Invalid/truncated records return an error with their recorded location.
 Plain standalone fsck checks structure and common streams and reports the number
 and compressed and decompressed sizes of embedded catalogs. Compressed size includes
-catalog headers and continuation framing; decompressed size is the encoded catalog
+the compression integrity footer; decompressed size is the encoded catalog
 body before compression. Deep validation adds decoded CopperList
 and captured-payload counts and encoded payload bytes. A table lists every captured
 task and message type, sorted by total bytes, with counts, share of payload storage,
@@ -77,7 +75,8 @@ comparison workflow.
 ## Selecting a Recorded Run
 
 A unified log can contain multiple recorded runs after a mission change or an
-appended restart. Each `Instantiated` lifecycle record begins a recorded run.
+appended restart. Section contexts identify each construction, including runs whose startup
+lifecycle records have rolled out.
 Its CopperList IDs and clock can start over independently of the previous run.
 
 Use the application's logreader binary to list the runs and select one:
@@ -91,19 +90,18 @@ logreader logs/robot.copper --run 1 log-stats --output run-1.json
 logreader logs/robot.copper --run 1 export-mcap --output run-1.mcap
 ```
 
-Indices are zero-based and follow `Instantiated` record order. They are distinct
+Indices are zero-based and follow the first retained section of each run. They are distinct
 from the recorded `instance_id`, which can repeat across process restarts.
 `list-runs` reads lifecycle metadata without decoding application payloads.
 It shows the mission, application, runtime instance ID, start time, and whether
 `ShutdownCompleted` was recorded.
 
 Single-run logs select their run automatically. Logs from standalone
-writers with no `Instantiated` record are treated as one implicit run.
+writers use construction ID zero and are treated as one implicit run.
 Multi-run logs require `--run` for extraction, fsck, statistics, and MCAP
-export. The selection includes the runtime's initial stream reservations and all
-of its CL, keyframe, lifecycle, and structured-log sections. A multi-run log
-whose startup section ordering cannot be recognized is listed but rejected for
-selection.
+export. The selection includes sections carrying that construction ID and shared
+static metadata. Startup timestamps remain unknown when lifecycle records have
+rolled out.
 
 The selected run supplies the recorded configuration used by logging codecs.
 Statistics also default to that configuration and its recorded mission; `--config`

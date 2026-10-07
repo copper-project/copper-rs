@@ -359,8 +359,8 @@ pub(crate) fn check_with(
                                 }
                                 Err(error) => {
                                     break 'scan Err(CuError::from(format!(
-                                        "CopperList at slab {} section offset {} record byte {}: {error}",
-                                        position.slab_index, position.offset, offset,
+                                        "CopperList at section byte {} record byte {}: {error}",
+                                        position.0, offset,
                                     )));
                                 }
                             };

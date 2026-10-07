@@ -8,7 +8,7 @@ use crate::fsck::{CheckedCopperList, check_with};
 use crate::runs;
 use crate::{CatalogFormat, CopperListDecoder, ExportFormat};
 use clap::{ColorChoice, Parser, Subcommand};
-use cu29::prelude::{CuError, CuResult, ValueDecodeCatalog};
+use cu29::prelude::{CuError, CuResult};
 use num_format::{Locale, ToFormattedString};
 use serde::{Deserialize, Serialize};
 use std::io::{IsTerminal, Write};
@@ -124,7 +124,7 @@ fn run_with_args(args: StandaloneCli) -> CuResult<()> {
 struct CatalogDocument {
     catalog_version: u16,
     run: usize,
-    catalog: ValueDecodeCatalog,
+    catalog: crate::catalog::SelectedCatalog,
 }
 
 pub(crate) fn dump_catalog(
@@ -352,7 +352,7 @@ impl PayloadStats {
 }
 
 fn write_payload_stats(
-    catalog: &ValueDecodeCatalog,
+    catalog: &crate::catalog::SelectedCatalog,
     stats: &[PayloadStats],
     total_bytes: usize,
     output: &mut impl Write,
@@ -488,15 +488,34 @@ mod tests {
 
     #[test]
     fn test_payload_stats_identify_largest_sources_and_native_sizes() {
-        use cu29::prelude::{ValueDecodeCatalogBuilder, ValueDecodeCatalogLayout};
+        use cu29::prelude::{
+            ValueDecodeCatalogLayout, ValueDecodeCatalogSlot, ValueDecodeDescription,
+        };
 
-        let mut builder = ValueDecodeCatalogBuilder::default();
-        builder.add::<u32>("control", "u32");
-        builder.add::<Vec<u8>>("camera", "Vec<u8>");
-        builder.add_uncaptured("hidden", "Opaque");
-        let catalog = builder
-            .finish("()", "default", ValueDecodeCatalogLayout::Compact)
-            .unwrap();
+        let catalog = crate::catalog::SelectedCatalog {
+            version: 2,
+            mission: "default".into(),
+            config_ron: "()".into(),
+            layout: ValueDecodeCatalogLayout::Compact,
+            description: ValueDecodeDescription::from_type::<u32>().unwrap(),
+            slots: vec![
+                ValueDecodeCatalogSlot {
+                    task_id: "control".into(),
+                    msg_type: "u32".into(),
+                    binding: Some(0),
+                },
+                ValueDecodeCatalogSlot {
+                    task_id: "camera".into(),
+                    msg_type: "Vec<u8>".into(),
+                    binding: Some(0),
+                },
+                ValueDecodeCatalogSlot {
+                    task_id: "hidden".into(),
+                    msg_type: "Opaque".into(),
+                    binding: None,
+                },
+            ],
+        };
         let mut stats = vec![PayloadStats::default(); 3];
         let config = bincode::config::standard();
         for value in [42u32, 300] {
@@ -532,13 +551,22 @@ mod tests {
 
     #[test]
     fn test_zero_byte_captured_payload_has_finite_size_stats() {
-        use cu29::prelude::{ValueDecodeCatalogBuilder, ValueDecodeCatalogLayout};
+        use cu29::prelude::{
+            ValueDecodeCatalogLayout, ValueDecodeCatalogSlot, ValueDecodeDescription,
+        };
 
-        let mut builder = ValueDecodeCatalogBuilder::default();
-        builder.add::<()>("unit", "()");
-        let catalog = builder
-            .finish("()", "default", ValueDecodeCatalogLayout::Compact)
-            .unwrap();
+        let catalog = crate::catalog::SelectedCatalog {
+            version: 2,
+            mission: "default".into(),
+            config_ron: "()".into(),
+            layout: ValueDecodeCatalogLayout::Compact,
+            description: ValueDecodeDescription::from_type::<()>().unwrap(),
+            slots: vec![ValueDecodeCatalogSlot {
+                task_id: "unit".into(),
+                msg_type: "()".into(),
+                binding: Some(0),
+            }],
+        };
         let mut stats = PayloadStats::default();
         stats.observe(0);
         let mut output = Vec::new();
@@ -577,7 +605,7 @@ mod tests {
                 } else {
                     serde_json::from_str(text).unwrap()
                 };
-                assert_eq!(document.catalog_version, 1);
+                assert_eq!(document.catalog_version, 2);
                 assert_eq!(document.catalog.slots[0].task_id, "drive");
                 document.catalog.description.validate().unwrap();
                 if format == CatalogFormat::Ron {

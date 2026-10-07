@@ -18,15 +18,44 @@ impl Encode for WireBytes {
         encoder.writer().write(&self.0)
     }
 }
+use bincode::value_decode::ValueDecodeRef;
+use cu29_value::catalog_stream::{CatalogDescription, CatalogMission, CatalogSlot, write_catalog};
+static EMPTY: CatalogDescription = CatalogDescription {
+    layout: ValueDecodeCatalogLayout::Compact,
+    missions: &[CatalogMission { slots: &[] }],
+};
+struct StartupCatalog<'a>(&'a CatalogDescription);
+impl Encode for StartupCatalog<'_> {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        write_catalog(encoder.writer(), self.0)
+    }
+}
 fn catalog_blob() -> Vec<u8> {
-    ValueDecodeCatalogBuilder::default()
-        .finish("()", "default", ValueDecodeCatalogLayout::Compact)
-        .unwrap()
-        .to_blob()
-        .unwrap()
+    let mut bytes = [0; 4096];
+    let mut writer = bincode::enc::write::SliceWriter::new(&mut bytes);
+    write_catalog(&mut writer, &EMPTY).unwrap();
+    let size = writer.bytes_written();
+    bytes[..size].to_vec()
+}
+fn metadata() -> ApplicationMetadata {
+    ApplicationMetadata {
+        app_type: "App".into(),
+        app_name: "test".into(),
+        app_version: "1".into(),
+        git_commit: None,
+        git_dirty: None,
+        subsystem_id: None,
+        subsystem_code: 0,
+        effective_config_ron: "()".into(),
+        missions: vec!["default".into()],
+        catalog_offset: 0,
+    }
 }
 fn fixture(path: &Path, catalog: bool, corrupt: bool, duplicate: bool) {
-    let UnifiedLogger::Write(logger) = UnifiedLoggerBuilder::new()
+    let UnifiedLogger::Write(mut logger) = UnifiedLoggerBuilder::new()
         .file_base_name(path)
         .write(true)
         .create(true)
@@ -36,15 +65,20 @@ fn fixture(path: &Path, catalog: bool, corrupt: bool, duplicate: bool) {
     else {
         panic!("writer")
     };
-    let logger = Arc::new(Mutex::new(logger));
     if catalog {
-        let blob = catalog_blob();
-        write_value_decode_catalog(logger.clone(), &blob).unwrap();
-        if duplicate {
-            write_value_decode_catalog(logger.clone(), &blob).unwrap();
-        }
+        logger
+            .seal_metadata(&metadata(), Some(&StartupCatalog(&EMPTY)))
+            .unwrap();
+    } else {
+        logger.seal_metadata::<()>(&metadata(), None).unwrap();
     }
-    let mut cls = stream_write::<WireBytes, _>(logger, UnifiedLogType::CopperList, 1024).unwrap();
+    let logger = Arc::new(Mutex::new(logger));
+    if duplicate {
+        let mut duplicate =
+            LogStream::new(UnifiedLogType::ValueDecodeCatalog, logger.clone(), 1024).unwrap();
+        duplicate.log(&WireBytes(catalog_blob())).unwrap();
+    }
+    let mut cls = LogStream::new(UnifiedLogType::CopperList, logger, 1024).unwrap();
     cls.log(&WireBytes(vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0]))
         .unwrap();
     if corrupt {
@@ -127,11 +161,9 @@ fn test_machine_output_and_process_failure_contract() {
 }
 
 #[test]
-fn test_streaming_catalog_continues_across_sections_and_slabs() {
-    use bincode::value_decode::ValueDecodeRef;
-    use cu29::catalog_stream::{CatalogDescription, CatalogSlot};
+fn static_catalog_spans_backing_files_as_one_section() {
     let dir = tempfile::tempdir_in(env!("CARGO_MANIFEST_DIR")).unwrap();
-    let path = dir.path().join("stream.copper");
+    let path = dir.path().join("spanning.copper");
     let mut state = 7u32;
     let noise: String = (0..128 * 1024)
         .map(|_| {
@@ -141,20 +173,21 @@ fn test_streaming_catalog_continues_across_sections_and_slabs() {
             char::from(b'a' + (state % 26) as u8)
         })
         .collect();
-    let config: &'static str =
-        Box::leak(format!("(tasks: [], cnx: []) /*{noise}*/").into_boxed_str());
-    static SLOTS: &[CatalogSlot] = &[CatalogSlot {
-        task_id: "source",
-        msg_type: "u32",
-        payload: Some(ValueDecodeRef::of::<u32>()),
-    }];
+    let task_id: &'static str = Box::leak(noise.into_boxed_str());
+    let slots = Box::leak(
+        vec![CatalogSlot {
+            task_id,
+            msg_type: "u32",
+            payload: Some(ValueDecodeRef::of::<u32>()),
+        }]
+        .into_boxed_slice(),
+    );
+    let missions = Box::leak(vec![CatalogMission { slots }].into_boxed_slice());
     let description = CatalogDescription {
-        mission: "default",
-        config_ron: config,
         layout: ValueDecodeCatalogLayout::Compact,
-        slots: SLOTS,
+        missions,
     };
-    let UnifiedLogger::Write(logger) = UnifiedLoggerBuilder::new()
+    let UnifiedLogger::Write(mut logger) = UnifiedLoggerBuilder::new()
         .file_base_name(&path)
         .write(true)
         .create(true)
@@ -164,52 +197,38 @@ fn test_streaming_catalog_continues_across_sections_and_slabs() {
     else {
         panic!("writer")
     };
-    let logger = Arc::new(Mutex::new(logger));
-    cu29::prelude::record_value_decode_catalog(logger.clone(), &description).unwrap();
+    logger
+        .seal_metadata(&metadata(), Some(&StartupCatalog(&description)))
+        .unwrap();
     drop(logger);
     let catalog = cu29_export::catalog::read_value_decode_catalog(&path, None).unwrap();
-    assert_eq!(catalog.config_ron, config);
-    assert_eq!(catalog.slots[0].task_id, "source");
+    assert_eq!(catalog.missions[0].slots[0].task_id, task_id);
     let output = run(&path, &["fsck", "--deep"]);
     assert!(
         output.status.success(),
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let UnifiedLogger::Read(mut reader) = UnifiedLoggerBuilder::new()
-        .file_base_name(&path)
-        .build()
-        .unwrap()
-    else {
-        panic!("reader")
-    };
-    let mut sections = Vec::new();
-    while let Some(section) = reader
+    let mut reader = UnifiedLoggerRead::new(&path).unwrap();
+    let bytes = reader
         .read_next_section_type(UnifiedLogType::ValueDecodeCatalog)
         .unwrap()
-    {
-        sections.push(section);
-    }
-    assert!(sections.len() > 3);
+        .unwrap();
+    assert!(bytes.len() > 16 * 1024);
+    assert!(
+        reader
+            .read_next_section_type(UnifiedLogType::ValueDecodeCatalog)
+            .unwrap()
+            .is_none()
+    );
     let output = String::from_utf8(output.stdout).unwrap();
-    let compressed_bytes: usize = sections.iter().map(Vec::len).sum();
-    let decompressed_bytes = bincode::encode_to_vec(&catalog, bincode::config::standard())
+    let compressed = bytes.len().to_formatted_string(&Locale::en);
+    let decompressed = bincode::encode_to_vec(&catalog, bincode::config::standard())
         .unwrap()
-        .len();
-    assert!(output.contains(&format!(
-        "Catalog compressed    -> {} bytes",
-        compressed_bytes.to_formatted_string(&Locale::en)
-    )));
-    assert!(output.contains(&format!(
-        "Catalog decompressed  -> {} bytes",
-        decompressed_bytes.to_formatted_string(&Locale::en)
-    )));
-    assert!(ValueDecodeCatalog::from_blob(&sections.concat()).is_ok());
-    let missing = [&sections[..1], &sections[2..]].concat().concat();
-    assert!(ValueDecodeCatalog::from_blob(&missing).is_err());
-    sections.swap(0, 1);
-    assert!(ValueDecodeCatalog::from_blob(&sections.concat()).is_err());
-    sections.swap(0, 1);
-    sections.push(sections[0].clone());
-    assert!(ValueDecodeCatalog::from_blob(&sections.concat()).is_err());
+        .len()
+        .to_formatted_string(&Locale::en);
+    assert!(output.contains(&format!("Catalog compressed    -> {compressed} bytes")));
+    assert!(output.contains(&format!("Catalog decompressed  -> {decompressed} bytes")));
+    assert!(ValueDecodeCatalog::from_blob(&bytes[..bytes.len() - 1]).is_err());
+    assert!(ValueDecodeCatalog::from_blob(&[bytes.as_slice(), bytes.as_slice()].concat()).is_err());
 }

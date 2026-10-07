@@ -50,101 +50,33 @@ pub struct CuDecodedCopperList {
 pub fn read_value_decode_catalog(path: &Path, run: Option<usize>) -> CuResult<ValueDecodeCatalog> {
     let recorded = runs::discover(path)?;
     let selected = runs::select(&recorded, run)?;
-    load_catalog(selected, path)
+    load_shared_catalog(selected, path)
 }
 
-fn configs_match(recorded: &str, described: &str) -> CuResult<bool> {
-    if recorded == described {
-        return Ok(true);
-    }
-    fn document(source: &str) -> CuResult<serde_json::Value> {
-        let config = cu29::config::CuConfig::deserialize_ron(source)?;
-        let mut document = serde_json::to_value(config).map_err(|error| {
-            CuError::new_with_cause("Could not compare catalog configuration", error)
-        })?;
-        // Mission maps and their merged task lists can serialize in different
-        // orders. Log slots are ordered explicitly by the catalog, while these
-        // declarations identify the same configured nodes by id.
-        let merged_missions = document
-            .get("missions")
-            .is_some_and(serde_json::Value::is_array);
-        for field in ["tasks", "missions"] {
-            if !merged_missions {
-                continue;
-            }
-            if let Some(values) = document
-                .get_mut(field)
-                .and_then(serde_json::Value::as_array_mut)
-            {
-                values.sort_by(|left, right| left["id"].as_str().cmp(&right["id"].as_str()));
-            }
-        }
-        for field in ["tasks", "cnx", "bridges", "resources", "monitors"] {
-            if let Some(declarations) = document
-                .get_mut(field)
-                .and_then(serde_json::Value::as_array_mut)
-            {
-                for declaration in declarations {
-                    if let Some(missions) = declaration
-                        .get_mut("missions")
-                        .and_then(serde_json::Value::as_array_mut)
-                    {
-                        missions.sort_by(|left, right| left.as_str().cmp(&right.as_str()));
-                    }
-                }
-            }
-        }
-        Ok(document)
-    }
-    Ok(document(recorded)? == document(described)?)
+/// The selected mission's slots, borrowing their identity from static application metadata.
+#[derive(serde::Serialize, serde::Deserialize)]
+pub(crate) struct SelectedCatalog {
+    pub version: u16,
+    pub mission: String,
+    pub config_ron: String,
+    pub layout: ValueDecodeCatalogLayout,
+    pub description: cu29::prelude::ValueDecodeDescription,
+    pub slots: Vec<cu29::prelude::ValueDecodeCatalogSlot>,
 }
 
-/// Assemble physical sections into one logical catalog, checking continuation order.
 #[derive(Default)]
 pub(crate) struct CatalogSections {
     bytes: Vec<u8>,
-    sequence: Option<u32>,
 }
 impl CatalogSections {
-    pub(crate) fn push(&mut self, mut section: &[u8]) -> CuResult<()> {
-        const MAGIC: &[u8; 8] = b"CUVDCHNK";
-        const MAX: usize = 10 + 16 * 1024 * 1024 * 9 / 8 + 8;
-        if section.starts_with(MAGIC) {
-            if !self.bytes.is_empty() && self.sequence.is_none() {
-                return Err("Run contains multiple ValueDecodeCatalog sections".into());
-            }
-            while !section.is_empty() {
-                let header = section.get(..14).ok_or("Truncated catalog chunk")?;
-                if &header[..8] != MAGIC {
-                    return Err("Invalid catalog continuation".into());
-                }
-                let sequence = u32::from_le_bytes(header[8..12].try_into().unwrap());
-                if sequence != self.sequence.unwrap_or(0) {
-                    return Err("Run contains duplicate, missing or out-of-order catalog chunks (multiple ValueDecodeCatalog sections)".into());
-                }
-                let len = usize::from(u16::from_le_bytes([header[12], header[13]]));
-                if len == 0 || len > 128 {
-                    return Err("Invalid catalog chunk length".into());
-                }
-                let bytes = section
-                    .get(14..14 + len)
-                    .ok_or("Truncated catalog chunk data")?;
-                if self.bytes.len() + len > MAX {
-                    return Err("Catalog exceeds offline size limit".into());
-                }
-                self.bytes.extend_from_slice(bytes);
-                self.sequence = Some(sequence + 1);
-                section = &section[14 + len..];
-            }
-        } else {
-            if !self.bytes.is_empty() {
-                return Err("Run contains multiple ValueDecodeCatalog sections".into());
-            }
-            if section.len() > MAX {
-                return Err("Catalog exceeds offline size limit".into());
-            }
-            self.bytes.extend_from_slice(section);
+    pub(crate) fn push(&mut self, section: &[u8]) -> CuResult<()> {
+        if !self.bytes.is_empty() {
+            return Err("Log contains multiple static ValueDecodeCatalog sections".into());
         }
+        if section.is_empty() || section.len() > 16 * 1024 * 1024 * 9 / 8 + 8 {
+            return Err("Invalid static catalog size".into());
+        }
+        self.bytes.extend_from_slice(section);
         Ok(())
     }
     pub(crate) fn finish(self) -> CuResult<ValueDecodeCatalog> {
@@ -153,56 +85,62 @@ impl CatalogSections {
     }
 }
 
-pub(crate) fn load_catalog(run: &runs::RecordedRun, path: &Path) -> CuResult<ValueDecodeCatalog> {
-    load_catalog_with_version(run, path).map(|(_, catalog)| catalog)
+fn load_shared_catalog(run: &runs::RecordedRun, path: &Path) -> CuResult<ValueDecodeCatalog> {
+    let mut reader = run.reader(path)?;
+    let (_, bytes) = reader.read_next_section_type_at(UnifiedLogType::ValueDecodeCatalog)?
+        .ok_or_else(|| CuError::from("Log has no ValueDecodeCatalog; catalog decoding and deep validation require a catalog"))?;
+    if reader
+        .read_next_section_type_at(UnifiedLogType::ValueDecodeCatalog)?
+        .is_some()
+    {
+        return Err("Log contains multiple static ValueDecodeCatalog sections".into());
+    }
+    let catalog = ValueDecodeCatalog::from_blob(&bytes)
+        .map_err(|error| CuError::new_with_cause("Invalid static ValueDecodeCatalog", error))?;
+    let metadata = crate::build_read_logger(path)?
+        .application_metadata()?
+        .ok_or_else(|| CuError::from("Catalog requires application metadata"))?;
+    if catalog.missions.len() != metadata.missions.len() {
+        return Err("Catalog mission table does not match application metadata".into());
+    }
+    if catalog
+        .missions
+        .iter()
+        .any(|mission| mission.slots.len() > MAX_SLOTS)
+    {
+        return Err("Catalog exceeds offline slot limit".into());
+    }
+    Ok(catalog)
+}
+
+pub(crate) fn load_catalog(run: &runs::RecordedRun, path: &Path) -> CuResult<SelectedCatalog> {
+    let mut catalog = load_shared_catalog(run, path)?;
+    let index = run.mission_index as usize;
+    if index >= catalog.missions.len() {
+        return Err("Section mission index is outside the catalog".into());
+    }
+    let mission = catalog.missions.remove(index);
+    Ok(SelectedCatalog {
+        version: catalog.version,
+        layout: catalog.layout,
+        description: catalog.description,
+        slots: mission.slots,
+        mission: run.missions.first().cloned().unwrap_or_default(),
+        config_ron: run.config.clone().unwrap_or_default(),
+    })
 }
 
 pub(crate) fn load_catalog_with_version(
     run: &runs::RecordedRun,
     path: &Path,
-) -> CuResult<(u16, ValueDecodeCatalog)> {
-    let mut reader = run.reader(path)?;
-    let mut sections = CatalogSections::default();
-    let mut found = false;
-    while let Some((position, bytes)) = reader
-        .read_next_section_type_at(UnifiedLogType::ValueDecodeCatalog)
-        .map_err(|error| CuError::from(format!("Run {} catalog discovery: {error}", run.index)))?
-    {
-        sections.push(&bytes).map_err(|error| {
-            CuError::from(format!(
-                "Run {} catalog at slab {} offset {}: {error}",
-                run.index, position.slab_index, position.offset
-            ))
-        })?;
-        found = true;
-    }
-    if !found {
-        return Err(CuError::from(format!(
-            "Run {} has no ValueDecodeCatalog; catalog decoding and deep validation require a catalog",
-            run.index
-        )));
-    }
-    let version = cu29::prelude::ValueDecodeCatalogHeader::read(&sections.bytes)
-        .map_err(|error| CuError::new_with_cause("Invalid ValueDecodeCatalog header", error))?
-        .version;
-    let catalog = sections.finish()?;
-    if catalog.slots.len() > MAX_SLOTS {
-        return Err("Catalog exceeds offline slot limit".into());
-    }
-    if let Some(config) = &run.config
-        && !configs_match(config, &catalog.config_ron)?
-    {
-        return Err("Catalog configuration does not match the selected run".into());
-    }
-    if !run.missions.is_empty() && !run.missions.contains(&catalog.mission) {
-        return Err("Catalog mission does not match the selected run".into());
-    }
-    Ok((version, catalog))
+) -> CuResult<(u16, SelectedCatalog)> {
+    let catalog = load_catalog(run, path)?;
+    Ok((catalog.version, catalog))
 }
 
 /// A fallible iterator that stops after the first malformed record. Experimental API.
 pub struct CopperListValueReader {
-    catalog: ValueDecodeCatalog,
+    catalog: SelectedCatalog,
     reader: runs::RunReader,
     run: usize,
     bytes: Vec<u8>,
@@ -234,7 +172,7 @@ pub fn copperlist_values_reader(
 }
 
 impl CopperListValueReader {
-    pub(crate) fn catalog(&self) -> &ValueDecodeCatalog {
+    pub(crate) fn catalog(&self) -> &SelectedCatalog {
         &self.catalog
     }
 }
@@ -261,8 +199,8 @@ impl Iterator for CopperListValueReader {
             let (entry, used) = decode_copperlist(&self.catalog, &self.bytes[self.offset..])
                 .map_err(|error| {
                     CuError::from(format!(
-                        "Run {} slab {} section offset {} record byte {}: {error}",
-                        self.run, self.position.slab_index, self.position.offset, self.offset
+                        "Run {} section byte {} record byte {}: {error}",
+                        self.run, self.position.0, self.offset
                     ))
                 })?;
             self.offset += used;
@@ -367,14 +305,14 @@ impl Cursor<'_> {
 }
 
 pub(crate) fn decode_copperlist(
-    catalog: &ValueDecodeCatalog,
+    catalog: &SelectedCatalog,
     bytes: &[u8],
 ) -> CuResult<(CuDecodedCopperList, usize)> {
     decode_copperlist_with_payload_sizes(catalog, bytes, |_, _| {})
 }
 
 pub(crate) fn decode_copperlist_with_payload_sizes(
-    catalog: &ValueDecodeCatalog,
+    catalog: &SelectedCatalog,
     bytes: &[u8],
     mut payload_size: impl FnMut(usize, usize),
 ) -> CuResult<(CuDecodedCopperList, usize)> {
@@ -584,66 +522,32 @@ mod tests {
     use cu29::prelude::*;
     use cu29::value_decode::ValueDecodeOp;
 
-    #[test]
-    fn test_catalog_config_comparison_accepts_mission_map_order_and_rejects_changes() {
-        let first = r#"(
-            missions: [(id: "default"), (id: "flow")],
-            tasks: [(id: "source", type: "Source", config: {"threshold": 1, "rate": 2, "missions": ["first", "second"]}), (id: "sink", type: "Sink")],
-            cnx: [(src: "source", dst: "sink", msg: "u32")],
-        )"#;
-        let reordered = r#"(
-            missions: [(id: "flow"), (id: "default")],
-            tasks: [(id: "sink", type: "Sink"), (id: "source", type: "Source", config: {"rate": 2, "threshold": 1, "missions": ["first", "second"]})],
-            cnx: [(src: "source", dst: "sink", msg: "u32")],
-        )"#;
-        assert!(configs_match(first, reordered).unwrap());
-        assert!(!configs_match(first, &reordered.replace("u32", "u64")).unwrap());
-        assert!(
-            !configs_match(
-                first,
-                &reordered.replace("threshold\": 1", "threshold\": 3")
-            )
-            .unwrap()
-        );
-        assert!(
-            !configs_match(
-                first,
-                &reordered.replace(r#"["first", "second"]"#, r#"["second", "first"]"#)
-            )
-            .unwrap()
-        );
-        assert!(configs_match(first, "invalid config").is_err());
-
-        let scoped = first
-            .replace(
-                "type: \"Sink\"",
-                "type: \"Sink\", missions: [\"default\", \"flow\"]",
-            )
-            .replace("msg: \"u32\"", "msg: \"u32\", missions: [\"default\"]");
-        let scoped_reordered = scoped.replace(
-            "missions: [\"default\", \"flow\"]",
-            "missions: [\"flow\", \"default\"]",
-        );
-        assert!(configs_match(&scoped, &scoped_reordered).unwrap());
-        let changed_membership = scoped.replace(
-            "missions: [\"default\", \"flow\"]",
-            "missions: [\"default\"]",
-        );
-        assert!(!configs_match(&scoped, &changed_membership).unwrap());
-
-        // A plain graph's task declaration order remains significant.
-        let plain_first = first.replace("missions: [(id: \"default\"), (id: \"flow\")],", "");
-        let plain_reordered =
-            reordered.replace("missions: [(id: \"flow\"), (id: \"default\")],", "");
-        assert!(!configs_match(&plain_first, &plain_reordered).unwrap());
-    }
-
-    fn catalog(layout: ValueDecodeCatalogLayout) -> ValueDecodeCatalog {
-        let mut builder = ValueDecodeCatalogBuilder::default();
-        builder.add::<u32>("first", "u32");
-        builder.add::<u32>("second", "u32");
-        builder.add_uncaptured("hidden", "Opaque");
-        builder.finish("()", "default", layout).unwrap()
+    fn catalog(layout: ValueDecodeCatalogLayout) -> SelectedCatalog {
+        let description = ValueDecodeDescription::from_type::<u32>().unwrap();
+        SelectedCatalog {
+            version: 2,
+            mission: "default".into(),
+            config_ron: "()".into(),
+            layout,
+            slots: vec![
+                ValueDecodeCatalogSlot {
+                    task_id: "first".into(),
+                    msg_type: "u32".into(),
+                    binding: Some(description.root),
+                },
+                ValueDecodeCatalogSlot {
+                    task_id: "second".into(),
+                    msg_type: "u32".into(),
+                    binding: Some(description.root),
+                },
+                ValueDecodeCatalogSlot {
+                    task_id: "hidden".into(),
+                    msg_type: "Opaque".into(),
+                    binding: None,
+                },
+            ],
+            description,
+        }
     }
 
     fn messages() -> [CuMsg<u32>; 3] {
@@ -771,12 +675,9 @@ mod tests {
     }
 
     #[test]
-    fn test_pinned_v1_compact_fixture() {
-        let mut builder = ValueDecodeCatalogBuilder::default();
-        builder.add::<u32>("only", "u32");
-        let catalog = builder
-            .finish("()", "default", ValueDecodeCatalogLayout::Compact)
-            .unwrap();
+    fn test_pinned_native_compact_fixture() {
+        let mut catalog = catalog(ValueDecodeCatalogLayout::Compact);
+        catalog.slots.truncate(1);
         let bytes = [42, 0, 0, 0, 0, 0, 0, 1, 1, 0, 42];
         let (entry, used) = decode_copperlist(&catalog, &bytes).unwrap();
         assert_eq!(used, bytes.len());
@@ -791,15 +692,13 @@ mod tests {
     #[test]
     fn test_graph_validation_includes_unselected_enum_branches() {
         #[derive(Encode, Reflect)]
+        #[bincode(describe)]
         enum Payload {
             Empty,
             Sample { value: u32 },
         }
-        let mut builder = ValueDecodeCatalogBuilder::default();
-        builder.add::<Payload>("enum", "Payload");
-        let mut catalog = builder
-            .finish("()", "default", ValueDecodeCatalogLayout::Compact)
-            .unwrap();
+        let mut catalog = catalog(ValueDecodeCatalogLayout::Compact);
+        catalog.description = ValueDecodeDescription::from_type::<Payload>().unwrap();
         catalog.description.validate().unwrap();
         let operation = catalog
             .description

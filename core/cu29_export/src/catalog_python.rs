@@ -27,7 +27,7 @@ impl PyCopperListValueIterator {
     }
 }
 
-/// Return the selected run's complete catalog as a dictionary.
+/// Return the shared catalog and every compiled mission's slot map as a dictionary.
 #[pyfunction]
 #[pyo3(signature = (path, run=None))]
 fn value_decode_catalog_unified(
@@ -188,7 +188,33 @@ mod tests {
             assert_eq!(
                 catalog
                     .bind(py)
-                    .get_item("mission")
+                    .get_item("version")
+                    .unwrap()
+                    .extract::<u16>()
+                    .unwrap(),
+                2
+            );
+            assert_eq!(
+                catalog
+                    .bind(py)
+                    .get_item("missions")
+                    .unwrap()
+                    .len()
+                    .unwrap(),
+                2
+            );
+            assert_eq!(
+                catalog
+                    .bind(py)
+                    .get_item("missions")
+                    .unwrap()
+                    .get_item(0)
+                    .unwrap()
+                    .get_item("slots")
+                    .unwrap()
+                    .get_item(0)
+                    .unwrap()
+                    .get_item("task_id")
                     .unwrap()
                     .extract::<String>()
                     .unwrap(),
