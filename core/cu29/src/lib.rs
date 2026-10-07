@@ -357,7 +357,7 @@ pub mod prelude {
     pub use cu29_value::catalog::{
         ValueDecodeCatalog, ValueDecodeCatalogMission, ValueDecodeCatalogSlot,
     };
-    #[cfg(feature = "self-describing-logs")]
+    #[cfg(any(feature = "self-describing-logs", feature = "decode-catalog"))]
     pub use cu29_value::catalog_format::ValueDecodeCatalogLayout;
     #[cfg(feature = "decode-catalog")]
     pub use cu29_value::decode::{ValueDecodeDescription, ValueDecodeLimits};
