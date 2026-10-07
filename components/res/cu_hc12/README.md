@@ -112,6 +112,3 @@ The HC-12 transparent byte stream uses this serial integrity check even if the
 radio hardware also checks its own packets. Assign one radio to the TX provider and the
 peer radio to the RX provider for one-way telemetry. See
 [serial framing](../cu29_logstream_serial/README.md).
-
-From the repository root, `just hc12-check` checks drivers, framing, resource
-composition, DAG rendering and `no_std` compatibility using software tests.

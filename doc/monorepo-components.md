@@ -13,8 +13,8 @@ open-source ZED C wrapper sources.
 | `zed-sdk-sys` | `components/libs/zed_sdk_sys` |
 | `cu-vitfly` | `components/tasks/cu_vitfly` |
 
-Run `just monorepo-crates-check` from the repository root to check dependency
-resolution, clippy, tests, codec doctests, and codec `no_std` builds. ViTFly uses
+Run `just lint` and `just test` from the repository root for workspace checks.
+ViTFly uses
 the CPU backend by default. Its parity tests download and cache the pretrained
 weights inside `components/tasks/cu_vitfly/weights` on first use.
 

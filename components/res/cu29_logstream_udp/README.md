@@ -106,28 +106,10 @@ datagrams are supported; IPv6 jumbograms are outside this contract. Configured
 streams should stay within their transport MTU, normally 1200 bytes on unknown
 IP paths, to avoid IP fragmentation.
 
-## Verification and iteration boundary
+## Feedback
 
-From the repository root, run `just logstream-udp-check`. It checks Clippy and
-tests IPv4/IPv6 loopback, empty/exact/oversized datagrams, resource options,
-invalid configuration, shared endpoints, queue pressure, and error/no-retry
-behavior. A deterministic submission test covers `WouldBlock`: real UDP queue
-pressure often drops packets silently instead of returning backpressure.
-
-The recipe enables the crate's `runtime-integration` test feature explicitly.
-Normal carrier builds do not enable `cu29/logstream` or its asynchronous runtime
-features for other workspace apps. The root PR check and host CI run the
-integration test separately from the general workspace tests.
-
-The generated-runtime integration test receives actual UDP traffic in socket
-arrival order, discovers its manifest without out-of-band FEC settings, and
-decodes correctly ordered application-typed CopperLists and recovery objects.
-The router buffers a bounded number of packets preceding manifest discovery.
-The test verifies native archives and explicit gaps after lost prefixes or outages.
 For a runnable sender and receiver in separate processes, see the
-[UDP demo](../../../examples/cu_logstream_demo). Run `just logstream-demo-check`
-from the repository root to exercise clean reception, FEC recovery, outages,
-late start, receiver restart, and recorded replay.
+[UDP demo](../../../examples/cu_logstream_demo).
 
 For a return channel, bind the sender destination's `feedback.transport` to the bundle's `rx` resource.
 `CuUdpLogStreamRx` implements `CuFeedbackRx`, and `CuUdpLogStreamTx` implements `CuFeedbackTx`.

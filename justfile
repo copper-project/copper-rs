@@ -18,54 +18,6 @@ PREK_FMT_CI_HOOKS := "trailing-whitespace check-merge-conflict detect-private-ke
 default:
 	just pr-check
 
-# Shared monitor feature combinations and frontend integration.
-tuimon-check:
-	cargo test -p cu-tuimon --no-default-features
-	cargo test -p cu-tuimon --no-default-features --features dag
-	cargo test -p cu-tuimon --no-default-features --features hop
-	cargo test -p cu-tuimon
-	cargo clippy -p cu-tuimon --all-targets --no-default-features -- --deny warnings
-	cargo clippy -p cu-tuimon --all-targets --no-default-features --features hop -- --deny warnings
-	cargo clippy -p cu-tuimon -p cu-consolemon -p cu-bevymon --all-targets -- --deny warnings
-	cargo test -p cu-consolemon
-
-# Verify the experimental native-bytes-to-value API and its user-facing payload examples.
-self-describing-logs-check:
-	cargo test -p cu29-value-types --all-features
-	cargo test -p cu-bincode --test describe
-	cargo test -p cu-bincode --test describe --features self-describing
-	cargo test -p cu29-value --features self-describing-logs
-	cargo test -p cu29 --features self-describing-logs --test value_decode
-	cargo clippy -p cu29-value -p cu29-value-types -p cu29-units --all-targets --features cu29-value/self-describing-logs -- --deny warnings
-	cargo clippy -p cu29 --lib --test value_decode --features self-describing-logs -- --deny warnings
-	cargo check -p cu29 -p cu29-value -p cu29-value-types --no-default-features
-	cargo check -p cu29 -p cu29-value -p cu29-value-types -p cu29-units --no-default-features --target thumbv7em-none-eabihf
-
-# Replace logs/vit-extracted with replayable VitFly tensors and UI-style previews.
-vit-extract:
-	just --justfile "{{ROOT}}/examples/cu_flight_controller/justfile" vit-extract
-
-# Verify the in-tree codec, ZED wrappers, and CPU inference task.
-monorepo-crates-check:
-	#!/usr/bin/env bash
-	set -euo pipefail
-	excluded="$(python3 support/ci/workspace_excludes.py list --toolchain stable)"
-	packages=()
-	for package in cu-bincode cu-bincode-derive cu-zed zed-sdk zed-sdk-sys cu-vitfly; do
-		if ! grep -Fxq "$package" <<< "$excluded"; then
-			packages+=(-p "$package")
-		fi
-	done
-	just workspace-excludes-check
-	cargo +stable metadata --format-version 1 --all-features --filter-platform x86_64-unknown-linux-gnu > /dev/null
-	cargo +stable clippy "${packages[@]}" --all-targets -- --deny warnings
-	cargo +stable nextest run "${packages[@]}" --all-targets
-	cargo +stable clippy -p cu-bincode -p cu-bincode-derive --all-targets --all-features -- --deny warnings
-	cargo +stable nextest run -p cu-bincode -p cu-bincode-derive --all-targets --all-features
-	cargo +stable test -p cu-bincode -p cu-bincode-derive --doc --all-features
-	cargo +stable check -p cu-bincode --no-default-features
-	cargo +stable check -p cu-bincode --no-default-features --features alloc,derive,serde
-
 # Verify workspace CI exclusions across runner operating systems.
 workspace-excludes-check:
 	python3 -m unittest discover -s support/ci -p test_workspace_excludes.py
@@ -101,7 +53,14 @@ pr-check:
 	just api-check
 	just test
 	just logstream-udp-check
-	just logstream-pacing-check
+	cargo +stable clippy -p cu29-logstream --all-targets -- --deny warnings
+	cargo +stable test -p cu29-logstream
+	cargo +stable check -p cu29-logstream --no-default-features
+	cargo +stable clippy -p cu29 --features logstream --test logstream_runtime -- --deny warnings
+	cargo +stable test -p cu29 --features logstream --test logstream_runtime
+	cargo +stable clippy -p cu-logstream-demo --all-targets --features replay -- --deny warnings
+	cargo +stable test -p cu29-runtime --test replay_primitives --features cu29/async-cl-io
+	just --justfile examples/cu_logstream_demo/justfile check
 
 # Reproduce the scheduled weekly audit and beta checks on the local host.
 weekly: weekly-audit
@@ -248,89 +207,10 @@ test:
 	cargo +stable nextest run --all-targets --workspace {{WORKSPACE_EXCLUDES}}
 	cargo +stable nextest run --no-default-features
 
-# Graph/schedule rendering, resource usage labels, and config parsing regressions.
-graph-view-check:
-	cargo +stable clippy -p cu29-graph-view -p cu29-schedule-view -- --deny warnings
-	cargo +stable test -p cu29-graph-view -p cu29-schedule-view
-
 # UDP carrier contracts and generated sender/session-router localhost integration.
 logstream-udp-check:
 	cargo +stable clippy -p cu29-logstream-udp --all-targets --features runtime-integration -- --deny warnings
 	cargo +stable test -p cu29-logstream-udp --features runtime-integration
-
-# Receiver assembly, native archives, UDP arrival order, and replay continuity.
-logstream-receiver-check:
-	cargo +stable test -p cu29-logstream
-	cargo +stable check -p cu29-logstream --no-default-features
-	cargo +stable test -p cu29-runtime --test replay_primitives
-	just logstream-udp-check
-
-# Compile-time resource composition and DAG dependency rendering.
-resource-stack-check:
-	cargo +stable clippy -p cu29-graph-view -p cu29-derive --lib -- --deny warnings
-	cargo +stable test -p cu29 --test resource_stack
-	cargo +stable test -p cu29-derive --lib resource
-	cargo +stable test -p cu29-graph-view
-	cargo +stable check -p cu29 --no-default-features --target thumbv7em-none-eabihf
-
-# Resource stacking, HC-12 startup, serial bridge/framing, and DAG ownership.
-hc12-check:
-	cargo +stable clippy -p cu-linux-resources --no-default-features --all-targets -- --deny warnings
-	cargo +stable test -p cu-linux-resources --no-default-features
-	cargo +stable clippy -p cu-hc12 -p cu-serial -p cu-serial-bridge -p cu29-logstream-serial -p cu-linux-resources --all-targets --features cu29/reflect -- --deny warnings
-	cargo +stable test -p cu-hc12 -p cu-serial -p cu-serial-bridge -p cu29-logstream-serial -p cu-linux-resources --features cu29/reflect
-	cargo +stable test -p cu29 --test resource_stack
-	cargo +stable test -p cu29-derive --lib resource
-	cargo +stable test -p cu29-graph-view
-	cargo +stable test -p cu29-logstream --test pacing
-	cargo +stable check -p cu-hc12 -p cu-serial -p cu-serial-bridge -p cu29-logstream-serial --no-default-features
-
-# Sender budget/retention, generated integration, and one-way UDP recovery.
-logstream-pacing-check:
-	cargo +stable clippy -p cu29-logstream --all-targets -- --deny warnings
-	cargo +stable test -p cu29-logstream
-	cargo +stable check -p cu29-logstream --no-default-features
-	cargo +stable clippy -p cu29 --features logstream --test logstream_runtime -- --deny warnings
-	cargo +stable test -p cu29 --features logstream --test logstream_runtime
-	just logstream-demo-check
-
-# Advisory feedback, adaptive FEC, static return-channel wiring, and UDP regressions.
-logstream-feedback-check:
-	cargo +stable clippy -p cu29-logstream --all-targets -- --deny warnings
-	cargo +stable test -p cu29-logstream
-	cargo +stable check -p cu29-logstream --no-default-features
-	cargo +stable test -p cu29-runtime --lib config::tests
-	cargo +stable test -p cu29 --features logstream --test logstream_runtime
-	just logstream-udp-check
-
-# TUI stream snapshots/rates and generated monitor wiring, including feedback.
-logstream-monitor-check:
-	cargo +stable clippy -p cu-tuimon -p cu-consolemon -p cu-bevymon --all-targets -- --deny warnings
-	cargo +stable test -p cu-tuimon -p cu-consolemon
-	just logstream-feedback-check
-
-# Runnable two-process UDP scenarios, archive comparison, and recorded replay.
-logstream-demo-check:
-	cargo +stable clippy -p cu-logstream-demo --all-targets --features replay -- --deny warnings
-	cargo +stable test -p cu29-runtime --test replay_primitives --features cu29/async-cl-io
-	just --justfile examples/cu_logstream_demo/justfile check
-
-# Structured-log binary handoff, generated wiring, archive isolation, and remote telemetry.
-logstream-structured-check:
-	cargo +stable test -p cu29-log --lib
-	cargo +stable check -p cu29-log --no-default-features
-	cargo +stable test -p cu29 --features logstream --test logstream_runtime --test logstream_configured_runtime --test logstream_sim_compile
-	just logstream-telemetry-check
-	just logstream-udp-check
-
-# Pull telemetry, reader overruns, archive isolation, and the native terminal UI.
-logstream-telemetry-check:
-	cargo +stable clippy -p cu29-logstream --all-targets -- --deny warnings
-	cargo +stable test -p cu29-logstream
-	cargo +stable check -p cu29-logstream --no-default-features
-	cargo +stable clippy -p cu-logstream-demo --all-targets --features replay,tui -- --deny warnings
-	cargo +stable test -p cu-logstream-demo --features demo,tui --bin cu-logstream-demo
-	just logstream-demo-check
 
 # Check the large examples from the former extra-examples repo.
 check-extra-examples: check-extra-examples-host check-extra-examples-embedded
@@ -631,24 +511,6 @@ extract-log dev out="logs/embedded_0.copper":
 	echo "Reading Cu29 partition $PART -> $OUT"
 	sudo dd if="$PART" of="$OUT" bs=4M status=progress conv=fsync
 
-# Compatibility alias for rendering the current Copper config from the working directory.
-dag mission="":
-	#!/usr/bin/env bash
-	set -euo pipefail
-
-	echo "just dag is deprecated; use just graph <config>" >&2
-	invocation_dir="{{invocation_directory()}}"
-	cfg_path="${invocation_dir}/copperconfig.ron"
-	if [[ ! -f "$cfg_path" ]]; then
-		cfg_path="${invocation_dir}/multi_copper.ron"
-		if [[ ! -f "$cfg_path" ]]; then
-			echo "No copperconfig.ron or multi_copper.ron found in ${invocation_dir}" >&2
-			exit 1
-		fi
-	fi
-
-	just graph "$cfg_path" graph.svg "{{mission}}"
-
 # Helpers for managing git worktrees for different branches.
 wt branch:
   #!/usr/bin/env bash
@@ -671,33 +533,3 @@ wt branch:
     zellij action write-chars "cd ${dir};reset"
     zellij action write 13
   fi
-
-# Selective capture, generated live replay, opt-in divergence checks, and UI isolation.
-logstream-twin-check:
-    cargo +stable clippy -p cu29-logstream --all-targets --features verify-reconstruction -- --deny warnings
-    cargo +stable clippy -p cu-logstream-demo --all-targets --features replay,tui,verify-reconstruction -- --deny warnings
-    cargo +stable test -p cu-logstream-demo --features demo,tui,verify-reconstruction
-    cargo +stable test -p cu-logstream-demo --features demo --test twin
-    just logstream-receiver-check
-    just --justfile examples/cu_logstream_demo/justfile check
-
-# Compile-time replay input checks and valid downstream reconstruction.
-logstream-replay-inputs-check:
-    cargo +stable clippy -p cu29-runtime -p cu29-derive --lib -- --deny warnings
-    cargo +stable test -p cu29-runtime --test stream_replay_config
-    cargo +stable test -p cu29-derive --lib test_compile_fail
-    cargo +stable test -p cu-logstream-demo --features demo --test twin
-
-# Two-way demo, feedback transitions, adaptation, and native archive interoperability.
-logstream-feedback-demo-check:
-    cargo +stable test -p cu-tuimon --no-default-features
-    cargo +stable clippy -p cu-logstream-demo --all-targets --features replay,tui,sender-monitor,feedback -- --deny warnings
-    cargo +stable test -p cu-logstream-demo --features demo,tui,sender-monitor,feedback
-    just --justfile examples/cu_logstream_demo/justfile run-two-way all
-
-# Sender monitor, status metadata, and streamed reconstruction interoperability.
-logstream-sender-check:
-    cargo +stable test -p cu-tuimon --no-default-features
-    cargo +stable clippy -p cu-logstream-demo --all-targets --features replay,tui,verify-reconstruction,sender-monitor -- --deny warnings
-    cargo +stable test -p cu-logstream-demo --features demo,tui,verify-reconstruction,sender-monitor
-    just --justfile examples/cu_logstream_demo/justfile check-sender

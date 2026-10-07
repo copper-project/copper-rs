@@ -192,6 +192,7 @@ Implications:
 
 ## Documentation Scope
 
+- Component and crate READMEs are user documentation, including on crates.io. Keep repository CI commands, maintainer regression-check recipes, and generic Cargo test instructions in `CONTRIBUTING.md`, not in component READMEs. Include commands only when they help users configure, run, or use the component.
 - Describe what a component does and how to use it. Never describe what is absent or list unrelated features it does not implement.
 - Keep generic component documentation generic. Put device-specific configuration, lifecycle details, and wiring in that device's component documentation or integration example.
 - Explain behavior, requirements, and errors directly, in terms that help the reader use the documented component. Avoid contrasts with unrelated components and implementation history.
@@ -213,11 +214,10 @@ Implications:
 - Do not paper over issues just to make something work.
   - No hacks to hide a deeper design/runtime problem.
   - No shortcut that creates spaghetti code or weakens the architecture.
-- Prefer `just` targets over inventing ad hoc command sequences.
-- Do not hand users megalong or non-obvious command lines when a task can be mapped to a local `justfile`.
-  - Add a documented `justfile` target instead.
-  - Prefer `just` itself to be the reasonable default action the user is likely asking for.
-  - If a crate/example has a non-obvious `cargo run --example ...` or similar invocation, hide it behind `just`.
+- Prefer existing `just` targets.
+- Add a target only for a recurring, user-facing workflow with clear reuse.
+- Run one-off investigation and verification commands directly.
+- Prefer extending an existing parameterized target over adding specialized targets.
 - After each edit pass, run `just fmt` from the repo root before moving on.
 - Before pushing, run the narrowest appropriate root `just` verification target for the surfaces you changed.
   - Default to `just pr-check`.

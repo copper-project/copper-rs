@@ -94,7 +94,7 @@ for example, `just graph flight_controller.ron graph.svg flow end2end`.
 ### Distributed subsystem compile check
 
 ```bash
-just subsystems-check
+just end2end-check
 ```
 
 This checks the real ZED/ViTFly/Zenoh compute graph and the current buildable STM32 firmware graph.
@@ -180,7 +180,7 @@ realtime behavior of the flight controller itself.
 just py-build
 
 # Print GNSS latitude/longitude from the flight-controller sim log
-just py-gnss log=logs/flight_controller_sim.copper
+just py logs/flight_controller_sim.copper
 ```
 
 The script is at `python/print_gnss_from_log.py` and can also be run directly:

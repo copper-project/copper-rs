@@ -18,9 +18,6 @@ build-generated:
 	cd "{{ROOT}}/catalog"
 	./build_generated.sh
 
-# Backwards-compatible alias for the deployable build.
-build-dist: build-generated
-
 # Build and publish the deployable catalog tree to Bunny Storage.
 deploy:
 	#!/usr/bin/env bash
@@ -36,6 +33,3 @@ deploy-dry-run:
 	cd "{{ROOT}}/catalog"
 	./build_generated.sh
 	BUNNY_DRY_RUN=true ./deploy_bunny_storage.sh
-
-# Backwards-compatible alias.
-catalog: generate

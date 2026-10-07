@@ -41,19 +41,6 @@ fsck log="logs/image_codec_demo.copper":
 	cd "{{ROOT}}"
 	cargo run -p cu-image-codec-demo --features logreader --bin cu-image-codec-demo-logreader -- "$log_path" fsck
 
-fsck-consolemon log="logs/image_codec_demo_consolemon.copper":
-	#!/usr/bin/env bash
-	set -euo pipefail
-
-	invocation_dir="{{invocation_directory()}}"
-	log_path="{{log}}"
-	if [[ "$log_path" != /* ]]; then
-		log_path="${invocation_dir}/${log_path}"
-	fi
-
-	cd "{{ROOT}}"
-	cargo run -p cu-image-codec-demo --features logreader --bin cu-image-codec-demo-logreader -- "$log_path" fsck
-
 log-stats log="logs/image_codec_demo.copper" out="target/cu29_logstats.json":
 	#!/usr/bin/env bash
 	set -euo pipefail

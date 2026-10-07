@@ -56,9 +56,7 @@ preserves the received payloads and timestamps.
 - Optional feedback reports receiver health and adjusts future continuous FEC within explicit bounds.
   A duplex resource may share stream TX and feedback RX; one receive owner consumes each logical endpoint.
 
-Run `just logstream-receiver-check` from the repository root to test reception,
-archival, and replay continuity. See the Rust API docs for receiver limits and
-event handling.
+See the Rust API docs for receiver limits and event handling.
 
 ## Structured log records
 
@@ -109,10 +107,6 @@ entries. Pausing or dropping either display reader never delays recording.
 Custom archive consumers can obtain the same owned value with
 `archive.take_structured_log()` immediately after `accept`.
 
-Run `just logstream-structured-check` for binary preservation, allocation, local
-section rollover, loss/reordering, shutdown, generated wiring, and telemetry UI
-coverage.
-
 ## Ground-side telemetry
 
 The std-only `telemetry` module provides a single-publisher, single-reader
@@ -150,8 +144,7 @@ Both still share a process failure boundary.
 The [Ratatui demo](../../examples/cu_logstream_demo#native-telemetry-screen)
 shows typed robot outputs and a pause control. Live deterministic task
 reconstruction and generated mission dispatch are subsequent steps; displaying
-captured payloads alone does not recover task state. Run
-`just logstream-telemetry-check` for the integration and regression checks.
+captured payloads alone does not recover task state.
 
 ## Sender storage and lifecycle
 
@@ -186,9 +179,6 @@ test clock. Structured logging adds the bounded byte copy described above; CL an
 RobotClock and drive `poll` themselves. The std driver owns thread wakeups.
 Immediate `ContinuousCopperListSink` and `RecoveryPointSink` remain available
 for codec tests/custom integration and do not enforce pacing themselves.
-
-Run `just logstream-pacing-check` for scheduler, worker lifecycle, and UDP demo
-checks, including recovery after the entire initial bootstrap transmission is lost.
 
 ## Live Copper twin
 
@@ -354,12 +344,8 @@ captures and labels them Reconstructed, never Verified.
 Only debug captures that pass comparison are labeled Verified. A mismatch suppresses
 reconstructed frames until the next matching recovery point; native recording continues. Debug
 digests are consumed live and do not add archive sections or change offline log readers.
-Use `just telemetry-verify` and `just sender-verify` to run the development checks.
-`just resim` reconstructs ordinary capture archives offline; the demo's verification
-command compares the result against the full onboard log.
-
-Run `just logstream-twin-check` for allocation/native-format checks, both verification
-modes, worker lifecycle, reader isolation, and the UDP loss/recovery/replay scenarios.
+See the [UDP demo](../../examples/cu_logstream_demo) for live verification
+and offline replay.
 
 ## Optional receiver feedback
 
@@ -401,7 +387,7 @@ or excessive reports cannot refresh health. After timeout, state is stale and th
 per report period toward baseline. Bitrate, burst, latency, memory, FEC window/field/density, and object FEC
 stay fixed. Feedback failure never stops capture or autonomous recovery; snapshots retain failure state.
 
-Loss excludes the active coding window and unseen history/tails. Reports and adaptation stay on stream workers. Run `just logstream-feedback-check`.
+Loss excludes the active coding window and unseen history/tails. Reports and adaptation stay on stream workers.
 
 ### TUI bandwidth panel
 
@@ -417,4 +403,4 @@ horizontally and vertically on small terminals or when several destinations are 
 Generated apps attach read-only worker handles through `CuMonitoringRuntime`. Console and Bevy monitors
 pass those handles to the shared TUI model; custom monitor frontends can use `runtime.log_streams()`.
 Snapshots are published on sender workers and sampled by the presentation thread. The task path gains
-no monitoring callbacks, serialization, or synchronization. Run `just logstream-monitor-check`.
+no monitoring callbacks, serialization, or synchronization.

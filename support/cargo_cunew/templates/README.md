@@ -96,7 +96,6 @@ The generated project includes helper commands in its `justfile`:
 * `just resim`: Replay the recorded log once into a fresh replay log.
 * `just resim-debug`: Start the replay-backed remote debug server manually.
 * `just graph`: Render the graph to `graph.svg`; `just graph-log` adds observed timing from a Copper log.
-* `just dag`: Compatibility alias for `graph`; prints a deprecation notice.
 * `just sched`: Render the exact generated per-CopperList process order to `schedule.svg`; `just sched-log` adds observed timing.
 * `just pgs-baseline`, `pgs-optimize`, `pgs-candidate`, `pgs-measure`: host-project PGS loop. `schedule.ron` starts with the template's `src → sink` chain, CPU 0, `Fair`, and a placeholder deadline that must be tuned. Artifacts and ranked SVGs live under `target/pgs`.
 

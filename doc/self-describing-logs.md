@@ -9,7 +9,8 @@ Descriptions can be bincode-serialized and transported independently of payload
 types. `Encode` generates static companion recipes in the linked `cu-bincode`
 checkout, using its existing parser and attribute handling. Copper supplies
 quantity storage registrations, time/string recipes, and fixed-capacity container
-recipes. `just self-describing-logs-check` verifies native byte/value agreement.
+recipes. Run `cargo test -p cu29-value --features self-describing-logs` to verify
+native byte/value agreement.
 
 Standard native recipes are available independently of the logging feature,
 including on `no_std` targets. `cu-bincode/self-describing` enables automatic
