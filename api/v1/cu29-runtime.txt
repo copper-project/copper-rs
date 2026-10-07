@@ -886,13 +886,12 @@ pub fn cu29_runtime::curuntime::RuntimeLifecycleConfigSource::decode<__D: cu_bin
 pub enum cu29_runtime::curuntime::RuntimeLifecycleEvent
 pub cu29_runtime::curuntime::RuntimeLifecycleEvent::Instantiated
 pub cu29_runtime::curuntime::RuntimeLifecycleEvent::Instantiated::config_source: cu29_runtime::curuntime::RuntimeLifecycleConfigSource
-pub cu29_runtime::curuntime::RuntimeLifecycleEvent::Instantiated::effective_config_ron: alloc::string::String
-pub cu29_runtime::curuntime::RuntimeLifecycleEvent::Instantiated::stack: cu29_runtime::curuntime::RuntimeLifecycleStackInfo
+pub cu29_runtime::curuntime::RuntimeLifecycleEvent::LifecycleFailed
+pub cu29_runtime::curuntime::RuntimeLifecycleEvent::LifecycleFailed::error: alloc::string::String
+pub cu29_runtime::curuntime::RuntimeLifecycleEvent::LifecycleFailed::operation: cu29_runtime::curuntime::RuntimeLifecycleOperation
 pub cu29_runtime::curuntime::RuntimeLifecycleEvent::MissionStarted
-pub cu29_runtime::curuntime::RuntimeLifecycleEvent::MissionStarted::mission: alloc::string::String
 pub cu29_runtime::curuntime::RuntimeLifecycleEvent::MissionStopped
-pub cu29_runtime::curuntime::RuntimeLifecycleEvent::MissionStopped::mission: alloc::string::String
-pub cu29_runtime::curuntime::RuntimeLifecycleEvent::MissionStopped::reason: alloc::string::String
+pub cu29_runtime::curuntime::RuntimeLifecycleEvent::MissionStopped::reason: cu29_runtime::curuntime::RuntimeStopReason
 pub cu29_runtime::curuntime::RuntimeLifecycleEvent::Panic
 pub cu29_runtime::curuntime::RuntimeLifecycleEvent::Panic::column: core::option::Option<u32>
 pub cu29_runtime::curuntime::RuntimeLifecycleEvent::Panic::file: core::option::Option<alloc::string::String>
@@ -905,6 +904,28 @@ impl<'__de, __Context> cu_bincode::de::BorrowDecode<'__de, __Context> for cu29_r
 pub fn cu29_runtime::curuntime::RuntimeLifecycleEvent::borrow_decode<__D: cu_bincode::de::BorrowDecoder<'__de, Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
 impl<__Context> cu_bincode::de::Decode<__Context> for cu29_runtime::curuntime::RuntimeLifecycleEvent
 pub fn cu29_runtime::curuntime::RuntimeLifecycleEvent::decode<__D: cu_bincode::de::Decoder<Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
+pub enum cu29_runtime::curuntime::RuntimeLifecycleOperation
+pub cu29_runtime::curuntime::RuntimeLifecycleOperation::Iteration
+pub cu29_runtime::curuntime::RuntimeLifecycleOperation::Shutdown
+pub cu29_runtime::curuntime::RuntimeLifecycleOperation::Start
+pub cu29_runtime::curuntime::RuntimeLifecycleOperation::Stop
+impl cu_bincode::enc::Encode for cu29_runtime::curuntime::RuntimeLifecycleOperation
+pub fn cu29_runtime::curuntime::RuntimeLifecycleOperation::encode<__E: cu_bincode::enc::Encoder>(&self, encoder: &mut __E) -> core::result::Result<(), cu_bincode::error::EncodeError>
+impl<'__de, __Context> cu_bincode::de::BorrowDecode<'__de, __Context> for cu29_runtime::curuntime::RuntimeLifecycleOperation
+pub fn cu29_runtime::curuntime::RuntimeLifecycleOperation::borrow_decode<__D: cu_bincode::de::BorrowDecoder<'__de, Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
+impl<__Context> cu_bincode::de::Decode<__Context> for cu29_runtime::curuntime::RuntimeLifecycleOperation
+pub fn cu29_runtime::curuntime::RuntimeLifecycleOperation::decode<__D: cu_bincode::de::Decoder<Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
+pub enum cu29_runtime::curuntime::RuntimeStopReason
+pub cu29_runtime::curuntime::RuntimeStopReason::Completed
+pub cu29_runtime::curuntime::RuntimeStopReason::Error
+pub cu29_runtime::curuntime::RuntimeStopReason::Panic
+pub cu29_runtime::curuntime::RuntimeStopReason::Requested
+impl cu_bincode::enc::Encode for cu29_runtime::curuntime::RuntimeStopReason
+pub fn cu29_runtime::curuntime::RuntimeStopReason::encode<__E: cu_bincode::enc::Encoder>(&self, encoder: &mut __E) -> core::result::Result<(), cu_bincode::error::EncodeError>
+impl<'__de, __Context> cu_bincode::de::BorrowDecode<'__de, __Context> for cu29_runtime::curuntime::RuntimeStopReason
+pub fn cu29_runtime::curuntime::RuntimeStopReason::borrow_decode<__D: cu_bincode::de::BorrowDecoder<'__de, Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
+impl<__Context> cu_bincode::de::Decode<__Context> for cu29_runtime::curuntime::RuntimeStopReason
+pub fn cu29_runtime::curuntime::RuntimeStopReason::decode<__D: cu_bincode::de::Decoder<Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
 pub struct cu29_runtime::curuntime::CuExecutionLoop
 pub cu29_runtime::curuntime::CuExecutionLoop::loop_count: core::option::Option<u32>
 pub cu29_runtime::curuntime::CuExecutionLoop::steps: alloc::vec::Vec<cu29_runtime::curuntime::CuExecutionUnit>

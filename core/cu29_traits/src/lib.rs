@@ -459,6 +459,8 @@ pub enum UnifiedLogType {
     LastEntry,         // This is a special entry that is used to signal the end of the log.
     RuntimeLifecycle,  // Runtime lifecycle events (mission/config/stack context).
     StreamContinuity,  // Received archive provenance, gaps and verified restart boundaries.
+    ApplicationMetadata,
+    ValueDecodeCatalog,
 }
 /// Represent the minimum set of traits to be usable as Metadata in Copper.
 pub trait Metadata: Default + Debug + Clone + Encode + Decode<()> + Serialize {}

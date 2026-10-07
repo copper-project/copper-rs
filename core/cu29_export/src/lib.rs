@@ -793,14 +793,24 @@ pub fn runtime_lifecycle_reader(
 
 /// Returns the first mission announced by the runtime lifecycle section, if any.
 pub fn unified_log_mission(unifiedlog_base: &Path) -> CuResult<Option<String>> {
-    let dl = build_read_logger(unifiedlog_base)?;
-    let reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::RuntimeLifecycle);
-    Ok(
-        runtime_lifecycle_reader(reader).find_map(|entry| match entry.event {
-            RuntimeLifecycleEvent::MissionStarted { mission } => Some(mission),
-            _ => None,
-        }),
-    )
+    let mut dl = build_read_logger(unifiedlog_base)?;
+    let Some(metadata) = dl.application_metadata()? else {
+        return Ok(None);
+    };
+    loop {
+        let header = dl.raw_skip_section()?;
+        if header.entry_type == UnifiedLogType::LastEntry {
+            return Ok(None);
+        }
+        if header.context.run_id != 0 {
+            return metadata
+                .missions
+                .get(header.context.mission_index as usize)
+                .cloned()
+                .map(Some)
+                .ok_or(CuError::from("Invalid mission index"));
+        }
+    }
 }
 
 /// Ensures the unified log was recorded for the expected mission.
@@ -1212,33 +1222,21 @@ Call register_copperlist_python_type::<P>() from Rust before using this function
     ) -> PyResult<Py<PyAny>> {
         let root = PyDict::new(py);
         match event {
-            RuntimeLifecycleEvent::Instantiated {
-                config_source,
-                effective_config_ron,
-                stack,
-            } => {
+            RuntimeLifecycleEvent::Instantiated { config_source } => {
                 root.set_item("kind", "instantiated")?;
                 root.set_item("config_source", runtime_config_source_to_py(config_source))?;
-                root.set_item("effective_config_ron", effective_config_ron)?;
-
-                let stack_py = PyDict::new(py);
-                stack_py.set_item("app_name", &stack.app_name)?;
-                stack_py.set_item("app_version", &stack.app_version)?;
-                stack_py.set_item("git_commit", &stack.git_commit)?;
-                stack_py.set_item("git_dirty", stack.git_dirty)?;
-                stack_py.set_item("subsystem_id", &stack.subsystem_id)?;
-                stack_py.set_item("subsystem_code", stack.subsystem_code)?;
-                stack_py.set_item("instance_id", stack.instance_id)?;
-                root.set_item("stack", dict_to_namespace(stack_py, py)?)?;
             }
-            RuntimeLifecycleEvent::MissionStarted { mission } => {
+            RuntimeLifecycleEvent::MissionStarted => {
                 root.set_item("kind", "mission_started")?;
-                root.set_item("mission", mission)?;
             }
-            RuntimeLifecycleEvent::MissionStopped { mission, reason } => {
+            RuntimeLifecycleEvent::MissionStopped { reason } => {
                 root.set_item("kind", "mission_stopped")?;
-                root.set_item("mission", mission)?;
-                root.set_item("reason", reason)?;
+                root.set_item("reason", format!("{reason:?}"))?;
+            }
+            RuntimeLifecycleEvent::LifecycleFailed { operation, error } => {
+                root.set_item("kind", "lifecycle_failed")?;
+                root.set_item("operation", format!("{operation:?}"))?;
+                root.set_item("error", error)?;
             }
             RuntimeLifecycleEvent::Panic {
                 message,
@@ -1783,29 +1781,17 @@ mod tests {
     }
 
     #[test]
-    fn runtime_lifecycle_reader_extracts_started_mission() {
+    fn runtime_lifecycle_reader_retains_timestamps_and_events() {
         let records = vec![
             RuntimeLifecycleRecord {
                 timestamp: CuTime::default(),
                 event: RuntimeLifecycleEvent::Instantiated {
                     config_source: RuntimeLifecycleConfigSource::BundledDefault,
-                    effective_config_ron: "(missions: [])".to_string(),
-                    stack: RuntimeLifecycleStackInfo {
-                        app_name: "demo".to_string(),
-                        app_version: "0.1.0".to_string(),
-                        git_commit: None,
-                        git_dirty: None,
-                        subsystem_id: Some("ping".to_string()),
-                        subsystem_code: 7,
-                        instance_id: 42,
-                    },
                 },
             },
             RuntimeLifecycleRecord {
                 timestamp: CuTime::from_nanos(42),
-                event: RuntimeLifecycleEvent::MissionStarted {
-                    mission: "gnss".to_string(),
-                },
+                event: RuntimeLifecycleEvent::MissionStarted,
             },
         ];
         let mut bytes = Vec::new();
@@ -1813,12 +1799,10 @@ mod tests {
             bytes.extend(bincode::encode_to_vec(record, standard()).unwrap());
         }
 
-        let mission =
-            runtime_lifecycle_reader(Cursor::new(bytes)).find_map(|entry| match entry.event {
-                RuntimeLifecycleEvent::MissionStarted { mission } => Some(mission),
-                _ => None,
-            });
-        assert_eq!(mission.as_deref(), Some("gnss"));
+        assert_eq!(
+            runtime_lifecycle_reader(Cursor::new(bytes)).collect::<Vec<_>>(),
+            records
+        );
     }
 
     #[test]

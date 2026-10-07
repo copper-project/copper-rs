@@ -533,3 +533,18 @@ wt branch:
     zellij action write-chars "cd ${dir};reset"
     zellij action write 13
   fi
+
+# Byte section rings, mmap/SD agreement, construction/lifecycle and native replay.
+metadata-rollover-check:
+    cargo test -p cu29-unifiedlog
+    cargo test -p cu29-unifiedlog --features mmap-fsync
+    cargo test -p cu-sdlogger
+    cargo test -p cu-sdlogger --no-default-features --features eh1
+    cargo test -p cu29-export --lib
+    cargo test -p cu29-runtime --lib
+    cargo test -p cu29 --test metadata_lifecycle --test stateless_task --test resource_stack
+    cargo clippy -p cu29-unifiedlog -p cu29-export -p cu-sdlogger --all-targets -- --deny warnings
+    cargo clippy -p cu29 --test metadata_lifecycle -- --deny warnings
+    cargo check -p cu29 --no-default-features --target thumbv7em-none-eabihf
+    cargo check -p cu-sdlogger --no-default-features --features eh1 --target thumbv7em-none-eabihf
+    RAYON_NUM_THREADS=1 COPPER_DETERMINISM_ITERS=256 COPPER_DETERMINISM_DT_TICKS=1000 cargo test -p cu-caterpillar --features determinism_ci -- determinism_record_and_resim --test-threads=1

@@ -215,11 +215,17 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         Named(fields_named) => {
             fields_named.named.push(runtime_field);
             fields_named.named.push(lifecycle_sink_field);
+            fields_named.named.push(parse_quote! { lifecycle_running: bool });
+            fields_named.named.push(parse_quote! { shutdown_completed: bool });
+            fields_named.named.push(parse_quote! { stop_reason: ::cu29::curuntime::RuntimeStopReason });
             fields_named.named.push(logger_runtime_field);
         }
         Unnamed(fields_unnamed) => {
             fields_unnamed.unnamed.push(runtime_field);
             fields_unnamed.unnamed.push(lifecycle_sink_field);
+            fields_unnamed.unnamed.push(parse_quote! { lifecycle_running: bool });
+            fields_unnamed.unnamed.push(parse_quote! { shutdown_completed: bool });
+            fields_unnamed.unnamed.push(parse_quote! { stop_reason: ::cu29::curuntime::RuntimeStopReason });
             fields_unnamed.unnamed.push(logger_runtime_field);
         }
         Fields::Unit => {
@@ -256,7 +262,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         Err(e) => return return_error(e.to_string()),
     };
     let mut all_missions_tokens = Vec::<proc_macro2::TokenStream>::new();
-    for (mission, graph) in &all_missions {
+    for (mission_index, (mission, graph)) in all_missions.iter().enumerate() {
+        let mission_index = mission_index as u32;
+        let mission_names = all_missions.iter().map(|(name, _)| name.as_str()).collect::<Vec<_>>();
         let git_commit_tokens = git_commit_tokens.clone();
         let git_dirty_tokens = git_dirty_tokens.clone();
         let mission_mod = parse_str::<Ident>(mission.as_str())
@@ -2836,6 +2844,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     )) {
                         Ok(result) => result,
                         Err(payload) => {
+                            self.stop_reason = cu29::curuntime::RuntimeStopReason::Panic;
                             let panic_message = cu29::monitoring::panic_payload_to_string(payload.as_ref());
                             self.copper_runtime.monitor.process_panic(&panic_message);
                             let _ = self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::Panic {
@@ -2856,6 +2865,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     }
 
                     if STOP_FLAG.load(Ordering::SeqCst) || result.is_err() {
+                        if result.is_err() && self.stop_reason != cu29::curuntime::RuntimeStopReason::Panic { self.stop_reason = cu29::curuntime::RuntimeStopReason::Error; }
                         break result;
                     }
                 }
@@ -2878,6 +2888,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     }
 
                     if STOP_FLAG.load(Ordering::SeqCst) || result.is_err() {
+                        if result.is_err() && self.stop_reason != cu29::curuntime::RuntimeStopReason::Panic { self.stop_reason = cu29::curuntime::RuntimeStopReason::Error; }
                         break result;
                     }
                 }
@@ -3461,10 +3472,79 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 Ok(())
             }
         };
+        let stop_components_sig = if sim_mode {
+            quote! { fn stop_components(&mut self, sim_callback: &mut impl FnMut(SimStep) -> SimOverride) -> CuResult<()> }
+        } else { quote! { fn stop_components(&mut self) -> CuResult<()> } };
+        let stop_components = quote! {
+            #stop_components_sig {
+                let result: CuResult<()> = (|| {
+                let lifecycle_clid = self.copper_runtime.copperlists_manager.last_cl_id();
+                let mut ctx = cu29::context::CuContext::from_runtime_metadata(
+                    self.copper_runtime.clock(),
+                    lifecycle_clid,
+                    self.copper_runtime.instance_id(),
+                    self.copper_runtime.subsystem_code(),
+                    #mission_mod::TASK_IDS,
+                );
+                #(#stop_calls)*
+                ctx.clear_current_component();
+                ctx.clear_current_task();
+                self.copper_runtime.monitor.stop(&ctx)?;
+                self.copper_runtime.copperlists_manager.finish_pending()?;
+                #keyframe_finish_pending
+                Ok(())
+                })();
+                match result {
+                    Ok(()) => {
+                        self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::MissionStopped { reason: self.stop_reason })?;
+                        self.lifecycle_running = false;
+                        self.stop_reason = cu29::curuntime::RuntimeStopReason::Requested;
+                        Ok(())
+                    }
+                    Err(error) => {
+                        let _ = self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::LifecycleFailed {
+                            operation: cu29::curuntime::RuntimeLifecycleOperation::Stop, error: error.to_string(),
+                        });
+                        Err(error)
+                    }
+                }
+            }
+        };
+        let drop_stop = if sim_mode {
+            quote! { self.stop_components(&mut |_| SimOverride::ExecuteByRuntime) }
+        } else { quote! { self.stop_components() } };
+        let drop_panic = std.then(|| quote! {
+            if std::thread::panicking() {
+                self.stop_reason = cu29::curuntime::RuntimeStopReason::Panic;
+                let _ = self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::Panic {
+                    message: "Application is unwinding after a panic".to_string(), file: None, line: None, column: None,
+                });
+            }
+        });
+        let app_drop_impl = quote! {
+            impl Drop for #application_name {
+                fn drop(&mut self) {
+                    if self.shutdown_completed { return; }
+                    #drop_panic
+                    if self.lifecycle_running && #drop_stop.is_err() { return; }
+                    if let Err(error) = self.log_shutdown_completed() {
+                        let _ = self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::LifecycleFailed {
+                            operation: cu29::curuntime::RuntimeLifecycleOperation::Shutdown, error: error.to_string(),
+                        });
+                    }
+                }
+            }
+        };
         let run_methods: proc_macro2::TokenStream = quote! {
 
             #run_one_iteration {
-                #iteration_body
+                let result: CuResult<()> = (|| { #iteration_body })();
+                if let Err(error) = &result {
+                    let _ = self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::LifecycleFailed {
+                        operation: cu29::curuntime::RuntimeLifecycleOperation::Iteration, error: error.to_string(),
+                    });
+                }
+                result
             }
 
             fn restore_keyframe(&mut self, keyframe: &KeyFrame) -> CuResult<()> {
@@ -3480,9 +3560,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             #start_all_tasks {
-                let _ = self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::MissionStarted {
-                    mission: #mission.to_string(),
-                });
+                self.lifecycle_running = true;
+                let result: CuResult<()> = (|| {
                 let lifecycle_clid = self.copper_runtime.copperlists_manager.last_cl_id();
                 let mut ctx = cu29::context::CuContext::from_runtime_metadata(
                     self.copper_runtime.clock(),
@@ -3497,31 +3576,23 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 ctx.clear_current_task();
                 self.copper_runtime.monitor.start(&ctx)?;
                 Ok(())
+                })();
+                match result {
+                    Ok(()) => {
+                        self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::MissionStarted)?;
+                        self.lifecycle_running = true;
+                        Ok(())
+                    }
+                    Err(error) => {
+                        let _ = self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::LifecycleFailed {
+                            operation: cu29::curuntime::RuntimeLifecycleOperation::Start, error: error.to_string(),
+                        });
+                        Err(error)
+                    }
+                }
             }
 
-            #stop_all_tasks {
-                let lifecycle_clid = self.copper_runtime.copperlists_manager.last_cl_id();
-                let mut ctx = cu29::context::CuContext::from_runtime_metadata(
-                    self.copper_runtime.clock(),
-                    lifecycle_clid,
-                    self.copper_runtime.instance_id(),
-                    self.copper_runtime.subsystem_code(),
-                    #mission_mod::TASK_IDS,
-                );
-                #(#stop_calls)*
-                ctx.clear_current_component();
-                ctx.clear_current_task();
-                self.copper_runtime.monitor.stop(&ctx)?;
-                self.copper_runtime.copperlists_manager.finish_pending()?;
-                #keyframe_finish_pending
-                // TODO(lifecycle): emit typed stop reasons (completed/error/panic/requested)
-                // once panic/reporting flow is finalized for std and no-std.
-                let _ = self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::MissionStopped {
-                    mission: #mission.to_string(),
-                    reason: "stop_all_tasks".to_string(),
-                });
-                Ok(())
-            }
+            #stop_all_tasks { self.stop_components(#sim_callback_arg) }
 
             #run {
                 #run_body
@@ -3574,6 +3645,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             pub struct AppResources {
                 pub config: CuConfig,
                 pub config_source: RuntimeLifecycleConfigSource,
+                pub log_context: Option<cu29::prelude::SectionContext>,
                 pub resources: ResourceManager,
                 #app_resources_thread_pools_field
             }
@@ -3639,6 +3711,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 Ok(AppResources {
                     config,
                     config_source,
+                    log_context: None,
                     resources,
                     #prepare_resources_thread_pools_init
                 })
@@ -3699,10 +3772,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! {
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: creating keyframes stream");
-                let local_keyframe_sink = stream_write::<KeyFrame, S>(
+                let local_keyframe_sink = cu29::prelude::stream_write_context::<KeyFrame, S>(
                     unified_logger.clone(),
                     UnifiedLogType::FrozenTasks,
-                    1024 * 1024 * 10, // 10 MiB
+                    1024 * 1024 * 10, log_context, // 10 MiB
                 )?;
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: keyframes stream ready");
@@ -3908,9 +3981,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         };
 
         let local_structured_logger_init = quote! {
-            let local_structured_log_sink = ::cu29::prelude::LogStream::new(
+            let local_structured_log_sink = ::cu29::prelude::LogStream::with_context(
                 ::cu29::prelude::UnifiedLogType::StructuredLogLine,
-                unified_logger.clone(), 4096 * 10,
+                unified_logger.clone(), 4096 * 10, log_context,
             )?;
         };
         let (early_structured_logger_init, late_structured_logger_init) = if logstream_enabled {
@@ -3946,10 +4019,15 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let AppResources {
                     config,
                     config_source,
+                    log_context,
                     resources,
                     #build_with_resources_thread_pools_destructure
                 } = app_resources;
 
+                let log_context = match log_context {
+                    Some(context) => context,
+                    None => Self::prepare_log_metadata::<S, L>(&unified_logger, &config, instance_id)?,
+                };
                 #early_structured_logger_init
 
                 // For simple cases we can say the section is just a bunch of Copper Lists.
@@ -3967,10 +4045,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 );
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: creating copperlist stream");
-                let local_copperlist_sink = stream_write::<#mission_mod::CuList, S>(
+                let local_copperlist_sink = cu29::prelude::stream_write_context::<#mission_mod::CuList, S>(
                     unified_logger.clone(),
                     UnifiedLogType::CopperList,
-                    default_section_size,
+                    default_section_size, log_context,
                     // the 2 sizes are not directly related as we encode the CuList but we can
                     // assume the encoded size is close or lower than the non encoded one
                     // This is to be sure we have the size of at least a Culist and some.
@@ -3985,34 +4063,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: creating runtime lifecycle stream");
-                let effective_config_ron = config
-                    .serialize_ron()
-                    .unwrap_or_else(|_| "<failed to serialize config>".to_string());
-                let mut local_lifecycle_sink = stream_write::<RuntimeLifecycleRecord, S>(
-                    unified_logger.clone(),
-                    UnifiedLogType::RuntimeLifecycle,
-                    effective_config_ron.len().saturating_add(1024 * 64),
-                )?;
+                let effective_config_ron = config.serialize_ron()?;
                 ::cu29::logcodec::set_effective_config_ron::<super::#mission_mod::CuStampedDataSet>(&effective_config_ron);
-                let stack_info = RuntimeLifecycleStackInfo {
-                    app_name: env!("CARGO_PKG_NAME").to_string(),
-                    app_version: env!("CARGO_PKG_VERSION").to_string(),
-                    git_commit: #git_commit_tokens,
-                    git_dirty: #git_dirty_tokens,
-                    subsystem_id: #application_name::subsystem().id().map(str::to_string),
-                    subsystem_code: #application_name::subsystem().code(),
-                    instance_id,
-                };
-                local_lifecycle_sink.log(&RuntimeLifecycleRecord {
-                    timestamp: clock.now(),
-                    event: RuntimeLifecycleEvent::Instantiated {
-                        config_source,
-                        effective_config_ron,
-                        stack: stack_info,
-                    },
-                })?;
-                #[cfg(target_os = "none")]
-                ::cu29::prelude::info!("CuApp new: runtime lifecycle stream ready");
+                let mut local_lifecycle_sink = cu29::prelude::stream_write_context::<RuntimeLifecycleRecord, S>(
+                    unified_logger.clone(), UnifiedLogType::RuntimeLifecycle, 4096, log_context,
+                )?;
 
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: building runtime");
@@ -4040,9 +4095,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: runtime built");
 
+                local_lifecycle_sink.log(&RuntimeLifecycleRecord {
+                    timestamp: copper_runtime.clock_ref().now(),
+                    event: RuntimeLifecycleEvent::Instantiated { config_source },
+                })?;
                 let application = Ok(#application_name {
                     copper_runtime,
                     runtime_lifecycle_sink: Some(Box::new(local_lifecycle_sink)),
+                    lifecycle_running: false,
+                    shutdown_completed: false,
+                    stop_reason: cu29::curuntime::RuntimeStopReason::Requested,
                     logger_runtime,
                 });
 
@@ -4052,14 +4114,39 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         };
 
+        let metadata_log_lock = if std {
+            quote! { let mut logger = logger.lock().map_err(|_| CuError::from("Logger mutex poisoned"))?; }
+        } else { quote! { let mut logger = logger.lock(); } };
         let app_inherent_impl = quote! {
             impl #application_name {
+                #stop_components
                 const SUBSYSTEM: cu29::prelude::app::Subsystem =
                     cu29::prelude::app::Subsystem::new(#subsystem_id_tokens, #subsystem_code_literal);
 
                 #[inline]
                 pub fn subsystem() -> cu29::prelude::app::Subsystem {
                     Self::SUBSYSTEM
+                }
+
+                #[doc(hidden)]
+                fn prepare_log_metadata<S: SectionStorage, L: UnifiedLogWrite<S>>(
+                    logger: &Arc<Mutex<L>>, config: &CuConfig, instance_id: u32,
+                ) -> CuResult<cu29::prelude::SectionContext> {
+                    let metadata = cu29::prelude::ApplicationMetadata {
+                        app_type: stringify!(#application_name).to_string(),
+                        app_name: env!("CARGO_PKG_NAME").to_string(),
+                        app_version: env!("CARGO_PKG_VERSION").to_string(),
+                        git_commit: #git_commit_tokens,
+                        git_dirty: #git_dirty_tokens,
+                        subsystem_id: Self::subsystem().id().map(str::to_string),
+                        subsystem_code: Self::subsystem().code(),
+                        effective_config_ron: config.serialize_ron()?,
+                        missions: vec![#(#mission_names.to_string()),*],
+                        catalog_offset: 0,
+                    };
+                    #metadata_log_lock
+                    logger.seal_metadata::<()>(&metadata, None)?;
+                    logger.construction_context(instance_id, #mission_index)
                 }
 
                 pub fn original_config() -> String {
@@ -4092,8 +4179,19 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 /// Convenience helper for manual execution loops to mark graceful shutdown.
                 // TODO(lifecycle): add helper(s) for panic/error stop reporting once we wire
                 // RuntimeLifecycleEvent::Panic across std/no-std execution models.
+                /// Select the typed reason for this construction's next successful stop.
+                pub fn set_stop_reason(&mut self, reason: cu29::curuntime::RuntimeStopReason) { self.stop_reason = reason; }
+
                 pub fn log_shutdown_completed(&mut self) -> CuResult<()> {
-                    self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::ShutdownCompleted)
+                    if self.lifecycle_running { return Err(CuError::from("Stop the application before completing shutdown")); }
+                    if self.shutdown_completed { return Ok(()); }
+                    self.copper_runtime.copperlists_manager.close_output()?;
+                    self.copper_runtime.keyframes_manager.close_output()?;
+                    self.logger_runtime.try_flush()?;
+                    self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::ShutdownCompleted)?;
+                    self.shutdown_completed = true;
+                    self.runtime_lifecycle_sink.take();
+                    Ok(())
                 }
 
                 #prepare_config_fn
@@ -4716,11 +4814,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         .clock
                         .ok_or(CuError::from("Clock missing from builder"))?;
                     let (config, config_source) = #builder_prepare_config_call;
+                    let log_context = #application_name::prepare_log_metadata::<S, L>(&self.unified_logger, &config, self.instance_id)?;
                     let resources = (self.resources_factory)(&config)?;
                     #builder_build_thread_pools_stmt
                     let app_resources = AppResources {
                         config,
                         config_source,
+                        log_context: Some(log_context),
                         resources,
                         #builder_build_thread_pools_init
                     };
@@ -4918,7 +5018,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::curuntime::RuntimeLifecycleConfigSource;
                 use cu29::curuntime::RuntimeLifecycleEvent;
                 use cu29::curuntime::RuntimeLifecycleRecord;
-                use cu29::curuntime::RuntimeLifecycleStackInfo;
                 use cu29::CuResult;
                 use cu29::CuError;
                 use cu29::cutask::CuSrcTask;
@@ -5010,6 +5109,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 pub #application_struct
 
                 #app_inherent_impl
+                #app_drop_impl
                 #app_builder_inherent_impl
                 #app_metadata_impl
                 #app_reflect_impl

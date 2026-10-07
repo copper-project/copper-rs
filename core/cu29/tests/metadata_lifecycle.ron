@@ -1,0 +1,6 @@
+(
+    logging: (enable_task_logging: true, enable_keyframe_logging: false),
+    monitors: [(type: "FatalMonitor")],
+    tasks: [(id: "source", type: "Source"), (id: "sink", type: "Sink")],
+    cnx: [(src: "source", dst: "sink", msg: "u32")],
+)
