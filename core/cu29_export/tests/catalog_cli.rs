@@ -275,7 +275,7 @@ fn test_catalog_preserves_unicode_storage_symbols() {
             payload: Some(ValueDecodeRef::of::<f32::Mass>()),
         },
     ];
-    let description = CatalogDescription {
+    static DESCRIPTION: CatalogDescription = CatalogDescription {
         layout: ValueDecodeCatalogLayout::Compact,
         missions: &[CatalogMission { slots: SLOTS }],
     };
@@ -292,7 +292,7 @@ fn test_catalog_preserves_unicode_storage_symbols() {
         panic!("writer")
     };
     logger
-        .seal_metadata(&metadata(), Some(&StartupCatalog(&description)))
+        .seal_metadata(&metadata(), Some(&StartupCatalog(&DESCRIPTION)))
         .unwrap();
     drop(logger);
     let catalog = cu29_export::catalog::read_value_decode_catalog(&path, None).unwrap();
