@@ -245,8 +245,8 @@ fn static_catalog_spans_backing_files_as_one_section() {
 #[test]
 fn test_catalog_preserves_unicode_storage_symbols() {
     use bincode::value_decode::ValueDecodeRef;
-    use cu29::catalog_stream::{CatalogDescription, CatalogSlot};
     use cu29::units::si::{f32, f64};
+    use cu29_value::catalog_stream::{CatalogDescription, CatalogSlot};
 
     static SLOTS: &[CatalogSlot] = &[
         CatalogSlot {
@@ -276,14 +276,12 @@ fn test_catalog_preserves_unicode_storage_symbols() {
         },
     ];
     let description = CatalogDescription {
-        mission: "default",
-        config_ron: "(tasks: [], cnx: [])",
         layout: ValueDecodeCatalogLayout::Compact,
-        slots: SLOTS,
+        missions: &[CatalogMission { slots: SLOTS }],
     };
     let dir = tempfile::tempdir_in(env!("CARGO_MANIFEST_DIR")).unwrap();
     let path = dir.path().join("units.copper");
-    let UnifiedLogger::Write(logger) = UnifiedLoggerBuilder::new()
+    let UnifiedLogger::Write(mut logger) = UnifiedLoggerBuilder::new()
         .file_base_name(&path)
         .write(true)
         .create(true)
@@ -293,8 +291,9 @@ fn test_catalog_preserves_unicode_storage_symbols() {
     else {
         panic!("writer")
     };
-    let logger = Arc::new(Mutex::new(logger));
-    record_value_decode_catalog(logger.clone(), &description).unwrap();
+    logger
+        .seal_metadata(&metadata(), Some(&StartupCatalog(&description)))
+        .unwrap();
     drop(logger);
     let catalog = cu29_export::catalog::read_value_decode_catalog(&path, None).unwrap();
     let ron = ron::ser::to_string_pretty(
