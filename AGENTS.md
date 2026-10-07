@@ -199,6 +199,12 @@ Implications:
 
 ## Practical Development Notes
 
+- Whenever considering a change to a feature, always ask the maintainer whether
+  backward compatibility is required before choosing the implementation. If it is
+  required, establish which released APIs, formats, or existing user data must be
+  supported. Do not invent compatibility requirements for unused or unreleased
+  iterations of a feature.
+
 - When publishing a stable minor or patch release, including a backport, complete
   the GitHub release checklist in `RELEASING.md`. Publish an entry for the exact
   release tag using the global Copper Release Notes, and keep Latest on the

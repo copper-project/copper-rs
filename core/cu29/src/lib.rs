@@ -23,6 +23,7 @@
 //! - `std`: host/runtime support that is also safe to compile for browser targets
 //! - `signal-handler`: desktop Ctrl-C integration for generated `run()` loops
 //! - `reflect`: reflection support for runtime and units types
+//! - `self-describing-logs`: experimental native-payload descriptions and offline value decoding; enables `std` and `reflect`
 //! - `textlogs`: text logging derive support
 //! - `remote-debug`: remote debug transport support
 //! - `sysclock-perf`: use a host/system clock for runtime perf timing while keeping robot time for `tov` and `rate_target_hz`
@@ -170,6 +171,8 @@ pub use bincode;
 pub use cu29_clock as clock;
 #[cfg(feature = "units")]
 pub use cu29_units as units;
+#[cfg(feature = "self-describing-logs")]
+pub use cu29_value::decode as value_decode;
 #[doc(hidden)]
 pub use serde;
 #[cfg(feature = "defmt")]
@@ -286,6 +289,7 @@ pub mod prelude {
     pub use crate::{safety_case, safety_check, safety_check_eq};
     #[cfg(feature = "reflect")]
     pub use bevy_reflect_derive::Reflect;
+    pub use bincode::{ValueDecode, ValueDecodeSpec};
     #[cfg(feature = "signal-handler")]
     pub use ctrlc;
     pub use cu29_clock::*;
@@ -344,8 +348,12 @@ pub mod prelude {
     #[cfg(feature = "std")]
     pub use cu29_unifiedlog::memmap;
     pub use cu29_unifiedlog::*;
-    pub use cu29_value::Value;
+    #[cfg(feature = "self-describing-logs")]
+    pub use cu29_value::decode::{ValueDecodeDescription, ValueDecodeLimits};
     pub use cu29_value::to_value;
+    pub use cu29_value::{
+        Quantity, QuantityMetadata, StorageUnit, TimeStorageUnit, Value, ValueMetadata,
+    };
     pub use serde_derive::{Deserialize, Serialize};
 }
 

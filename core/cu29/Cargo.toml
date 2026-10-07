@@ -51,6 +51,7 @@ rayon = { workspace = true, optional = true }
 ctrlc = { workspace = true, optional = true }
 
 [features]
+self-describing-logs = ["std", "reflect", "cu29-runtime/self-describing-logs"]
 logstream-verify = ["logstream", "cu29-logstream/verify-reconstruction"]
 default = ["std", "signal-handler", "textlogs", "units"]
 defmt = [

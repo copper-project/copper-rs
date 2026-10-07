@@ -33,6 +33,7 @@ members = [
   "core/cu29_traits",
   "core/cu29_unifiedlog",
   "core/cu29_value",
+  "core/cu29_value_types",
   "components/bridges/cu_crsf",
   "components/bridges/cu_feetech",
   "components/bridges/cu_msp_bridge",
@@ -271,6 +272,7 @@ cu29-unifiedlog = { path = "core/cu29_unifiedlog", default-features = false, fea
   "compact",
 ], version = "1.3.0-dev" }
 cu29-units = { path = "core/cu29_units", version = "1.3.0-dev" }
+cu29-value-types = { path = "core/cu29_value_types", version = "1.3.0-dev" }
 cu29-value = { path = "core/cu29_value", default-features = false, version = "1.3.0-dev" }
 cu-ffv1-codec = { path = "components/codecs/cu_ffv1_codec", version = "1.3.0-dev" }
 cu-fec = { path = "components/libs/cu_fec", version = "1.3.0-dev", default-features = false }

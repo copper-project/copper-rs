@@ -167,8 +167,10 @@ If you really want to use bincode to encode/decode a different protocol, conside
 
 ## Native encoding descriptions
 
-Enable `self-describing` alongside `derive` to generate a `ValueDecode`
-implementation with native `Encode` derives. Types containing `with_serde`
+`ValueDecode` is always available, including in `no_std` builds. Types deriving
+`Encode` can use `#[bincode(describe)]` to generate their description independently
+of Cargo features. Enable `self-describing` alongside `derive` to generate
+descriptions for all native `Encode` derives. Types containing `with_serde`
 fields retain their codec implementations but need a handwritten `ValueDecode`
 implementation because Serde controls their wire representation. The companion uses the encoder's
 parsed declaration and field attributes, preserving field order, enum tags,
@@ -189,7 +191,9 @@ impl ValueDecode for Orientation {
 
 Recipes are static and construct no value tree on the encoding path. Copper's
 experimental `cu29_value::decode::ValueDecodeDescription` combines them with
-reflection and quantity metadata to interpret native payload bytes offline.
+reflection and typed `ValueDecode::METADATA` to interpret native payload bytes offline.
+The allocation-free metadata vocabulary, scalar kinds, and record shapes are
+shared through `cu29-value-types`. Metadata remains separate from native payload bytes.
 Missing nested recipes produce compile errors when companion generation is
 enabled. Serde adapter encodings and selective `Uleb128` encodings require
 additional supported recipes.

@@ -17,8 +17,9 @@ impl DeriveEnum {
     }
 
     pub fn generate_encode(self, generator: &mut Generator) -> Result<()> {
-        #[cfg(feature = "self-describing")]
-        crate::value_decode::generate_enum(generator, &self.attributes, &self.variants)?;
+        if self.attributes.describe || cfg!(feature = "self-describing") {
+            crate::value_decode::generate_enum(generator, &self.attributes, &self.variants)?;
+        }
         let field_bounds = FieldBounds::new(
             self.variants
                 .iter()

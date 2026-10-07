@@ -3,6 +3,7 @@ use virtue::utils::{ParsedAttribute, parse_tagged_attribute};
 
 pub struct ContainerAttributes {
     pub crate_name: String,
+    pub describe: bool,
     pub bounds: Option<(String, Literal)>,
     pub decode_bounds: Option<(String, Literal)>,
     pub decode_context: Option<(String, Literal)>,
@@ -14,6 +15,7 @@ impl Default for ContainerAttributes {
     fn default() -> Self {
         Self {
             crate_name: "::bincode".to_string(),
+            describe: false,
             bounds: None,
             decode_bounds: None,
             decode_context: None,
@@ -86,6 +88,9 @@ impl FromAttribute for ContainerAttributes {
                     } else {
                         return Err(Error::custom_at("Should be a literal str", val.span()));
                     }
+                }
+                ParsedAttribute::Tag(i) if i.to_string() == "describe" => {
+                    result.describe = true;
                 }
                 ParsedAttribute::Tag(i) => {
                     return Err(Error::custom_at("Unknown field attribute", i.span()));

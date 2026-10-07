@@ -31,6 +31,7 @@ derive = ["dep:cu-bincode-derive"]
 self-describing = ["cu-bincode-derive?/self-describing"]
 
 [dependencies]
+cu29-value-types = { path = "../cu29_value_types", version = "1.3.0-dev" }
 cu-bincode-derive = { path = "../cu_bincode_derive", version = "=2.2.0-beta", optional = true }
 serde = { version = "1.0", default-features = false, optional = true }
 unty = "0.0"

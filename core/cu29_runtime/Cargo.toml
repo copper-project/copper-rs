@@ -93,6 +93,7 @@ serde = { workspace = true }
 tempfile = { workspace = true }
 
 [features]
+self-describing-logs = ["cu29-value/self-describing-logs"]
 default = ["std"]
 # Optional worker handles; absent from monitoring contexts when streaming is disabled.
 logstream-monitoring = ["std"]

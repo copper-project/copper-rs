@@ -1801,6 +1801,8 @@ impl<T, const N: usize> cu_bincode::de::Decode<()> for cu29_runtime::payload::Cu
 pub fn cu29_runtime::payload::CuArray<T, N>::decode<D: cu_bincode::de::Decoder<Context = ()>>(decoder: &mut D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
 impl<T, const N: usize> cu_bincode::enc::Encode for cu29_runtime::payload::CuArray<T, N> where T: cu_bincode::enc::Encode + core::clone::Clone
 pub fn cu29_runtime::payload::CuArray<T, N>::encode<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
+impl<T: core::clone::Clone + cu_bincode::value_decode::ValueDecode, const N: usize> cu_bincode::value_decode::ValueDecode for cu29_runtime::payload::CuArray<T, N>
+pub const cu29_runtime::payload::CuArray<T, N>::DECODE: &'static cu_bincode::value_decode::ValueDecodeSpec
 impl<T: core::clone::Clone, const N: usize> cu29_runtime::reflect::TypePath for cu29_runtime::payload::CuArray<T, N>
 pub fn cu29_runtime::payload::CuArray<T, N>::crate_name() -> core::option::Option<&'static str>
 pub fn cu29_runtime::payload::CuArray<T, N>::module_path() -> core::option::Option<&'static str>
@@ -1814,6 +1816,8 @@ impl<T, const N: usize> cu_bincode::de::Decode<()> for cu29_runtime::payload::Cu
 pub fn cu29_runtime::payload::CuArrayVec<T, N>::decode<D: cu_bincode::de::Decoder<Context = ()>>(decoder: &mut D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
 impl<T, const N: usize> cu_bincode::enc::Encode for cu29_runtime::payload::CuArrayVec<T, N> where T: core::clone::Clone + cu_bincode::enc::Encode + 'static
 pub fn cu29_runtime::payload::CuArrayVec<T, N>::encode<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
+impl<T: core::clone::Clone + cu_bincode::value_decode::ValueDecode, const N: usize> cu_bincode::value_decode::ValueDecode for cu29_runtime::payload::CuArrayVec<T, N>
+pub const cu29_runtime::payload::CuArrayVec<T, N>::DECODE: &'static cu_bincode::value_decode::ValueDecodeSpec
 impl<T: core::clone::Clone, const N: usize> core::default::Default for cu29_runtime::payload::CuArrayVec<T, N>
 pub fn cu29_runtime::payload::CuArrayVec<T, N>::default() -> Self
 impl<T: core::clone::Clone, const N: usize> cu29_runtime::reflect::TypePath for cu29_runtime::payload::CuArrayVec<T, N>
@@ -1969,6 +1973,8 @@ impl<'de, U> serde_core::de::Deserialize<'de> for cu29_runtime::pool::CuHandle<a
 pub fn cu29_runtime::pool::CuHandle<alloc::vec::Vec<U>>::deserialize<D: serde_core::de::Deserializer<'de>>(deserializer: D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 impl<'de, U> serde_core::de::Deserialize<'de> for cu29_runtime::pool::CuHandle<cu29_runtime::pool::CuSharedMemoryBuffer<U>> where U: cu29_runtime::pool::ElementType + serde_core::de::Deserialize<'de> + 'static
 pub fn cu29_runtime::pool::CuHandle<cu29_runtime::pool::CuSharedMemoryBuffer<U>>::deserialize<D: serde_core::de::Deserializer<'de>>(deserializer: D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+impl<T: core::fmt::Debug + core::marker::Send + core::marker::Sync + cu_bincode::value_decode::ValueDecode> cu_bincode::value_decode::ValueDecode for cu29_runtime::pool::CuHandle<T>
+pub const cu29_runtime::pool::CuHandle<T>::DECODE: &'static cu_bincode::value_decode::ValueDecodeSpec
 impl<T: core::fmt::Debug + core::marker::Send + core::marker::Sync> core::clone::Clone for cu29_runtime::pool::CuHandle<T>
 pub fn cu29_runtime::pool::CuHandle<T>::clone(&self) -> Self
 impl<T: core::fmt::Debug + core::marker::Send + core::marker::Sync> core::default::Default for cu29_runtime::pool::CuHandle<T>
