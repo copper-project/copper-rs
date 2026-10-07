@@ -384,6 +384,7 @@ pub struct ByteLogger<B: ByteStorage> {
     leases: Arc<LeaseTable>,
     generation: usize,
     next_run_id: u64,
+    retained_space: u64,
     append_pending: bool,
     faulted: bool,
 }
@@ -441,6 +442,7 @@ impl<B: ByteStorage> ByteLogger<B> {
             }),
             generation: 0,
             next_run_id: 1,
+            retained_space: 0,
             append_pending,
             faulted: false,
         }
@@ -471,6 +473,11 @@ impl<B: ByteStorage> ByteLogger<B> {
             if section.is_open {
                 return Err(CuError::from("Cannot append: retained section is open"));
             }
+            logger.retained_space = logger
+                .retained_space
+                .checked_add(section.allocated)
+                .filter(|used| *used <= logger.header.sections_end - logger.header.sections_begin)
+                .ok_or_else(|| CuError::from("Retained sections exceed data capacity"))?;
             logger.next_run_id = logger.next_run_id.max(
                 section
                     .context
@@ -926,6 +933,7 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
                 {
                     claims.seal(slot);
                 }
+                self.retained_space -= h.allocated;
                 let next = h.next_section;
                 if cursor == last_overlap {
                     self.header.head_section = next;
@@ -982,6 +990,7 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
         self.header.tail_section = position;
         self.header.clean_close = false;
         self.publish()?;
+        self.retained_space += size;
         for lease in self.leases.iter() {
             if lease.offset() == position {
                 lease.set_offset(0);
@@ -1021,8 +1030,9 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
     }
     fn status(&self) -> UnifiedLogStatus {
         UnifiedLogStatus {
-            total_used_space: self.header.tail_section as usize,
-            total_allocated_space: self.header.sections_end as usize,
+            total_used_space: usize::try_from(self.header.sections_begin + self.retained_space)
+                .unwrap_or(usize::MAX),
+            total_allocated_space: usize::try_from(self.header.sections_end).unwrap_or(usize::MAX),
         }
     }
 }

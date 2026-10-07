@@ -536,6 +536,8 @@ wt branch:
 
 # Byte section rings, mmap/SD agreement, construction/lifecycle and native replay.
 metadata-rollover-check:
+    cargo check -p cu-autoware --bin kpi
+    cargo run -p cu-logging-size
     cargo test -p cu29-unifiedlog
     cargo test -p cu29-unifiedlog --features mmap-fsync
     cargo test -p cu-sdlogger

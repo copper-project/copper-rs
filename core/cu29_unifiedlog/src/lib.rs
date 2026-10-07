@@ -222,7 +222,9 @@ impl<S: SectionStorage> SectionHandle<S> {
 /// Basic statistics for the unified logger.
 /// Note: the total_allocated_space might grow for the std implementation
 pub struct UnifiedLogStatus {
+    /// Bytes reserved for headers, static metadata and retained data sections.
     pub total_used_space: usize,
+    /// Total logical backing capacity, including free space.
     pub total_allocated_space: usize,
 }
 

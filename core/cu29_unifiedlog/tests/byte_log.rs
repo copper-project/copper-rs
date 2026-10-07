@@ -143,6 +143,7 @@ fn repeated_wrap_rebinds_sparse_streams_and_preserves_metadata() {
     }
     sparse.log(&999u32).unwrap();
     drop(sparse);
+    let reserved = logger.lock().unwrap().status().total_used_space;
     drop(logger);
     let retained = values(&path);
     assert!(retained.len() < 80 && !retained.is_empty());
@@ -163,6 +164,19 @@ fn repeated_wrap_rebinds_sparse_streams_and_preserves_metadata() {
             .0,
         [1; 100]
     );
+    let mut reader = UnifiedLoggerRead::new(&path).unwrap();
+    let mut allocated = reader.raw_main_header().page_size as usize;
+    loop {
+        let section = reader.raw_skip_section().unwrap();
+        if section.entry_type == UnifiedLogType::LastEntry {
+            break;
+        }
+        allocated += section.allocated as usize;
+    }
+    assert_eq!(reserved, allocated);
+    assert!(reserved <= 8192);
+    let reopened = writer(&path, 2048, 8192, true, CapacityPolicy::OverwriteOldest);
+    assert_eq!(reopened.status().total_used_space, reserved);
 }
 #[test]
 fn matching_append_changes_policy_and_allocates_new_run_ids() {
