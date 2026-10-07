@@ -44,7 +44,6 @@ decode-catalog = [
   "dep:cu29-units",
   "cu29-units/reflect",
 ]
-decode-catalog-build = ["decode-catalog", "self-describing-logs"]
 self-describing-logs = ["bincode/self-describing", "dep:heatshrink"]
 default = ["std"]
 std = ["ordered-float/std", "cu29-clock/std", "cu29-units?/std", "bincode/std"]

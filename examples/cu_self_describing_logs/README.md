@@ -6,7 +6,9 @@ Run `just check` for the startup integration tests.
 The application keeps its payloads in `src/payloads.rs` and enables
 `cu29/self-describing-logs`. Its ordinary `Encode` derives supply the descriptions.
 The generated builder serializes and compresses the reachable schemas at startup,
-then writes them through the unified logger. The recording loop uses the usual
+then writes one static section beside application metadata before resources.
+All compiled missions share that section and its schema graph; matching append
+reuses it. Start, stop and recording iterations reuse the startup metadata. The recording loop uses the usual
 native CopperList encoding.
 
 ```rust,ignore

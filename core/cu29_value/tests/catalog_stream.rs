@@ -6,8 +6,8 @@ use bincode::enc::write::SliceWriter;
 use bincode::value_decode::ValueDecodeRef;
 use cu_gnss_payloads::GnssFixSolution;
 use cu29_value::catalog::ValueDecodeCatalog;
-use cu29_value::catalog_header::ValueDecodeCatalogLayout;
-use cu29_value::catalog_stream::{CatalogDescription, CatalogSlot, write_catalog};
+use cu29_value::catalog_format::ValueDecodeCatalogLayout;
+use cu29_value::catalog_stream::{CatalogDescription, CatalogMission, CatalogSlot, write_catalog};
 use cu29_value::decode::ValueDecodeLimits;
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
@@ -59,26 +59,26 @@ struct Sample {
 }
 
 static CATALOG: CatalogDescription = CatalogDescription {
-    mission: "default",
-    config_ron: "(tasks: [], cnx: [])",
     layout: ValueDecodeCatalogLayout::Compact,
-    slots: &[
-        CatalogSlot {
-            task_id: "source",
-            msg_type: "Sample",
-            payload: Some(ValueDecodeRef::of::<Sample>()),
-        },
-        CatalogSlot {
-            task_id: "filter",
-            msg_type: "Sample",
-            payload: Some(ValueDecodeRef::of::<Sample>()),
-        },
-        CatalogSlot {
-            task_id: "uncaptured",
-            msg_type: "Opaque",
-            payload: None,
-        },
-    ],
+    missions: &[CatalogMission {
+        slots: &[
+            CatalogSlot {
+                task_id: "source",
+                msg_type: "Sample",
+                payload: Some(ValueDecodeRef::of::<Sample>()),
+            },
+            CatalogSlot {
+                task_id: "filter",
+                msg_type: "Sample",
+                payload: Some(ValueDecodeRef::of::<Sample>()),
+            },
+            CatalogSlot {
+                task_id: "uncaptured",
+                msg_type: "Opaque",
+                payload: None,
+            },
+        ],
+    }],
 };
 
 fn blob() -> Vec<u8> {
@@ -100,8 +100,11 @@ fn streams_external_and_recursive_types_without_allocating() {
     assert_eq!(ALLOCATIONS.with(Cell::get), 0);
     let len = writer.bytes_written();
     let catalog = ValueDecodeCatalog::from_blob(&buffer[..len]).unwrap();
-    assert_eq!(catalog.slots[0].binding, catalog.slots[1].binding);
-    assert_eq!(catalog.slots[2].binding, None);
+    assert_eq!(
+        catalog.missions[0].slots[0].binding,
+        catalog.missions[0].slots[1].binding
+    );
+    assert_eq!(catalog.missions[0].slots[2].binding, None);
     assert!(
         catalog
             .description
@@ -128,7 +131,7 @@ fn streams_external_and_recursive_types_without_allocating() {
     let (_, used) = catalog
         .description
         .decode_at(
-            catalog.slots[0].binding.unwrap(),
+            catalog.missions[0].slots[0].binding.unwrap(),
             &bytes,
             bincode::config::standard(),
             ValueDecodeLimits::default(),
@@ -153,10 +156,8 @@ fn rejects_corruption_truncation_and_wrong_lengths() {
 #[test]
 fn empty_catalog_remains_valid() {
     static EMPTY: CatalogDescription = CatalogDescription {
-        mission: "default",
-        config_ron: "()",
         layout: ValueDecodeCatalogLayout::Compact,
-        slots: &[],
+        missions: &[CatalogMission { slots: &[] }],
     };
     let mut buffer = [0; 4096];
     let mut writer = SliceWriter::new(&mut buffer);
@@ -165,6 +166,7 @@ fn empty_catalog_remains_valid() {
     assert!(
         ValueDecodeCatalog::from_blob(&buffer[..len])
             .unwrap()
+            .missions[0]
             .slots
             .is_empty()
     );

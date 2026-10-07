@@ -11,12 +11,3 @@ keywords.workspace = true
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
-
-[dependencies]
-cu29-value = { workspace = true, optional = true, features = [
-  "decode-catalog-build",
-] }
-cu29-traits = { workspace = true, optional = true, features = ["std"] }
-
-[features]
-self-describing-logs = ["dep:cu29-value", "dep:cu29-traits"]

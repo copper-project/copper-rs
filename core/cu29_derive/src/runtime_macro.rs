@@ -4117,6 +4117,20 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let metadata_log_lock = if std {
             quote! { let mut logger = logger.lock().map_err(|_| CuError::from("Logger mutex poisoned"))?; }
         } else { quote! { let mut logger = logger.lock(); } };
+        let seal_metadata = if cfg!(feature = "self-describing-logs") {
+            let modules = mission_names.iter().map(|name| parse_str::<Ident>(name).unwrap()).collect::<Vec<_>>();
+            let layout = if cfg!(feature = "flat-copperlist-encoding") { quote! { Flat } } else { quote! { Compact } };
+            quote! {
+                if let Some(error) = [#(super::#modules::VALUE_DECODE_CATALOG_ERROR),*].into_iter().flatten().next() {
+                    return Err(CuError::from(error));
+                }
+                let catalog = cu29::catalog_stream::CatalogDescription {
+                    layout: cu29::prelude::ValueDecodeCatalogLayout::#layout,
+                    missions: &[#(super::#modules::VALUE_DECODE_CATALOG_MISSION),*],
+                };
+                logger.seal_metadata(&metadata, Some(&cu29::prelude::CompressedCatalog(&catalog)))?;
+            }
+        } else { quote! { logger.seal_metadata::<()>(&metadata, None)?; } };
         let app_inherent_impl = quote! {
             impl #application_name {
                 #stop_components
@@ -4145,7 +4159,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         catalog_offset: 0,
                     };
                     #metadata_log_lock
-                    logger.seal_metadata::<()>(&metadata, None)?;
+                    #seal_metadata
                     logger.construction_context(instance_id, #mission_index)
                 }
 

@@ -304,7 +304,7 @@ pub mod prelude {
     pub use cu29_runtime::app::*;
     #[cfg(feature = "self-describing-logs")]
     #[doc(hidden)]
-    pub use cu29_runtime::catalog::record_value_decode_catalog;
+    pub use cu29_runtime::catalog::CompressedCatalog;
     pub use cu29_runtime::config::*;
     pub use cu29_runtime::context::*;
     pub use cu29_runtime::copperlist::*;
@@ -354,9 +354,11 @@ pub mod prelude {
     pub use cu29_unifiedlog::memmap;
     pub use cu29_unifiedlog::*;
     #[cfg(feature = "decode-catalog")]
-    pub use cu29_value::catalog::{ValueDecodeCatalog, ValueDecodeCatalogBuilder};
+    pub use cu29_value::catalog::{
+        ValueDecodeCatalog, ValueDecodeCatalogMission, ValueDecodeCatalogSlot,
+    };
     #[cfg(feature = "self-describing-logs")]
-    pub use cu29_value::catalog_header::{ValueDecodeCatalogHeader, ValueDecodeCatalogLayout};
+    pub use cu29_value::catalog_format::ValueDecodeCatalogLayout;
     #[cfg(feature = "decode-catalog")]
     pub use cu29_value::decode::{ValueDecodeDescription, ValueDecodeLimits};
     pub use cu29_value::to_value;

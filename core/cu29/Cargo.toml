@@ -55,13 +55,7 @@ self-describing-logs = [
   "cu29-runtime/self-describing-logs",
   "cu29-derive/self-describing-logs",
 ]
-decode-catalog = [
-  "self-describing-logs",
-  "std",
-  "reflect",
-  "cu29-value/decode-catalog",
-  "cu29-derive/decode-catalog",
-]
+decode-catalog = ["std", "reflect", "cu29-value/decode-catalog"]
 logstream-verify = ["logstream", "cu29-logstream/verify-reconstruction"]
 default = ["std", "signal-handler", "textlogs", "units"]
 defmt = [

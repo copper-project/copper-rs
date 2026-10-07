@@ -8,7 +8,7 @@ use cu29::units::si::length::centimeter;
 use std::collections::BTreeMap;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Encode, Decode, Reflect)]
-#[bincode(decode_context = "()")]
+#[bincode(decode_context = "()", describe)]
 #[reflect(from_reflect = false)]
 struct SensorSample {
     ticks: u32,

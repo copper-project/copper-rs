@@ -278,7 +278,7 @@ where
                 }
 
                 match header.entry_type {
-                    UnifiedLogType::ApplicationMetadata | UnifiedLogType::ValueDecodeCatalog => {}
+                    UnifiedLogType::ApplicationMetadata => {}
                     UnifiedLogType::StructuredLogLine => {
                         structured_log_size += content.len();
                         let mut reader = Cursor::new(content.as_slice());

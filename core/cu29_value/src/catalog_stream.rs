@@ -1,8 +1,6 @@
 //! Borrowed catalog descriptions serialized once at startup with fixed working memory.
 
-use crate::catalog_header::{
-    HEADER_LEN, MAGIC, VALUE_DECODE_CATALOG_MAX_BYTES, VERSION, ValueDecodeCatalogLayout,
-};
+use crate::catalog_format::{VALUE_DECODE_CATALOG_MAX_BYTES, VERSION, ValueDecodeCatalogLayout};
 use bincode::Encode;
 use bincode::ValueDecodeSpec;
 use bincode::config::standard;
@@ -24,12 +22,16 @@ pub struct CatalogSlot {
     pub payload: Option<ValueDecodeRef>,
 }
 
-/// Generated graph metadata; all strings and wire recipes are borrowed from the image.
-pub struct CatalogDescription {
-    pub mission: &'static str,
-    pub config_ron: &'static str,
-    pub layout: ValueDecodeCatalogLayout,
+/// One generated mission's output positions in native encoding order.
+#[derive(Clone, Copy)]
+pub struct CatalogMission {
     pub slots: &'static [CatalogSlot],
+}
+
+/// All compiled missions share one borrowed, deterministic payload graph.
+pub struct CatalogDescription {
+    pub layout: ValueDecodeCatalogLayout,
+    pub missions: &'static [CatalogMission],
 }
 
 struct Types {
@@ -63,9 +65,11 @@ impl Types {
             entries: [None; MAX_TYPES],
             len: 0,
         };
-        for slot in catalog.slots {
-            if let Some(payload) = slot.payload {
-                types.add(payload)?;
+        for mission in catalog.missions {
+            for slot in mission.slots {
+                if let Some(payload) = slot.payload {
+                    types.add(payload)?;
+                }
             }
         }
         if types.len == 0 {
@@ -210,8 +214,7 @@ impl Types {
     ) -> Result<(), EncodeError> {
         // Preserve the owned ValueDecodeCatalog body layout. Allocation and wire-op
         // deduplication are unnecessary for producing its indexed tables.
-        catalog.mission.encode(encoder)?;
-        catalog.config_ron.encode(encoder)?;
+        VERSION.encode(encoder)?;
         catalog.layout.encode(encoder)?;
         0usize.encode(encoder)?; // first root binding in ValueDecodeDescription
         self.len.encode(encoder)?;
@@ -247,12 +250,16 @@ impl Types {
                 }
             }
         }
-        catalog.slots.len().encode(encoder)?;
-        for slot in catalog.slots {
-            slot.task_id.encode(encoder)?;
-            slot.msg_type.encode(encoder)?;
-            let binding = slot.payload.and_then(|payload| self.id(payload));
-            binding.encode(encoder)?;
+        catalog.missions.len().encode(encoder)?;
+        for (index, mission) in catalog.missions.iter().enumerate() {
+            (index as u32).encode(encoder)?;
+            mission.slots.len().encode(encoder)?;
+            for slot in mission.slots {
+                slot.task_id.encode(encoder)?;
+                slot.msg_type.encode(encoder)?;
+                let binding = slot.payload.and_then(|payload| self.id(payload));
+                binding.encode(encoder)?;
+            }
         }
         Ok(())
     }
@@ -276,17 +283,13 @@ pub(crate) struct CompressedWriter<W: Writer> {
     raw_len: usize,
 }
 impl<W: Writer> CompressedWriter<W> {
-    pub(crate) fn new(mut output: W) -> Result<Self, EncodeError> {
-        let mut header = [0; HEADER_LEN];
-        header[..8].copy_from_slice(MAGIC);
-        header[8..].copy_from_slice(&VERSION.to_le_bytes());
-        output.write(&header)?;
-        Ok(Self {
+    pub(crate) fn new(output: W) -> Self {
+        Self {
             compressor: Compressor::new(),
             output,
             crc: u32::MAX,
             raw_len: 0,
-        })
+        }
     }
 
     fn drain(&mut self) -> Result<(), EncodeError> {
@@ -341,7 +344,7 @@ pub fn write_catalog<W: Writer>(
     catalog: &CatalogDescription,
 ) -> Result<(), EncodeError> {
     let types = Types::collect(catalog)?;
-    let writer = CompressedWriter::new(output)?;
+    let writer = CompressedWriter::new(output);
     let mut encoder = EncoderImpl::new(writer, standard());
     types.encode(catalog, &mut encoder)?;
     encoder.into_writer().finish()
