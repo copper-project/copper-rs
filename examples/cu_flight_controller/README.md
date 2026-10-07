@@ -171,7 +171,9 @@ If you are building another replay target, follow the same pattern with
 The `self-describing-logs` feature records a compressed payload catalog automatically
 when the generated runtime is built. Simulation, host compute, and firmware enable
 this feature. Schema serialization and Heatshrink compression run once at startup
-with bounded memory, including on `no_std` targets.
+with bounded memory, including on `no_std` targets. Each subsystem seals one catalog
+covering all its missions in static metadata outside the rotating data region.
+Matching appended runs reuse that catalog; section contexts select each run's mission.
 Payload dependencies supply their encoding recipes directly; the application
 enables `cu29/self-describing-logs` once.
 

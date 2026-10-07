@@ -3948,7 +3948,12 @@ mod tests {
         for log_base in [&mcu_log_base, &compute_log_base] {
             let catalog = cu29_export::catalog::read_value_decode_catalog(log_base, None)
                 .expect("each subsystem log should embed its catalog");
-            assert!(!catalog.slots.is_empty());
+            assert!(
+                catalog
+                    .missions
+                    .iter()
+                    .any(|mission| !mission.slots.is_empty())
+            );
             let records = cu29_export::catalog::copperlist_values_reader(log_base, None)
                 .expect("catalog reader should open each subsystem log")
                 .collect::<CuResult<Vec<_>>>()
