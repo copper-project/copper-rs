@@ -60,7 +60,7 @@ impl<BD: BlockDevice> SdRegion<BD> {
                     core::slice::from_ref(&self.buffer),
                     BlockIdx(
                         self.pending
-                            .ok_or(CuError::from("Missing SD block buffer"))?,
+                            .ok_or_else(|| CuError::from("Missing SD block buffer"))?,
                     ),
                 )
                 .map_err(|_| CuError::from("SD block write failed"))?;
@@ -77,7 +77,7 @@ impl<BD: BlockDevice> SdRegion<BD> {
         }
         self.start
             .checked_add(offset)
-            .ok_or(CuError::from("SD byte offset overflow"))
+            .ok_or_else(|| CuError::from("SD byte offset overflow"))
     }
 }
 impl<BD: BlockDevice + Send> ByteRegion for SdRegion<BD> {

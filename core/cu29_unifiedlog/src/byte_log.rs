@@ -115,7 +115,7 @@ impl Claims {
             .held
             .iter_mut()
             .find(|s| s.is_none())
-            .ok_or(CuError::from("Lease claim table is full"))? = Some((slot, state));
+            .ok_or_else(|| CuError::from("Lease claim table is full"))? = Some((slot, state));
         Ok(())
     }
     fn seal(&mut self, slot: usize) {
@@ -476,7 +476,7 @@ impl<B: ByteStorage> ByteLogger<B> {
                     .context
                     .run_id
                     .checked_add(1)
-                    .ok_or(CuError::from("Run ID exhausted"))?,
+                    .ok_or_else(|| CuError::from("Run ID exhausted"))?,
             );
             if section.next_section == 0 && cursor != logger.header.tail_section {
                 return Err(CuError::from("Invalid tail section"));
@@ -686,7 +686,7 @@ impl<B: ByteStorage> ByteLogger<B> {
 fn aligned(size: u64) -> CuResult<u64> {
     size.checked_add(HEADER - 1)
         .map(|s| s / HEADER * HEADER)
-        .ok_or(CuError::from("Section size overflow"))
+        .ok_or_else(|| CuError::from("Section size overflow"))
 }
 impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
     fn seal_metadata<C: Encode>(
@@ -738,7 +738,7 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
         let end = base
             .checked_add(app_size)
             .and_then(|s| s.checked_add(catalog_size))
-            .ok_or(CuError::from("Metadata size overflow"))?;
+            .ok_or_else(|| CuError::from("Metadata size overflow"))?;
         if self.header.metadata_offset != 0 {
             self.compare(base, UnifiedLogType::ApplicationMetadata, &metadata)?;
             if let Some(catalog) = catalog {
@@ -796,7 +796,7 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
         let run_id = self.next_run_id;
         self.next_run_id = run_id
             .checked_add(1)
-            .ok_or(CuError::from("Run ID exhausted"))?;
+            .ok_or_else(|| CuError::from("Run ID exhausted"))?;
         Ok(SectionContext {
             run_id,
             instance_id,
@@ -944,12 +944,12 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
             .position(|s| {
                 s.load(Ordering::Acquire) % 4 != IDLE && s.load(Ordering::Acquire) % 4 != BUSY
             })
-            .ok_or(CuError::from("Too many concurrent section writes"))?;
+            .ok_or_else(|| CuError::from("Too many concurrent section writes"))?;
         self.generation = self
             .generation
             .checked_add(1)
             .filter(|g| *g < usize::MAX / 4)
-            .ok_or(CuError::from("Section generation exhausted"))?;
+            .ok_or_else(|| CuError::from("Section generation exhausted"))?;
         let header = SectionHeader {
             entry_type: kind,
             allocated: size,

@@ -88,7 +88,7 @@ impl MmapRegion {
                 .maps
                 .get(index)
                 .and_then(Option::as_ref)
-                .ok_or(CuError::from("Missing mapped slab"))?;
+                .ok_or_else(|| CuError::from("Missing mapped slab"))?;
             let count = (len - done).min(map.length.saturating_sub(local));
             if count == 0 {
                 return Err(CuError::from("Truncated mapped slab"));

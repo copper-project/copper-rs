@@ -541,6 +541,7 @@ metadata-rollover-check:
     cargo test -p cu-sdlogger
     cargo test -p cu-sdlogger --no-default-features --features eh1
     cargo test -p cu29-export --lib
+    cargo test -p cu29-logstream --test session_router
     cargo test -p cu29-runtime --lib
     cargo test -p cu29 --test metadata_lifecycle --test stateless_task --test resource_stack
     cargo clippy -p cu29-unifiedlog -p cu29-export -p cu-sdlogger --all-targets -- --deny warnings

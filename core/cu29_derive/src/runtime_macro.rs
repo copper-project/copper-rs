@@ -4176,12 +4176,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     sink.log(&RuntimeLifecycleRecord { timestamp, event })
                 }
 
-                /// Convenience helper for manual execution loops to mark graceful shutdown.
-                // TODO(lifecycle): add helper(s) for panic/error stop reporting once we wire
-                // RuntimeLifecycleEvent::Panic across std/no-std execution models.
                 /// Select the typed reason for this construction's next successful stop.
                 pub fn set_stop_reason(&mut self, reason: cu29::curuntime::RuntimeStopReason) { self.stop_reason = reason; }
 
+                /// Drain and close this construction after a successful stop.
                 pub fn log_shutdown_completed(&mut self) -> CuResult<()> {
                     if self.lifecycle_running { return Err(CuError::from("Stop the application before completing shutdown")); }
                     if self.shutdown_completed { return Ok(()); }
