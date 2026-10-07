@@ -457,16 +457,18 @@ mod catalog_tests {
         use bincode::enc::write::SliceWriter;
         use bincode::value_decode::ValueDecodeRef;
         use cu29_value::catalog::ValueDecodeCatalog;
-        use cu29_value::catalog_header::ValueDecodeCatalogLayout;
-        use cu29_value::catalog_stream::{CatalogDescription, CatalogSlot, write_catalog};
+        use cu29_value::catalog_format::ValueDecodeCatalogLayout;
+        use cu29_value::catalog_stream::{
+            CatalogDescription, CatalogMission, CatalogSlot, write_catalog,
+        };
         static CATALOG: CatalogDescription = CatalogDescription {
-            mission: "default",
-            config_ron: "()",
             layout: ValueDecodeCatalogLayout::Compact,
-            slots: &[CatalogSlot {
-                task_id: "responses",
-                msg_type: "MspResponseBatch",
-                payload: Some(ValueDecodeRef::of::<MspResponseBatch>()),
+            missions: &[CatalogMission {
+                slots: &[CatalogSlot {
+                    task_id: "responses",
+                    msg_type: "MspResponseBatch",
+                    payload: Some(ValueDecodeRef::of::<MspResponseBatch>()),
+                }],
             }],
         };
         let mut buffer = [0; 16384];
