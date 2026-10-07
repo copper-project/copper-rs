@@ -213,6 +213,7 @@ impl RunReader {
             .ok_or_else(|| CuError::from("Cyclic section links"))?;
         Ok(())
     }
+    #[cfg(feature = "self-describing-logs")]
     pub fn read_next_section_type_at(
         &mut self,
         kind: UnifiedLogType,
