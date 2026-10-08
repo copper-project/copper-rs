@@ -241,6 +241,35 @@ fn print_runtime_lifecycle_record(index: usize, entry: &RuntimeLifecycleRecord) 
     }
 }
 
+pub(crate) fn process_time_bounds(
+    times: impl IntoIterator<Item = PartialCuTimeRange>,
+) -> (OptionCuTime, OptionCuTime) {
+    let mut first = OptionCuTime::none();
+    let mut last = OptionCuTime::none();
+    for time in times {
+        observe_process_times(&mut first, &mut last, time.start, time.end);
+    }
+    (first, last)
+}
+
+fn observe_process_times(
+    first: &mut OptionCuTime,
+    last: &mut OptionCuTime,
+    start: OptionCuTime,
+    end: OptionCuTime,
+) {
+    if let Some(start) = Option::<CuTime>::from(start)
+        && Option::<CuTime>::from(*first).is_none_or(|first| start < first)
+    {
+        *first = start.into();
+    }
+    if let Some(end) = Option::<CuTime>::from(end)
+        && Option::<CuTime>::from(*last).is_none_or(|last| end > last)
+    {
+        *last = end.into();
+    }
+}
+
 pub(crate) fn check<P>(
     dl: &mut RunReader,
     verbose: u8,
@@ -330,18 +359,17 @@ where
                             }
                             copperlist_sequence.observe(entry.id);
                             section_last_cl = Some(entry.id);
-                            if first_ts.is_none() {
+                            let messages = entry.cumsgs();
+                            let (start, end) = process_time_bounds(
+                                messages.iter().map(|msg| msg.metadata().process_time()),
+                            );
+                            if first_cl.is_none() {
                                 first_cl = Some(entry.id);
-                                if let Some(first) = entry.cumsgs().first() {
-                                    first_ts = first.metadata().process_time().start;
-                                }
-                                if overall_first_ts.is_none() {
-                                    overall_first_ts = first_ts;
-                                }
                             }
-                            if let Some(last_msg) = entry.cumsgs().last() {
-                                last_ts = last_msg.metadata().process_time().end;
+                            if first_ts.is_none() {
+                                first_ts = start;
                             }
+                            observe_process_times(&mut overall_first_ts, &mut last_ts, start, end);
                         }
                         if verbose > 0 {
                             match (first_cl, section_last_cl) {
@@ -513,13 +541,17 @@ where
         let total_time = last_ts.unwrap() - overall_first_ts.unwrap();
         println!("  Total time       -> {total_time}");
     } else {
-        println!("  Total time       -> n/a (no copperlists)");
+        println!("  Total time       -> n/a (no recorded process timestamps)");
     }
     println!(
         "  Total used size  -> {} bytes",
         useful_size.to_formatted_string(l)
     );
-    println!("  Logging rate     -> {mib_per_sec:.02} MiB/s (effective)");
+    if total_time_nanos > 0.0 {
+        println!("  Logging rate     -> {mib_per_sec:.02} MiB/s (effective)");
+    } else {
+        println!("  Logging rate     -> n/a (no positive recorded duration)");
+    }
 
     println!();
     println!(
@@ -557,11 +589,11 @@ where
             println!("    ... and {omitted} more hole range(s)");
         }
     }
-    println!(
-        "  CL rate          -> {}.{:02} Hz",
-        (cl_rate.trunc() as u64).to_formatted_string(&Locale::en),
-        (cl_rate.fract() * 100.0).round() as u64
-    );
+    if total_time_nanos > 0.0 {
+        println!("  CL rate          -> {cl_rate:.02} Hz");
+    } else {
+        println!("  CL rate          -> n/a (no positive recorded duration)");
+    }
     println!(
         "  CL total size    -> {} bytes",
         cls_size.to_formatted_string(l)
@@ -585,7 +617,11 @@ where
     }
     println!();
     println!("  # of Keyframes   -> {}", keyframes.to_formatted_string(l));
-    println!("  KF rate          -> {kf_rate:.2} Hz");
+    if total_time_nanos > 0.0 {
+        println!("  KF rate          -> {kf_rate:.2} Hz");
+    } else {
+        println!("  KF rate          -> n/a (no positive recorded duration)");
+    }
     println!(
         "  KF total size    -> {} bytes",
         kfs_size.to_formatted_string(l)
@@ -615,6 +651,53 @@ where
 #[cfg(test)]
 mod tests {
     use super::{ByteEntropy, CopperListHole, CopperListSequence, EntropySamples, EntropySummary};
+
+    #[test]
+    fn process_time_bounds_find_interior_slots_with_empty_boundaries() {
+        use super::process_time_bounds;
+        use cu29::prelude::{CuTime, OptionCuTime, PartialCuTimeRange};
+
+        let time = |start: u64, end: u64| PartialCuTimeRange {
+            start: CuTime::from(start).into(),
+            end: CuTime::from(end).into(),
+        };
+        let (start, end) = process_time_bounds([
+            PartialCuTimeRange::default(),
+            time(200, 400),
+            time(100, 300),
+            PartialCuTimeRange::default(),
+        ]);
+        assert_eq!(Option::<CuTime>::from(start), Some(CuTime::from(100u64)));
+        assert_eq!(Option::<CuTime>::from(end), Some(CuTime::from(400u64)));
+        assert_eq!(
+            process_time_bounds([]),
+            (OptionCuTime::none(), OptionCuTime::none())
+        );
+    }
+
+    #[test]
+    fn process_time_bounds_skip_absent_slots_and_preserve_extrema() {
+        use super::observe_process_times;
+        use cu29::prelude::{CuTime, OptionCuTime};
+
+        let mut first = OptionCuTime::none();
+        let mut last = OptionCuTime::none();
+        for (start, end) in [
+            (None, None),
+            (Some(100), Some(200)),
+            (Some(50), Some(150)),
+            (None, None),
+        ] {
+            observe_process_times(
+                &mut first,
+                &mut last,
+                start.map(CuTime::from).into(),
+                end.map(CuTime::from).into(),
+            );
+        }
+        assert_eq!(Option::<CuTime>::from(first), Some(CuTime::from(50u64)));
+        assert_eq!(Option::<CuTime>::from(last), Some(CuTime::from(200u64)));
+    }
 
     #[test]
     fn empty_entropy_is_absent() {
