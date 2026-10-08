@@ -2,5 +2,8 @@
 <p>Shared build-script setup for Copper crates and applications.</p>
 <p>Call <code>cu29_build::setup()</code> once from <code>build.rs</code>. It configures Copper’s logging
 macros and forwards the crate’s active Cargo features to Copper code generation.</p>
+<p>Applications enable <code>cu29/self-describing-logs</code> to record a compressed catalog
+through the normal generated builder. The usual <code>cu29_build::setup()</code> call is
+sufficient; see <code>examples/cu_self_describing_logs</code>.</p>
 </div></details><h2 id="constants" class="section-header">Constants<a href="#constants" class="anchor">§</a></h2><dl class="item-table"><dt><a class="constant" href="constant.COPPER_CFG_FEATURES_ENV.html" title="constant cu29_build::COPPER_CFG_FEATURES_ENV">COPPER_<wbr>CFG_<wbr>FEATURES_<wbr>ENV</a></dt><dd>Environment variable used to pass the consuming crate’s Cargo features to
 Copper’s procedural macros and generated runtime.</dd></dl><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.setup.html" title="fn cu29_build::setup">setup</a></dt><dd>Emit the standard Cargo build-script configuration required by Copper.</dd></dl></section></div></main></body></html>
