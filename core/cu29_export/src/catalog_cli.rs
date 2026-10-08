@@ -493,7 +493,7 @@ mod tests {
         };
 
         let catalog = crate::catalog::SelectedCatalog {
-            version: 2,
+            version: 1,
             mission: "default".into(),
             config_ron: "()".into(),
             layout: ValueDecodeCatalogLayout::Compact,
@@ -556,7 +556,7 @@ mod tests {
         };
 
         let catalog = crate::catalog::SelectedCatalog {
-            version: 2,
+            version: 1,
             mission: "default".into(),
             config_ron: "()".into(),
             layout: ValueDecodeCatalogLayout::Compact,
@@ -605,7 +605,7 @@ mod tests {
                 } else {
                     serde_json::from_str(text).unwrap()
                 };
-                assert_eq!(document.catalog_version, 2);
+                assert_eq!(document.catalog_version, 1);
                 assert_eq!(document.catalog.slots[0].task_id, "drive");
                 document.catalog.description.validate().unwrap();
                 if format == CatalogFormat::Ron {

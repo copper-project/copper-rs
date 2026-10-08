@@ -525,7 +525,7 @@ mod tests {
     fn catalog(layout: ValueDecodeCatalogLayout) -> SelectedCatalog {
         let description = ValueDecodeDescription::from_type::<u32>().unwrap();
         SelectedCatalog {
-            version: 2,
+            version: 1,
             mission: "default".into(),
             config_ron: "()".into(),
             layout,
