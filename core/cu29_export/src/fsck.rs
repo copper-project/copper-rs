@@ -298,7 +298,7 @@ pub(crate) fn check_with(
     let mut runtime_lifecycle_size: usize = 0;
     let mut runtime_lifecycle_events: usize = 0;
     let mut sl_entries: usize = 0;
-    let mut catalogs: usize = 0;
+    let mut catalog_present = false;
     let mut catalog_size: usize = 0;
     #[cfg(feature = "self-describing-logs")]
     let mut catalog_decompressed_size: Option<usize> = None;
@@ -478,7 +478,7 @@ pub(crate) fn check_with(
                         }
                     }
                     UnifiedLogType::ValueDecodeCatalog => {
-                        catalogs = 1;
+                        catalog_present = true;
                         catalog_size += content.len();
                         #[cfg(feature = "self-describing-logs")]
                         catalog_sections.push(&content)?;
@@ -512,7 +512,7 @@ pub(crate) fn check_with(
 
     #[cfg(feature = "self-describing-logs")]
     let result = result.and_then(|()| {
-        if catalogs != 0 {
+        if catalog_present {
             let catalog = catalog_sections.finish()?;
             catalog_decompressed_size = Some(
                 bincode::encode_into_std_write(&catalog, &mut std::io::sink(), standard())
@@ -679,8 +679,8 @@ pub(crate) fn check_with(
     );
     println!();
     println!(
-        "  # of Catalogs         -> {}",
-        catalogs.to_formatted_string(l)
+        "  Catalog present       -> {}",
+        if catalog_present { "yes" } else { "no" }
     );
     println!(
         "  Catalog compressed    -> {} bytes",

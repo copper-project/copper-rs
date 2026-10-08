@@ -121,7 +121,7 @@ fn test_machine_output_and_process_failure_contract() {
     let basic = run(&good, &["fsck"]);
     assert!(basic.status.success());
     let basic = String::from_utf8(basic.stdout).unwrap();
-    assert!(basic.contains("# of Catalogs"));
+    assert!(basic.contains("Catalog present       -> yes"));
     let catalog_bytes = catalog_blob().len();
     assert!(basic.contains(&format!("Catalog compressed    -> {catalog_bytes} bytes")));
     let catalog = cu29_export::catalog::read_value_decode_catalog(&good, None).unwrap();
@@ -149,6 +149,15 @@ fn test_machine_output_and_process_failure_contract() {
     ] {
         let path = dir.path().join(format!("{name}.copper"));
         fixture(&path, catalog, corrupt, duplicate);
+        if !catalog {
+            let basic = run(&path, &["fsck"]);
+            assert!(basic.status.success());
+            assert!(
+                String::from_utf8(basic.stdout)
+                    .unwrap()
+                    .contains("Catalog present       -> no")
+            );
+        }
         let output = run(&path, &["fsck", "--deep"]);
         assert!(!output.status.success(), "{name}");
         assert!(!output.stderr.is_empty(), "{name}");
