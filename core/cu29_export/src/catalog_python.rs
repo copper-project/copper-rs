@@ -1,4 +1,4 @@
-//! Python bindings for run-scoped catalog decoding without native registrations.
+//! Python bindings for shared catalogs and run-scoped decoding without native registrations.
 
 use crate::catalog::{
     CopperListValueReader, CuDecodedCopperList, copperlist_values_reader, read_value_decode_catalog,
@@ -29,13 +29,8 @@ impl PyCopperListValueIterator {
 
 /// Return the shared catalog and every compiled mission's slot map as a dictionary.
 #[pyfunction]
-#[pyo3(signature = (path, run=None))]
-fn value_decode_catalog_unified(
-    py: Python<'_>,
-    path: &str,
-    run: Option<usize>,
-) -> PyResult<Py<PyAny>> {
-    let catalog = read_value_decode_catalog(Path::new(path), run)
+fn value_decode_catalog_unified(py: Python<'_>, path: &str) -> PyResult<Py<PyAny>> {
+    let catalog = read_value_decode_catalog(Path::new(path))
         .map_err(|error| PyIOError::new_err(error.to_string()))?;
     serde_to_py(&catalog, py)
 }
@@ -184,7 +179,7 @@ mod tests {
             let dir = tempfile::tempdir_in(env!("CARGO_MANIFEST_DIR")).unwrap();
             let path = dir.path().join("python.copper");
             crate::catalog_tests::fixture(&path, false, true);
-            let catalog = value_decode_catalog_unified(py, path.to_str().unwrap(), None).unwrap();
+            let catalog = value_decode_catalog_unified(py, path.to_str().unwrap()).unwrap();
             assert_eq!(
                 catalog
                     .bind(py)
@@ -192,7 +187,7 @@ mod tests {
                     .unwrap()
                     .extract::<u16>()
                     .unwrap(),
-                2
+                1
             );
             assert_eq!(
                 catalog

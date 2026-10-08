@@ -159,14 +159,16 @@ Enable `python` and `self-describing-logs` for complete offline dictionaries:
 ```python
 import libcu29_export as cu
 
-catalog = cu.value_decode_catalog_unified("logs/robot.copper", run=1)
+catalog = cu.value_decode_catalog_unified("logs/robot.copper")
 for cl in cu.copperlist_value_iterator_unified("logs/robot.copper", run=1):
     print(cl["id"], cl["msgs"][0]["payload"])
 ```
 
-These functions load the selected catalog directly. Integers keep their full
-precision, and corrupt records raise `IOError`. The Rust equivalents are
-`catalog::read_value_decode_catalog` and `catalog::copperlist_values_reader`.
+The catalog contains every compiled mission's slot map and is shared by all
+recorded runs. The CopperList iterator selects a run and its mission's slot map.
+Integers keep their full precision, and corrupt records raise `IOError`. The Rust
+equivalents are `catalog::read_value_decode_catalog` and
+`catalog::copperlist_values_reader`.
 
 ## Feature Flags
 

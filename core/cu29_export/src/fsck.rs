@@ -303,7 +303,7 @@ pub(crate) fn check_with(
     #[cfg(feature = "self-describing-logs")]
     let mut catalog_decompressed_size: Option<usize> = None;
     #[cfg(feature = "self-describing-logs")]
-    let mut catalog_sections = crate::catalog::CatalogSections::default();
+    let mut catalog_section = crate::catalog::CatalogSection::default();
 
     let result = 'scan: loop {
         // for _ in 0..4 {
@@ -481,7 +481,7 @@ pub(crate) fn check_with(
                         catalog_present = true;
                         catalog_size += content.len();
                         #[cfg(feature = "self-describing-logs")]
-                        catalog_sections.push(&content)?;
+                        catalog_section.set(&content)?;
                         if verbose > 0 {
                             println!("    ValueDecodeCatalog: {} bytes", content.len());
                         }
@@ -513,7 +513,7 @@ pub(crate) fn check_with(
     #[cfg(feature = "self-describing-logs")]
     let result = result.and_then(|()| {
         if catalog_present {
-            let catalog = catalog_sections.finish()?;
+            let catalog = catalog_section.decode()?;
             catalog_decompressed_size = Some(
                 bincode::encode_into_std_write(&catalog, &mut std::io::sink(), standard())
                     .map_err(|error| {

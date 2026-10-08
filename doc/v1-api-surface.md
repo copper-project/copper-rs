@@ -116,9 +116,9 @@ option select recorded runs identified by `Instantiated` lifecycle records.
   static metadata section using fixed working memory. Catalog version 1 includes
   a bincode version field, typed metadata, Heatshrink compression and a
   length/checksum footer.
-- `cu29_export::catalog`: experimental run-scoped catalog loading and fallible
-  standalone CopperList value readers. `ValueDecodeDescription::validate` checks
-  complete graphs; `decode_at` decodes selected bindings without graph copies.
+- `cu29_export::catalog`: experimental shared catalog loading and fallible
+  run-scoped standalone CopperList value readers. `ValueDecodeDescription::validate`
+  checks complete graphs; `decode_at` decodes selected bindings without graph copies.
   Catalog CLI formats/decoder selection and registration-free Python catalog
   functions are experimental. Internal shared allocation budgets are hidden.
 - `cu29-value-types` and its `cu29_value` / `cu29::prelude` re-exports:

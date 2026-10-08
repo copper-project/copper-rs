@@ -194,7 +194,7 @@ fn test_missing_catalog_is_explicit() {
     let path = dir.path().join("missing-catalog.copper");
     fixture(&path, false, false);
     assert!(
-        crate::catalog::read_value_decode_catalog(&path, None)
+        crate::catalog::read_value_decode_catalog(&path)
             .unwrap_err()
             .to_string()
             .contains("require a catalog")
@@ -221,7 +221,7 @@ fn test_oversized_catalog_is_rejected_before_loading_its_body() {
         .seal_metadata(&metadata(), Some(&WireBytes(blob)))
         .unwrap();
     drop(logger);
-    let error = crate::catalog::read_value_decode_catalog(&path, None)
+    let error = crate::catalog::read_value_decode_catalog(&path)
         .unwrap_err()
         .to_string();
     assert!(error.contains("exceeds offline size limit"), "{error}");
@@ -236,9 +236,9 @@ fn appended_runs_reuse_one_catalog_with_both_mission_maps() {
         write_run(&logger, value, mission, false, true);
         drop(logger);
     }
+    let catalog = crate::catalog::read_value_decode_catalog(&path).unwrap();
+    assert_eq!(catalog.missions.len(), 2);
     for (index, (task, value)) in [("drive", 300), ("park", 42)].into_iter().enumerate() {
-        let catalog = crate::catalog::read_value_decode_catalog(&path, Some(index)).unwrap();
-        assert_eq!(catalog.missions.len(), 2);
         assert_eq!(catalog.missions[index].slots[0].task_id, task);
         let entries = copperlist_values_reader(&path, Some(index))
             .unwrap()
