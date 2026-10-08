@@ -30,5 +30,8 @@ use cu29_units::si::length::meter;
 The quantity wrappers in both scalar widths declare typed `ValueDecode::METADATA`
 using the shared `cu29-value-types` catalogue. Each quantity records its coherent
 storage unit; named dimensionless quantities retain `rad`, `sr`, `bit`, or
-`bit s^-1`. The metadata is borrowed from static data and packaged by offline
+`bit·s⁻¹`. The metadata is borrowed from static data and packaged by offline
 value-description tooling.
+
+Coherent storage symbols use conventional Unicode SI notation, such as `V`, `T`,
+`N·m`, and `m·s⁻¹`, from the shared `cu29-value-types` catalogue.

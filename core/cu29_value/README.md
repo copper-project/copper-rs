@@ -42,7 +42,7 @@ Descriptions preserve field names, original type identities, scalar widths, and
 quantity storage units. Each type declares a static, typed `ValueDecode::METADATA`
 slice using Copper's metadata vocabulary, shared through `cu29-value-types`.
 All supported quantities retain their coherent storage unit in both scalar widths:
-length is `m`, velocity is `m s^-1`, and mass is `kg`. Copper clock values retain
+length is `m`, velocity is `m·s⁻¹`, and mass is `kg`. Copper clock values retain
 nanosecond storage. Unit symbols are presentation output from typed storage units.
 
 A handwritten type can attach existing Copper metadata:
@@ -125,3 +125,8 @@ Conversion behavior is intentionally simple:
 
 [license-badge]: https://img.shields.io/badge/license-MIT-lightgray.svg?style=flat-square
 [license]: https://github.com/arcnmx/serde-value/blob/master/COPYING
+
+Coherent storage symbols use conventional Unicode SI notation, such as `V`, `T`,
+`N·m`, and `m·s⁻¹`, from the shared `cu29-value-types` catalogue.
+JSON and RON metadata include a typed quantity and its presentation symbol.
+Readers interpret the permanent IDs and retain unknown metadata bodies.

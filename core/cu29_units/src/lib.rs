@@ -13,7 +13,7 @@ extern crate alloc;
 pub use uom;
 
 macro_rules! define_storage_wrappers {
-    ($storage_mod:ident, $storage_ty:ty, [$(($id:literal, $unit_mod:ident, $quantity:ident, $unit:literal),)+]) => {
+    ($storage_mod:ident, $storage_ty:ty, [$(($id:literal, $unit_mod:ident, $quantity:ident, $symbol:literal),)+]) => {
         pub mod $storage_mod {
             use core::marker::PhantomData;
             use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -22,7 +22,7 @@ macro_rules! define_storage_wrappers {
             use bevy_reflect::Reflect;
 
             macro_rules! define_quantity {
-                ($unit_mod_name:ident, $quantity_name:ident) => {
+                ($unit_mod_name:ident, $quantity_name:ident, $unit_symbol:literal) => {
                     #[repr(transparent)]
                     #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
                     #[cfg_attr(feature = "reflect", derive(Reflect))]
@@ -32,6 +32,8 @@ macro_rules! define_storage_wrappers {
                     }
 
                     impl $quantity_name {
+                        const STORAGE_UNIT: &'static str = $unit_symbol;
+
                         #[inline]
                         pub fn new<U>(value: $storage_ty) -> Self
                         where
@@ -188,11 +190,26 @@ macro_rules! define_storage_wrappers {
                         const DECODE: &'static bincode::ValueDecodeSpec = <$storage_ty as bincode::ValueDecode>::DECODE;
                         const METADATA: &'static [bincode::value_decode::ValueMetadata] = &[
                             bincode::value_decode::ValueMetadata::Quantity(
-                                cu29_value_types::QuantityMetadata::coherent(
-                                    cu29_value_types::Quantity::$quantity_name,
-                                ),
+                                cu29_value_types::QuantityMetadata::coherent(cu29_value_types::Quantity::$quantity_name),
                             ),
                         ];
+                    }
+
+                    impl cu29_traits::DebugScalarType for $quantity_name {
+                        fn debug_scalar_registration() -> cu29_traits::DebugScalarRegistration {
+                            cu29_traits::DebugScalarRegistration {
+                                type_path: core::any::type_name::<Self>(),
+                                scalar_kind: if stringify!($storage_ty) == "f32" {
+                                    cu29_traits::DebugScalarKind::F32
+                                } else {
+                                    cu29_traits::DebugScalarKind::F64
+                                },
+                                semantics: cu29_traits::DebugFieldSemantics::Quantity {
+                                    quantity_name: alloc::string::String::from(stringify!($quantity_name)),
+                                    unit_symbol: alloc::string::String::from(Self::STORAGE_UNIT),
+                                },
+                            }
+                        }
                     }
 
                     impl bincode::Encode for $quantity_name {
@@ -238,7 +255,37 @@ macro_rules! define_storage_wrappers {
                 };
             }
 
-            $(define_quantity!($unit_mod, $quantity);)+
+            $(define_quantity!($unit_mod, $quantity, $symbol);)+
+
+            pub(crate) fn debug_scalar_registrations() -> alloc::vec::Vec<cu29_traits::DebugScalarRegistration> {
+                alloc::vec![$(<$quantity as cu29_traits::DebugScalarType>::debug_scalar_registration()),+]
+            }
+
+            #[cfg(all(test, feature = "reflect"))]
+            #[test]
+            fn test_quantity_symbols_and_scalar_encoding() {
+                let registrations = debug_scalar_registrations();
+                assert_eq!(registrations.len(), cu29_value_types::Quantity::ALL.len());
+                $(
+                    let quantity = cu29_value_types::QuantityMetadata::coherent(cu29_value_types::Quantity::$quantity);
+                    let registration = registrations.iter().find(|entry| entry.type_path == core::any::type_name::<$quantity>()).unwrap();
+                    let cu29_traits::DebugFieldSemantics::Quantity { unit_symbol, .. } = &registration.semantics else {
+                        panic!("expected quantity semantics");
+                    };
+                    assert_eq!(unit_symbol, quantity.storage_unit().symbol());
+                    assert_eq!(<$quantity as bincode::ValueDecode>::METADATA, &[bincode::value_decode::ValueMetadata::Quantity(quantity)]);
+                    for raw in [0.0, -1.25, 1234.5] {
+                        let value = $quantity::from_base_value(raw);
+                        let config = bincode::config::standard();
+                        let encoded = bincode::encode_to_vec(value, config).unwrap();
+                        assert_eq!(encoded, bincode::encode_to_vec(raw, config).unwrap());
+                        let (decoded, used): ($quantity, usize) = bincode::decode_from_slice(&encoded, config).unwrap();
+                        assert_eq!(decoded.raw(), raw);
+                        assert_eq!(used, encoded.len());
+                    }
+                )+
+            }
+
 
         }
     };
@@ -275,7 +322,6 @@ pub mod si {
     };
 
     cu29_value_types::__quantity_catalogue!(define_storage_wrappers, f32, f32);
-
     cu29_value_types::__quantity_catalogue!(define_storage_wrappers, f64, f64);
 }
 
@@ -400,7 +446,6 @@ pub mod constant {
 
     }
 
-    // This is deliberately distinct from the debugger's preferred display-unit list below.
     // Every coherent unit here maps one input unit to one unit in uom's underlying SI storage.
     define_constant_catalogue! {
         (length, Length, meter, meter,
@@ -433,165 +478,13 @@ pub mod constant {
     }
 }
 
-use alloc::string::ToString;
 use alloc::vec::Vec;
-use cu29_traits::{DebugFieldSemantics, DebugScalarKind, DebugScalarRegistration, DebugScalarType};
 
-macro_rules! impl_debug_scalar_units {
-    ($(($unit_mod:ident, $quantity:ident, $display_unit:ident),)+) => {
-        macro_rules! impl_storage_debug_scalar_units {
-            ($storage_mod:ident, $storage_ty:ty) => {
-                $(
-                    impl DebugScalarType for si::$storage_mod::$quantity {
-                        fn debug_scalar_registration() -> DebugScalarRegistration {
-                            DebugScalarRegistration {
-                                type_path: core::any::type_name::<Self>(),
-                                scalar_kind: if stringify!($storage_ty) == "f32" {
-                                    DebugScalarKind::F32
-                                } else {
-                                    DebugScalarKind::F64
-                                },
-                                semantics: DebugFieldSemantics::Quantity {
-                                    quantity_name: stringify!($quantity).to_string(),
-                                    unit_symbol: <uom::si::$unit_mod::$display_unit as uom::si::Unit>::abbreviation()
-                                        .to_string(),
-                                },
-                            }
-                        }
-                    }
-                )+
-            };
-        }
-
-        impl_storage_debug_scalar_units!(f32, f32);
-        impl_storage_debug_scalar_units!(f64, f64);
-
-        pub fn debug_scalar_registrations() -> Vec<DebugScalarRegistration> {
-            alloc::vec![
-                $(
-                    <si::f32::$quantity as DebugScalarType>::debug_scalar_registration(),
-                    <si::f64::$quantity as DebugScalarType>::debug_scalar_registration(),
-                )+
-            ]
-        }
-    };
-}
-
-impl_debug_scalar_units! {
-    (absement, Absement, meter_second),
-    (acceleration, Acceleration, meter_per_second_squared),
-    (action, Action, joule_second),
-    (amount_of_substance, AmountOfSubstance, mole),
-    (angle, Angle, radian),
-    (angular_absement, AngularAbsement, radian_second),
-    (angular_acceleration, AngularAcceleration, radian_per_second_squared),
-    (angular_jerk, AngularJerk, radian_per_second_cubed),
-    (angular_momentum, AngularMomentum, newton_meter_second),
-    (angular_velocity, AngularVelocity, radian_per_second),
-    (area, Area, square_meter),
-    (areal_density_of_states, ArealDensityOfStates, state_per_square_meter_joule),
-    (areal_heat_capacity, ArealHeatCapacity, joule_per_square_meter_kelvin),
-    (areal_mass_density, ArealMassDensity, kilogram_per_square_meter),
-    (areal_number_density, ArealNumberDensity, per_square_kilometer),
-    (areal_number_rate, ArealNumberRate, per_square_meter_second),
-    (available_energy, AvailableEnergy, joule_per_kilogram),
-    (capacitance, Capacitance, farad),
-    (catalytic_activity, CatalyticActivity, katal),
-    (catalytic_activity_concentration, CatalyticActivityConcentration, katal_per_cubic_meter),
-    (curvature, Curvature, radian_per_meter),
-    (diffusion_coefficient, DiffusionCoefficient, square_meter_per_second),
-    (dynamic_viscosity, DynamicViscosity, pascal_second),
-    (electric_charge, ElectricCharge, coulomb),
-    (electric_charge_areal_density, ElectricChargeArealDensity, coulomb_per_square_meter),
-    (electric_charge_linear_density, ElectricChargeLinearDensity, coulomb_per_meter),
-    (electric_charge_volumetric_density, ElectricChargeVolumetricDensity, coulomb_per_cubic_meter),
-    (electric_current, ElectricCurrent, ampere),
-    (electric_current_density, ElectricCurrentDensity, ampere_per_square_meter),
-    (electric_dipole_moment, ElectricDipoleMoment, coulomb_meter),
-    (electric_displacement_field, ElectricDisplacementField, coulomb_per_square_meter),
-    (electric_field, ElectricField, volt_per_meter),
-    (electric_flux, ElectricFlux, volt_meter),
-    (electric_permittivity, ElectricPermittivity, farad_per_meter),
-    (electric_potential, ElectricPotential, volt),
-    (electric_quadrupole_moment, ElectricQuadrupoleMoment, coulomb_square_meter),
-    (electrical_conductance, ElectricalConductance, siemens),
-    (electrical_conductivity, ElectricalConductivity, siemens_per_meter),
-    (electrical_mobility, ElectricalMobility, square_meter_per_volt_second),
-    (electrical_resistance, ElectricalResistance, ohm),
-    (electrical_resistivity, ElectricalResistivity, ohm_meter),
-    (energy, Energy, joule),
-    (force, Force, newton),
-    (frequency, Frequency, hertz),
-    (frequency_drift, FrequencyDrift, hertz_per_second),
-    (heat_capacity, HeatCapacity, gram_square_meter_per_second_squared_kelvin),
-    (heat_flux_density, HeatFluxDensity, watt_per_square_meter),
-    (heat_transfer, HeatTransfer, gram_per_second_cubed_kelvin),
-    (inductance, Inductance, henry),
-    (information, Information, bit),
-    (information_rate, InformationRate, bit_per_second),
-    (inverse_velocity, InverseVelocity, second_per_meter),
-    (jerk, Jerk, meter_per_second_cubed),
-    (kinematic_viscosity, KinematicViscosity, square_meter_per_second),
-    (length, Length, meter),
-    (linear_density_of_states, LinearDensityOfStates, state_per_meter_joule),
-    (linear_mass_density, LinearMassDensity, kilogram_per_meter),
-    (linear_number_density, LinearNumberDensity, per_kilometer),
-    (linear_number_rate, LinearNumberRate, per_kilometer_second),
-    (linear_power_density, LinearPowerDensity, watt_per_meter),
-    (luminance, Luminance, candela_per_square_meter),
-    (luminous_intensity, LuminousIntensity, candela),
-    (magnetic_field_strength, MagneticFieldStrength, ampere_per_meter),
-    (magnetic_flux, MagneticFlux, weber),
-    (magnetic_flux_density, MagneticFluxDensity, tesla),
-    (magnetic_moment, MagneticMoment, ampere_square_meter),
-    (magnetic_permeability, MagneticPermeability, henry_per_meter),
-    (mass, Mass, gram),
-    (mass_concentration, MassConcentration, gram_per_cubic_meter),
-    (mass_density, MassDensity, gram_per_cubic_meter),
-    (mass_flux, MassFlux, kilogram_per_square_meter_second),
-    (mass_per_energy, MassPerEnergy, gram_per_joule),
-    (mass_rate, MassRate, gram_per_second),
-    (molality, Molality, mole_per_kilogram),
-    (molar_concentration, MolarConcentration, mole_per_cubic_meter),
-    (molar_energy, MolarEnergy, joule_per_mole),
-    (molar_flux, MolarFlux, mole_per_square_meter_second),
-    (molar_heat_capacity, MolarHeatCapacity, joule_per_kelvin_mole),
-    (molar_mass, MolarMass, gram_per_mole),
-    (molar_radioactivity, MolarRadioactivity, becquerel_per_mole),
-    (molar_volume, MolarVolume, cubic_meter_per_mole),
-    (moment_of_inertia, MomentOfInertia, kilogram_square_meter),
-    (momentum, Momentum, gram_meter_per_second),
-    (power, Power, watt),
-    (power_rate, PowerRate, watt_per_second),
-    (pressure, Pressure, pascal),
-    (radiant_exposure, RadiantExposure, joule_per_square_meter),
-    (radioactivity, Radioactivity, becquerel),
-    (ratio, Ratio, ratio),
-    (reciprocal_length, ReciprocalLength, reciprocal_kilometer),
-    (solid_angle, SolidAngle, steradian),
-    (specific_area, SpecificArea, square_meter_per_kilogram),
-    (specific_heat_capacity, SpecificHeatCapacity, square_meter_per_second_squared_kelvin),
-    (specific_power, SpecificPower, watt_per_kilogram),
-    (specific_radioactivity, SpecificRadioactivity, becquerel_per_kilogram),
-    (surface_electric_current_density, SurfaceElectricCurrentDensity, ampere_per_meter),
-    (surface_tension, SurfaceTension, newton_per_meter),
-    (temperature_coefficient, TemperatureCoefficient, per_kelvin),
-    (temperature_gradient, TemperatureGradient, kelvin_per_kilometer),
-    (temperature_interval, TemperatureInterval, kelvin),
-    (thermal_conductance, ThermalConductance, gram_meter_squared_per_second_cubed_kelvin),
-    (thermal_conductivity, ThermalConductivity, gram_meter_per_second_cubed_kelvin),
-    (thermal_resistance, ThermalResistance, kelvin_per_yottawatt),
-    (thermodynamic_temperature, ThermodynamicTemperature, kelvin),
-    (time, Time, second),
-    (torque, Torque, newton_meter),
-    (velocity, Velocity, meter_per_second),
-    (volume, Volume, cubic_meter),
-    (volume_rate, VolumeRate, cubic_meter_per_second),
-    (volumetric_density_of_states, VolumetricDensityOfStates, state_per_cubic_meter_joule),
-    (volumetric_heat_capacity, VolumetricHeatCapacity, joule_per_cubic_meter_kelvin),
-    (volumetric_number_density, VolumetricNumberDensity, per_cubic_kilometer),
-    (volumetric_number_rate, VolumetricNumberRate, per_cubic_meter_second),
-    (volumetric_power_density, VolumetricPowerDensity, watt_per_cubic_meter),
+/// Register every supported quantity in both scalar widths for the debugger.
+pub fn debug_scalar_registrations() -> Vec<cu29_traits::DebugScalarRegistration> {
+    let mut registrations = si::f32::debug_scalar_registrations();
+    registrations.extend(si::f64::debug_scalar_registrations());
+    registrations
 }
 
 #[cfg(all(test, feature = "reflect"))]
@@ -629,5 +522,56 @@ mod tests {
         assert_eq!(speed.raw(), 10.0);
         assert_eq!(speed.value, 10.0);
         assert_eq!(speed.get::<meter_per_second>(), 10.0);
+    }
+}
+
+#[cfg(test)]
+mod storage_unit_tests {
+    use super::si::f32;
+    use bincode::ValueDecode;
+
+    fn symbol<T: ValueDecode>() -> &'static str {
+        let [bincode::value_decode::ValueMetadata::Quantity(quantity)] = T::METADATA else {
+            panic!("expected typed quantity metadata")
+        };
+        quantity.storage_unit().symbol()
+    }
+
+    #[test]
+    fn test_conventional_si_storage_units() {
+        assert_eq!(symbol::<f32::ElectricPotential>(), "V");
+        assert_eq!(symbol::<f32::MagneticFluxDensity>(), "T");
+        assert_eq!(symbol::<f32::Force>(), "N");
+        assert_eq!(symbol::<f32::Pressure>(), "Pa");
+        assert_eq!(symbol::<f32::Energy>(), "J");
+        assert_eq!(symbol::<f32::Torque>(), "N·m");
+        assert_eq!(symbol::<f32::Power>(), "W");
+        assert_eq!(symbol::<f32::Frequency>(), "Hz");
+        assert_eq!(symbol::<f32::AngularVelocity>(), "rad·s⁻¹");
+        assert_eq!(symbol::<f32::ElectricalResistance>(), "Ω");
+        assert_eq!(symbol::<f32::Absement>(), "m·s");
+        assert_eq!(symbol::<f32::Velocity>(), "m·s⁻¹");
+        assert_eq!(symbol::<f32::Acceleration>(), "m·s⁻²");
+        assert_eq!(symbol::<f32::Area>(), "m²");
+        assert_eq!(symbol::<f32::Volume>(), "m³");
+        assert_eq!(symbol::<f32::Mass>(), "kg");
+        assert_eq!(symbol::<f32::Angle>(), "rad");
+        assert_eq!(symbol::<f32::SolidAngle>(), "sr");
+        assert_eq!(symbol::<f32::Information>(), "bit");
+        assert_eq!(symbol::<f32::InformationRate>(), "bit·s⁻¹");
+        assert_eq!(symbol::<f32::Ratio>(), "1");
+    }
+
+    #[test]
+    fn test_named_units_match_storage_scale() {
+        assert_eq!(
+            f32::ElectricPotential::new::<super::si::electric_potential::millivolt>(1000.0).raw(),
+            1.0
+        );
+        assert_eq!(f32::Mass::new::<super::si::mass::gram>(1000.0).raw(), 1.0);
+        assert_eq!(
+            f32::Pressure::new::<super::si::pressure::kilopascal>(1.0).raw(),
+            1000.0
+        );
     }
 }

@@ -611,33 +611,7 @@ fn test_all_quantity_metadata_and_native_storage() {
             );
             assert_eq!(description.schemas[description.bindings[description.root].schema].quantity(), Some(expected));
 
-            // Catalogue presentation must agree with uom's actual dimensions.
-            use cu29_units::uom::si::Dimension;
-            use cu29_units::uom::typenum::Integer;
-            type D = cu29_units::uom::si::$module::Dimension;
-            let dimensions = [
-                <D as Dimension>::L::I32, <D as Dimension>::M::I32,
-                <D as Dimension>::T::I32, <D as Dimension>::I::I32,
-                <D as Dimension>::Th::I32, <D as Dimension>::N::I32,
-                <D as Dimension>::J::I32,
-            ];
-            let symbol = match Quantity::$ty {
-                Quantity::Angle => String::from("rad"),
-                Quantity::SolidAngle => String::from("sr"),
-                Quantity::Information => String::from("bit"),
-                Quantity::InformationRate => String::from("bit s^-1"),
-                _ => {
-                    let parts: Vec<_> = ["m", "kg", "s", "A", "K", "mol", "cd"]
-                        .into_iter().zip(dimensions)
-                        .filter(|(_, exponent)| *exponent != 0)
-                        .map(|(symbol, exponent)| if exponent == 1 {
-                            String::from(symbol)
-                        } else { alloc::format!("{symbol}^{exponent}") })
-                        .collect();
-                    if parts.is_empty() { String::from("1") } else { parts.join(" ") }
-                }
-            };
-            assert_eq!(expected.storage_unit().symbol(), symbol);
+            assert_eq!(expected.storage_unit().symbol(), $unit);
         })+};
     }
     cu29_value_types::__quantity_catalogue!(check_quantities);

@@ -24,8 +24,8 @@ use serde::Serialize;
 
 /// Reader-side metadata, preserving future Copper kinds and storage alternatives.
 /// Use [`Self::known`] to obtain metadata understood by this reader.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(try_from = "MetadataWire", into = "MetadataWire")]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(try_from = "MetadataWire")]
 pub struct ValueDecodeMetadata {
     value: MetadataValue,
 }
@@ -40,6 +40,23 @@ enum MetadataValue {
 struct MetadataWire {
     kind: u32,
     bytes: Vec<u8>,
+}
+
+impl Serialize for ValueDecodeMetadata {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        match &self.value {
+            MetadataValue::Known(ValueMetadata::Quantity(quantity)) => {
+                let mut entry = serializer.serialize_struct("MetadataWire", 4)?;
+                entry.serialize_field("kind", &self.kind_id())?;
+                entry.serialize_field("bytes", quantity_bytes(*quantity).as_slice())?;
+                entry.serialize_field("quantity", quantity)?;
+                entry.serialize_field("storage_symbol", quantity.storage_unit().symbol())?;
+                entry.end()
+            }
+            MetadataValue::Unknown(wire) => wire.serialize(serializer),
+        }
+    }
 }
 
 impl From<ValueMetadata> for ValueDecodeMetadata {

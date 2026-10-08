@@ -241,3 +241,97 @@ fn static_catalog_spans_backing_files_as_one_section() {
     assert!(ValueDecodeCatalog::from_blob(&bytes[..bytes.len() - 1]).is_err());
     assert!(ValueDecodeCatalog::from_blob(&[bytes.as_slice(), bytes.as_slice()].concat()).is_err());
 }
+
+#[test]
+fn test_catalog_preserves_unicode_storage_symbols() {
+    use bincode::value_decode::ValueDecodeRef;
+    use cu29::units::si::{f32, f64};
+    use cu29_value::catalog_stream::{CatalogDescription, CatalogSlot};
+
+    static SLOTS: &[CatalogSlot] = &[
+        CatalogSlot {
+            task_id: "velocity",
+            msg_type: "Velocity",
+            payload: Some(ValueDecodeRef::of::<f32::Velocity>()),
+        },
+        CatalogSlot {
+            task_id: "acceleration",
+            msg_type: "Acceleration",
+            payload: Some(ValueDecodeRef::of::<f64::Acceleration>()),
+        },
+        CatalogSlot {
+            task_id: "voltage",
+            msg_type: "ElectricPotential",
+            payload: Some(ValueDecodeRef::of::<f64::ElectricPotential>()),
+        },
+        CatalogSlot {
+            task_id: "magnetometer",
+            msg_type: "MagneticFluxDensity",
+            payload: Some(ValueDecodeRef::of::<f32::MagneticFluxDensity>()),
+        },
+        CatalogSlot {
+            task_id: "mass",
+            msg_type: "Mass",
+            payload: Some(ValueDecodeRef::of::<f32::Mass>()),
+        },
+    ];
+    static DESCRIPTION: CatalogDescription = CatalogDescription {
+        layout: ValueDecodeCatalogLayout::Compact,
+        missions: &[CatalogMission { slots: SLOTS }],
+    };
+    let dir = tempfile::tempdir_in(env!("CARGO_MANIFEST_DIR")).unwrap();
+    let path = dir.path().join("units.copper");
+    let UnifiedLogger::Write(mut logger) = UnifiedLoggerBuilder::new()
+        .file_base_name(&path)
+        .write(true)
+        .create(true)
+        .preallocated_size(64 * 1024)
+        .build()
+        .unwrap()
+    else {
+        panic!("writer")
+    };
+    logger
+        .seal_metadata(&metadata(), Some(&StartupCatalog(&DESCRIPTION)))
+        .unwrap();
+    drop(logger);
+    let catalog = cu29_export::catalog::read_value_decode_catalog(&path, None).unwrap();
+    let ron = ron::ser::to_string_pretty(
+        &catalog,
+        ron::ser::PrettyConfig::default().struct_names(true),
+    )
+    .unwrap();
+    let restored: cu29::prelude::ValueDecodeCatalog = ron::from_str(&ron).unwrap();
+    assert_eq!(
+        bincode::encode_to_vec(&restored, bincode::config::standard()).unwrap(),
+        bincode::encode_to_vec(&catalog, bincode::config::standard()).unwrap()
+    );
+    for (name, symbol) in [("electric_potential", "V"), ("magnetic_flux_density", "T")] {
+        let quantity = catalog
+            .description
+            .schemas
+            .iter()
+            .filter_map(|schema| schema.quantity())
+            .find(|quantity| quantity.quantity().name() == name)
+            .unwrap();
+        assert_eq!(quantity.storage_unit().symbol(), symbol);
+    }
+    for (format, color) in [("human", "auto"), ("json", "always"), ("ron", "always")] {
+        let output = run(
+            &path,
+            &["catalog", "--export-format", format, "--color", color],
+        );
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(!output.stdout.contains(&0x1b));
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert!(!text.contains("kg·s⁻²·A⁻¹"));
+        assert!(!text.contains("m²·kg·s⁻³·A⁻¹"));
+        for symbol in ["m·s⁻¹", "m·s⁻²", "kg", "V", "T"] {
+            assert!(text.contains(symbol), "{format}: {symbol}: {text}");
+        }
+    }
+}
