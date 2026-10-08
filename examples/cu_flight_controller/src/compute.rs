@@ -2,6 +2,7 @@ use cu29::prelude::*;
 
 mod autonomy_bridge;
 mod compute_tasks;
+
 mod messages;
 
 mod tasks {
@@ -22,7 +23,10 @@ fn main() {
 
 fn drive() -> CuResult<()> {
     let app = ComputeApp::builder()
-        .with_log_path("logs/compute.copper", LOG_SLAB_SIZE)?
+        .with_log_path(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("logs/compute.copper"),
+            LOG_SLAB_SIZE,
+        )?
         .build()?;
     app.run_until_shutdown()?;
     Ok(())

@@ -797,9 +797,7 @@ impl Default for SimOsdOverlay {
 
 impl SimOsdOverlay {
     fn clear(&mut self) {
-        for c in &mut self.cells {
-            *c = OSD_BLANK_SYMBOL;
-        }
+        self.cells.fill(OSD_BLANK_SYMBOL);
     }
 
     fn apply_batch(&mut self, batch: &MspRequestBatch) {
@@ -1541,8 +1539,8 @@ fn capture_zed_depth(event: On<ReadbackComplete>, store: Res<sim_zed::SimZedFram
 
     let mut depth = Vec::with_capacity(pixel_count);
     let mut confidence = Vec::with_capacity(pixel_count);
-    for bytes in event.data.chunks_exact(size_of::<f32>()) {
-        let reverse_z = f32::from_ne_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+    for bytes in event.data.as_chunks::<{ size_of::<f32>() }>().0 {
+        let reverse_z = f32::from_ne_bytes(*bytes);
         let distance = zed_reverse_z_to_distance(reverse_z);
         let valid = distance.is_finite() && distance <= sim_zed::ZED_SIM_MAX_DEPTH_M;
         depth.push(if valid {
@@ -3946,6 +3944,22 @@ mod tests {
             .log_shutdown_completed()
             .expect("failed to log compute shutdown");
         drop(copper);
+
+        for log_base in [&mcu_log_base, &compute_log_base] {
+            let catalog = cu29_export::catalog::read_value_decode_catalog(log_base, None)
+                .expect("each subsystem log should embed its catalog");
+            assert!(
+                catalog
+                    .missions
+                    .iter()
+                    .any(|mission| !mission.slots.is_empty())
+            );
+            let records = cu29_export::catalog::copperlist_values_reader(log_base, None)
+                .expect("catalog reader should open each subsystem log")
+                .collect::<CuResult<Vec<_>>>()
+                .expect("catalog should decode every recorded subsystem payload");
+            assert!(!records.is_empty());
+        }
 
         let discovered =
             cu29::distributed_replay::DistributedReplayLog::discover(&compute_log_base)

@@ -125,7 +125,7 @@ just fwd
 
 ```bash
 # Extract CopperLists from log file
-just logreader log=logs/embedded.copper
+just logextract-native logs/embedded.copper
 
 # Check log file integrity
 just fsck log=logs/embedded.copper
@@ -165,6 +165,46 @@ The replay target uses the standardized replay contract:
 
 If you are building another replay target, follow the same pattern with
 `cu29::replay::{ReplayCli, ReplayDefaults, per_session_replay_log_base, serve_remote_debug}`.
+
+### Embedded payload catalogs
+
+The `self-describing-logs` feature records a compressed payload catalog automatically
+when the generated runtime is built. Simulation, host compute, and firmware enable
+this feature. Schema serialization and Heatshrink compression run once at startup
+with bounded memory, including on `no_std` targets. Each subsystem seals one catalog
+covering all its missions in static metadata outside the rotating data region.
+Matching appended runs reuse that catalog; section contexts select each run's mission.
+Payload dependencies supply their encoding recipes directly; the application
+enables `cu29/self-describing-logs` once.
+
+Choose the decoder explicitly:
+
+| Recipe | Payload decoder | Export formats |
+| --- | --- | --- |
+| `just logextract-catalog [log] [format]` | Self-describing catalog embedded in the log | `jsonl` (default), `json`, `csv` |
+| `just logextract-native [log]` | Compiled MCU Rust message types | `json` |
+| `just compute-logextract-native [log]` | Compiled compute Rust message types | `json` |
+
+For example, `just logextract-catalog logs/flight_controller_sim.copper csv > logs/mcu.csv`.
+Use `just logtool-catalog <log> <subcommand> [flags]` for the full catalog-backed CLI.
+
+Run these commands from this directory. `demo` exits cleanly and finalizes both logs.
+Use `just catalog-smoke` for a headless recording and catalog-decoding check.
+
+```bash
+just demo
+just catalog
+just catalog logs/flight_compute_sim.copper
+just logextract-catalog > logs/mcu.jsonl
+just logextract-catalog logs/flight_compute_sim.copper > logs/compute.jsonl
+just deep-fsck
+just deep-fsck logs/flight_compute_sim.copper
+```
+
+Use `just catalog logs/flight_controller_sim.copper --export-format ron` for the full
+catalog, or `just logtool-catalog logs/flight_controller_sim.copper list-runs` to inspect
+appended runs. Select a run with
+`just logtool-catalog logs/flight_controller_sim.copper --run 0 catalog`.
 
 ### Python GNSS Extraction
 
@@ -376,7 +416,7 @@ The firmware logs to the SD card in Copper's binary format. Use the log reader t
 
 ```bash
 # Extract structured data
-just logreader
+just logextract-native
 
 # Extract text logs (when compiled with textlogs feature)
 just textlogs

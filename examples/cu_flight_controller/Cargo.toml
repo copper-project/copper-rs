@@ -178,10 +178,12 @@ bevy = { workspace = true, default-features = false, features = [
 
 [features]
 default = ["sim", "forest-world"]
+self-describing-logs = ["cu29?/self-describing-logs"]
 forest-world = []
 urban-world = []
 autonomous-demo = []
 sim_core = [
+  "self-describing-logs",
   "dep:cu29",
   "cu29/std",
   "cu29/sysclock-perf",
@@ -205,6 +207,7 @@ textlogs = [
 
 
 firmware = [
+  "self-describing-logs",
   "dep:cu29",
   "cu29/defmt",
   "dep:defmt",
@@ -240,6 +243,7 @@ firmware = [
   "cu-logmon/defmt",
 ]
 end2end = [
+  "self-describing-logs",
   "dep:cu29",
   "cu29/std",
   "cu29/signal-handler",
@@ -287,6 +291,7 @@ sim = [
   "dep:cu-zenoh-bridge",
   "dep:cu-ratelimit",
   "cu29/reflect",
+  "cu-msp-bridge/reflect",
   "dep:cu-consolemon",
   "dep:cached-path",
   "dep:evdev",
@@ -366,7 +371,7 @@ path = "tests/config_matrix.rs"
 required-features = ["logreader"]
 
 [dev-dependencies]
-cu29-export = { workspace = true }
+cu29-export = { workspace = true, features = ["self-describing-logs"] }
 tempfile = { workspace = true }
 
 [build-dependencies]
