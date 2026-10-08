@@ -113,7 +113,7 @@ option select recorded runs identified by `Instantiated` lifecycle records.
 - `cu29::value_decode_catalog` and `cu29_value::catalog`: versioned shared payload
   catalogs and offline decompression. The startup writer borrows native recipes,
   shares one graph across compiled mission slot maps, and compresses into the
-  static metadata section using fixed working memory. Catalog version 2 includes
+  static metadata section using fixed working memory. Catalog version 1 includes
   a bincode version field, typed metadata, Heatshrink compression and a
   length/checksum footer.
 - `cu29_export::catalog`: experimental run-scoped catalog loading and fallible

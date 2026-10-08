@@ -159,7 +159,7 @@ mod tests {
                 .unwrap(),
         )
         .unwrap();
-        assert_eq!(catalog.version, 2);
+        assert_eq!(catalog.version, 1);
         assert!(
             reader
                 .read_next_section_type(UnifiedLogType::ValueDecodeCatalog)
