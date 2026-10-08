@@ -303,7 +303,7 @@
 <a href=#303 id=303 data-nosnippet>303</a>    <span class="attr">#[cfg(feature = <span class="string">"self-describing-logs"</span>)]
 <a href=#304 id=304 data-nosnippet>304</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>catalog_decompressed_size: <span class="prelude-ty">Option</span>&lt;usize&gt; = <span class="prelude-val">None</span>;
 <a href=#305 id=305 data-nosnippet>305</a>    <span class="attr">#[cfg(feature = <span class="string">"self-describing-logs"</span>)]
-<a href=#306 id=306 data-nosnippet>306</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>catalog_sections = <span class="kw">crate</span>::catalog::CatalogSections::default();
+<a href=#306 id=306 data-nosnippet>306</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>catalog_section = <span class="kw">crate</span>::catalog::CatalogSection::default();
 <a href=#307 id=307 data-nosnippet>307</a>
 <a href=#308 id=308 data-nosnippet>308</a>    <span class="kw">let </span>result = <span class="lifetime">'scan</span>: <span class="kw">loop </span>{
 <a href=#309 id=309 data-nosnippet>309</a>        <span class="comment">// for _ in 0..4 {
@@ -481,7 +481,7 @@
 <a href=#481 id=481 data-nosnippet>481</a>                        catalog_present = <span class="bool-val">true</span>;
 <a href=#482 id=482 data-nosnippet>482</a>                        catalog_size += content.len();
 <a href=#483 id=483 data-nosnippet>483</a>                        <span class="attr">#[cfg(feature = <span class="string">"self-describing-logs"</span>)]
-<a href=#484 id=484 data-nosnippet>484</a>                        </span>catalog_sections.push(<span class="kw-2">&amp;</span>content)<span class="question-mark">?</span>;
+<a href=#484 id=484 data-nosnippet>484</a>                        </span>catalog_section.set(<span class="kw-2">&amp;</span>content)<span class="question-mark">?</span>;
 <a href=#485 id=485 data-nosnippet>485</a>                        <span class="kw">if </span>verbose &gt; <span class="number">0 </span>{
 <a href=#486 id=486 data-nosnippet>486</a>                            <span class="macro">println!</span>(<span class="string">"    ValueDecodeCatalog: {} bytes"</span>, content.len());
 <a href=#487 id=487 data-nosnippet>487</a>                        }
@@ -513,7 +513,7 @@
 <a href=#513 id=513 data-nosnippet>513</a>    <span class="attr">#[cfg(feature = <span class="string">"self-describing-logs"</span>)]
 <a href=#514 id=514 data-nosnippet>514</a>    </span><span class="kw">let </span>result = result.and_then(|()| {
 <a href=#515 id=515 data-nosnippet>515</a>        <span class="kw">if </span>catalog_present {
-<a href=#516 id=516 data-nosnippet>516</a>            <span class="kw">let </span>catalog = catalog_sections.finish()<span class="question-mark">?</span>;
+<a href=#516 id=516 data-nosnippet>516</a>            <span class="kw">let </span>catalog = catalog_section.decode()<span class="question-mark">?</span>;
 <a href=#517 id=517 data-nosnippet>517</a>            catalog_decompressed_size = <span class="prelude-val">Some</span>(
 <a href=#518 id=518 data-nosnippet>518</a>                bincode::encode_into_std_write(<span class="kw-2">&amp;</span>catalog, <span class="kw-2">&amp;mut </span>std::io::sink(), standard())
 <a href=#519 id=519 data-nosnippet>519</a>                    .map_err(|error| {
