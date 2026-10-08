@@ -173,46 +173,15 @@ impl EntropySamples {
 fn print_runtime_lifecycle_record(index: usize, entry: &RuntimeLifecycleRecord) {
     println!("    RuntimeLifecycle #{index} @{}", entry.timestamp);
     match &entry.event {
-        RuntimeLifecycleEvent::Instantiated {
-            config_source,
-            effective_config_ron,
-            stack,
-        } => {
-            println!("      event: Instantiated");
-            println!("      config_source: {config_source:?}");
-            println!("      stack:");
-            println!("        app_name: {}", stack.app_name);
-            println!("        app_version: {}", stack.app_version);
-            println!(
-                "        git_commit: {}",
-                stack.git_commit.as_deref().unwrap_or("n/a")
-            );
-            println!(
-                "        git_dirty: {}",
-                stack
-                    .git_dirty
-                    .map(|v| if v { "true" } else { "false" })
-                    .unwrap_or("n/a")
-            );
-            println!(
-                "        subsystem_id: {}",
-                stack.subsystem_id.as_deref().unwrap_or("n/a")
-            );
-            println!("        subsystem_code: {}", stack.subsystem_code);
-            println!("        instance_id: {}", stack.instance_id);
-            println!("      effective_config_ron:");
-            for line in effective_config_ron.lines() {
-                println!("        {line}");
-            }
+        RuntimeLifecycleEvent::Instantiated { config_source } => {
+            println!("      event: Instantiated ({config_source:?})");
         }
-        RuntimeLifecycleEvent::MissionStarted { mission } => {
-            println!("      event: MissionStarted");
-            println!("      mission: {mission}");
+        RuntimeLifecycleEvent::MissionStarted => println!("      event: MissionStarted"),
+        RuntimeLifecycleEvent::MissionStopped { reason } => {
+            println!("      event: MissionStopped ({reason:?})")
         }
-        RuntimeLifecycleEvent::MissionStopped { mission, reason } => {
-            println!("      event: MissionStopped");
-            println!("      mission: {mission}");
-            println!("      reason: {reason}");
+        RuntimeLifecycleEvent::LifecycleFailed { operation, error } => {
+            println!("      event: LifecycleFailed ({operation:?}): {error}")
         }
         RuntimeLifecycleEvent::Panic {
             message,
@@ -309,6 +278,7 @@ where
                 }
 
                 match header.entry_type {
+                    UnifiedLogType::ApplicationMetadata | UnifiedLogType::ValueDecodeCatalog => {}
                     UnifiedLogType::StructuredLogLine => {
                         structured_log_size += content.len();
                         let mut reader = Cursor::new(content.as_slice());

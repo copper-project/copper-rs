@@ -1,1410 +1,568 @@
-//! This is the memory map file implementation for the unified logger for Copper.
-//! It is std only.
-
+//! Mapped-file adapter for the byte-addressed section chain.
+use crate::byte_log::{ByteLogger, ByteRegion, ByteSection, ByteStorage, read_header, read_main};
 use crate::{
-    AllocatedSection, MAIN_MAGIC, MainHeader, SECTION_MAGIC, SectionHandle, SectionHeader,
-    SectionStorage, UNIFIED_LOG_FORMAT_VERSION, UnifiedLogRead, UnifiedLogStatus, UnifiedLogWrite,
+    ApplicationMetadata, CapacityPolicy, MainHeader, SECTION_HEADER_COMPACT_SIZE, SectionHeader,
+    UnifiedLogRead,
 };
-
-use crate::SECTION_HEADER_COMPACT_SIZE;
-
-use AllocatedSection::Section;
-use bincode::config::standard;
-use bincode::enc::EncoderImpl;
-use bincode::enc::write::SliceWriter;
-use bincode::error::EncodeError;
-use bincode::{Encode, decode_from_slice, encode_into_slice};
-use core::slice::from_raw_parts_mut;
-use cu29_traits::{
-    CuError, CuResult, ObservedWriter, UnifiedLogType, abort_observed_encode,
-    begin_observed_encode, finish_observed_encode,
-};
+use alloc::sync::Arc;
+use bincode::{config::standard, decode_from_slice};
+use cu29_traits::{CuError, CuResult, UnifiedLogType};
 use memmap2::{Mmap, MmapMut};
 use std::fs::{File, OpenOptions};
-use std::io::Read;
-use std::mem::ManuallyDrop;
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
-use std::{io, mem};
 
-pub struct MmapSectionStorage {
-    buffer: &'static mut [u8],
-    offset: usize,
-    block_size: usize,
+const MAX_SPANS: usize = 64;
+enum Mapping {
+    Read(Mmap),
+    Write(core::cell::UnsafeCell<MmapMut>),
 }
-
-impl MmapSectionStorage {
-    pub fn new(buffer: &'static mut [u8], block_size: usize) -> Self {
-        Self {
-            buffer,
-            offset: 0,
-            block_size,
-        }
-    }
-
-    pub fn buffer_ptr(&self) -> *const u8 {
-        &self.buffer[0] as *const u8
-    }
+struct MappedFile {
+    mapping: Mapping,
+    pointer: *mut u8,
+    length: usize,
+    #[cfg(feature = "mmap-fsync")]
+    file: File,
 }
-
-impl SectionStorage for MmapSectionStorage {
-    fn initialize<E: Encode>(&mut self, header: &E) -> Result<usize, EncodeError> {
-        self.post_update_header(header)?;
-        self.offset = self.block_size;
-        Ok(self.offset)
-    }
-
-    fn post_update_header<E: Encode>(&mut self, header: &E) -> Result<usize, EncodeError> {
-        encode_into_slice(header, &mut self.buffer[0..], standard())
-    }
-
-    fn append<E: Encode>(&mut self, entry: &E) -> Result<usize, EncodeError> {
-        begin_observed_encode();
-        let result = (|| {
-            let mut encoder = EncoderImpl::new(
-                ObservedWriter::new(SliceWriter::new(&mut self.buffer[self.offset..])),
-                standard(),
-            );
-            entry.encode(&mut encoder)?;
-            Ok(encoder.into_writer().into_inner().bytes_written())
-        })();
-        let size = match result {
-            Ok(size) => {
-                debug_assert_eq!(size, finish_observed_encode());
-                size
-            }
-            Err(err) => {
-                abort_observed_encode();
-                return Err(err);
+// SAFETY: Sections receive disjoint ranges and exclusive generation leases. Header
+// access uses the same lease. The mapping never exposes borrowed payload slices.
+unsafe impl Send for MappedFile {}
+unsafe impl Sync for MappedFile {}
+impl MappedFile {
+    fn new(file: File, writable: bool) -> io::Result<Self> {
+        // SAFETY: Copper owns these backing files; external mutation is unsupported.
+        let (mapping, pointer, length) = unsafe {
+            if writable {
+                let mut mapping = MmapMut::map_mut(&file)?;
+                let pointer = mapping.as_mut_ptr();
+                let length = mapping.len();
+                (
+                    Mapping::Write(core::cell::UnsafeCell::new(mapping)),
+                    pointer,
+                    length,
+                )
+            } else {
+                let mapping = Mmap::map(&file)?;
+                let pointer = mapping.as_ptr().cast_mut();
+                let length = mapping.len();
+                (Mapping::Read(mapping), pointer, length)
             }
         };
-        self.offset += size;
-        Ok(size)
-    }
-
-    fn flush(&mut self) -> CuResult<usize> {
-        // Flushing is handled at the slab level for mmap-backed storage.
-        Ok(self.offset)
+        Ok(Self {
+            mapping,
+            pointer,
+            length,
+            #[cfg(feature = "mmap-fsync")]
+            file,
+        })
     }
 }
 
-///
-/// Holds the read or write side of the datalogger.
+/// A range keeps mappings alive even after the logger is dropped.
+pub struct MmapRegion {
+    maps: [Option<Arc<MappedFile>>; MAX_SPANS],
+    first: usize,
+    slab_size: usize,
+    length: u64,
+}
+impl MmapRegion {
+    fn visit(
+        &self,
+        offset: u64,
+        len: usize,
+        mut visit: impl FnMut(&MappedFile, usize, usize, usize) -> CuResult<()>,
+    ) -> CuResult<()> {
+        if offset
+            .checked_add(len as u64)
+            .is_none_or(|end| end > self.length)
+        {
+            return Err(CuError::from("Mapped range exceeds section"));
+        }
+        let mut cursor = self.first
+            + usize::try_from(offset).map_err(|_| CuError::from("Offset exceeds address space"))?;
+        let mut done = 0;
+        while done < len {
+            let index = cursor / self.slab_size;
+            let local = cursor % self.slab_size;
+            let map = self
+                .maps
+                .get(index)
+                .and_then(Option::as_ref)
+                .ok_or_else(|| CuError::from("Missing mapped slab"))?;
+            let count = (len - done).min(map.length.saturating_sub(local));
+            if count == 0 {
+                return Err(CuError::from("Truncated mapped slab"));
+            }
+            visit(map, local, done, count)?;
+            cursor += count;
+            done += count;
+        }
+        Ok(())
+    }
+}
+impl ByteRegion for MmapRegion {
+    fn len(&self) -> u64 {
+        self.length
+    }
+    fn read(&self, offset: u64, bytes: &mut [u8]) -> CuResult<()> {
+        self.visit(offset, bytes.len(), |map, local, done, count| {
+            // SAFETY: Reads are bounded to a leased section or read-only file mapping.
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    map.pointer.add(local),
+                    bytes[done..].as_mut_ptr(),
+                    count,
+                );
+            }
+            Ok(())
+        })
+    }
+    fn write(&mut self, offset: u64, bytes: &[u8]) -> CuResult<()> {
+        self.visit(offset, bytes.len(), |map, local, done, count| {
+            let Mapping::Write(_) = &map.mapping else {
+                return Err(CuError::from("Read-only mapped storage"));
+            };
+            // SAFETY: The allocator gives disjoint sections exclusive generation leases.
+            // A header update seals its lease before writing; reclamation cannot overlap
+            // an encoder holding BUSY. No mutable Rust references to a mapping escape.
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    bytes[done..].as_ptr(),
+                    map.pointer.add(local),
+                    count,
+                );
+            }
+            Ok(())
+        })
+    }
+    fn commit(&mut self) -> CuResult<()> {
+        Ok(())
+    }
+    fn flush(&mut self) -> CuResult<()> {
+        for map in self.maps.iter().flatten() {
+            match &map.mapping {
+                Mapping::Write(mapping) => {
+                    // SAFETY: Flushing observes the mapping without creating payload slices.
+                    unsafe { &*mapping.get() }
+                        .flush()
+                        .map_err(|e| CuError::new_with_cause("Cannot flush mapped section", e))?;
+                    #[cfg(feature = "mmap-fsync")]
+                    map.file
+                        .sync_all()
+                        .map_err(|e| CuError::new_with_cause("Cannot sync backing file", e))?;
+                }
+                Mapping::Read(mapping) => {
+                    let _ = mapping.len();
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+#[doc(hidden)]
+pub struct MmapStorage {
+    path: PathBuf,
+    slab_size: usize,
+    maps: Vec<Arc<MappedFile>>,
+    writable: bool,
+}
+fn slab_path(path: &Path, index: usize) -> io::Result<PathBuf> {
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| io::Error::other("Invalid log file name"))?;
+    let extension = path
+        .extension()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| io::Error::other("Log file requires an extension"))?;
+    Ok(path.with_file_name(format!("{stem}_{index}.{extension}")))
+}
+impl MmapStorage {
+    fn open(path: &Path, writable: bool) -> io::Result<Self> {
+        let first = File::open(slab_path(path, 0)?)?;
+        let slab_size = first.metadata()?.len() as usize;
+        if slab_size < 512 || !slab_size.is_multiple_of(512) {
+            return Err(io::Error::other("Invalid backing slab size"));
+        }
+        let mut maps = Vec::new();
+        for index in 0.. {
+            let file = match OpenOptions::new()
+                .read(true)
+                .write(writable)
+                .open(slab_path(path, index)?)
+            {
+                Ok(file) => file,
+                Err(e) if e.kind() == io::ErrorKind::NotFound => break,
+                Err(e) => return Err(e),
+            };
+            if file.metadata()?.len() != slab_size as u64 {
+                return Err(io::Error::other("Inconsistent backing slab sizes"));
+            }
+            maps.push(Arc::new(MappedFile::new(file, writable)?));
+        }
+        Ok(Self {
+            path: path.to_path_buf(),
+            slab_size,
+            maps,
+            writable,
+        })
+    }
+    fn create(path: &Path, slab_size: usize) -> io::Result<Self> {
+        if slab_size < 1024 || !slab_size.is_multiple_of(512) {
+            return Err(io::Error::other(
+                "Slab size must be a multiple of 512 bytes",
+            ));
+        }
+        let mut storage = Self {
+            path: path.to_path_buf(),
+            slab_size,
+            maps: Vec::new(),
+            writable: true,
+        };
+        storage.grow(slab_size as u64).map_err(io::Error::other)?;
+        // Remove old suffixes only for this explicitly replaced log.
+        for index in 1.. {
+            match std::fs::remove_file(slab_path(path, index)?) {
+                Ok(()) => {}
+                Err(e) if e.kind() == io::ErrorKind::NotFound => break,
+                Err(e) => return Err(e),
+            }
+        }
+        match std::fs::remove_file(path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e),
+        }
+        let target = slab_path(path, 0)?;
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(target.file_name().unwrap(), path)?;
+        #[cfg(not(unix))]
+        std::fs::hard_link(target, path)?;
+        Ok(storage)
+    }
+}
+impl ByteStorage for MmapStorage {
+    type Region = MmapRegion;
+    fn len(&self) -> u64 {
+        self.maps.len() as u64 * self.slab_size as u64
+    }
+    fn grow(&mut self, end: u64) -> CuResult<()> {
+        if end <= self.len() {
+            return Ok(());
+        }
+        if !self.writable {
+            return Err(CuError::from("Read-only storage cannot grow"));
+        }
+        let count = end.div_ceil(self.slab_size as u64);
+        while (self.maps.len() as u64) < count {
+            let path = slab_path(&self.path, self.maps.len())
+                .map_err(|e| CuError::new_with_cause("Invalid slab path", e))?;
+            let file = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(path)
+                .map_err(|e| CuError::new_with_cause("Cannot create backing slab", e))?;
+            file.set_len(self.slab_size as u64)
+                .map_err(|e| CuError::new_with_cause("Cannot allocate backing slab", e))?;
+            self.maps
+                .push(Arc::new(MappedFile::new(file, true).map_err(|e| {
+                    CuError::new_with_cause("Cannot map backing slab", e)
+                })?));
+        }
+        Ok(())
+    }
+    fn region(&self, offset: u64, length: u64) -> CuResult<MmapRegion> {
+        if offset
+            .checked_add(length)
+            .is_none_or(|end| end > self.len())
+        {
+            return Err(CuError::from("Byte range exceeds backing storage"));
+        }
+        let begin = usize::try_from(offset / self.slab_size as u64)
+            .map_err(|_| CuError::from("Offset exceeds address space"))?;
+        let count =
+            ((offset % self.slab_size as u64 + length).div_ceil(self.slab_size as u64)) as usize;
+        if count > MAX_SPANS {
+            return Err(CuError::from("Section spans more than 64 backing files"));
+        }
+        let mut maps = core::array::from_fn(|_| None);
+        for (slot, mapping) in maps.iter_mut().zip(self.maps[begin..begin + count].iter()) {
+            *slot = Some(mapping.clone());
+        }
+        Ok(MmapRegion {
+            maps,
+            first: (offset % self.slab_size as u64) as usize,
+            slab_size: self.slab_size,
+            length,
+        })
+    }
+}
+pub type MmapSectionStorage = ByteSection<MmapRegion>;
+pub type MmapUnifiedLoggerWrite = ByteLogger<MmapStorage>;
 pub enum MmapUnifiedLogger {
     Read(MmapUnifiedLoggerRead),
     Write(MmapUnifiedLoggerWrite),
 }
 
-/// Use this builder to create a new DataLogger.
+#[derive(Default)]
 pub struct MmapUnifiedLoggerBuilder {
     file_base_name: Option<PathBuf>,
     preallocated_size: Option<usize>,
     write: bool,
     create: bool,
     append: bool,
-    rollover_size: Option<usize>,
+    capacity: Option<u64>,
+    policy: CapacityPolicy,
 }
-
-impl Default for MmapUnifiedLoggerBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl MmapUnifiedLoggerBuilder {
     pub fn new() -> Self {
-        Self {
-            file_base_name: None,
-            preallocated_size: None,
-            write: false,
-            create: false, // This is the safest default
-            append: false,
-            rollover_size: None,
-        }
+        Self::default()
     }
-
-    /// If "something/toto.copper" is given, it will find or create "something/toto_0.copper",  "something/toto_1.copper" etc.
-    pub fn file_base_name(mut self, file_path: &Path) -> Self {
-        self.file_base_name = Some(file_path.to_path_buf());
+    pub fn file_base_name(mut self, path: &Path) -> Self {
+        self.file_base_name = Some(path.to_path_buf());
         self
     }
-
-    pub fn preallocated_size(mut self, preallocated_size: usize) -> Self {
-        self.preallocated_size = Some(preallocated_size);
+    pub fn preallocated_size(mut self, size: usize) -> Self {
+        self.preallocated_size = Some(size);
         self
     }
-
     pub fn write(mut self, write: bool) -> Self {
         self.write = write;
         self
     }
-
     pub fn create(mut self, create: bool) -> Self {
         self.create = create;
         self
     }
-
-    /// When `write` and `create` are both set, resume writing at the end of an
-    /// existing log instead of truncating it.
-    ///
-    /// Requires a cleanly closed log (one ending with a permanent end-of-log
-    /// marker). Returns an error if the log does not exist or is incomplete.
     pub fn append(mut self, append: bool) -> Self {
         self.append = append;
         self
     }
-
-    /// When `write` and `create` are both set, keep the log bounded on disk:
-    /// slabs form a ring of `max(1, size / slab_size)` files and, once the ring
-    /// is full, the oldest slab is overwritten so only the most recent logs are
-    /// retained.
+    /// Bound rotating sections by a byte capacity, retaining static metadata.
     pub fn rollover(mut self, size: usize) -> Self {
-        self.rollover_size = Some(size);
+        self.capacity = Some(size as u64);
+        self.policy = CapacityPolicy::OverwriteOldest;
         self
     }
-
+    pub fn capacity(mut self, size: u64, policy: CapacityPolicy) -> Self {
+        self.capacity = Some(size);
+        self.policy = policy;
+        self
+    }
     pub fn build(self) -> io::Result<MmapUnifiedLogger> {
-        let page_size = page_size::get();
-
-        if self.write && self.create {
-            let file_path = self.file_base_name.ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "File path is required for write mode",
-                )
-            })?;
-            let preallocated_size = self.preallocated_size.ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "Preallocated size is required for write mode",
-                )
-            })?;
-            let max_slabs = match self.rollover_size {
-                Some(size) => (size / preallocated_size).max(1),
-                None => 0,
-            };
-            let ulw = if self.append {
-                MmapUnifiedLoggerWrite::append(&file_path, preallocated_size, max_slabs)?
-            } else {
-                MmapUnifiedLoggerWrite::new(&file_path, preallocated_size, page_size, max_slabs)?
-            };
-            Ok(MmapUnifiedLogger::Write(ulw))
+        let path = self
+            .file_base_name
+            .ok_or_else(|| io::Error::other("Log file path is required"))?;
+        if !(self.write && self.create) {
+            return MmapUnifiedLoggerRead::new(&path).map(MmapUnifiedLogger::Read);
+        }
+        let slab_size = self
+            .preallocated_size
+            .ok_or_else(|| io::Error::other("Preallocated size is required"))?;
+        let slab_size = slab_size
+            .checked_add(511)
+            .ok_or_else(|| io::Error::other("Slab size overflow"))?
+            / 512
+            * 512;
+        let slab_size = slab_size.max(1024);
+        let logger = if self.append {
+            let storage = MmapStorage::open(&path, true)?;
+            if storage.slab_size != slab_size {
+                return Err(io::Error::other("Append slab allocation size mismatch"));
+            }
+            let capacity = self.capacity.unwrap_or(storage.len());
+            ByteLogger::append(storage, self.policy, capacity)
         } else {
-            let file_path = self.file_base_name.ok_or_else(|| {
-                io::Error::new(io::ErrorKind::InvalidInput, "File path is required")
-            })?;
-            let ulr = MmapUnifiedLoggerRead::new(&file_path)?;
-            Ok(MmapUnifiedLogger::Read(ulr))
-        }
-    }
-}
-
-struct SlabEntry {
-    file: File,
-    mmap_buffer: ManuallyDrop<MmapMut>,
-    current_global_position: usize,
-    sections_offsets_in_flight: Vec<usize>,
-    flushed_until_offset: usize,
-    page_size: usize,
-    temporary_end_marker: Option<usize>,
-    /// Whether the file is trimmed to its used size on drop. Rollover rings keep
-    /// every slab at its full preallocated size so `slab_size` stays derivable
-    /// from the on-disk geometry; linear logs trim to save space.
-    trim_on_drop: bool,
-    #[cfg(test)]
-    closed_sections: Vec<(usize, usize)>,
-    #[cfg(test)]
-    flushed_ranges: Vec<(usize, usize)>,
-    #[cfg(all(test, feature = "mmap-fsync"))]
-    sync_call_count: usize,
-}
-
-impl Drop for SlabEntry {
-    fn drop(&mut self) {
-        self.flush_until(self.current_global_position);
-        // SAFETY: We own the mapping and must drop it before trimming the file.
-        unsafe { ManuallyDrop::drop(&mut self.mmap_buffer) };
-        if self.trim_on_drop
-            && let Err(error) = self.file.set_len(self.current_global_position as u64)
-        {
-            eprintln!("Failed to trim datalogger file: {}", error);
-        }
-        self.sync_file();
-
-        if !self.sections_offsets_in_flight.is_empty() {
-            eprintln!("Error: Slab not full flushed.");
-        }
-    }
-}
-
-impl SlabEntry {
-    fn new(file: File, page_size: usize) -> io::Result<Self> {
-        let mmap_buffer = ManuallyDrop::new(
-            // SAFETY: The file descriptor is valid and mapping is confined to this struct.
-            unsafe { MmapMut::map_mut(&file) }
-                .map_err(|e| io::Error::new(e.kind(), format!("Failed to map file: {e}")))?,
-        );
-        Ok(Self {
-            file,
-            mmap_buffer,
-            current_global_position: 0,
-            sections_offsets_in_flight: Vec::with_capacity(16),
-            flushed_until_offset: 0,
-            page_size,
-            temporary_end_marker: None,
-            trim_on_drop: true,
-            #[cfg(test)]
-            closed_sections: Vec::new(),
-            #[cfg(test)]
-            flushed_ranges: Vec::new(),
-            #[cfg(all(test, feature = "mmap-fsync"))]
-            sync_call_count: 0,
-        })
-    }
-
-    fn flush_range(&mut self, start: usize, len: usize) {
-        if len == 0 {
-            return;
-        }
-        self.mmap_buffer
-            .flush_async_range(start, len)
-            .expect("Failed to flush memory map");
-        self.sync_file();
-        #[cfg(test)]
-        self.record_flushed_range(start, len);
-    }
-
-    fn sync_file(&mut self) {
-        #[cfg(feature = "mmap-fsync")]
-        {
-            self.file.sync_all().expect("Failed to fsync log file");
-            #[cfg(test)]
-            {
-                self.sync_call_count += 1;
-            }
-        }
-    }
-    /// Unsure the underlying mmap is flush to disk until the given position.
-    fn flush_until(&mut self, until_position: usize) {
-        // This is tolerated under linux, but crashes on macos
-        if (self.flushed_until_offset == until_position) || (until_position == 0) {
-            return;
-        }
-        self.flush_range(
-            self.flushed_until_offset,
-            until_position - self.flushed_until_offset,
-        );
-        self.flushed_until_offset = until_position;
-    }
-
-    fn clear_temporary_end_marker(&mut self) {
-        if let Some(marker_start) = self.temporary_end_marker.take() {
-            self.current_global_position = marker_start;
-            if self.flushed_until_offset > marker_start {
-                self.flushed_until_offset = marker_start;
-            }
-        }
-    }
-
-    fn write_end_marker(&mut self, temporary: bool) -> CuResult<()> {
-        let block_size = SECTION_HEADER_COMPACT_SIZE as usize;
-        let marker_start = self.align_to_next_page(self.current_global_position);
-        let total_marker_size = block_size; // header only
-        let marker_end = marker_start + total_marker_size;
-        if marker_end > self.mmap_buffer.len() {
-            return Err("Not enough space to write end-of-log marker".into());
-        }
-
-        let header = SectionHeader {
-            magic: SECTION_MAGIC,
-            block_size: SECTION_HEADER_COMPACT_SIZE,
-            entry_type: UnifiedLogType::LastEntry,
-            offset_to_next_section: total_marker_size as u32,
-            used: 0,
-            is_open: temporary,
-        };
-
-        encode_into_slice(
-            &header,
-            &mut self.mmap_buffer
-                [marker_start..marker_start + SECTION_HEADER_COMPACT_SIZE as usize],
-            standard(),
-        )
-        .map_err(|e| CuError::new_with_cause("Failed to encode end-of-log header", e))?;
-
-        self.temporary_end_marker = Some(marker_start);
-        self.current_global_position = marker_end;
-        Ok(())
-    }
-
-    fn is_it_my_section(&self, section: &SectionHandle<MmapSectionStorage>) -> bool {
-        let storage = section.get_storage();
-        let ptr = storage.buffer_ptr();
-        (ptr >= self.mmap_buffer.as_ptr())
-            && (ptr as usize)
-                < (self.mmap_buffer.as_ref().as_ptr() as usize + self.mmap_buffer.as_ref().len())
-    }
-
-    /// Flush the section to disk.
-    /// the flushing is permanent and the section is considered closed.
-    fn flush_section(&mut self, section: &mut SectionHandle<MmapSectionStorage>) {
-        section
-            .post_update_header()
-            .expect("Failed to update section header");
-
-        let storage = section.get_storage();
-        let ptr = storage.buffer_ptr();
-
-        if ptr < self.mmap_buffer.as_ptr()
-            || ptr as usize > self.mmap_buffer.as_ptr() as usize + self.mmap_buffer.len()
-        {
-            panic!("Invalid section buffer, not in the slab");
-        }
-
-        let base = self.mmap_buffer.as_ptr() as usize;
-        let section_start = ptr as usize - base;
-        let section_len = section.header.offset_to_next_section as usize;
-        #[cfg(test)]
-        self.record_closed_section(section_start, section_len);
-        self.sections_offsets_in_flight
-            .retain(|&x| x != section_start);
-
-        if self.sections_offsets_in_flight.is_empty() {
-            self.flush_until(self.current_global_position);
-            return;
-        }
-        let next_open_offset = self.sections_offsets_in_flight[0];
-        if self.flushed_until_offset < next_open_offset {
-            self.flush_until(next_open_offset);
-        }
-        if section_start + section_len > self.flushed_until_offset {
-            // A long-lived early section can otherwise pin later closed sections
-            // behind the prefix cursor until shutdown.
-            self.flush_range(section_start, section_len);
-        }
-    }
-
-    #[cfg(test)]
-    fn record_closed_section(&mut self, start: usize, len: usize) {
-        self.closed_sections.push((start, len));
-    }
-
-    #[cfg(test)]
-    fn record_flushed_range(&mut self, start: usize, len: usize) {
-        let mut merged_start = start;
-        let mut merged_end = start + len;
-        let mut merged_ranges = Vec::with_capacity(self.flushed_ranges.len() + 1);
-        let mut inserted = false;
-
-        for (range_start, range_len) in self.flushed_ranges.drain(..) {
-            let range_end = range_start + range_len;
-            if range_end < merged_start {
-                merged_ranges.push((range_start, range_len));
-                continue;
-            }
-            if merged_end < range_start {
-                if !inserted {
-                    merged_ranges.push((merged_start, merged_end - merged_start));
-                    inserted = true;
-                }
-                merged_ranges.push((range_start, range_len));
-                continue;
-            }
-
-            merged_start = merged_start.min(range_start);
-            merged_end = merged_end.max(range_end);
-        }
-
-        if !inserted {
-            merged_ranges.push((merged_start, merged_end - merged_start));
-        }
-
-        self.flushed_ranges = merged_ranges;
-    }
-
-    #[cfg(test)]
-    fn pending_closed_bytes(&self) -> usize {
-        let mut pending = 0;
-
-        for (section_start, section_len) in &self.closed_sections {
-            let section_end = section_start + section_len;
-            let mut cursor = *section_start;
-
-            for (range_start, range_len) in &self.flushed_ranges {
-                let range_end = range_start + range_len;
-                if range_end <= cursor {
-                    continue;
-                }
-                if *range_start >= section_end {
-                    break;
-                }
-                if *range_start > cursor {
-                    pending += *range_start - cursor;
-                }
-                cursor = cursor.max(range_end);
-                if cursor >= section_end {
-                    break;
-                }
-            }
-
-            if cursor < section_end {
-                pending += section_end - cursor;
-            }
-        }
-
-        pending
-    }
-
-    #[inline]
-    fn align_to_next_page(&self, ptr: usize) -> usize {
-        (ptr + self.page_size - 1) & !(self.page_size - 1)
-    }
-
-    /// The returned slice is section_size or greater.
-    fn add_section(
-        &mut self,
-        entry_type: UnifiedLogType,
-        requested_section_size: usize,
-    ) -> AllocatedSection<MmapSectionStorage> {
-        // align current_position to the next page
-        self.current_global_position = self.align_to_next_page(self.current_global_position);
-        let section_size = self.align_to_next_page(requested_section_size) as u32;
-
-        // We need to have enough space to store the section in that slab
-        if self.current_global_position + section_size as usize > self.mmap_buffer.len() {
-            return AllocatedSection::NoMoreSpace;
-        }
-
-        #[cfg(feature = "compact")]
-        let block_size = SECTION_HEADER_COMPACT_SIZE;
-
-        #[cfg(not(feature = "compact"))]
-        let block_size = self.page_size as u16;
-
-        let section_header = SectionHeader {
-            magic: SECTION_MAGIC,
-            block_size,
-            entry_type,
-            offset_to_next_section: section_size,
-            used: 0u32,
-            is_open: true,
-        };
-
-        // save the position to keep track for in flight sections
-        self.sections_offsets_in_flight
-            .push(self.current_global_position);
-        let end_of_section = self.current_global_position + requested_section_size;
-        let user_buffer = &mut self.mmap_buffer[self.current_global_position..end_of_section];
-
-        // SAFETY: We have exclusive access to user_buffer for the handle's lifetime.
-        let handle_buffer =
-            unsafe { from_raw_parts_mut(user_buffer.as_mut_ptr(), user_buffer.len()) };
-        let storage = MmapSectionStorage::new(handle_buffer, block_size as usize);
-
-        self.current_global_position = end_of_section;
-
-        Section(SectionHandle::create(section_header, storage).expect("Failed to create section"))
-    }
-
-    #[cfg(test)]
-    fn used(&self) -> usize {
-        self.current_global_position
-    }
-}
-
-/// A write side of the datalogger.
-pub struct MmapUnifiedLoggerWrite {
-    /// the front slab is the current active slab for any new section.
-    front_slab: SlabEntry,
-    /// the back slab is the previous slab that is being flushed.
-    back_slabs: Vec<SlabEntry>,
-    /// base file path to create the backing files from.
-    base_file_path: PathBuf,
-    /// allocation size for the backing files.
-    slab_size: usize,
-    /// current suffix for the backing files.
-    front_slab_suffix: usize,
-    /// number of slabs in the rollover ring; 0 means unbounded (no rollover).
-    max_slabs: usize,
-    /// index of the oldest retained slab (the first retained section).
-    head_slab_index: usize,
-    /// byte offset of the first retained section within its slab.
-    head_offset: u64,
-}
-
-fn build_slab_path(base_file_path: &Path, slab_index: usize) -> io::Result<PathBuf> {
-    let mut file_path = base_file_path.to_path_buf();
-    let stem = file_path.file_stem().ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Base file path has no file name",
-        )
-    })?;
-    let stem = stem.to_str().ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Base file name is not valid UTF-8",
-        )
-    })?;
-    let extension = file_path.extension().ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Base file path has no extension",
-        )
-    })?;
-    let extension = extension.to_str().ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Base file extension is not valid UTF-8",
-        )
-    })?;
-    if stem.is_empty() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Base file name is empty",
-        ));
-    }
-    let file_name = format!("{stem}_{slab_index}.{extension}");
-    file_path.set_file_name(file_name);
-    Ok(file_path)
-}
-
-fn make_slab_file(base_file_path: &Path, slab_size: usize, slab_suffix: usize) -> io::Result<File> {
-    let file_path = build_slab_path(base_file_path, slab_suffix)?;
-    let file = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open(&file_path)
-        .map_err(|e| {
-            io::Error::new(
-                e.kind(),
-                format!("Failed to open file {}: {e}", file_path.display()),
+            ByteLogger::new(
+                MmapStorage::create(&path, slab_size)?,
+                512,
+                self.policy,
+                self.capacity.unwrap_or(slab_size as u64),
             )
-        })?;
-    file.set_len(slab_size as u64).map_err(|e| {
-        io::Error::new(
-            e.kind(),
-            format!("Failed to set file length for {}: {e}", file_path.display()),
-        )
-    })?;
-    Ok(file)
-}
-
-fn remove_existing_alias(base_file_path: &Path) -> io::Result<()> {
-    match std::fs::symlink_metadata(base_file_path) {
-        Ok(meta) => {
-            if meta.is_dir() {
-                return Err(io::Error::new(
-                    io::ErrorKind::AlreadyExists,
-                    format!(
-                        "Cannot create base log alias at {} because a directory already exists there",
-                        base_file_path.display()
-                    ),
-                ));
-            }
-            std::fs::remove_file(base_file_path).map_err(|e| {
-                io::Error::new(
-                    e.kind(),
-                    format!(
-                        "Failed to remove existing base log alias {}: {e}",
-                        base_file_path.display()
-                    ),
-                )
-            })
         }
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(io::Error::new(
-            e.kind(),
-            format!(
-                "Failed to inspect existing base log alias {}: {e}",
-                base_file_path.display()
-            ),
-        )),
+        .map_err(io::Error::other)?;
+        Ok(MmapUnifiedLogger::Write(logger))
     }
 }
 
-fn create_base_alias_link(base_file_path: &Path) -> io::Result<()> {
-    let first_slab_path = build_slab_path(base_file_path, 0)?;
-    remove_existing_alias(base_file_path)?;
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::symlink;
-        let relative_target = Path::new(first_slab_path.file_name().ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "First slab file has no name component",
-            )
-        })?);
-        symlink(relative_target, base_file_path).map_err(|e| {
-            io::Error::new(
-                e.kind(),
-                format!(
-                    "Failed to create base log alias {} -> {}: {e}",
-                    base_file_path.display(),
-                    first_slab_path.display()
-                ),
-            )
-        })
-    }
-
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::symlink_file;
-        let relative_target = Path::new(first_slab_path.file_name().ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "First slab file has no name component",
-            )
-        })?);
-        match symlink_file(relative_target, base_file_path) {
-            Ok(()) => Ok(()),
-            Err(symlink_err) => std::fs::hard_link(&first_slab_path, base_file_path).map_err(
-                |hard_link_err| {
-                    io::Error::other(format!(
-                        "Failed to create base log alias {}. Symlink error: {symlink_err}. Hard-link fallback error: {hard_link_err}",
-                        base_file_path.display()
-                    ))
-                },
-            ),
-        }?;
-        Ok(())
-    }
-
-    #[cfg(not(any(unix, windows)))]
-    {
-        std::fs::hard_link(&first_slab_path, base_file_path).map_err(|e| {
-            io::Error::new(
-                e.kind(),
-                format!(
-                    "Failed to create base log alias {} -> {}: {e}",
-                    base_file_path.display(),
-                    first_slab_path.display()
-                ),
-            )
-        })
-    }
-}
-
-impl UnifiedLogWrite<MmapSectionStorage> for MmapUnifiedLoggerWrite {
-    /// The returned slice is section_size or greater.
-    fn add_section(
-        &mut self,
-        entry_type: UnifiedLogType,
-        requested_section_size: usize,
-    ) -> CuResult<SectionHandle<MmapSectionStorage>> {
-        self.garbage_collect_backslabs(); // Take the opportunity to keep up and close stale back slabs.
-        self.front_slab.clear_temporary_end_marker();
-        let maybe_section = self
-            .front_slab
-            .add_section(entry_type, requested_section_size);
-
-        match maybe_section {
-            AllocatedSection::NoMoreSpace => {
-                // move the front slab to the back slab.
-                let new_slab = self.create_slab()?;
-                // keep the slab until all its sections has been flushed.
-                self.back_slabs
-                    .push(mem::replace(&mut self.front_slab, new_slab));
-                match self
-                    .front_slab
-                    .add_section(entry_type, requested_section_size)
-                {
-                    AllocatedSection::NoMoreSpace => Err(CuError::from("out of space")),
-                    Section(section) => {
-                        self.place_end_marker(true)?;
-                        Ok(section)
-                    }
-                }
-            }
-            Section(section) => {
-                self.place_end_marker(true)?;
-                Ok(section)
-            }
-        }
-    }
-
-    fn flush_section(&mut self, section: &mut SectionHandle<MmapSectionStorage>) {
-        section.mark_closed();
-        for slab in self.back_slabs.iter_mut() {
-            if slab.is_it_my_section(section) {
-                slab.flush_section(section);
-                return;
-            }
-        }
-        self.front_slab.flush_section(section);
-    }
-
-    fn status(&self) -> UnifiedLogStatus {
-        UnifiedLogStatus {
-            total_used_space: self.front_slab.current_global_position,
-            total_allocated_space: self.slab_size * self.front_slab_suffix,
-        }
-    }
-}
-
-impl MmapUnifiedLoggerWrite {
-    fn next_suffix(&self) -> usize {
-        if self.max_slabs > 0 {
-            (self.front_slab_suffix + 1) % self.max_slabs
-        } else {
-            self.front_slab_suffix + 1
-        }
-    }
-
-    fn new(
-        base_file_path: &Path,
-        slab_size: usize,
-        page_size: usize,
-        max_slabs: usize,
-    ) -> io::Result<Self> {
-        let file = make_slab_file(base_file_path, slab_size, 0)?;
-        create_base_alias_link(base_file_path)?;
-        let mut front_slab = SlabEntry::new(file, page_size)?;
-        front_slab.trim_on_drop = max_slabs == 0;
-
-        // This is the first slab so add the main header.
-        let main_header = MainHeader {
-            magic: MAIN_MAGIC,
-            format_version: UNIFIED_LOG_FORMAT_VERSION,
-            first_section_offset: page_size as u16,
-            page_size: page_size as u16,
-            head_offset: page_size as u64,
-        };
-        let nb_bytes = encode_into_slice(&main_header, &mut front_slab.mmap_buffer[..], standard())
-            .map_err(|e| io::Error::other(format!("Failed to encode main header: {e}")))?;
-        assert!(nb_bytes < page_size);
-        front_slab.current_global_position = page_size; // align to the next page
-
-        Ok(Self {
-            front_slab,
-            back_slabs: Vec::new(),
-            base_file_path: base_file_path.to_path_buf(),
-            slab_size,
-            front_slab_suffix: 0,
-            max_slabs,
-            head_slab_index: 0,
-            head_offset: page_size as u64,
-        })
-    }
-
-    /// Resume writing at the end of a cleanly closed log instead of zapping it.
-    ///
-    /// Scans the existing log for the permanent end-of-log marker, reopens the
-    /// last slab for writing (re-extending it to `slab_size`, since it is trimmed
-    /// on clean shutdown), and positions the cursor right after that marker so new
-    /// sections overwrite it. The main header and earlier slabs are left untouched.
-    fn append(base_file_path: &Path, slab_size: usize, max_slabs: usize) -> io::Result<Self> {
-        // Locate the end-of-log marker using the read side.
-        let mut reader = MmapUnifiedLoggerRead::new(base_file_path)?;
-        let (existing_slab_size, existing_max_slabs) = reader.geometry();
-        // Only rollover rings keep every slab at its full preallocated size, so
-        // the slab size is only derivable (and only needs validating) for a ring.
-        // A linear log trims its last slab on clean shutdown and the requested
-        // preallocated size is simply re-applied on resume.
-        if max_slabs > 0 {
-            if existing_slab_size != slab_size {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    format!(
-                        "append(true) slab size mismatch: log has slab_size={existing_slab_size}; requested slab_size={slab_size}"
-                    ),
-                ));
-            }
-            // The ring extent is only derivable from the slab files present on
-            // disk, so a not-yet-wrapped ring reports fewer slabs than requested.
-            // Accept it as long as the on-disk geometry does not exceed the ring.
-            if existing_max_slabs > max_slabs {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    format!(
-                        "append(true) ring geometry mismatch: log has {existing_max_slabs} slabs; requested max_slabs={max_slabs}"
-                    ),
-                ));
-            }
-        }
-        let end = reader.end_of_log().map_err(io::Error::other)?;
-        let last_slab_index = end.slab_index;
-        let resume_offset = end.offset;
-        // Preserve the original page alignment recorded in the main header.
-        let original_page_size = reader.raw_main_header().page_size as usize;
-        let (head_slab_index, head_offset) = reader.head_position();
-        drop(reader);
-
-        let slab_path = build_slab_path(base_file_path, last_slab_index)?;
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(&slab_path)
-            .map_err(|e| {
-                io::Error::new(
-                    e.kind(),
-                    format!(
-                        "Failed to open slab {} for append: {e}",
-                        slab_path.display()
-                    ),
-                )
-            })?;
-
-        // The last slab is trimmed to its used size on clean shutdown; give it
-        // back room for new sections.
-        let current_len = file
-            .metadata()
-            .map_err(|e| {
-                io::Error::new(
-                    e.kind(),
-                    format!("Failed to read metadata for {}", slab_path.display()),
-                )
-            })?
-            .len();
-        if (current_len as usize) < slab_size {
-            file.set_len(slab_size as u64).map_err(|e| {
-                io::Error::new(
-                    e.kind(),
-                    format!(
-                        "Failed to extend slab {} for append: {e}",
-                        slab_path.display()
-                    ),
-                )
-            })?;
-        }
-
-        let mut front_slab = SlabEntry::new(file, original_page_size)?;
-        front_slab.trim_on_drop = max_slabs == 0;
-        front_slab.current_global_position = resume_offset;
-        front_slab.flushed_until_offset = resume_offset;
-
-        Ok(Self {
-            front_slab,
-            back_slabs: Vec::new(),
-            base_file_path: base_file_path.to_path_buf(),
-            slab_size,
-            front_slab_suffix: last_slab_index,
-            max_slabs,
-            head_slab_index,
-            head_offset,
-        })
-    }
-
-    fn garbage_collect_backslabs(&mut self) {
-        self.back_slabs
-            .retain_mut(|slab| !slab.sections_offsets_in_flight.is_empty());
-    }
-
-    fn place_end_marker(&mut self, temporary: bool) -> CuResult<()> {
-        match self.front_slab.write_end_marker(temporary) {
-            Ok(_) => Ok(()),
-            Err(_) => {
-                // Not enough space in the current slab, roll to a new one.
-                let new_slab = self.create_slab()?;
-                self.back_slabs
-                    .push(mem::replace(&mut self.front_slab, new_slab));
-                self.front_slab.write_end_marker(temporary)
-            }
-        }
-    }
-
-    pub fn stats(&self) -> (usize, Vec<usize>, usize) {
-        (
-            self.front_slab.current_global_position,
-            self.front_slab.sections_offsets_in_flight.clone(),
-            self.back_slabs.len(),
-        )
-    }
-
-    fn create_slab(&mut self) -> CuResult<SlabEntry> {
-        let next_suffix = self.next_suffix();
-        let wrapping = self.max_slabs > 0 && next_suffix == self.head_slab_index;
-        let file = make_slab_file(&self.base_file_path, self.slab_size, next_suffix)
-            .map_err(|e| CuError::new_with_cause("Failed to create slab file", e))?;
-        self.front_slab_suffix = next_suffix;
-
-        if wrapping {
-            // The ring wrapped: the slab being overwritten is the head, so the
-            // head advances to the next slab in the ring.
-            self.head_slab_index = (next_suffix + 1) % self.max_slabs;
-            self.head_offset = if self.head_slab_index == 0 {
-                self.front_slab.page_size as u64
-            } else {
-                0
-            };
-        }
-
-        let mut slab = SlabEntry::new(file, self.front_slab.page_size)
-            .map_err(|e| CuError::new_with_cause("Failed to create slab memory map", e))?;
-        slab.trim_on_drop = self.max_slabs == 0;
-
-        if next_suffix == 0 {
-            // Slab 0 always carries the main header.
-            self.write_main_header(&mut slab)
-                .map_err(|e| CuError::new_with_cause("Failed to write main header", e))?;
-        } else if wrapping {
-            // Wrapped onto a non-zero slab: persist the new head pointer in slab 0.
-            self.persist_head()
-                .map_err(|e| CuError::new_with_cause("Failed to persist head pointer", e))?;
-        }
-
-        Ok(slab)
-    }
-
-    fn page_size(&self) -> usize {
-        self.front_slab.page_size
-    }
-
-    fn absolute_head_offset(&self) -> u64 {
-        (self.head_slab_index as u64) * (self.slab_size as u64) + self.head_offset
-    }
-
-    fn main_header(&self) -> MainHeader {
-        MainHeader {
-            magic: MAIN_MAGIC,
-            format_version: UNIFIED_LOG_FORMAT_VERSION,
-            first_section_offset: self.page_size() as u16,
-            page_size: self.page_size() as u16,
-            head_offset: self.absolute_head_offset(),
-        }
-    }
-
-    fn write_main_header(&self, slab: &mut SlabEntry) -> io::Result<()> {
-        let header = self.main_header();
-        let nb_bytes = encode_into_slice(&header, &mut slab.mmap_buffer[..], standard())
-            .map_err(|e| io::Error::other(format!("Failed to encode main header: {e}")))?;
-        debug_assert!(nb_bytes < self.page_size());
-        slab.current_global_position = self.page_size();
-        Ok(())
-    }
-
-    fn persist_head(&self) -> io::Result<()> {
-        let slab0_path = build_slab_path(&self.base_file_path, 0)?;
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(&slab0_path)?;
-        let mut mmap = unsafe { MmapMut::map_mut(&file) }.map_err(|e| {
-            io::Error::new(
-                e.kind(),
-                format!("Failed to map slab 0 for header update: {e}"),
-            )
-        })?;
-        let header = self.main_header();
-        encode_into_slice(&header, &mut mmap[..], standard())
-            .map_err(|e| io::Error::other(format!("Failed to encode main header: {e}")))?;
-        mmap.flush()
-            .map_err(|e| io::Error::new(e.kind(), format!("Failed to flush main header: {e}")))
-    }
-}
-
-impl Drop for MmapUnifiedLoggerWrite {
-    fn drop(&mut self) {
-        #[cfg(debug_assertions)]
-        eprintln!("Flushing the unified Logger ... "); // Note this cannot be a structured log writing in this log.
-
-        self.front_slab.clear_temporary_end_marker();
-        if let Err(e) = self.place_end_marker(false) {
-            panic!("Failed to flush the unified logger: {}", e);
-        }
-        self.front_slab
-            .flush_until(self.front_slab.current_global_position);
-        self.garbage_collect_backslabs();
-        #[cfg(debug_assertions)]
-        eprintln!("Unified Logger flushed."); // Note this cannot be a structured log writing in this log.
-    }
-}
-
-fn discover_slab_geometry(base_file_path: &Path) -> io::Result<(usize, usize)> {
-    let mut slab_size = None;
-    let mut count = 0usize;
-    loop {
-        let path = build_slab_path(base_file_path, count)?;
-        match std::fs::metadata(&path) {
-            Ok(meta) => {
-                let len = meta.len() as usize;
-                if count == 0 {
-                    slab_size = Some(len);
-                }
-                count += 1;
-            }
-            Err(e) if e.kind() == io::ErrorKind::NotFound => break,
-            Err(e) => {
-                return Err(io::Error::new(
-                    e.kind(),
-                    format!("Failed to inspect slab file {}: {e}", path.display()),
-                ));
-            }
-        }
-    }
-    let slab_size = slab_size.ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::NotFound,
-            format!("No slab files found for {}", base_file_path.display()),
-        )
-    })?;
-    Ok((slab_size, count))
-}
-
-fn open_slab_index(
-    base_file_path: &Path,
-    slab_index: usize,
-) -> io::Result<(File, Mmap, u16, Option<MainHeader>)> {
-    let mut options = OpenOptions::new();
-    let options = options.read(true);
-
-    let file_path = build_slab_path(base_file_path, slab_index)?;
-    let file = options.open(&file_path).map_err(|e| {
-        io::Error::new(
-            e.kind(),
-            format!("Failed to open slab file {}: {e}", file_path.display()),
-        )
-    })?;
-    // SAFETY: The file is kept open for the lifetime of the mapping.
-    let mmap = unsafe { Mmap::map(&file) }
-        .map_err(|e| io::Error::new(e.kind(), format!("Failed to map slab file: {e}")))?;
-    let mut prolog = 0u16;
-    let mut maybe_main_header: Option<MainHeader> = None;
-    if slab_index == 0 {
-        let main_header: MainHeader;
-        let _read: usize;
-        (main_header, _read) = decode_from_slice(&mmap[..], standard()).map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Failed to decode main header: {e}"),
-            )
-        })?;
-        if main_header.magic != MAIN_MAGIC {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Invalid magic number in main header",
-            ));
-        }
-        if main_header.format_version != UNIFIED_LOG_FORMAT_VERSION {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "Unsupported unified log format version {} in main header; this reader supports version {}",
-                    main_header.format_version, UNIFIED_LOG_FORMAT_VERSION
-                ),
-            ));
-        }
-        prolog = main_header.first_section_offset;
-        maybe_main_header = Some(main_header);
-    }
-    Ok((file, mmap, prolog, maybe_main_header))
-}
-
-/// A read side of the memory map based unified logger.
+/// A byte offset relative to the beginning of the log.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub struct LogPosition(pub u64);
 pub struct MmapUnifiedLoggerRead {
-    base_file_path: PathBuf,
+    storage: MmapStorage,
     main_header: MainHeader,
-    current_mmap_buffer: Mmap,
-    current_file: File,
-    current_slab_index: usize,
-    current_reading_position: usize,
-    max_slabs: usize,
-    slabs_read: usize,
-    /// Slab size derived from slab 0's on-disk file size.
-    slab_size: usize,
-    /// Head slab index derived from the absolute head offset and `slab_size`.
-    head_slab_index: usize,
-    /// Head offset within `head_slab_index`.
-    head_offset_within: u64,
+    cursor: u64,
+    remaining: u64,
 }
-
-/// Absolute position inside a unified log (slab index + byte offset).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct LogPosition {
-    pub slab_index: usize,
-    pub offset: usize,
-}
-
-impl UnifiedLogRead for MmapUnifiedLoggerRead {
-    fn read_next_section_type(&mut self, datalogtype: UnifiedLogType) -> CuResult<Option<Vec<u8>>> {
-        // TODO: eventually implement a 0 copy of this too.
-        loop {
-            if self.current_reading_position >= self.current_mmap_buffer.len() {
-                self.next_slab().map_err(|e| {
-                    CuError::new_with_cause("Failed to read next slab, is the log complete?", e)
-                })?;
-            }
-
-            let header_result = self.read_section_header();
-            let header = header_result.map_err(|error| {
-                CuError::new_with_cause(
-                    &format!(
-                        "Could not read a sections header: {}/{}:{}",
-                        self.base_file_path.as_os_str().to_string_lossy(),
-                        self.current_slab_index,
-                        self.current_reading_position,
-                    ),
-                    error,
-                )
-            })?;
-
-            // Reached the end of file
-            if header.entry_type == UnifiedLogType::LastEntry {
-                return Ok(None);
-            }
-
-            // Found a section of the requested type
-            if header.entry_type == datalogtype {
-                let result = Some(self.read_section_content(&header)?);
-                self.current_reading_position += header.offset_to_next_section as usize;
-                return Ok(result);
-            }
-
-            // Keep reading until we find the requested type
-            self.current_reading_position += header.offset_to_next_section as usize;
-        }
-    }
-
-    /// Reads the section from the section header pos.
-    fn raw_read_section(&mut self) -> CuResult<(SectionHeader, Vec<u8>)> {
-        if self.current_reading_position >= self.current_mmap_buffer.len() {
-            self.next_slab().map_err(|e| {
-                CuError::new_with_cause("Failed to read next slab, is the log complete?", e)
-            })?;
-        }
-
-        let read_result = self.read_section_header();
-
-        match read_result {
-            Err(error) => Err(CuError::new_with_cause(
-                &format!(
-                    "Could not read a sections header: {}/{}:{}",
-                    self.base_file_path.as_os_str().to_string_lossy(),
-                    self.current_slab_index,
-                    self.current_reading_position,
-                ),
-                error,
-            )),
-            Ok(header) => {
-                let data = self.read_section_content(&header)?;
-                self.current_reading_position += header.offset_to_next_section as usize;
-                Ok((header, data))
-            }
-        }
-    }
-}
-
 impl MmapUnifiedLoggerRead {
-    /// Advance past the next section without copying its payload.
-    pub fn raw_skip_section(&mut self) -> CuResult<SectionHeader> {
-        if self.current_reading_position >= self.current_mmap_buffer.len() {
-            self.next_slab().map_err(|e| {
-                CuError::new_with_cause("Failed to read next slab, is the log complete?", e)
-            })?;
-        }
-
-        let header = self.read_section_header().map_err(|error| {
-            CuError::new_with_cause(
-                &format!(
-                    "Could not read a sections header: {}/{}:{}",
-                    self.base_file_path.as_os_str().to_string_lossy(),
-                    self.current_slab_index,
-                    self.current_reading_position,
-                ),
-                error,
-            )
-        })?;
-        self.current_reading_position += header.offset_to_next_section as usize;
-        Ok(header)
-    }
-
-    pub fn new(base_file_path: &Path) -> io::Result<Self> {
-        let (_, _, _, header) = open_slab_index(base_file_path, 0)?;
-        let main_header = header.ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData, "Missing main header in slab 0")
-        })?;
-        let (slab_size, max_slabs) = discover_slab_geometry(base_file_path)?;
-        let head_offset_abs = main_header.head_offset as usize;
-        // The ring geometry is not persisted, so split the absolute head pointer
-        // against the on-disk slab size. For a linear log the head is always in
-        // slab 0 (the persisted offset equals the first-section offset) and the
-        // division yields 0.
-        let head_slab = head_offset_abs / slab_size;
-        let head_offset = head_offset_abs % slab_size;
-        let (file, mmap, _prolog, _) = open_slab_index(base_file_path, head_slab)?;
-
+    pub fn new(path: &Path) -> io::Result<Self> {
+        let storage = MmapStorage::open(path, false)?;
+        let main_header = read_main(&storage).map_err(io::Error::other)?;
+        let cursor = if main_header.metadata_offset != 0 {
+            main_header.metadata_offset
+        } else {
+            main_header.head_section
+        };
+        let remaining = main_header.sections_end / 512 + 2;
         Ok(Self {
-            base_file_path: base_file_path.to_path_buf(),
+            storage,
             main_header,
-            current_file: file,
-            current_mmap_buffer: mmap,
-            current_slab_index: head_slab,
-            current_reading_position: head_offset,
-            max_slabs,
-            slabs_read: 1,
-            slab_size,
-            head_slab_index: head_slab,
-            head_offset_within: head_offset as u64,
+            cursor,
+            remaining,
         })
     }
-
-    /// Derived slab geometry: `(slab_size, ring_extent)`.
-    pub fn geometry(&self) -> (usize, usize) {
-        (self.slab_size, self.max_slabs)
-    }
-
-    /// Derived head position: `(slab_index, offset_within_slab)`.
-    pub fn head_position(&self) -> (usize, u64) {
-        (self.head_slab_index, self.head_offset_within)
-    }
-
-    /// Current cursor position (start of next section header).
-    pub fn position(&self) -> LogPosition {
-        LogPosition {
-            slab_index: self.current_slab_index,
-            offset: self.current_reading_position,
-        }
-    }
-
-    /// Seek to an absolute position (start of a section header).
-    pub fn seek(&mut self, pos: LogPosition) -> CuResult<()> {
-        if pos.slab_index != self.current_slab_index {
-            let (file, mmap, _prolog, _header) =
-                open_slab_index(&self.base_file_path, pos.slab_index).map_err(|e| {
-                    CuError::new_with_cause(
-                        &format!("Failed to open slab {} for seek", pos.slab_index),
-                        e,
-                    )
-                })?;
-            self.current_file = file;
-            self.current_mmap_buffer = mmap;
-            self.current_slab_index = pos.slab_index;
-        }
-        self.current_reading_position = pos.offset;
-        // Count the destination's distance from the head, so rereading a slab
-        // does not consume the traversal limit a second time.
-        self.slabs_read = if pos.slab_index >= self.head_slab_index {
-            pos.slab_index - self.head_slab_index + 1
-        } else {
-            self.max_slabs - self.head_slab_index + pos.slab_index + 1
-        };
-        Ok(())
-    }
-
-    fn next_slab(&mut self) -> io::Result<()> {
-        if self.max_slabs > 0 && self.slabs_read >= self.max_slabs {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Reached the start of the ring without finding the end-of-log marker",
-            ));
-        }
-        self.current_slab_index = if self.max_slabs > 0 {
-            (self.current_slab_index + 1) % self.max_slabs
-        } else {
-            self.current_slab_index + 1
-        };
-        let (file, mmap, prolog, _) =
-            open_slab_index(&self.base_file_path, self.current_slab_index)?;
-        self.current_file = file;
-        self.current_mmap_buffer = mmap;
-        self.current_reading_position = prolog as usize;
-        self.slabs_read += 1;
-        Ok(())
-    }
-
     pub fn raw_main_header(&self) -> &MainHeader {
         &self.main_header
     }
-
-    /// Scan forward to the permanent end-of-log marker and return its position
-    /// (the offset at which a writer may resume appending).
+    pub fn position(&self) -> LogPosition {
+        LogPosition(self.cursor)
+    }
+    pub fn seek(&mut self, position: LogPosition) -> CuResult<()> {
+        if position.0 != 0 {
+            self.section_header(position.0)?;
+        }
+        self.cursor = position.0;
+        self.remaining = self.main_header.sections_end / 512 + 2;
+        Ok(())
+    }
+    pub fn application_metadata(&self) -> CuResult<Option<ApplicationMetadata>> {
+        if self.main_header.metadata_offset == 0 {
+            return Ok(None);
+        }
+        let h = self.section_header(self.main_header.metadata_offset)?;
+        if h.entry_type != UnifiedLogType::ApplicationMetadata || h.is_open {
+            return Err(CuError::from("Invalid static application metadata"));
+        }
+        let mut data = vec![0; h.used as usize];
+        self.storage
+            .region(self.main_header.metadata_offset + 512, h.used as u64)?
+            .read(0, &mut data)?;
+        let (metadata, used) = decode_from_slice::<ApplicationMetadata, _>(&data, standard())
+            .map_err(|e| CuError::new_with_cause("Invalid application metadata", e))?;
+        if used != data.len() || metadata.catalog_offset != h.next_section {
+            return Err(CuError::from("Invalid metadata body or catalog offset"));
+        }
+        Ok(Some(metadata))
+    }
+    fn section_header(&self, offset: u64) -> CuResult<SectionHeader> {
+        if !offset.is_multiple_of(512)
+            || offset < self.main_header.page_size as u64
+            || offset >= self.main_header.sections_end
+        {
+            return Err(CuError::from("Invalid section offset"));
+        }
+        let h = read_header(&self.storage, offset)?;
+        let limit = if offset < self.main_header.sections_begin {
+            self.main_header.sections_begin
+        } else {
+            self.main_header.sections_end
+        };
+        if offset
+            .checked_add(h.allocated)
+            .is_none_or(|end| end > limit)
+        {
+            return Err(CuError::from("Section exceeds logical byte bounds"));
+        }
+        if h.next_section != 0
+            && (!h.next_section.is_multiple_of(512)
+                || h.next_section < self.main_header.page_size as u64
+                || h.next_section >= self.main_header.sections_end)
+        {
+            return Err(CuError::from("Invalid section link"));
+        }
+        if offset >= self.main_header.sections_begin {
+            if h.next_section != 0 && h.next_section < self.main_header.sections_begin {
+                return Err(CuError::from("Data links into static metadata"));
+            }
+            if (offset == self.main_header.tail_section) != (h.next_section == 0) {
+                return Err(CuError::from("Invalid tail link"));
+            }
+        }
+        Ok(h)
+    }
+    fn advance(&mut self, h: &SectionHeader) -> CuResult<()> {
+        if self.remaining == 0 {
+            return Err(CuError::from("Cyclic section links"));
+        }
+        self.remaining -= 1;
+        self.cursor = if self.cursor < self.main_header.sections_begin && h.next_section == 0 {
+            self.main_header.head_section
+        } else {
+            h.next_section
+        };
+        Ok(())
+    }
+    pub fn raw_skip_section(&mut self) -> CuResult<SectionHeader> {
+        if self.cursor == 0 {
+            return Ok(SectionHeader {
+                entry_type: UnifiedLogType::LastEntry,
+                is_open: !self.main_header.clean_close,
+                allocated: 512,
+                ..SectionHeader::default()
+            });
+        }
+        let h = self.section_header(self.cursor)?;
+        self.advance(&h)?;
+        Ok(h)
+    }
     pub fn end_of_log(&mut self) -> CuResult<LogPosition> {
-        loop {
-            if self.current_reading_position >= self.current_mmap_buffer.len() {
-                self.next_slab().map_err(|e| {
-                    CuError::new_with_cause(
-                        "Failed to advance to the next slab while locating the end of the log",
-                        e,
-                    )
-                })?;
-            }
-
-            let header = self.read_section_header()?;
-            if header.entry_type == UnifiedLogType::LastEntry {
-                if header.is_open {
-                    return Err(CuError::from(format!(
-                        "Log {} was not cleanly closed: temporary end-of-log marker in slab {}",
-                        self.base_file_path.display(),
-                        self.current_slab_index,
-                    )));
-                }
-                return Ok(self.position());
-            }
-            self.current_reading_position += header.offset_to_next_section as usize;
+        if !self.main_header.clean_close {
+            return Err(CuError::from("Log was not cleanly closed"));
         }
-    }
-
-    pub fn scan_section_bytes(&mut self, datalogtype: UnifiedLogType) -> CuResult<u64> {
-        let mut total = 0u64;
-
-        loop {
-            if self.current_reading_position >= self.current_mmap_buffer.len() {
-                self.next_slab().map_err(|e| {
-                    CuError::new_with_cause("Failed to read next slab, is the log complete?", e)
-                })?;
+        while self.cursor != 0 {
+            if self.raw_skip_section()?.is_open {
+                return Err(CuError::from("Log contains an open section"));
             }
-
-            let header = self.read_section_header()?;
-
-            if header.entry_type == UnifiedLogType::LastEntry {
-                return Ok(total);
-            }
-
-            if header.entry_type == datalogtype {
-                total = total.saturating_add(header.used as u64);
-            }
-
-            self.current_reading_position += header.offset_to_next_section as usize;
         }
+        Ok(LogPosition(0))
     }
-
-    /// Reads the section content from the section header pos.
-    fn read_section_content(&mut self, header: &SectionHeader) -> CuResult<Vec<u8>> {
-        // TODO: we could optimize by asking the buffer to fill
-        let mut section_data = vec![0; header.used as usize];
-        let start_of_data = self.current_reading_position + header.block_size as usize;
-        section_data.copy_from_slice(
-            &self.current_mmap_buffer[start_of_data..start_of_data + header.used as usize],
-        );
-
-        Ok(section_data)
-    }
-
-    fn read_section_header(&mut self) -> CuResult<SectionHeader> {
-        let section_header: SectionHeader;
-        (section_header, _) = decode_from_slice(
-            &self.current_mmap_buffer[self.current_reading_position..],
-            standard(),
-        )
-        .map_err(|e| {
-            CuError::new_with_cause(
-                &format!(
-                    "Could not read a sections header: {}/{}:{}",
-                    self.base_file_path.as_os_str().to_string_lossy(),
-                    self.current_slab_index,
-                    self.current_reading_position,
-                ),
-                e,
-            )
-        })?;
-        if section_header.magic != SECTION_MAGIC {
-            return Err("Invalid magic number in section header".into());
+    pub fn scan_section_bytes(&mut self, kind: UnifiedLogType) -> CuResult<u64> {
+        let mut bytes = 0;
+        while self.cursor != 0 {
+            let h = self.raw_skip_section()?;
+            if h.entry_type == kind {
+                bytes += h.used as u64;
+            }
         }
-
-        Ok(section_header)
+        Ok(bytes)
     }
 }
-
-/// This a convenience wrapper around the UnifiedLoggerRead to implement the Read trait.
+impl UnifiedLogRead for MmapUnifiedLoggerRead {
+    fn raw_read_section(&mut self) -> CuResult<(SectionHeader, Vec<u8>)> {
+        if self.cursor == 0 {
+            return Ok((self.raw_skip_section()?, Vec::new()));
+        }
+        let h = self.section_header(self.cursor)?;
+        let mut bytes = vec![0; h.used as usize];
+        self.storage
+            .region(
+                self.cursor + SECTION_HEADER_COMPACT_SIZE as u64,
+                h.used as u64,
+            )?
+            .read(0, &mut bytes)?;
+        self.advance(&h)?;
+        Ok((h, bytes))
+    }
+    fn read_next_section_type(&mut self, kind: UnifiedLogType) -> CuResult<Option<Vec<u8>>> {
+        while self.cursor != 0 {
+            let h = self.section_header(self.cursor)?;
+            if h.entry_type == kind {
+                return self.raw_read_section().map(|(_, bytes)| Some(bytes));
+            }
+            self.advance(&h)?;
+        }
+        Ok(None)
+    }
+}
 pub struct UnifiedLoggerIOReader {
     logger: MmapUnifiedLoggerRead,
     log_type: UnifiedLogType,
     buffer: Vec<u8>,
     buffer_pos: usize,
 }
-
 impl UnifiedLoggerIOReader {
     pub fn new(logger: MmapUnifiedLoggerRead, log_type: UnifiedLogType) -> Self {
         Self {
@@ -1414,885 +572,28 @@ impl UnifiedLoggerIOReader {
             buffer_pos: 0,
         }
     }
-
-    /// returns true if there is more data to read.
-    fn fill_buffer(&mut self) -> io::Result<bool> {
-        match self.logger.read_next_section_type(self.log_type) {
-            Ok(Some(section)) => {
-                self.buffer = section;
-                self.buffer_pos = 0;
-                Ok(true)
-            }
-            Ok(None) => Ok(false), // No more sections of this type
-            Err(e) => Err(io::Error::other(e.to_string())),
-        }
-    }
 }
-
 impl Read for UnifiedLoggerIOReader {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        if self.buffer_pos >= self.buffer.len() && !self.fill_buffer()? {
-            // This means we hit the last section.
+    fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
+        if bytes.is_empty() {
             return Ok(0);
         }
-
-        // If we still have no data after trying to fill the buffer, we're at EOF
-        if self.buffer_pos >= self.buffer.len() {
-            return Ok(0);
-        }
-
-        // Copy as much as we can from the buffer to `buf`
-        let len = std::cmp::min(buf.len(), self.buffer.len() - self.buffer_pos);
-        buf[..len].copy_from_slice(&self.buffer[self.buffer_pos..self.buffer_pos + len]);
-        self.buffer_pos += len;
-        Ok(len)
-    }
-}
-
-#[cfg(feature = "std")]
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::stream_write;
-    use bincode::de::read::SliceReader;
-    use bincode::{Decode, Encode, decode_from_reader, decode_from_slice};
-    use cu29_traits::WriteStream;
-    use std::io::{Seek, SeekFrom, Write};
-    use std::path::PathBuf;
-    use std::sync::{Arc, Mutex};
-    use tempfile::TempDir;
-
-    const LARGE_SLAB: usize = 100 * 1024; // 100KB
-    const SMALL_SLAB: usize = 16 * 2 * 1024; // 16KB is the page size on MacOS for example
-
-    fn make_a_logger(
-        tmp_dir: &TempDir,
-        slab_size: usize,
-    ) -> (Arc<Mutex<MmapUnifiedLoggerWrite>>, PathBuf) {
-        let file_path = tmp_dir.path().join("test.bin");
-        let MmapUnifiedLogger::Write(data_logger) = MmapUnifiedLoggerBuilder::new()
-            .write(true)
-            .create(true)
-            .file_base_name(&file_path)
-            .preallocated_size(slab_size)
-            .build()
-            .expect("Failed to create logger")
-        else {
-            panic!("Failed to create logger")
-        };
-
-        (Arc::new(Mutex::new(data_logger)), file_path)
-    }
-
-    #[test]
-    fn test_truncation_and_sections_creations() {
-        let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let file_path = tmp_dir.path().join("test.bin");
-        let _used = {
-            let MmapUnifiedLogger::Write(mut logger) = MmapUnifiedLoggerBuilder::new()
-                .write(true)
-                .create(true)
-                .file_base_name(&file_path)
-                .preallocated_size(100000)
-                .build()
-                .expect("Failed to create logger")
-            else {
-                panic!("Failed to create logger")
-            };
-            logger
-                .add_section(UnifiedLogType::StructuredLogLine, 1024)
-                .unwrap();
-            logger
-                .add_section(UnifiedLogType::CopperList, 2048)
-                .unwrap();
-            let used = logger.front_slab.used();
-            assert!(used < 4 * page_size::get()); // ie. 3 headers, 1 page max per
-            // logger drops
-
-            used
-        };
-
-        let _file = OpenOptions::new()
-            .read(true)
-            .open(tmp_dir.path().join("test_0.bin"))
-            .expect("Could not reopen the file");
-        // Check if we have correctly truncated the file
-        // TODO: recompute this math
-        //assert_eq!(
-        //    file.metadata().unwrap().len(),
-        //    (used + size_of::<SectionHeader>()) as u64
-        //);
-    }
-
-    #[test]
-    fn test_unsupported_main_header_format_version_is_rejected() {
-        let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let file_path = tmp_dir.path().join("test.bin");
-        {
-            let MmapUnifiedLogger::Write(_logger) = MmapUnifiedLoggerBuilder::new()
-                .write(true)
-                .create(true)
-                .file_base_name(&file_path)
-                .preallocated_size(100000)
-                .build()
-                .expect("Failed to create logger")
-            else {
-                panic!("Failed to create logger")
-            };
-        }
-
-        let mut file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(tmp_dir.path().join("test_0.bin"))
-            .expect("Could not reopen the slab");
-        let unsupported_version = UNIFIED_LOG_FORMAT_VERSION + 1;
-        file.seek(SeekFrom::Start(MAIN_MAGIC.len() as u64))
-            .expect("Could not seek to format version");
-        file.write_all(&[unsupported_version])
-            .expect("Could not write unsupported format version");
-        drop(file);
-
-        let err = match MmapUnifiedLoggerBuilder::new()
-            .file_base_name(&file_path)
-            .build()
-        {
-            Ok(_) => panic!("Reader accepted unsupported unified log format version"),
-            Err(err) => err,
-        };
-
-        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
-        assert_eq!(
-            err.to_string(),
-            format!(
-                "Unsupported unified log format version {unsupported_version} in main header; this reader supports version {UNIFIED_LOG_FORMAT_VERSION}"
-            )
-        );
-    }
-
-    #[test]
-    fn test_base_alias_exists_and_matches_first_slab() {
-        let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let file_path = tmp_dir.path().join("test.bin");
-        let _logger = MmapUnifiedLoggerBuilder::new()
-            .write(true)
-            .create(true)
-            .file_base_name(&file_path)
-            .preallocated_size(LARGE_SLAB)
-            .build()
-            .expect("Failed to create logger");
-
-        let first_slab = build_slab_path(&file_path, 0).expect("Failed to build first slab path");
-        assert!(file_path.exists(), "base alias does not exist");
-        assert!(first_slab.exists(), "first slab does not exist");
-
-        let alias_bytes = std::fs::read(&file_path).expect("Failed to read base alias");
-        let slab_bytes = std::fs::read(&first_slab).expect("Failed to read first slab");
-        assert_eq!(alias_bytes, slab_bytes);
-    }
-
-    #[test]
-    fn test_one_section_self_cleaning() {
-        let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let (logger, _) = make_a_logger(&tmp_dir, LARGE_SLAB);
-        {
-            let _stream = stream_write::<(), MmapSectionStorage>(
-                logger.clone(),
-                UnifiedLogType::StructuredLogLine,
-                1024,
-            );
-            assert_eq!(
-                logger
-                    .lock()
-                    .unwrap()
-                    .front_slab
-                    .sections_offsets_in_flight
-                    .len(),
-                1
-            );
-        }
-        assert_eq!(
-            logger
-                .lock()
-                .unwrap()
-                .front_slab
-                .sections_offsets_in_flight
-                .len(),
-            0
-        );
-        let logger = logger.lock().unwrap();
-        assert_eq!(
-            logger.front_slab.flushed_until_offset,
-            logger.front_slab.current_global_position
-        );
-    }
-
-    #[test]
-    fn test_temporary_end_marker_is_created() {
-        let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let (logger, _) = make_a_logger(&tmp_dir, LARGE_SLAB);
-        {
-            let mut stream = stream_write::<u32, MmapSectionStorage>(
-                logger.clone(),
-                UnifiedLogType::StructuredLogLine,
-                1024,
-            )
-            .unwrap();
-            stream.log(&42u32).unwrap();
-        }
-
-        let logger_guard = logger.lock().unwrap();
-        let slab = &logger_guard.front_slab;
-        let marker_start = slab
-            .temporary_end_marker
-            .expect("temporary end-of-log marker missing");
-        let (eof_header, _) =
-            decode_from_slice::<SectionHeader, _>(&slab.mmap_buffer[marker_start..], standard())
-                .expect("Could not decode end-of-log marker header");
-        assert_eq!(eof_header.entry_type, UnifiedLogType::LastEntry);
-        assert!(eof_header.is_open);
-        assert_eq!(eof_header.used, 0);
-    }
-
-    #[test]
-    fn test_final_end_marker_is_not_temporary() {
-        let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let (logger, f) = make_a_logger(&tmp_dir, LARGE_SLAB);
-        {
-            let mut stream = stream_write::<u32, MmapSectionStorage>(
-                logger.clone(),
-                UnifiedLogType::CopperList,
-                1024,
-            )
-            .unwrap();
-            stream.log(&1u32).unwrap();
-        }
-        drop(logger);
-
-        let MmapUnifiedLogger::Read(mut reader) = MmapUnifiedLoggerBuilder::new()
-            .file_base_name(&f)
-            .build()
-            .expect("Failed to build reader")
-        else {
-            panic!("Failed to create reader");
-        };
-
-        loop {
-            let (header, _data) = reader
-                .raw_read_section()
-                .expect("Failed to read section while searching for EOF");
-            if header.entry_type == UnifiedLogType::LastEntry {
-                assert!(!header.is_open);
-                break;
-            }
-        }
-    }
-
-    #[test]
-    fn test_two_sections_self_cleaning_in_order() {
-        let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let (logger, _) = make_a_logger(&tmp_dir, LARGE_SLAB);
-        let s1 = stream_write::<(), MmapSectionStorage>(
-            logger.clone(),
-            UnifiedLogType::StructuredLogLine,
-            1024,
-        );
-        assert_eq!(
-            logger
-                .lock()
-                .unwrap()
-                .front_slab
-                .sections_offsets_in_flight
-                .len(),
-            1
-        );
-        let s2 = stream_write::<(), MmapSectionStorage>(
-            logger.clone(),
-            UnifiedLogType::StructuredLogLine,
-            1024,
-        );
-        assert_eq!(
-            logger
-                .lock()
-                .unwrap()
-                .front_slab
-                .sections_offsets_in_flight
-                .len(),
-            2
-        );
-        drop(s2);
-        assert_eq!(
-            logger
-                .lock()
-                .unwrap()
-                .front_slab
-                .sections_offsets_in_flight
-                .len(),
-            1
-        );
-        drop(s1);
-        let lg = logger.lock().unwrap();
-        assert_eq!(lg.front_slab.sections_offsets_in_flight.len(), 0);
-        assert_eq!(
-            lg.front_slab.flushed_until_offset,
-            lg.front_slab.current_global_position
-        );
-    }
-
-    #[test]
-    fn test_two_sections_self_cleaning_out_of_order() {
-        let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let (logger, _) = make_a_logger(&tmp_dir, LARGE_SLAB);
-        let s1 = stream_write::<(), MmapSectionStorage>(
-            logger.clone(),
-            UnifiedLogType::StructuredLogLine,
-            1024,
-        );
-        assert_eq!(
-            logger
-                .lock()
-                .unwrap()
-                .front_slab
-                .sections_offsets_in_flight
-                .len(),
-            1
-        );
-        let s2 = stream_write::<(), MmapSectionStorage>(
-            logger.clone(),
-            UnifiedLogType::StructuredLogLine,
-            1024,
-        );
-        assert_eq!(
-            logger
-                .lock()
-                .unwrap()
-                .front_slab
-                .sections_offsets_in_flight
-                .len(),
-            2
-        );
-        drop(s1);
-        assert_eq!(
-            logger
-                .lock()
-                .unwrap()
-                .front_slab
-                .sections_offsets_in_flight
-                .len(),
-            1
-        );
-        drop(s2);
-        let lg = logger.lock().unwrap();
-        assert_eq!(lg.front_slab.sections_offsets_in_flight.len(), 0);
-        assert_eq!(
-            lg.front_slab.flushed_until_offset,
-            lg.front_slab.current_global_position
-        );
-    }
-
-    #[test]
-    fn test_closed_section_flushes_behind_open_earlier_section() {
-        let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let (logger, _) = make_a_logger(&tmp_dir, LARGE_SLAB);
-        let s1 = stream_write::<(), MmapSectionStorage>(
-            logger.clone(),
-            UnifiedLogType::StructuredLogLine,
-            1024,
-        )
-        .unwrap();
-        {
-            let mut s2 = stream_write::<u32, MmapSectionStorage>(
-                logger.clone(),
-                UnifiedLogType::CopperList,
-                1024,
-            )
-            .unwrap();
-            s2.log(&42u32).unwrap();
-        }
-
-        let logger_guard = logger.lock().unwrap();
-        assert_eq!(logger_guard.front_slab.sections_offsets_in_flight.len(), 1);
-        assert!(
-            logger_guard.front_slab.flushed_until_offset
-                < logger_guard.front_slab.current_global_position
-        );
-        assert_eq!(logger_guard.front_slab.pending_closed_bytes(), 0);
-        drop(logger_guard);
-        drop(s1);
-    }
-
-    #[test]
-    fn test_append_rejects_log_without_clean_close() {
-        let tmp_dir =
-            TempDir::new_in(env!("CARGO_MANIFEST_DIR")).expect("could not create a tmp dir");
-        let (logger, file_path) = make_a_logger(&tmp_dir, LARGE_SLAB);
-        {
-            let mut stream = stream_write::<u32, MmapSectionStorage>(
-                logger.clone(),
-                UnifiedLogType::StructuredLogLine,
-                1024,
-            )
-            .unwrap();
-            stream.log(&1u32).unwrap();
-        }
-
-        // Reproduce #1385: a killed writer never runs Drop to replace the
-        // temporary end-of-log marker with a permanent one.
-        std::mem::forget(logger);
-
-        let MmapUnifiedLogger::Read(mut reader) = MmapUnifiedLoggerBuilder::new()
-            .file_base_name(&file_path)
-            .build()
-            .expect("Failed to open logger for reading")
-        else {
-            panic!("Failed to open logger for reading")
-        };
-        let section = reader
-            .read_next_section_type(UnifiedLogType::StructuredLogLine)
-            .unwrap()
-            .expect("Missing logged section");
-        assert_eq!(
-            decode_from_slice::<u32, _>(&section, standard()).unwrap().0,
-            1
-        );
-        let header = reader.read_section_header().unwrap();
-        assert_eq!(header.entry_type, UnifiedLogType::LastEntry);
-        assert!(header.is_open, "Expected a temporary end-of-log marker");
-        drop(reader);
-
-        let result = MmapUnifiedLoggerBuilder::new()
-            .write(true)
-            .create(true)
-            .append(true)
-            .file_base_name(&file_path)
-            .preallocated_size(LARGE_SLAB)
-            .build();
-
-        assert!(
-            result.is_err(),
-            "Append must reject a log with a temporary end-of-log marker"
-        );
-    }
-
-    #[test]
-    fn test_append_preserves_existing_and_adds_new_sections() {
-        let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let file_path = tmp_dir.path().join("test.bin");
-
-        // First run: one section with three entries, then a clean close.
-        {
-            let MmapUnifiedLogger::Write(logger) = MmapUnifiedLoggerBuilder::new()
-                .write(true)
-                .create(true)
-                .file_base_name(&file_path)
-                .preallocated_size(LARGE_SLAB)
-                .build()
-                .expect("Failed to create logger")
-            else {
-                panic!("Failed to create logger")
-            };
-            let logger = Arc::new(Mutex::new(logger));
+        while self.buffer_pos == self.buffer.len() {
+            match self
+                .logger
+                .read_next_section_type(self.log_type)
+                .map_err(io::Error::other)?
             {
-                let mut stream = stream_write::<u32, MmapSectionStorage>(
-                    logger.clone(),
-                    UnifiedLogType::StructuredLogLine,
-                    1024,
-                )
-                .unwrap();
-                stream.log(&1u32).unwrap();
-                stream.log(&2u32).unwrap();
-                stream.log(&3u32).unwrap();
-            }
-        } // logger drops -> clean close
-
-        // Second run: append one more section with two entries.
-        {
-            let MmapUnifiedLogger::Write(logger) = MmapUnifiedLoggerBuilder::new()
-                .write(true)
-                .create(true)
-                .append(true)
-                .file_base_name(&file_path)
-                .preallocated_size(LARGE_SLAB)
-                .build()
-                .expect("Failed to append to logger")
-            else {
-                panic!("Failed to append to logger")
-            };
-            let logger = Arc::new(Mutex::new(logger));
-            {
-                let mut stream = stream_write::<u32, MmapSectionStorage>(
-                    logger.clone(),
-                    UnifiedLogType::StructuredLogLine,
-                    1024,
-                )
-                .unwrap();
-                stream.log(&4u32).unwrap();
-                stream.log(&5u32).unwrap();
-            }
-        }
-
-        // Read back both sections: the original three entries then the two appended.
-        let MmapUnifiedLogger::Read(mut dl) = MmapUnifiedLoggerBuilder::new()
-            .file_base_name(&file_path)
-            .build()
-            .expect("Failed to build logger")
-        else {
-            panic!("Failed to build logger")
-        };
-
-        let first = dl
-            .read_next_section_type(UnifiedLogType::StructuredLogLine)
-            .expect("Failed to read first section")
-            .expect("Missing first section");
-        let mut reader = SliceReader::new(&first[..]);
-        assert_eq!(
-            decode_from_reader::<u32, _, _>(&mut reader, standard()).unwrap(),
-            1
-        );
-        assert_eq!(
-            decode_from_reader::<u32, _, _>(&mut reader, standard()).unwrap(),
-            2
-        );
-        assert_eq!(
-            decode_from_reader::<u32, _, _>(&mut reader, standard()).unwrap(),
-            3
-        );
-
-        let second = dl
-            .read_next_section_type(UnifiedLogType::StructuredLogLine)
-            .expect("Failed to read second section")
-            .expect("Missing second section");
-        let mut reader = SliceReader::new(&second[..]);
-        assert_eq!(
-            decode_from_reader::<u32, _, _>(&mut reader, standard()).unwrap(),
-            4
-        );
-        assert_eq!(
-            decode_from_reader::<u32, _, _>(&mut reader, standard()).unwrap(),
-            5
-        );
-
-        assert!(
-            dl.read_next_section_type(UnifiedLogType::StructuredLogLine)
-                .expect("Failed to read past sections")
-                .is_none()
-        );
-    }
-
-    #[test]
-    fn test_write_then_read_one_section() {
-        let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let (logger, f) = make_a_logger(&tmp_dir, LARGE_SLAB);
-        {
-            let mut stream =
-                stream_write(logger.clone(), UnifiedLogType::StructuredLogLine, 1024).unwrap();
-            stream.log(&1u32).unwrap();
-            stream.log(&2u32).unwrap();
-            stream.log(&3u32).unwrap();
-        }
-        drop(logger);
-        let MmapUnifiedLogger::Read(mut dl) = MmapUnifiedLoggerBuilder::new()
-            .file_base_name(&f)
-            .build()
-            .expect("Failed to build logger")
-        else {
-            panic!("Failed to build logger");
-        };
-        let section = dl
-            .read_next_section_type(UnifiedLogType::StructuredLogLine)
-            .expect("Failed to read section");
-        assert!(section.is_some());
-        let section = section.unwrap();
-        let mut reader = SliceReader::new(&section[..]);
-        let v1: u32 = decode_from_reader(&mut reader, standard()).unwrap();
-        let v2: u32 = decode_from_reader(&mut reader, standard()).unwrap();
-        let v3: u32 = decode_from_reader(&mut reader, standard()).unwrap();
-        assert_eq!(v1, 1);
-        assert_eq!(v2, 2);
-        assert_eq!(v3, 3);
-    }
-
-    #[cfg(feature = "mmap-fsync")]
-    #[test]
-    fn test_fsync_feature_syncs_on_section_flush() {
-        let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let (logger, _) = make_a_logger(&tmp_dir, LARGE_SLAB);
-        {
-            let mut stream =
-                stream_write(logger.clone(), UnifiedLogType::StructuredLogLine, 1024).unwrap();
-            stream.log(&1u32).unwrap();
-        }
-
-        let logger = logger.lock().unwrap();
-        assert!(
-            logger.front_slab.sync_call_count > 0,
-            "expected mmap-fsync to issue at least one sync_all call"
-        );
-    }
-
-    /// Mimic a basic CopperList implementation.
-
-    #[derive(Debug, Encode, Decode)]
-    enum CopperListStateMock {
-        Free,
-        ProcessingTasks,
-        BeingSerialized,
-    }
-
-    #[derive(Encode, Decode)]
-    struct CopperList<P: bincode::enc::Encode> {
-        state: CopperListStateMock,
-        payload: P, // This is generated from the runtime.
-    }
-
-    #[test]
-    fn test_copperlist_list_like_logging() {
-        let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let (logger, f) = make_a_logger(&tmp_dir, LARGE_SLAB);
-        {
-            let mut stream =
-                stream_write(logger.clone(), UnifiedLogType::CopperList, 1024).unwrap();
-            let cl0 = CopperList {
-                state: CopperListStateMock::Free,
-                payload: (1u32, 2u32, 3u32),
-            };
-            let cl1 = CopperList {
-                state: CopperListStateMock::ProcessingTasks,
-                payload: (4u32, 5u32, 6u32),
-            };
-            stream.log(&cl0).unwrap();
-            stream.log(&cl1).unwrap();
-        }
-        drop(logger);
-
-        let MmapUnifiedLogger::Read(mut dl) = MmapUnifiedLoggerBuilder::new()
-            .file_base_name(&f)
-            .build()
-            .expect("Failed to build logger")
-        else {
-            panic!("Failed to build logger");
-        };
-        let section = dl
-            .read_next_section_type(UnifiedLogType::CopperList)
-            .expect("Failed to read section");
-        assert!(section.is_some());
-        let section = section.unwrap();
-
-        let mut reader = SliceReader::new(&section[..]);
-        let cl0: CopperList<(u32, u32, u32)> = decode_from_reader(&mut reader, standard()).unwrap();
-        let cl1: CopperList<(u32, u32, u32)> = decode_from_reader(&mut reader, standard()).unwrap();
-        assert_eq!(cl0.payload.1, 2);
-        assert_eq!(cl1.payload.2, 6);
-    }
-
-    #[test]
-    fn test_multi_slab_end2end() {
-        let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let (logger, f) = make_a_logger(&tmp_dir, SMALL_SLAB);
-        {
-            let mut stream =
-                stream_write(logger.clone(), UnifiedLogType::CopperList, 1024).unwrap();
-            let cl0 = CopperList {
-                state: CopperListStateMock::Free,
-                payload: (1u32, 2u32, 3u32),
-            };
-            // large enough so we are sure to create a few slabs
-            for _ in 0..10000 {
-                stream.log(&cl0).unwrap();
-            }
-        }
-        drop(logger);
-
-        let MmapUnifiedLogger::Read(mut dl) = MmapUnifiedLoggerBuilder::new()
-            .file_base_name(&f)
-            .build()
-            .expect("Failed to build logger")
-        else {
-            panic!("Failed to build logger");
-        };
-        let mut total_readback = 0;
-        loop {
-            let section = dl.read_next_section_type(UnifiedLogType::CopperList);
-            if section.is_err() {
-                break;
-            }
-            let section = section.unwrap();
-            if section.is_none() {
-                break;
-            }
-            let section = section.unwrap();
-
-            let mut reader = SliceReader::new(&section[..]);
-            loop {
-                let maybe_cl: Result<CopperList<(u32, u32, u32)>, _> =
-                    decode_from_reader(&mut reader, standard());
-                if maybe_cl.is_ok() {
-                    total_readback += 1;
-                } else {
-                    break;
+                Some(buffer) => {
+                    self.buffer = buffer;
+                    self.buffer_pos = 0;
                 }
+                None => return Ok(0),
             }
         }
-        assert_eq!(total_readback, 10000);
-    }
-
-    #[test]
-    fn test_seek_and_reread_across_slab_boundaries() {
-        for max_slabs in [0, 3] {
-            let tmp_dir = TempDir::new().unwrap();
-            let file_path = tmp_dir.path().join("seek.bin");
-            let page_size = page_size::get();
-            {
-                let mut writer =
-                    MmapUnifiedLoggerWrite::new(&file_path, 4 * page_size, page_size, max_slabs)
-                        .unwrap();
-                for _ in 0..24 {
-                    let mut section = writer
-                        .add_section(UnifiedLogType::CopperList, page_size)
-                        .unwrap();
-                    writer.flush_section(&mut section);
-                }
-            }
-
-            let mut reader = MmapUnifiedLoggerRead::new(&file_path).unwrap();
-            let beginning = reader.position();
-            let mut expected = 0;
-            while reader.raw_skip_section().unwrap().entry_type != UnifiedLogType::LastEntry {
-                expected += 1;
-            }
-            assert!(expected > 0);
-            if max_slabs == 0 {
-                assert_eq!(expected, 24);
-            } else {
-                assert!(expected < 24);
-                assert_ne!(beginning.slab_index, 0);
-            }
-
-            // Run discovery skips headers, then seeks back to decode selected sections.
-            // A saved position can be at the end of the preceding slab.
-            for _ in 0..2 {
-                reader.seek(beginning).unwrap();
-                let mut actual = 0;
-                loop {
-                    let position = reader.position();
-                    let header = reader.raw_skip_section().unwrap();
-                    if header.entry_type == UnifiedLogType::LastEntry {
-                        break;
-                    }
-                    reader.seek(position).unwrap();
-                    let (reread, _) = reader.raw_read_section().unwrap();
-                    assert_eq!(reread.entry_type, header.entry_type);
-                    actual += 1;
-                }
-                assert_eq!(actual, expected);
-            }
-        }
-    }
-
-    #[test]
-    fn test_rollover_keeps_only_last_slabs() {
-        let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let file_path = tmp_dir.path().join("test.bin");
-        // Ring of 2 slabs.
-        let rollover_size = SMALL_SLAB * 2;
-        {
-            let MmapUnifiedLogger::Write(logger) = MmapUnifiedLoggerBuilder::new()
-                .write(true)
-                .create(true)
-                .file_base_name(&file_path)
-                .preallocated_size(SMALL_SLAB)
-                .rollover(rollover_size)
-                .build()
-                .expect("Failed to create logger")
-            else {
-                panic!("Failed to create logger")
-            };
-            let logger = Arc::new(Mutex::new(logger));
-            {
-                let mut stream =
-                    stream_write(logger.clone(), UnifiedLogType::CopperList, 1024).unwrap();
-                let cl0 = CopperList {
-                    state: CopperListStateMock::Free,
-                    payload: (1u32, 2u32, 3u32),
-                };
-                // Enough entries to span many slabs and wrap the ring.
-                for _ in 0..10000 {
-                    stream.log(&cl0).unwrap();
-                }
-            }
-        } // logger drops -> clean close
-
-        // The ring must not have grown past max_slabs (2) files.
-        assert!(build_slab_path(&file_path, 0).unwrap().exists());
-        assert!(build_slab_path(&file_path, 1).unwrap().exists());
-        assert!(!build_slab_path(&file_path, 2).unwrap().exists());
-
-        let MmapUnifiedLogger::Read(mut dl) = MmapUnifiedLoggerBuilder::new()
-            .file_base_name(&file_path)
-            .build()
-            .expect("Failed to build reader")
-        else {
-            panic!("Failed to build reader")
-        };
-
-        let mut total_readback = 0;
-        loop {
-            let section = dl.read_next_section_type(UnifiedLogType::CopperList);
-            if section.is_err() {
-                break;
-            }
-            let section = section.unwrap();
-            if section.is_none() {
-                break;
-            }
-            let section = section.unwrap();
-            let mut reader = SliceReader::new(&section[..]);
-            loop {
-                let maybe_cl: Result<CopperList<(u32, u32, u32)>, _> =
-                    decode_from_reader(&mut reader, standard());
-                if maybe_cl.is_ok() {
-                    total_readback += 1;
-                } else {
-                    break;
-                }
-            }
-        }
-        // Rollover must have dropped the oldest entries, but retained some.
-        assert!(total_readback > 0);
-        assert!(total_readback < 10000);
-    }
-
-    #[test]
-    fn test_append_rollover_geometry_mismatch_fails() {
-        let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let file_path = tmp_dir.path().join("test.bin");
-        {
-            let MmapUnifiedLogger::Write(_logger) = MmapUnifiedLoggerBuilder::new()
-                .write(true)
-                .create(true)
-                .file_base_name(&file_path)
-                .preallocated_size(SMALL_SLAB)
-                .rollover(SMALL_SLAB * 2)
-                .build()
-                .expect("Failed to create logger")
-            else {
-                panic!("Failed to create logger")
-            };
-        }
-
-        // Append with a different slab size must fail loudly (geometry mismatch).
-        let err = match MmapUnifiedLoggerBuilder::new()
-            .write(true)
-            .create(true)
-            .append(true)
-            .file_base_name(&file_path)
-            .preallocated_size(LARGE_SLAB)
-            .rollover(LARGE_SLAB * 2)
-            .build()
-        {
-            Ok(_) => panic!("append(true) should have failed on geometry mismatch"),
-            Err(e) => e,
-        };
-        assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
+        let count = bytes.len().min(self.buffer.len() - self.buffer_pos);
+        bytes[..count].copy_from_slice(&self.buffer[self.buffer_pos..self.buffer_pos + count]);
+        self.buffer_pos += count;
+        Ok(count)
     }
 }

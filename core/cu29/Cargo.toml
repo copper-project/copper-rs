@@ -119,6 +119,7 @@ rtsan = ["dep:rtsan-standalone", "cu29-derive/rtsan"]
 safety-ids = ["std", "dep:inventory", "dep:serde_json"]
 
 [dev-dependencies]
+tempfile = { workspace = true }
 cu29-logstream = { workspace = true, features = ["test-utils"] }
 heapless = { workspace = true }
 

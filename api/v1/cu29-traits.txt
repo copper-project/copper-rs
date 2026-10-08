@@ -43,6 +43,7 @@ impl cu29_traits::DebugScalarKind
 pub const fn cu29_traits::DebugScalarKind::is_numeric(self) -> bool
 pub const fn cu29_traits::DebugScalarKind::type_name(self) -> &'static str
 pub enum cu29_traits::UnifiedLogType
+pub cu29_traits::UnifiedLogType::ApplicationMetadata
 pub cu29_traits::UnifiedLogType::CopperList
 pub cu29_traits::UnifiedLogType::Empty
 pub cu29_traits::UnifiedLogType::FrozenTasks
@@ -50,6 +51,7 @@ pub cu29_traits::UnifiedLogType::LastEntry
 pub cu29_traits::UnifiedLogType::RuntimeLifecycle
 pub cu29_traits::UnifiedLogType::StreamContinuity
 pub cu29_traits::UnifiedLogType::StructuredLogLine
+pub cu29_traits::UnifiedLogType::ValueDecodeCatalog
 impl cu_bincode::enc::Encode for cu29_traits::UnifiedLogType
 pub fn cu29_traits::UnifiedLogType::encode<__E: cu_bincode::enc::Encoder>(&self, encoder: &mut __E) -> core::result::Result<(), cu_bincode::error::EncodeError>
 impl<'__de, __Context> cu_bincode::de::BorrowDecode<'__de, __Context> for cu29_traits::UnifiedLogType

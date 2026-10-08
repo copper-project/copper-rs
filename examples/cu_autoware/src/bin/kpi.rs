@@ -774,26 +774,29 @@ fn reader(log_base: &Path, section: UnifiedLogType) -> CuResult<UnifiedLoggerIOR
 /// app was built from, and the shutdown record `cu_autoware::run` writes last. Without
 /// them a truncated log reports on its prefix and a stale one reports on the wrong graph.
 fn provenance(log_base: &Path) -> CuResult<(String, bool)> {
+    let metadata = UnifiedLoggerRead::new(log_base)
+        .map_err(|error| CuError::new_with_cause("Cannot read log metadata", error))?
+        .application_metadata()?
+        .ok_or_else(|| CuError::from("no static application metadata"))?;
     let source = reader(log_base, UnifiedLogType::RuntimeLifecycle)?;
-    let (mut config, mut complete) = (None, false);
+    let (mut instantiated, mut complete) = (false, false);
     for record in runtime_lifecycle_reader(source) {
         match record.event {
-            RuntimeLifecycleEvent::Instantiated {
-                effective_config_ron,
-                ..
-            } => config = Some(effective_config_ron),
+            RuntimeLifecycleEvent::Instantiated { .. } => instantiated = true,
             RuntimeLifecycleEvent::ShutdownCompleted => complete = true,
             _ => {}
         }
     }
-    config
-        .map(|config| (config, complete))
-        .ok_or_else(|| CuError::from("no Instantiated record in the runtime lifecycle section"))
+    if !instantiated {
+        return Err(CuError::from(
+            "no Instantiated record in the runtime lifecycle section",
+        ));
+    }
+    Ok((metadata.effective_config_ron, complete))
 }
 
-/// What decides which node lands in which copperlist slot. The recorded RON cannot be
-/// compared verbatim — `ComponentConfig` is a `HashMap`, so the two processes serialize
-/// its keys in different orders — and per-node values do not move slots anyway.
+/// Compare the recorded task order with the generated decoder's task order.
+/// Per-node configuration values do not change CopperList slots.
 fn layout_witness(config: &CuConfig) -> String {
     let tasks: Vec<String> = config
         .graphs

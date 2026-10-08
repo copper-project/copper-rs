@@ -240,6 +240,15 @@ impl LoggerRuntime {
         LoggerRuntime {}
     }
 
+    /// Flush the active structured-log sink, reporting storage failures.
+    #[doc(hidden)]
+    pub fn try_flush(&self) -> CuResult<()> {
+        if let Some(state) = LOGGER_STATE.get() {
+            lock_mutex(&state.sink).flush()?;
+        }
+        Ok(())
+    }
+
     pub fn flush(&self) {
         // no op in no_std TODO(gbin): check if it will be needed in no_std at some point.
         if let Some(state) = LOGGER_STATE.get() {

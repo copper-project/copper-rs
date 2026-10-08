@@ -132,7 +132,9 @@ option select recorded runs identified by `Instantiated` lifecycle records.
   - `high-precision-limiter`
 - Low-level logging codec registry APIs in `cu29::logcodec`.
 - Low-level monitoring probes and allocation counters.
-- Direct unified-log section/header structs.
+- Direct unified-log section/header structs, `ApplicationMetadata`, `SectionContext`,
+  `CapacityPolicy`, and the metadata-aware unreleased format v2. Lifecycle records
+  use `RuntimeStopReason` and `RuntimeLifecycleOperation`.
 
 ## Internal
 
@@ -150,6 +152,7 @@ option select recorded runs identified by `Instantiated` lifecycle records.
 - `AsyncCopperListsManager`.
 - `OwnedCopperListSubmission`.
 - Generated mission modules and generated helper functions.
+- `cu29_unifiedlog::byte_log`: shared storage-adapter implementation.
 - Direct task tuple and bridge tuple access through `copper_runtime_mut()`.
 
 ## Deprecated

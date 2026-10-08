@@ -37,3 +37,15 @@ Notes:
 - `ForceSyncSend` does not provide locking; use it only with single-threaded or
   externally synchronized access.
 - See `examples/cu_rp2350_skeleton` and [`examples/cu_elrs_bdshot_demo`](https://github.com/copper-project/extra-examples/tree/master/examples/cu_elrs_bdshot_demo) for full RP2350 setups that hand the logger to a `CuApplication`.
+
+## Section capacity and append
+
+`EMMCLogger::with_policy(device, partition_start, partition_size, policy)` selects
+`Grow`, `OverwriteOldest`, or `StopWhenFull` from `CapacityPolicy`. The partition
+bounds every policy. `EMMCLogger::new` selects `StopWhenFull`.
+
+`EMMCLogger::append` validates a cleanly closed section chain before enabling
+writes. Generated application builders compare static application metadata and
+catalog bytes first. Offsets are bytes relative to the partition start; retained
+sections carry construction, instance and mission identity. A fixed block buffer
+preserves adjacent entries during partial-block writes and failed-write retries.

@@ -89,8 +89,10 @@ pub use cu29::prelude::ReflectTaskIntrospection
 pub use cu29::prelude::ReflectTypePath
 pub use cu29::prelude::RuntimeLifecycleConfigSource
 pub use cu29::prelude::RuntimeLifecycleEvent
+pub use cu29::prelude::RuntimeLifecycleOperation
 pub use cu29::prelude::RuntimeLifecycleRecord
 pub use cu29::prelude::RuntimeLifecycleStackInfo
+pub use cu29::prelude::RuntimeStopReason
 pub use cu29::prelude::Serialize
 pub use cu29::prelude::SerializedPayloadSchema
 pub use cu29::prelude::StorageUnit

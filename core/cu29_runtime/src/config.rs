@@ -106,6 +106,7 @@ pub struct NodeLogging {
     #[serde(skip_serializing_if = "Option::is_none")]
     codec: Option<String>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    #[serde(serialize_with = "serialize_ordered_map")]
     codecs: HashMap<String, String>,
     /// Logging policy applied to the source's pool-acquired `CuHandle`s. Surfaced
     /// in user RON config as e.g. `logging: ( handle_content: "touched_only" )`.
@@ -380,6 +381,7 @@ pub struct Node {
 
     /// Resources requested by the task.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "serialize_optional_ordered_map")]
     resources: Option<HashMap<String, String>>,
 
     /// Missions for which this task is run.
@@ -739,6 +741,7 @@ fn validate_bridge_channel(
 pub struct ResourceBundleConfig {
     /// Resource inputs consumed by this provider at startup.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "serialize_optional_ordered_map")]
     pub resources: Option<HashMap<String, String>>,
     pub id: String,
     #[serde(rename = "provider")]
@@ -865,6 +868,7 @@ pub struct BridgeConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub config: Option<ComponentConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "serialize_optional_ordered_map")]
     pub resources: Option<HashMap<String, String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub missions: Option<Vec<String>>,
@@ -2278,6 +2282,7 @@ impl ConfigPredicate {
 pub struct IncludesConfig {
     pub path: String,
     #[serde(default)]
+    #[serde(serialize_with = "serialize_ordered_map")]
     pub params: HashMap<String, Value>,
     #[serde(default)]
     pub missions: Option<Vec<String>>,
@@ -2709,6 +2714,21 @@ impl<'de> Deserialize<'de> for CuConfig {
     }
 }
 
+fn serialize_ordered_map<T: Serialize, S: Serializer>(
+    map: &HashMap<String, T>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    map.iter().collect::<BTreeMap<_, _>>().serialize(serializer)
+}
+fn serialize_optional_ordered_map<T: Serialize, S: Serializer>(
+    map: &Option<HashMap<String, T>>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    map.as_ref()
+        .map(|map| map.iter().collect::<BTreeMap<_, _>>())
+        .serialize(serializer)
+}
+
 impl Serialize for CuConfig {
     /// This is a custom serialization to make this implementation independent of petgraph.
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -2793,9 +2813,10 @@ impl Serialize for CuConfig {
                 .serialize(serializer)
             }
             Missions(graphs) => {
+                let graphs = graphs.iter().collect::<BTreeMap<_, _>>();
                 let missions = graphs
                     .keys()
-                    .map(|id| MissionsConfig { id: id.clone() })
+                    .map(|id| MissionsConfig { id: (*id).clone() })
                     .collect();
 
                 // Collect all unique tasks across missions

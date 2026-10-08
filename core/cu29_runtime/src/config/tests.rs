@@ -2586,3 +2586,23 @@ fn test_background_process_empty_validation_and_roundtrip() {
     }
     assert!(!Node::new("worker", "Task").background_process_empty());
 }
+
+#[test]
+fn static_metadata_config_is_deterministic_across_independent_constructions() {
+    let source = r#"(tasks: [(id: "src", type: "demo::Src", kind: source,
+        config: {"z": 1, "a": 2, "m": 3},
+        resources: {"right": "right", "left": "left"})], cnx: [])"#;
+    let expected = CuConfig::deserialize_ron(source)
+        .unwrap()
+        .serialize_ron()
+        .unwrap();
+    for _ in 0..32 {
+        assert_eq!(
+            CuConfig::deserialize_ron(source)
+                .unwrap()
+                .serialize_ron()
+                .unwrap(),
+            expected
+        );
+    }
+}
