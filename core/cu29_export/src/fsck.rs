@@ -1,7 +1,6 @@
 use crate::runs::RunReader;
 use bincode::config::standard;
 use bincode::decode_from_std_read;
-use bincode::error::DecodeError;
 use cu29::prelude::*;
 use cu29::{CopperListTuple, CuResult};
 use num_format::{Locale, ToFormattedString};
@@ -247,6 +246,40 @@ pub(crate) fn check<P>(
 where
     P: CopperListTuple,
 {
+    let mut decode = |bytes: &[u8]| {
+        let (entry, used) = bincode::decode_from_slice::<CopperList<P>, _>(bytes, standard())
+            .map_err(|error| CuError::new_with_cause("Corrupted CopperList", error))?;
+        let messages = entry.cumsgs();
+        let (start, end) =
+            process_time_bounds(messages.iter().map(|msg| msg.metadata().process_time()));
+        Ok(CheckedCopperList {
+            id: entry.id,
+            used,
+            start,
+            end,
+        })
+    };
+    check_with(dl, verbose, dump_runtime_lifecycle, Some(&mut decode))
+}
+
+pub(crate) struct CheckedCopperList {
+    pub id: u64,
+    pub used: usize,
+    pub start: OptionCuTime,
+    pub end: OptionCuTime,
+}
+
+type CopperListCheck<'a> = dyn FnMut(&[u8]) -> CuResult<CheckedCopperList> + 'a;
+
+pub(crate) fn check_with(
+    dl: &mut RunReader,
+    verbose: u8,
+    dump_runtime_lifecycle: bool,
+    mut decode: Option<&mut CopperListCheck<'_>>,
+) -> CuResult<()> {
+    if decode.is_none() {
+        println!("Structural check: CopperList payload decoding requires fsck --deep.");
+    }
     let header = dl.raw_main_header();
 
     if verbose > 0 {
@@ -265,9 +298,16 @@ where
     let mut runtime_lifecycle_size: usize = 0;
     let mut runtime_lifecycle_events: usize = 0;
     let mut sl_entries: usize = 0;
+    let mut catalog_present = false;
+    let mut catalog_size: usize = 0;
+    #[cfg(feature = "self-describing-logs")]
+    let mut catalog_decompressed_size: Option<usize> = None;
+    #[cfg(feature = "self-describing-logs")]
+    let mut catalog_sections = crate::catalog::CatalogSections::default();
 
     let result = 'scan: loop {
         // for _ in 0..4 {
+        let position = dl.position();
         let section = dl.raw_read_section();
         match section {
             Ok((header, content)) => {
@@ -298,48 +338,56 @@ where
                         cls_size += content.len();
                         cls_entropy.observe(&content);
 
-                        let mut reader = Cursor::new(content.as_slice());
+                        let Some(decode) = decode.as_mut() else {
+                            continue;
+                        };
+                        let mut offset = 0;
                         let mut first_cl = None;
                         let mut section_last_cl = None;
-                        let mut first_ts: OptionCuTime = OptionCuTime::none();
-                        while reader.position() < content.len() as u64 {
-                            let entry_start = reader.position() as usize;
-                            let entry = match decode_from_std_read::<CopperList<P>, _, _>(
-                                &mut reader,
-                                standard(),
-                            ) {
-                                Ok(entry) => entry,
+                        let mut first_ts = OptionCuTime::none();
+                        while offset < content.len() {
+                            let entry = match decode(&content[offset..]) {
+                                Ok(entry)
+                                    if entry.used > 0 && entry.used <= content.len() - offset =>
+                                {
+                                    entry
+                                }
+                                Ok(_) => {
+                                    break 'scan Err(
+                                        "CopperList decoder consumed an invalid byte count".into(),
+                                    );
+                                }
                                 Err(error) => {
-                                    let after = copperlist_sequence
-                                        .last_id
-                                        .map_or_else(|| "start".to_string(), |id| format!("#{id}"));
-                                    println!("CopperList after {after} is corrupted: {error:?}");
-                                    break;
+                                    break 'scan Err(CuError::from(format!(
+                                        "CopperList at section byte {} record byte {}: {error}",
+                                        position.0, offset,
+                                    )));
                                 }
                             };
-                            let entry_end = reader.position() as usize;
-                            cl_entropy_samples.observe(&content[entry_start..entry_end]);
+                            cl_entropy_samples.observe(&content[offset..offset + entry.used]);
+                            offset += entry.used;
                             if let Some(last) = copperlist_sequence.last_id
                                 && entry.id <= last
                             {
                                 break 'scan Err(CuError::from(format!(
                                     "CopperList IDs must increase within a recorded run: {} after {}",
-                                    entry.id, last,
+                                    entry.id, last
                                 )));
                             }
                             copperlist_sequence.observe(entry.id);
                             section_last_cl = Some(entry.id);
-                            let messages = entry.cumsgs();
-                            let (start, end) = process_time_bounds(
-                                messages.iter().map(|msg| msg.metadata().process_time()),
-                            );
                             if first_cl.is_none() {
                                 first_cl = Some(entry.id);
                             }
                             if first_ts.is_none() {
-                                first_ts = start;
+                                first_ts = entry.start;
                             }
-                            observe_process_times(&mut overall_first_ts, &mut last_ts, start, end);
+                            observe_process_times(
+                                &mut overall_first_ts,
+                                &mut last_ts,
+                                entry.start,
+                                entry.end,
+                            );
                         }
                         if verbose > 0 {
                             match (first_cl, section_last_cl) {
@@ -377,34 +425,23 @@ where
                     }
                     UnifiedLogType::RuntimeLifecycle => {
                         runtime_lifecycle_size += content.len();
-                        let mut reader: Cursor<Vec<u8>> = Cursor::new(content);
-                        loop {
-                            match decode_from_std_read::<RuntimeLifecycleRecord, _, _>(
+                        let mut reader = Cursor::new(content.as_slice());
+                        while reader.position() < content.len() as u64 {
+                            let entry = match decode_from_std_read::<RuntimeLifecycleRecord, _, _>(
                                 &mut reader,
                                 standard(),
                             ) {
-                                Ok(entry) => {
-                                    runtime_lifecycle_events += 1;
-                                    if dump_runtime_lifecycle {
-                                        print_runtime_lifecycle_record(
-                                            runtime_lifecycle_events,
-                                            &entry,
-                                        );
-                                    }
+                                Ok(entry) => entry,
+                                Err(error) => {
+                                    break 'scan Err(CuError::new_with_cause(
+                                        "Corrupted runtime lifecycle record",
+                                        error,
+                                    ));
                                 }
-                                Err(DecodeError::UnexpectedEnd { .. }) => break,
-                                Err(DecodeError::Io { inner, .. })
-                                    if inner.kind() == std::io::ErrorKind::UnexpectedEof =>
-                                {
-                                    break;
-                                }
-                                Err(e) => {
-                                    println!(
-                                        "RuntimeLifecycle section entry #{} is corrupted: {e:?}",
-                                        runtime_lifecycle_events + 1
-                                    );
-                                    break;
-                                }
+                            };
+                            runtime_lifecycle_events += 1;
+                            if dump_runtime_lifecycle {
+                                print_runtime_lifecycle_record(runtime_lifecycle_events, &entry);
                             }
                         }
                     }
@@ -441,12 +478,10 @@ where
                         }
                     }
                     UnifiedLogType::ValueDecodeCatalog => {
+                        catalog_present = true;
+                        catalog_size += content.len();
                         #[cfg(feature = "self-describing-logs")]
-                        cu29::prelude::ValueDecodeCatalog::from_blob(&content).map_err(
-                            |error| {
-                                CuError::new_with_cause("Invalid ValueDecodeCatalog section", error)
-                            },
-                        )?;
+                        catalog_sections.push(&content)?;
                         if verbose > 0 {
                             println!("    ValueDecodeCatalog: {} bytes", content.len());
                         }
@@ -474,6 +509,23 @@ where
             }
         }
     };
+
+    #[cfg(feature = "self-describing-logs")]
+    let result = result.and_then(|()| {
+        if catalog_present {
+            let catalog = catalog_sections.finish()?;
+            catalog_decompressed_size = Some(
+                bincode::encode_into_std_write(&catalog, &mut std::io::sink(), standard())
+                    .map_err(|error| {
+                        CuError::new_with_cause(
+                            "Could not measure decompressed catalog size",
+                            error,
+                        )
+                    })?,
+            );
+        }
+        Ok(())
+    });
 
     let total_time_nanos = if !overall_first_ts.is_none() && !last_ts.is_none() {
         (last_ts.unwrap() - overall_first_ts.unwrap()).as_nanos() as f64
@@ -625,6 +677,23 @@ where
         "  Lifecycle total size  -> {} bytes",
         runtime_lifecycle_size.to_formatted_string(l)
     );
+    println!();
+    println!(
+        "  Catalog present       -> {}",
+        if catalog_present { "yes" } else { "no" }
+    );
+    println!(
+        "  Catalog compressed    -> {} bytes",
+        catalog_size.to_formatted_string(l)
+    );
+    #[cfg(feature = "self-describing-logs")]
+    match catalog_decompressed_size {
+        Some(size) => println!(
+            "  Catalog decompressed  -> {} bytes",
+            size.to_formatted_string(l)
+        ),
+        None => println!("  Catalog decompressed  -> n/a"),
+    }
 
     result
 }
