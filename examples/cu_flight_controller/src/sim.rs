@@ -3946,7 +3946,7 @@ mod tests {
         drop(copper);
 
         for log_base in [&mcu_log_base, &compute_log_base] {
-            let catalog = cu29_export::catalog::read_value_decode_catalog(log_base, None)
+            let catalog = cu29_export::catalog::read_value_decode_catalog(log_base)
                 .expect("each subsystem log should embed its catalog");
             assert!(
                 catalog

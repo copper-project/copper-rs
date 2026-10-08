@@ -124,7 +124,7 @@ fn test_machine_output_and_process_failure_contract() {
     assert!(basic.contains("Catalog present       -> yes"));
     let catalog_bytes = catalog_blob().len();
     assert!(basic.contains(&format!("Catalog compressed    -> {catalog_bytes} bytes")));
-    let catalog = cu29_export::catalog::read_value_decode_catalog(&good, None).unwrap();
+    let catalog = cu29_export::catalog::read_value_decode_catalog(&good).unwrap();
     let decompressed_bytes = bincode::encode_to_vec(&catalog, bincode::config::standard())
         .unwrap()
         .len();
@@ -210,7 +210,7 @@ fn static_catalog_spans_backing_files_as_one_section() {
         .seal_metadata(&metadata(), Some(&StartupCatalog(&description)))
         .unwrap();
     drop(logger);
-    let catalog = cu29_export::catalog::read_value_decode_catalog(&path, None).unwrap();
+    let catalog = cu29_export::catalog::read_value_decode_catalog(&path).unwrap();
     assert_eq!(catalog.missions[0].slots[0].task_id, task_id);
     let output = run(&path, &["fsck", "--deep"]);
     assert!(
@@ -295,7 +295,7 @@ fn test_catalog_preserves_unicode_storage_symbols() {
         .seal_metadata(&metadata(), Some(&StartupCatalog(&DESCRIPTION)))
         .unwrap();
     drop(logger);
-    let catalog = cu29_export::catalog::read_value_decode_catalog(&path, None).unwrap();
+    let catalog = cu29_export::catalog::read_value_decode_catalog(&path).unwrap();
     let ron = ron::ser::to_string_pretty(
         &catalog,
         ron::ser::PrettyConfig::default().struct_names(true),

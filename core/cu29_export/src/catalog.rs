@@ -9,8 +9,8 @@ use bincode::Decode;
 use bincode::Uleb128;
 use cu29::prelude::{
     CuError, CuMsgMetadata, CuMsgOrigin, CuResult, CuTime, CuTimeRange, OptionCuTime,
-    PartialCuTimeRange, Tov, UnifiedLogType, Value, ValueDecodeCatalog, ValueDecodeCatalogLayout,
-    ValueDecodeLimits,
+    PartialCuTimeRange, Tov, UnifiedLogRead, UnifiedLogType, Value, ValueDecodeCatalog,
+    ValueDecodeCatalogLayout, ValueDecodeLimits,
 };
 use cu29::value_decode::ValueDecodeBudget;
 use std::path::Path;
@@ -45,14 +45,6 @@ pub struct CuDecodedCopperList {
     pub msgs: Vec<CuDecodedLogSlot>,
 }
 
-/// Load and validate the selected run's catalog. Experimental API.
-/// Multi-run logs require a zero-based `run` selection.
-pub fn read_value_decode_catalog(path: &Path, run: Option<usize>) -> CuResult<ValueDecodeCatalog> {
-    let recorded = runs::discover(path)?;
-    let selected = runs::select(&recorded, run)?;
-    load_shared_catalog(selected, path)
-}
-
 /// The selected mission's slots, borrowing their identity from static application metadata.
 #[derive(serde::Serialize, serde::Deserialize)]
 pub(crate) struct SelectedCatalog {
@@ -65,11 +57,11 @@ pub(crate) struct SelectedCatalog {
 }
 
 #[derive(Default)]
-pub(crate) struct CatalogSections {
+pub(crate) struct CatalogSection {
     bytes: Vec<u8>,
 }
-impl CatalogSections {
-    pub(crate) fn push(&mut self, section: &[u8]) -> CuResult<()> {
+impl CatalogSection {
+    pub(crate) fn set(&mut self, section: &[u8]) -> CuResult<()> {
         if !self.bytes.is_empty() {
             return Err("Log contains multiple static ValueDecodeCatalog sections".into());
         }
@@ -79,25 +71,43 @@ impl CatalogSections {
         self.bytes.extend_from_slice(section);
         Ok(())
     }
-    pub(crate) fn finish(self) -> CuResult<ValueDecodeCatalog> {
+    pub(crate) fn decode(self) -> CuResult<ValueDecodeCatalog> {
         ValueDecodeCatalog::from_blob(&self.bytes)
             .map_err(|error| CuError::new_with_cause("Invalid ValueDecodeCatalog", error))
     }
 }
 
-fn load_shared_catalog(run: &runs::RecordedRun, path: &Path) -> CuResult<ValueDecodeCatalog> {
-    let mut reader = run.reader(path)?;
-    let (_, bytes) = reader.read_next_section_type_at(UnifiedLogType::ValueDecodeCatalog)?
-        .ok_or_else(|| CuError::from("Log has no ValueDecodeCatalog; catalog decoding and deep validation require a catalog"))?;
-    if reader
-        .read_next_section_type_at(UnifiedLogType::ValueDecodeCatalog)?
-        .is_some()
-    {
-        return Err("Log contains multiple static ValueDecodeCatalog sections".into());
+/// Load and validate the shared catalog for every compiled mission. Experimental API.
+/// The catalog is shared by all recorded runs in the log.
+pub fn read_value_decode_catalog(path: &Path) -> CuResult<ValueDecodeCatalog> {
+    let mut reader = crate::build_read_logger(path)?;
+    let mut catalog_position = None;
+    loop {
+        let position = reader.position();
+        let header = reader.raw_skip_section()?;
+        if header.entry_type == UnifiedLogType::LastEntry {
+            break;
+        }
+        if header.entry_type == UnifiedLogType::ValueDecodeCatalog {
+            if catalog_position.is_some() {
+                return Err("Log contains multiple static ValueDecodeCatalog sections".into());
+            }
+            if header.used as usize > 16 * 1024 * 1024 * 9 / 8 + 8 {
+                return Err("Catalog exceeds offline size limit".into());
+            }
+            catalog_position = Some(position);
+        }
     }
+    let position = catalog_position.ok_or_else(|| {
+        CuError::from(
+            "Log has no ValueDecodeCatalog; catalog decoding and deep validation require a catalog",
+        )
+    })?;
+    reader.seek(position)?;
+    let (_, bytes) = reader.raw_read_section()?;
     let catalog = ValueDecodeCatalog::from_blob(&bytes)
         .map_err(|error| CuError::new_with_cause("Invalid static ValueDecodeCatalog", error))?;
-    let metadata = crate::build_read_logger(path)?
+    let metadata = reader
         .application_metadata()?
         .ok_or_else(|| CuError::from("Catalog requires application metadata"))?;
     if catalog.missions.len() != metadata.missions.len() {
@@ -114,7 +124,7 @@ fn load_shared_catalog(run: &runs::RecordedRun, path: &Path) -> CuResult<ValueDe
 }
 
 pub(crate) fn load_catalog(run: &runs::RecordedRun, path: &Path) -> CuResult<SelectedCatalog> {
-    let mut catalog = load_shared_catalog(run, path)?;
+    let mut catalog = read_value_decode_catalog(path)?;
     let index = run.mission_index as usize;
     if index >= catalog.missions.len() {
         return Err("Section mission index is outside the catalog".into());
