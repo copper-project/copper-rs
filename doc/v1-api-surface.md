@@ -36,7 +36,7 @@ option select recorded runs identified by `Instantiated` lifecycle records.
 - Task and bridge authoring APIs:
   - `CuSrcTask`
   - `CuTask`
-  - `CuStatelessTask`
+  - `CuStatelessTask` (`Reflect + Send + Sync`; no `Freezable` requirement)
   - `CuSinkTask`
   - `CuBridge`
   - `CuMsg`

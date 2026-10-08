@@ -1977,7 +1977,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     let skip_substituted = sim_mode
                         && task_specs.cutypes[*index] != CuTaskType::Regular
                         && !task_specs.run_in_sim_flags[*index];
-                    if skip_substituted {
+                    if skip_substituted || task_specs.stateless_flags[*index] {
                         quote! {
                             let _ = frames.next_frame()?;
                         }
@@ -2014,8 +2014,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             .map(|component| match component {
                 ParallelLifecycleKey::Task(index) => {
                     let task_tuple_index = syn::Index::from(*index);
+                    let keyframe_state = if task_specs.stateless_flags[*index] {
+                        quote! { cu29::cutask::CuStatelessTaskState }
+                    } else {
+                        quote! { tasks.#task_tuple_index }
+                    };
                     quote! {
-                        kf_manager.include_capture_capacity(&tasks.#task_tuple_index)?;
+                        kf_manager.include_capture_capacity(&#keyframe_state)?;
                     }
                 }
                 ParallelLifecycleKey::Bridge(index) => {

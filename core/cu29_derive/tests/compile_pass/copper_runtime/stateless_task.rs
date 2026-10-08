@@ -23,8 +23,6 @@ impl CuSrcTask for StatelessSource {
 #[derive(Reflect)]
 struct StatelessTransform;
 
-impl Freezable for StatelessTransform {}
-
 impl CuStatelessTask for StatelessTransform {
     type Resources<'r> = ();
     type Input<'m> = input_msg!(u32);
