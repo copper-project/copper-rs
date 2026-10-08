@@ -17,8 +17,17 @@ mod linux_only {
     const LARGE_POINTS: usize = 100_000;
     const SMALL_STACK_BYTES: usize = 256 * 1024;
 
-    #[derive(Debug, Default, Encode, Serialize, Deserialize)]
+    #[derive(Debug, Default, Serialize, Deserialize)]
     struct PointCloudMsgs(CuStampedData<PointCloudSoaHandle<LARGE_POINTS>, CuMsgMetadata>);
+
+    impl Encode for PointCloudMsgs {
+        fn encode<E: bincode::enc::Encoder>(
+            &self,
+            encoder: &mut E,
+        ) -> Result<(), bincode::error::EncodeError> {
+            self.0.encode(encoder)
+        }
+    }
 
     impl Decode<()> for PointCloudMsgs {
         fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {

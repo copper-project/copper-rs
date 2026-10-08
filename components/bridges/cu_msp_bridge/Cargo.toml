@@ -29,6 +29,7 @@ serde = { workspace = true }
 cu-linux-resources = { workspace = true, optional = true }
 
 [features]
+reflect = ["cu29/reflect", "cu-msp-lib/reflect"]
 default = ["std"]
 std = [
   "cu29/std",
@@ -43,3 +44,8 @@ log-level-info = ["cu29/log-level-info"]
 
 [build-dependencies]
 cu29-build = { workspace = true }
+
+[dev-dependencies]
+cu29 = { workspace = true, features = ["reflect"] }
+cu29-value = { workspace = true, features = ["decode-catalog"] }
+cu-msp-lib = { workspace = true, features = ["reflect"] }

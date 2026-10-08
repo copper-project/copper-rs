@@ -32,6 +32,8 @@ kornia-tensor = { version = "0.2.0", optional = true }
 serde = { workspace = true }
 
 [dev-dependencies]
+cu29 = { workspace = true, features = ["reflect"] }
+cu29-value = { workspace = true, features = ["decode-catalog"] }
 serde_json = { workspace = true }
 
 [features]

@@ -125,6 +125,14 @@ impl Encode for MspRequestBatch {
     }
 }
 
+impl bincode::ValueDecode for MspRequestBatch {
+    const DECODE: &'static bincode::ValueDecodeSpec = &bincode::ValueDecodeSpec::Sequence {
+        element: bincode::value_decode::ValueDecodeRef::of::<MspRequest>(),
+        count: bincode::value_decode::Scalar::U64,
+        capacity: Some(MAX_REQUESTS_PER_BATCH),
+    };
+}
+
 impl Decode<()> for MspRequestBatch {
     fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
         decode_bounded_vec::<MspRequest, MAX_REQUESTS_PER_BATCH, _>(decoder).map(MspRequestBatch)
@@ -160,6 +168,14 @@ impl Encode for MspResponseBatch {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         Encode::encode(&self.0.as_slice(), encoder)
     }
+}
+
+impl bincode::ValueDecode for MspResponseBatch {
+    const DECODE: &'static bincode::ValueDecodeSpec = &bincode::ValueDecodeSpec::Sequence {
+        element: bincode::value_decode::ValueDecodeRef::of::<MspResponse>(),
+        count: bincode::value_decode::Scalar::U64,
+        capacity: Some(MAX_RESPONSES_PER_BATCH),
+    };
 }
 
 impl Decode<()> for MspResponseBatch {
@@ -430,3 +446,86 @@ where
 /// Type alias for MSP bridge using standard I/O (for backward compatibility)
 #[cfg(feature = "std")]
 pub type CuMspBridgeStd = CuMspBridge<cu_linux_resources::LinuxSerialPort, std::io::Error>;
+
+#[cfg(test)]
+mod catalog_tests {
+    use super::*;
+    use cu29_value::decode::{ValueDecodeDescription, ValueDecodeLimits};
+
+    #[test]
+    fn test_streaming_catalog_decodes_native_msp_response_batch() {
+        use bincode::enc::write::SliceWriter;
+        use bincode::value_decode::ValueDecodeRef;
+        use cu29_value::catalog::ValueDecodeCatalog;
+        use cu29_value::catalog_format::ValueDecodeCatalogLayout;
+        use cu29_value::catalog_stream::{
+            CatalogDescription, CatalogMission, CatalogSlot, write_catalog,
+        };
+        static CATALOG: CatalogDescription = CatalogDescription {
+            layout: ValueDecodeCatalogLayout::Compact,
+            missions: &[CatalogMission {
+                slots: &[CatalogSlot {
+                    task_id: "responses",
+                    msg_type: "MspResponseBatch",
+                    payload: Some(ValueDecodeRef::of::<MspResponseBatch>()),
+                }],
+            }],
+        };
+        let mut buffer = [0; 16384];
+        let mut writer = SliceWriter::new(&mut buffer);
+        write_catalog(&mut writer, &CATALOG).unwrap();
+        let len = writer.bytes_written();
+        let catalog = ValueDecodeCatalog::from_blob(&buffer[..len]).unwrap();
+        let mut sample = MspResponseBatch::new();
+        sample.push(MspResponse::Unknown).unwrap();
+        sample
+            .push(MspResponse::MspApiVersion(Default::default()))
+            .unwrap();
+        let config = bincode::config::standard();
+        let bytes = bincode::encode_to_vec(&sample, config).unwrap();
+        let (decoded, used) = catalog
+            .description
+            .decode(&bytes, config, ValueDecodeLimits::default())
+            .unwrap();
+        assert_eq!(used, bytes.len());
+        assert_eq!(decoded, to_value(sample.0.as_slice()).unwrap());
+        let oversized = bincode::encode_to_vec(MAX_RESPONSES_PER_BATCH as u64 + 1, config).unwrap();
+        assert!(
+            catalog
+                .description
+                .decode(&oversized, config, ValueDecodeLimits::default())
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn test_catalog_decodes_native_msp_request_batch() {
+        let mut sample = MspRequestBatch::new();
+        sample.push(MspRequest::MspApiVersionRequest).unwrap();
+        sample
+            .push(MspRequest::MspSetRawRc(
+                cu_msp_lib::structs::MspRc::default(),
+            ))
+            .unwrap();
+        let config = bincode::config::standard();
+        let bytes = bincode::encode_to_vec(&sample, config).unwrap();
+        let mut registry = cu29::reflect::TypeRegistry::default();
+        registry.register::<MspRequestBatch>();
+        registry.register::<MspRequest>();
+        let description =
+            ValueDecodeDescription::from_registry::<MspRequestBatch>(&registry).unwrap();
+        let (decoded, used) = description
+            .decode(&bytes, config, ValueDecodeLimits::default())
+            .unwrap();
+        assert_eq!(used, bytes.len());
+        assert_eq!(decoded, to_value(sample.0.as_slice()).unwrap());
+
+        // Reject a count that exceeds the native fixed-capacity batch.
+        let oversized = bincode::encode_to_vec(MAX_REQUESTS_PER_BATCH as u64 + 1, config).unwrap();
+        assert!(
+            description
+                .decode(&oversized, config, ValueDecodeLimits::default())
+                .is_err()
+        );
+    }
+}
