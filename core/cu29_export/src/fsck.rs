@@ -278,7 +278,7 @@ where
                 }
 
                 match header.entry_type {
-                    UnifiedLogType::ApplicationMetadata | UnifiedLogType::ValueDecodeCatalog => {}
+                    UnifiedLogType::ApplicationMetadata => {}
                     UnifiedLogType::StructuredLogLine => {
                         structured_log_size += content.len();
                         let mut reader = Cursor::new(content.as_slice());
@@ -438,6 +438,17 @@ where
                                 _ => {}
                             }
                             remaining = &remaining[used..];
+                        }
+                    }
+                    UnifiedLogType::ValueDecodeCatalog => {
+                        #[cfg(feature = "self-describing-logs")]
+                        cu29::prelude::ValueDecodeCatalog::from_blob(&content).map_err(
+                            |error| {
+                                CuError::new_with_cause("Invalid ValueDecodeCatalog section", error)
+                            },
+                        )?;
+                        if verbose > 0 {
+                            println!("    ValueDecodeCatalog: {} bytes", content.len());
                         }
                     }
                     UnifiedLogType::LastEntry => {

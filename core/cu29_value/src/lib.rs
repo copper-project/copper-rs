@@ -36,9 +36,16 @@ pub use cu29_value_types::{
 use ordered_float::OrderedFloat;
 use serde::Deserialize;
 
-#[cfg(feature = "self-describing-logs")]
+#[cfg(feature = "decode-catalog")]
+pub mod catalog;
+#[cfg(any(feature = "self-describing-logs", feature = "decode-catalog"))]
+pub mod catalog_format;
+#[cfg(any(feature = "self-describing-logs", feature = "decode-catalog"))]
+#[doc(hidden)]
+pub mod catalog_stream;
+#[cfg(feature = "decode-catalog")]
 pub mod decode;
-#[cfg(feature = "self-describing-logs")]
+#[cfg(feature = "decode-catalog")]
 mod metadata;
 
 mod bdec;
@@ -1260,5 +1267,5 @@ mod tests {
     }
 }
 
-#[cfg(all(test, feature = "self-describing-logs"))]
+#[cfg(all(test, feature = "decode-catalog", feature = "self-describing-logs"))]
 mod decode_tests;

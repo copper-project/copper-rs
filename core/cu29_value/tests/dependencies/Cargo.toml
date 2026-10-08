@@ -1,0 +1,24 @@
+[package]
+name = "cu29-value-ui-dependencies"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.95"
+license = "Apache-2.0"
+publish = false
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+bincode = { package = "cu-bincode", path = "../../../cu_bincode", version = "=2.2.0-beta", default-features = false, features = [
+  "derive",
+  "alloc",
+  "self-describing",
+] }
+
+[package.metadata.cargo-shear]
+# ui_test exposes this dependency to the fixture files through --extern.
+ignored = ["bincode"]
+
+# Keep the self-describing derive confined to this compile-test harness.
+[workspace]

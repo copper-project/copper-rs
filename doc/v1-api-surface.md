@@ -101,12 +101,26 @@ option select recorded runs identified by `Instantiated` lifecycle records.
 
 ## Experimental
 
-- `self-describing-logs` feature, `cu29::value_decode`, and
+- `self-describing-logs` feature for automatic startup catalog recording;
+  `decode-catalog` for host-side `cu29::value_decode`, and
   `cu29_value::decode`: `ValueDecodeDescription` builds portable wire/schema
   descriptions and decodes native payload bytes to `Value` trees offline.
-- `cu29::prelude::{ValueDecode, ValueDecodeSpec, ValueDecodeDescription,
-  ValueDecodeLimits}` with `self-describing-logs` enabled. The companion trait and
-  static wire recipes are supplied by `cu-bincode`.
+- `cu29::prelude::{ValueDecode, ValueDecodeSpec}` are always available. The
+  companion trait and static wire operations are supplied by `cu-bincode`;
+  `#[bincode(describe)]` generates descriptions for individual `Encode` types.
+  `cu29::prelude::{ValueDecodeDescription, ValueDecodeLimits}` requires
+  `decode-catalog` for offline tooling.
+- `cu29::value_decode_catalog` and `cu29_value::catalog`: versioned shared payload
+  catalogs and offline decompression. The startup writer borrows native recipes,
+  shares one graph across compiled mission slot maps, and compresses into the
+  static metadata section using fixed working memory. Catalog version 1 includes
+  a bincode version field, typed metadata, Heatshrink compression and a
+  length/checksum footer.
+- `cu29_export::catalog`: experimental run-scoped catalog loading and fallible
+  standalone CopperList value readers. `ValueDecodeDescription::validate` checks
+  complete graphs; `decode_at` decodes selected bindings without graph copies.
+  Catalog CLI formats/decoder selection and registration-free Python catalog
+  functions are experimental. Internal shared allocation budgets are hidden.
 - `cu29-value-types` and its `cu29_value` / `cu29::prelude` re-exports:
   `Quantity`, `QuantityMetadata`, `StorageUnit`, `TimeStorageUnit`, and
   `ValueMetadata`. `ValueDecode::METADATA` attaches the Copper-owned vocabulary

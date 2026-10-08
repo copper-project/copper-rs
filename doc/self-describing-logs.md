@@ -23,6 +23,9 @@ continues to call `cu29_build::setup()`.
 The runtime macro emits static descriptions for **all compiled missions**, with
 one shared payload schema graph and each mission's actual CopperList slot order.
 The running application produces and saves its catalog only at startup.
+The generated builder supplies all compiled mission slot maps to the logger's
+static metadata interface before resources are initialized; append compares the
+shared catalog and reuses its section.
 The first application construction serializes these descriptions with bincode,
 compresses them with Heatshrink and writes one static catalog section before
 resources and runtime streams are initialized. Offline tools load that section
@@ -101,6 +104,9 @@ automatically.
 The section body is one bincode value compressed with Heatshrink: standard
 bincode configuration (little-endian floats, variable-width integers), Heatshrink
 window bits **10**, lookahead bits **5**. Its version is an ordinary bincode field.
+The compressed bytes end with the uncompressed byte count and IEEE CRC32 checksum
+as two little-endian `u32` values, allowing bounded decompression and integrity
+validation.
 
 | Field | Meaning |
 | --- | --- |

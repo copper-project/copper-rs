@@ -1,0 +1,11 @@
+import "../../support/just/viewers.just"
+
+default: run
+
+# Record a startup catalog and ten wheel samples.
+run:
+    cargo run --features self-describing-logs
+
+# Exercise automatic startup recording and catalog rejection.
+check:
+    cargo test --features self-describing-logs

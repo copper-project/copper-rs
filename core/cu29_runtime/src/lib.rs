@@ -55,3 +55,7 @@ pub mod simulation;
 pub(crate) mod sync_compat;
 #[cfg(feature = "std")]
 pub mod thread_pool;
+
+#[cfg(feature = "self-describing-logs")]
+#[doc(hidden)]
+pub mod catalog;

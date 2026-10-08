@@ -804,6 +804,46 @@ fn gen_culist_support(
         })
         .collect();
 
+    let catalog_description = if cfg!(feature = "self-describing-logs") {
+        let mut slots = Vec::new();
+        let mut error = None;
+        for (index, (task_id, msg_type, payload_type)) in task_output_specs.iter().enumerate() {
+            let captured = cuconfig
+                .logging
+                .as_ref()
+                .is_none_or(|logging| logging.enable_task_logging)
+                && cuconfig
+                    .find_task_node(mission_label, task_id)
+                    .is_none_or(|node| node.is_logging_enabled());
+            let payload = if !captured {
+                quote! { None }
+            } else if let Some(codec) = &flat_codec_bindings[index] {
+                error = Some(format!(
+                    "Task '{task_id}' output '{msg_type}' uses logging codec '{}', which needs a catalog description of its encoded representation.",
+                    codec.codec_type_path
+                ));
+                quote! { None }
+            } else {
+                quote! { Some(cu29::bincode::value_decode::ValueDecodeRef::of::<#payload_type>()) }
+            };
+            slots.push(quote! { cu29::catalog_stream::CatalogSlot { task_id: #task_id, msg_type: #msg_type, payload: #payload } });
+        }
+        let error = match error {
+            Some(error) => quote! { Some(#error) },
+            None => quote! { None },
+        };
+        quote! {
+            #[allow(dead_code)]
+            pub const VALUE_DECODE_CATALOG_MISSION: cu29::catalog_stream::CatalogMission = cu29::catalog_stream::CatalogMission {
+                slots: &[#(#slots),*],
+            };
+            #[allow(dead_code)]
+            pub const VALUE_DECODE_CATALOG_ERROR: Option<&'static str> = #error;
+        }
+    } else {
+        quote! {}
+    };
+
     // Generate bridge channel getter methods
     for spec in bridge_specs {
         for channel in &spec.rx_channels {
@@ -840,6 +880,7 @@ fn gen_culist_support(
     // This generates a way to get the metadata of every single message of a culist at low cost
     quote! {
         #capture_support
+        #catalog_description
         #collect_metadata_function
         #compute_payload_bytes_fn
         #default_config_ron_const

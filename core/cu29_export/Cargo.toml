@@ -45,6 +45,7 @@ tempfile = { workspace = true }
 jsonschema = { version = "0.56", default-features = false }
 
 [features]
+self-describing-logs = ["cu29/decode-catalog"]
 default = []
 python = ["dep:pyo3"]
 # Only enable this when building the Python extension itself; Rust binaries need

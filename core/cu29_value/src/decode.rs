@@ -377,6 +377,7 @@ impl ValueDecodeDescription {
     /// use bincode::{Encode, Decode};
     /// use bevy_reflect::Reflect;
     /// #[derive(Encode, Decode, Reflect)]
+    /// #[bincode(describe)]
     /// struct Sample { ticks: u32, valid: bool }
     /// let description = ValueDecodeDescription::from_type::<Sample>().unwrap();
     /// let bytes = bincode::encode_to_vec(Sample { ticks: 42, valid: true }, bincode::config::standard()).unwrap();

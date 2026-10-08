@@ -1,0 +1,29 @@
+[package]
+name = "cu-self-describing-logs"
+description = "Build and record an embedded payload decode catalog."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "cu-self-describing-logs"
+path = "src/main.rs"
+required-features = ["self-describing-logs"]
+
+[dependencies]
+serde = { workspace = true }
+cu29 = { workspace = true, optional = true }
+
+[build-dependencies]
+cu29-build = { workspace = true }
+
+[dev-dependencies]
+cu29-value = { workspace = true, features = ["decode-catalog"] }
+tempfile = { workspace = true }
+
+[features]
+default = []
+self-describing-logs = ["dep:cu29", "cu29/self-describing-logs"]
+flat-copperlist-encoding = ["cu29?/flat-copperlist-encoding"]

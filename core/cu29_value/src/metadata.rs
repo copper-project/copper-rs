@@ -134,12 +134,12 @@ impl TryFrom<MetadataWire> for ValueDecodeMetadata {
 
 impl Encode for ValueDecodeMetadata {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        self.kind_id().encode(encoder)?;
         match &self.value {
-            MetadataValue::Known(ValueMetadata::Quantity(quantity)) => {
-                quantity_bytes(*quantity).as_slice().encode(encoder)
+            MetadataValue::Known(value) => value.encode(encoder),
+            MetadataValue::Unknown(wire) => {
+                wire.kind.encode(encoder)?;
+                wire.bytes.encode(encoder)
             }
-            MetadataValue::Unknown(wire) => wire.bytes.encode(encoder),
         }
     }
 }

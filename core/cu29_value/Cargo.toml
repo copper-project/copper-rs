@@ -19,28 +19,32 @@ documentation = "https://docs.rs/cu29-value"
 
 [dependencies]
 cu29-value-types = { workspace = true, features = ["serde"] }
+heatshrink = { package = "heatshrink-lib", version = "1.0.0", default-features = false, optional = true }
 bevy_reflect = { workspace = true, optional = true }
 cu29-units = { workspace = true, optional = true }
 cu29-clock = { workspace = true }
 
 bincode = { workspace = true }
 serde = { workspace = true }
+
 ordered-float = { version = "5.1", default-features = false }
 pyo3 = { workspace = true, optional = true }
 
 [dev-dependencies]
-trybuild = "1.0"
+cu-gnss-payloads = { path = "../../components/payloads/cu_gnss_payloads", default-features = false }
+ui_test = { version = "0.30.7", default-features = false, features = ["rustc"] }
 serde_derive = { workspace = true }
 
 [features]
-self-describing-logs = [
+decode-catalog = [
+  "dep:heatshrink",
   "std",
-  "bincode/self-describing",
   "dep:bevy_reflect",
   "cu29-clock/reflect",
   "dep:cu29-units",
   "cu29-units/reflect",
 ]
+self-describing-logs = ["bincode/self-describing", "dep:heatshrink"]
 default = ["std"]
-std = ["ordered-float/std", "cu29-clock/std", "cu29-units?/std"]
+std = ["ordered-float/std", "cu29-clock/std", "cu29-units?/std", "bincode/std"]
 python = ["std", "dep:pyo3"]

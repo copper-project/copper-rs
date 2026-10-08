@@ -18,6 +18,24 @@ PREK_FMT_CI_HOOKS := "trailing-whitespace check-merge-conflict detect-private-ke
 default:
 	just pr-check
 
+# Verify native descriptions, shared startup catalogs and embedded compilation.
+self-describing-logs-check:
+	cargo test -p cu29-value-types --all-features
+	cargo test -p cu-bincode --test describe
+	cargo test -p cu-bincode --test describe --features self-describing
+	cargo check -p cu29 --no-default-features --features self-describing-logs --target thumbv7em-none-eabihf
+	cargo test -p cu29-value --features decode-catalog,self-describing-logs
+	cargo test -p cu29 --features decode-catalog --test value_decode
+	cargo test -p cu-self-describing-logs --features self-describing-logs
+	cargo test -p cu-self-describing-logs --features self-describing-logs,flat-copperlist-encoding
+	cargo test -p cu29-export --lib runs::tests
+	cargo clippy -p cu29-value -p cu29-value-types -p cu29-units -p cu29-build --all-targets --features cu29-value/decode-catalog,cu29-value/self-describing-logs -- --deny warnings
+	cargo clippy -p cu29 --lib --test value_decode --features decode-catalog -- --deny warnings
+	cargo clippy -p cu-self-describing-logs --all-targets --features self-describing-logs -- --deny warnings
+	cargo clippy -p cu29-export --all-targets --features self-describing-logs -- --deny warnings
+	cargo check -p cu29 -p cu29-value -p cu29-value-types --no-default-features
+	cargo check -p cu29 -p cu29-value -p cu29-value-types -p cu29-units --no-default-features --target thumbv7em-none-eabihf
+
 # Verify workspace CI exclusions across runner operating systems.
 workspace-excludes-check:
 	python3 -m unittest discover -s support/ci -p test_workspace_excludes.py
@@ -85,6 +103,7 @@ publish:
 # Compile fixtures: error codes/messages and successful downstream applications.
 compile-tests toolchain="stable":
     cargo +{{toolchain}} test -p cu29-derive --lib test_compile_fail -- --nocapture
+    cargo +{{toolchain}} test -p cu29-value --features self-describing-logs --test value_decode_compile -- --nocapture
 
 # Validate workflow expressions, shell snippets, YAML, and change classification.
 ci-config-check:
