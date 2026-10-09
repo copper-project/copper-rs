@@ -241,14 +241,15 @@ runs:
           sudo ln -sf "$(basename "$xml2_path")" "$(dirname "$xml2_path")/libxml2.so.2"
         fi
 
-    - name: Install GStreamer (macOS, cached)
+    - name: Install GStreamer (macOS)
       if: runner.os == 'macOS'
       uses: gerlero/brew-install@v1
       env:
         HOMEBREW_NO_AUTO_UPDATE: "1"
         HOMEBREW_NO_INSTALL_CLEANUP: "1"
       with:
-        cache: true
+        # Always run brew install; cached dry-run parsing can skip missing formulae.
+        cache: false
         packages: |
           gstreamer
           gst-plugins-base
@@ -268,23 +269,8 @@ runs:
         echo "DYLD_LIBRARY_PATH=/opt/homebrew/opt/gstreamer/lib:/usr/local/opt/gstreamer/lib:$DYLD_LIBRARY_PATH" >> "$GITHUB_ENV"
         echo "PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig:/opt/homebrew/opt/gstreamer/lib/pkgconfig:${QT_PREFIX}/lib/pkgconfig:$PKG_CONFIG_PATH" >> "$GITHUB_ENV"
 
-    - name: Debug GStreamer Installation
+    - name: Verify GStreamer installation (macOS)
       if: runner.os == 'macOS'
       shell: bash
       run: |
-        echo "Checking GStreamer version..."
-        pkg-config --modversion gstreamer-1.0 || { echo "GStreamer not found!"; }
-
-        echo "Checking GStreamer library path..."
-        if [[ -d "/opt/homebrew/opt/gstreamer/lib" ]]; then
-          echo "GStreamer is installed at /opt/homebrew/opt/gstreamer/lib"
-          ls -l /opt/homebrew/opt/gstreamer/lib | head
-        else
-          echo "GStreamer libraries missing!"
-        fi
-
-        echo "Checking PKG_CONFIG_PATH..."
-        echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
-
-        echo "Checking DYLD_LIBRARY_PATH..."
-        echo "DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH"
+        pkg-config --modversion gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0
