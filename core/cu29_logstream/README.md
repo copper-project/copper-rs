@@ -305,6 +305,8 @@ onboard application, enabling standalone decoding of received captures. Catalogs
 are generated from the compiled missions, payload recipes and encoding features;
 use the same definitions and features for sender and twin. Configuration capture
 is deferred: the archive's effective configuration string is empty.
+The shared catalog includes streamed payload recipes when onboard task logging is
+disabled, so streaming-only recordings also support standalone decoding.
 Replay retains up to the configured queue capacity in events and pending captures,
 plus one recovery point and one executing frame. Presentation retains up to the
 configured frame and structured-entry capacities; payload storage and thread/runtime
