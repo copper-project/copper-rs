@@ -601,7 +601,7 @@ jobs:
         with:
           components: rustfmt
       - name: Install formatting tools
-        uses: taiki-e/install-action@v2.87.23
+        uses: taiki-e/install-action@v2.87.26
         with:
           tool: taplo-cli, fmtron@0.10.0, typos
       - name: Install actionlint
@@ -659,7 +659,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - uses: taiki-e/install-action@v2.87.23
+      - uses: taiki-e/install-action@v2.87.26
         with:
           tool: just
       - uses: Swatinem/rust-cache@v2
