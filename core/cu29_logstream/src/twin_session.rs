@@ -281,6 +281,9 @@ impl<A: LiveReplay, R: CuStreamRx + 'static> CuTwinBuilder<A, R> {
                                         return Ok(());
                                     }
                                     if let SessionEvent::Manifest(manifest) = &event {
+                                        if manifest.manifest().context.mission_index != A::MISSION_INDEX {
+                                            return Err(crate::Error::InvalidConfig("twin requires the matching sender mission"));
+                                        }
                                         status.identity = Some(manifest.manifest().identity);
                                         if feedback_tx.is_some() {
                                             reporter = crate::feedback::FeedbackReporter::new(

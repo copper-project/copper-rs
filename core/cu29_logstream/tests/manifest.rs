@@ -60,13 +60,28 @@ fn config_resolves_to_sender_config_and_manifest() {
         session_id: *b"manifest-session",
         sender_id: 17,
     };
-    let sender = plan.sender_config(identity, schema()).unwrap();
+    let sender = plan
+        .sender_config(
+            identity,
+            schema(),
+            cu29_unifiedlog::SectionContext {
+                run_id: 1,
+                instance_id: identity.sender_id,
+                mission_index: 0,
+            },
+        )
+        .unwrap();
     sender.validate().unwrap();
 
     let manifest = SessionManifest::decode_record(&sender.recovery.manifest_record).unwrap();
     let payload = bincode::encode_to_vec(&manifest, bincode::config::standard()).unwrap();
     let expected = bincode::encode_to_vec(
-        (&identity, plan.receiver_requirements(), schema()),
+        (
+            &identity,
+            plan.receiver_requirements(),
+            schema(),
+            manifest.context,
+        ),
         bincode::config::standard(),
     )
     .unwrap();
@@ -77,6 +92,63 @@ fn config_resolves_to_sender_config_and_manifest() {
     assert_eq!(sender.continuous.fec.symbol_size(), 1128);
     assert_eq!(sender.continuous.fec.window_symbols(), 64);
     assert_eq!(sender.recovery.recovery_interval, 100);
+}
+
+#[test]
+fn construction_identity_is_bound_by_the_manifest_digest() {
+    let plan = LogStreamPlan::resolve(&destination()).unwrap();
+    let identity = StreamIdentity {
+        session_id: [8; 16],
+        sender_id: 41,
+    };
+    let context = cu29_unifiedlog::SectionContext {
+        run_id: 7,
+        instance_id: 41,
+        mission_index: 2,
+    };
+    let record = plan
+        .sender_config(identity, schema(), context)
+        .unwrap()
+        .recovery
+        .manifest_record;
+    let manifest = SessionManifest::decode_record(&record).unwrap();
+    assert_eq!(manifest.context, context);
+    for changed in [
+        cu29_unifiedlog::SectionContext {
+            run_id: 8,
+            ..context
+        },
+        cu29_unifiedlog::SectionContext {
+            mission_index: 3,
+            ..context
+        },
+    ] {
+        let changed =
+            SessionManifest::new(identity, plan.receiver_requirements(), schema(), changed)
+                .encode_record()
+                .unwrap();
+        assert_ne!(
+            cu29_logstream::decode_record(&record).unwrap().digest,
+            cu29_logstream::decode_record(&changed).unwrap().digest
+        );
+    }
+    let wrong_instance = cu29_unifiedlog::SectionContext {
+        instance_id: 42,
+        ..context
+    };
+    assert!(
+        plan.sender_config(identity, schema(), wrong_instance)
+            .is_err()
+    );
+    let malformed = SessionManifest::new(
+        identity,
+        plan.receiver_requirements(),
+        schema(),
+        wrong_instance,
+    )
+    .encode_record()
+    .unwrap();
+    assert!(SessionManifest::decode_record(&malformed).is_err());
 }
 
 #[test]
@@ -121,7 +193,17 @@ fn manifest_contains_only_receiver_requirements() {
         session_id: [7; 16],
         sender_id: 17,
     };
-    let original = plan.sender_config(identity, schema()).unwrap();
+    let original = plan
+        .sender_config(
+            identity,
+            schema(),
+            cu29_unifiedlog::SectionContext {
+                run_id: 1,
+                instance_id: identity.sender_id,
+                mission_index: 0,
+            },
+        )
+        .unwrap();
     let mut local_policy = plan.clone();
     local_policy.destination_id = "another-destination-with-a-long-name".into();
     local_policy.mtu_bytes += 100;
@@ -134,7 +216,17 @@ fn manifest_contains_only_receiver_requirements() {
     local_policy.objects.max_object_bytes *= 2;
     local_policy.objects.repair_symbols_per_block *= 2;
     local_policy.recovery_interval *= 2;
-    let changed = local_policy.sender_config(identity, schema()).unwrap();
+    let changed = local_policy
+        .sender_config(
+            identity,
+            schema(),
+            cu29_unifiedlog::SectionContext {
+                run_id: 1,
+                instance_id: identity.sender_id,
+                mission_index: 0,
+            },
+        )
+        .unwrap();
     assert_eq!(
         original.recovery.manifest_record,
         changed.recovery.manifest_record
@@ -150,7 +242,19 @@ fn manifest_contains_only_receiver_requirements() {
     );
     // Sender-only policies still require validation before a sender is constructed.
     local_policy.bitrate_bps = 0;
-    assert!(local_policy.sender_config(identity, schema()).is_err());
+    assert!(
+        local_policy
+            .sender_config(
+                identity,
+                schema(),
+                cu29_unifiedlog::SectionContext {
+                    run_id: 1,
+                    instance_id: identity.sender_id,
+                    mission_index: 0
+                }
+            )
+            .is_err()
+    );
 }
 
 #[test]
@@ -200,6 +304,11 @@ fn malformed_requirements_are_rejected_after_record_verification() {
             },
             requirements,
             schema(),
+            cu29_unifiedlog::SectionContext {
+                run_id: 1,
+                instance_id: 0,
+                mission_index: 0,
+            },
         )
         .encode_record()
         .unwrap();
@@ -234,6 +343,11 @@ fn manifest_rejects_truncated_payloads_unknown_fields_and_trailing_bytes() {
             .unwrap()
             .receiver_requirements(),
         schema(),
+        cu29_unifiedlog::SectionContext {
+            run_id: 1,
+            instance_id: 0,
+            mission_index: 0,
+        },
     );
     let payload = bincode::encode_to_vec(&manifest, bincode::config::standard()).unwrap();
     let frame = |payload: &[u8]| {
@@ -263,7 +377,16 @@ fn receiver_requirements_remain_bound_by_the_manifest_digest() {
     let requirements = LogStreamPlan::resolve(&destination())
         .unwrap()
         .receiver_requirements();
-    let manifest = SessionManifest::new(identity, requirements, schema());
+    let manifest = SessionManifest::new(
+        identity,
+        requirements,
+        schema(),
+        cu29_unifiedlog::SectionContext {
+            run_id: 1,
+            instance_id: identity.sender_id,
+            mission_index: 0,
+        },
+    );
     let original = manifest.encode_record().unwrap();
     for requirements in [
         cu29_logstream::ReceiverRequirements {
@@ -283,9 +406,18 @@ fn receiver_requirements_remain_bound_by_the_manifest_digest() {
             ..requirements
         },
     ] {
-        let changed = SessionManifest::new(identity, requirements, schema())
-            .encode_record()
-            .unwrap();
+        let changed = SessionManifest::new(
+            identity,
+            requirements,
+            schema(),
+            cu29_unifiedlog::SectionContext {
+                run_id: 1,
+                instance_id: identity.sender_id,
+                mission_index: 0,
+            },
+        )
+        .encode_record()
+        .unwrap();
         SessionManifest::decode_record(&changed).unwrap();
         assert_ne!(
             cu29_logstream::decode_record(&original).unwrap().digest,
@@ -310,7 +442,17 @@ fn feedback_manifest_keeps_receiver_contract_and_omits_sender_adaptation() {
         session_id: [7; 16],
         sender_id: 17,
     };
-    let original = plan.sender_config(identity, schema()).unwrap();
+    let original = plan
+        .sender_config(
+            identity,
+            schema(),
+            cu29_unifiedlog::SectionContext {
+                run_id: 1,
+                instance_id: identity.sender_id,
+                mission_index: 0,
+            },
+        )
+        .unwrap();
     let manifest = SessionManifest::decode_record(&original.recovery.manifest_record).unwrap();
     let feedback = manifest.requirements.feedback.unwrap();
     assert_eq!(feedback.report_interval_ms, 500);
@@ -318,7 +460,17 @@ fn feedback_manifest_keeps_receiver_contract_and_omits_sender_adaptation() {
     plan.feedback.as_mut().unwrap().timeout_ms = 3000;
     plan.feedback.as_mut().unwrap().adaptation = None;
     plan.continuous.repair_every_source_symbols = 2;
-    let changed = plan.sender_config(identity, schema()).unwrap();
+    let changed = plan
+        .sender_config(
+            identity,
+            schema(),
+            cu29_unifiedlog::SectionContext {
+                run_id: 1,
+                instance_id: identity.sender_id,
+                mission_index: 0,
+            },
+        )
+        .unwrap();
     assert_eq!(
         original.recovery.manifest_record,
         changed.recovery.manifest_record
@@ -327,19 +479,35 @@ fn feedback_manifest_keeps_receiver_contract_and_omits_sender_adaptation() {
     plan.feedback.as_mut().unwrap().report_interval_ms = 600;
     assert_ne!(
         original.recovery.manifest_record,
-        plan.sender_config(identity, schema())
-            .unwrap()
-            .recovery
-            .manifest_record
+        plan.sender_config(
+            identity,
+            schema(),
+            cu29_unifiedlog::SectionContext {
+                run_id: 1,
+                instance_id: identity.sender_id,
+                mission_index: 0
+            }
+        )
+        .unwrap()
+        .recovery
+        .manifest_record
     );
     plan.feedback.as_mut().unwrap().report_interval_ms = 500;
     plan.destination_id = "other".into();
     assert_ne!(
         original.recovery.manifest_record,
-        plan.sender_config(identity, schema())
-            .unwrap()
-            .recovery
-            .manifest_record
+        plan.sender_config(
+            identity,
+            schema(),
+            cu29_unifiedlog::SectionContext {
+                run_id: 1,
+                instance_id: identity.sender_id,
+                mission_index: 0
+            }
+        )
+        .unwrap()
+        .recovery
+        .manifest_record
     );
     let mut invalid = manifest;
     invalid

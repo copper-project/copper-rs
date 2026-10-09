@@ -55,6 +55,11 @@ fn manifest_bootstraps_continuous_decoder_without_out_of_band_fec_config() {
                 outputs: vec![],
                 reconstruction: vec![],
             },
+            cu29_unifiedlog::SectionContext {
+                run_id: 1,
+                instance_id: identity.sender_id,
+                mission_index: 0,
+            },
         )
         .unwrap();
 
@@ -136,6 +141,11 @@ fn setup() -> (
             ApplicationSchema {
                 outputs: vec![],
                 reconstruction: vec![],
+            },
+            cu29_unifiedlog::SectionContext {
+                run_id: 1,
+                instance_id: identity.sender_id,
+                mission_index: 0,
             },
         )
         .unwrap();
@@ -945,6 +955,11 @@ fn structured_handoff_allocates_nothing_preserves_local_logs_and_stops_without_l
             ApplicationSchema {
                 outputs: vec![],
                 reconstruction: vec![],
+            },
+            cu29_unifiedlog::SectionContext {
+                run_id: 1,
+                instance_id: (setup().0.continuous.identity).sender_id,
+                mission_index: 0,
             },
         )
         .unwrap();

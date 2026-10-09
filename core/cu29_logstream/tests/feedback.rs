@@ -287,6 +287,11 @@ fn reporter_uses_local_cadence_and_advertised_capability() {
             outputs: vec![],
             reconstruction: vec![],
         },
+        cu29_unifiedlog::SectionContext {
+            run_id: 1,
+            instance_id: 7,
+            mission_index: 0,
+        },
     );
     let decoded = SessionManifest::decode_record(&manifest.encode_record().unwrap()).unwrap();
     assert_eq!(decoded, manifest);

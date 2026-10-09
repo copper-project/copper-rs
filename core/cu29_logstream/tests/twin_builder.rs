@@ -56,6 +56,7 @@ impl CaptureDataSet for Cameras {
 struct App;
 impl LiveReplay for App {
     type DataSet = Cameras;
+    const MISSION_INDEX: u32 = 0;
     fn seal_archive_metadata(_: &mut cu29_unifiedlog::UnifiedLoggerWrite) -> CuResult<()> {
         Ok(())
     }
@@ -114,6 +115,11 @@ fn packets(max_record_bytes: u64, count: u64) -> VecDeque<Vec<u8>> {
                 sender_id: 7,
             },
             Cameras::stream_schema(),
+            cu29_unifiedlog::SectionContext {
+                run_id: 1,
+                instance_id: 7,
+                mission_index: App::MISSION_INDEX,
+            },
         )
         .unwrap();
     let mut packets = Vec::new();
