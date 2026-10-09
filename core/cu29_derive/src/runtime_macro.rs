@@ -3285,6 +3285,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             live_twin::runtime_support(
                 application_name,
                 &mission_mod,
+                mission_index,
                 &culist_plan,
                 &culist_exec_entities,
             )
@@ -3843,6 +3844,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             sender_id: instance_id,
                         },
                         logstream_schema.clone(),
+                        log_context,
                     )
                     .map_err(|error| CuError::from(error.to_string()))?;
                 let #transport_ident: #transport_type = resources
@@ -3906,13 +3908,15 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         sender_config.continuous.identity.sender_id = instance_id;
                         sender_config.recovery.finite.identity.sender_id = instance_id;
                         let schema = <#mission_mod::CuStampedDataSet as ::cu29::logstream::capture::CaptureDataSet>::stream_schema();
-                        if !schema.reconstruction.is_empty() {
-                            let manifest = ::cu29::logstream::SessionManifest::decode_record(&sender_config.recovery.manifest_record)
-                                .map_err(|e| CuError::from(e.to_string()))?;
-                            if manifest.application_schema != schema {
-                                return Err(CuError::from("injected sender must use the generated reconstruction schema"));
-                            }
+                        let mut manifest = ::cu29::logstream::SessionManifest::decode_record(&sender_config.recovery.manifest_record)
+                            .map_err(|e| CuError::from(e.to_string()))?;
+                        if manifest.application_schema != schema {
+                            return Err(CuError::from("injected sender must use the generated application schema"));
                         }
+                        manifest.identity = sender_config.continuous.identity;
+                        manifest.context = log_context;
+                        sender_config.recovery.manifest_record = manifest.encode_record()
+                            .map_err(|e| CuError::from(e.to_string()))?;
                         let bitrate = sender_config.pacing.bitrate_bps;
                         let baseline = sender_config.continuous.repair_every_source_symbols;
                         let (mut copperlist, keyframe, sender_monitor) = ::cu29::logstream::scheduled_sinks::<
