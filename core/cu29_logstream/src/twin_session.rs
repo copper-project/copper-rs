@@ -6,6 +6,7 @@ use crate::{
     CaptureArchive, CuStreamRx, SessionEvent, SessionRouter, SessionRouterLimits, StreamIdentity,
 };
 use cu29_traits::{CuError, CuResult};
+use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder};
 use std::marker::PhantomData;
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
@@ -271,11 +272,20 @@ impl<A: LiveReplay, R: CuStreamRx + 'static> CuTwinBuilder<A, R> {
                                                 feedback_clock.now(),
                                             );
                                         }
-                                        archive = Some(CaptureArchive::<A::DataSet>::new(
-                                            &path,
-                                            manifest,
-                                            self.slab_bytes,
-                                            self.section_bytes,
+                                        let logger = UnifiedLoggerBuilder::new()
+                                            .file_base_name(&path)
+                                            .preallocated_size(self.slab_bytes)
+                                            .write(true)
+                                            .create(true)
+                                            .build()
+                                            .map_err(|e| crate::Error::Codec(e.to_string()))?;
+                                        let UnifiedLogger::Write(mut logger) = logger else {
+                                            unreachable!()
+                                        };
+                                        A::seal_archive_metadata(&mut logger)
+                                            .map_err(|e| crate::Error::Codec(e.to_string()))?;
+                                        archive = Some(CaptureArchive::<A::DataSet>::new_with_logger(
+                                            manifest, self.section_bytes, logger,
                                         )?);
                                     }
                                     let writer =

@@ -103,6 +103,23 @@ impl<P: CopperListTuple> NativeArchive<P> {
         let UnifiedLogger::Write(logger) = logger else {
             unreachable!()
         };
+        Self::new_with_logger(received, section_bytes, expected_schema, decode, logger)
+    }
+
+    fn new_with_logger(
+        received: &ReceivedManifest,
+        section_bytes: usize,
+        expected_schema: ApplicationSchema,
+        decode: ArchiveDecoder<P>,
+        logger: UnifiedLoggerWrite,
+    ) -> Result<Self> {
+        let manifest = received.manifest();
+        manifest.requirements.validate()?;
+        if manifest.application_schema != expected_schema {
+            return Err(Error::InvalidConfig(
+                "archive requires the matching application schema",
+            ));
+        }
         let logger = Arc::new(Mutex::new(logger));
         let mut archive = Self {
             last_structured: None,
@@ -305,6 +322,22 @@ fn io_error(error: impl core::fmt::Display) -> Error {
 /// StreamContinuity retains the reconstruction contract and source gaps.
 pub struct CaptureArchive<P: crate::capture::CaptureDataSet>(NativeArchive<P>);
 impl<P: crate::capture::CaptureDataSet> CaptureArchive<P> {
+    /// Open capture streams after the application has sealed static metadata.
+    #[doc(hidden)]
+    pub fn new_with_logger(
+        received: &ReceivedManifest,
+        section_bytes: usize,
+        logger: UnifiedLoggerWrite,
+    ) -> Result<Self> {
+        Ok(Self(NativeArchive::new_with_logger(
+            received,
+            section_bytes,
+            P::stream_schema(),
+            crate::capture::decode_capture,
+            logger,
+        )?))
+    }
+
     pub fn new(
         path: &Path,
         received: &ReceivedManifest,
