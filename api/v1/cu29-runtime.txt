@@ -1178,7 +1178,7 @@ pub fn cu29_runtime::simulation::CuSimSrcTask<T>::register_debug_state_types(reg
 pub fn cu29_runtime::simulation::CuSimSrcTask<T>::start(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::simulation::CuSimSrcTask<T>::stop(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::simulation::CuSimSrcTask<T>::with_debug_state<R>(&self, f: impl core::ops::function::FnOnce(&dyn cu29_runtime::reflect::Reflect) -> R) -> R where Self: core::marker::Sized
-pub trait cu29_runtime::cutask::CuStatelessTask: cu29_runtime::cutask::Freezable + cu29_runtime::reflect::Reflect + core::marker::Send + core::marker::Sync
+pub trait cu29_runtime::cutask::CuStatelessTask: cu29_runtime::reflect::Reflect + core::marker::Send + core::marker::Sync
 pub type cu29_runtime::cutask::CuStatelessTask::Input<'m>: cu29_runtime::cutask::CuMsgPack
 pub type cu29_runtime::cutask::CuStatelessTask::Output<'m>: cu29_runtime::cutask::CuMsgPayload
 pub type cu29_runtime::cutask::CuStatelessTask::Resources<'r>

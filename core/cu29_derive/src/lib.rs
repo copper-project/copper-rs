@@ -5200,7 +5200,12 @@ fn generate_task_execution_tokens(
         setup: task_setup,
         instance: task_instance,
     } = task_tokens;
-    let freeze_task = keyframe_freeze_task_tokens(keyframe_logging_enabled, &task_instance);
+    let keyframe_state = if task_specs.stateless_flags[task_index] {
+        quote! { cu29::cutask::CuStatelessTaskState }
+    } else {
+        task_instance.clone()
+    };
+    let freeze_task = keyframe_freeze_task_tokens(keyframe_logging_enabled, &keyframe_state);
     let comment_str = format!(
         "DEBUG ->> {} ({:?}) Id:{} I:{:?} O:{:?}",
         step.node.get_id(),

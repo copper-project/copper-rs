@@ -448,6 +448,12 @@ pub trait Freezable {
     }
 }
 
+/// Empty keyframe state used by generated runtimes for stateless tasks.
+#[doc(hidden)]
+pub struct CuStatelessTaskState;
+
+impl Freezable for CuStatelessTaskState {}
+
 /// Bincode Adapter for Freezable tasks
 /// This allows the use of the bincode API directly to freeze and thaw tasks.
 pub struct BincodeAdapter<'a, T: Freezable + ?Sized>(pub &'a T);
@@ -618,12 +624,14 @@ pub trait CuTask: Freezable + Reflect {
 /// Stateless tasks have the same input/output shape as [`CuTask`], but
 /// `preprocess`, `process`, and `postprocess` receive `&self`. This makes the
 /// task safe for runtimes to invoke for different CopperLists concurrently.
-/// Construction, `start`, `stop`, and [`Freezable::thaw`] remain exclusive
-/// lifecycle operations.
+/// Construction, `start`, and `stop` remain exclusive lifecycle operations.
+///
+/// Stateless tasks do not require [`Freezable`]. The runtime records an empty
+/// keyframe component for them and leaves the task instance unchanged on restore.
 ///
 /// Implementations must be [`Send`] and [`Sync`]. Any shared state reachable
 /// through `self` must preserve deterministic behavior when callbacks overlap.
-pub trait CuStatelessTask: Freezable + Reflect + Send + Sync {
+pub trait CuStatelessTask: Reflect + Send + Sync {
     type Input<'m>: CuMsgPack;
     type Output<'m>: CuMsgPayload;
     /// Resources required by the task.

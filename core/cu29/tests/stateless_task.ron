@@ -1,10 +1,11 @@
 (
-    logging: (enable_task_logging: false, enable_keyframe_logging: false),
+    includes: [(path: "stateless_task_pipeline.ron", when: Feature("parallel-rt"))],
+    logging: (enable_task_logging: true, enable_keyframe_logging: true, keyframe_interval: 1),
     runtime: (thread_pools: [(id: "rt", threads: 1)]),
     tasks: [
-        (id: "src", type: "Source"),
+        (id: "src", type: "Source", run_in_sim: true),
         (id: "double", type: "Double", kind: stateless_task),
-        (id: "sink", type: "Sink"),
+        (id: "sink", type: "Sink", run_in_sim: true),
     ],
     cnx: [(src: "src", dst: "double", msg: "u32"), (src: "double", dst: "sink", msg: "u32")],
 )
