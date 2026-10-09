@@ -135,6 +135,136 @@ fn twin_catalog_describes_streamed_payloads_when_onboard_task_logging_is_disable
     assert!(values.iter().all(|list| list.msgs[0].payload.is_some()));
 }
 
+#[derive(Debug)]
+struct PacketRx(std::collections::VecDeque<Vec<u8>>);
+impl cu29_logstream::CuStreamRx for PacketRx {
+    fn try_recv(
+        &mut self,
+        out: &mut [u8],
+    ) -> Result<Option<usize>, cu29_logstream::CuStreamRxError> {
+        let Some(packet) = self.0.pop_front() else {
+            return Ok(None);
+        };
+        out[..packet.len()].copy_from_slice(&packet);
+        Ok(Some(packet.len()))
+    }
+}
+
+#[test]
+fn twin_rollover_bounds_disk_usage_and_retains_metadata_and_recent_entries() {
+    use cu29::prelude::*;
+    use cu29_logstream::capture::CaptureDataSet;
+    use cu29_logstream::{FiniteObjectEncoder, Lane, LogStreamPlan, RecordKind, StreamIdentity};
+
+    let _serial = SERIAL.lock().unwrap();
+    let logs = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("logs");
+    std::fs::create_dir_all(&logs).unwrap();
+    let directory = tempfile::tempdir_in(logs).unwrap();
+    let ground = directory.path().join("ground.copper");
+    let config = CuConfig::deserialize_ron(&Twin::original_config()).unwrap();
+    let plan = LogStreamPlan::resolve(&config.log_streaming.unwrap().destinations[0]).unwrap();
+    let sender = plan
+        .sender_config(
+            StreamIdentity {
+                session_id: [4; 16],
+                sender_id: 41,
+            },
+            DataSet::stream_schema(),
+        )
+        .unwrap();
+    let mut packets = Vec::new();
+    FiniteObjectEncoder::new(sender.recovery.finite)
+        .unwrap()
+        .push_record(&sender.recovery.manifest_record, &mut packets)
+        .unwrap();
+    let mut encoder = FiniteObjectEncoder::new(cu29_logstream::FiniteObjectSenderConfig {
+        lane: Lane::StructuredLog,
+        ..sender.recovery.finite
+    })
+    .unwrap();
+    for id in 0..200 {
+        let mut entry = CuLogEntry::new(0, CuLogLevel::Info);
+        entry.time = CuTime::from(id);
+        entry.add_param(0, Value::String("x".repeat(3500)));
+        let payload =
+            cu29::bincode::encode_to_vec(&entry, cu29::bincode::config::standard()).unwrap();
+        let record =
+            cu29_logstream::encode_record(RecordKind::StructuredLog, id, &payload).unwrap();
+        encoder.push_record(&record, &mut packets).unwrap();
+    }
+    let capacity = 512 * 1024;
+    let (mut twin, mut reader) = Twin::twin(PacketRx(packets.into()))
+        .with_log_path(&ground)
+        .with_log_rollover(capacity)
+        .archive_only()
+        .spawn()
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while reader.status().structured_logs < 200 {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "rollover stopped recording: {:?}",
+            reader.status()
+        );
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+    twin.stop().unwrap();
+    let files = std::fs::read_dir(directory.path())
+        .unwrap()
+        .map(|entry| entry.unwrap())
+        .filter(|entry| entry.path() != ground)
+        .map(|entry| entry.metadata().unwrap().len())
+        .sum::<u64>();
+    assert_eq!(
+        files, capacity as u64,
+        "archive grew beyond its storage bound"
+    );
+    let mut reader = UnifiedLoggerRead::new(&ground).unwrap();
+    assert!(reader.application_metadata().unwrap().is_some());
+    let mut ids = Vec::new();
+    while let Some(section) = reader
+        .read_next_section_type(UnifiedLogType::StructuredLogLine)
+        .unwrap()
+    {
+        let mut bytes = section.as_slice();
+        while !bytes.is_empty() {
+            let (entry, used): (CuLogEntry, _) =
+                cu29::bincode::decode_from_slice(bytes, cu29::bincode::config::standard()).unwrap();
+            ids.push(entry.time.as_nanos());
+            bytes = &bytes[used..];
+        }
+    }
+    assert!(ids.len() < 200);
+    assert!(ids[0] > 0, "oldest entries were not reclaimed");
+    assert_eq!(ids.last(), Some(&199));
+    #[cfg(feature = "self-describing-logs")]
+    assert_eq!(
+        cu29_export::catalog::read_value_decode_catalog(&ground)
+            .unwrap()
+            .missions
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn invalid_twin_rollover_capacity_is_rejected_before_creating_a_log() {
+    let logs = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("logs");
+    std::fs::create_dir_all(&logs).unwrap();
+    let directory = tempfile::tempdir_in(logs).unwrap();
+    for capacity in [0, 65536, 65537] {
+        assert!(
+            Twin::twin(PacketRx(Default::default()))
+                .with_log_path(directory.path().join("invalid.copper"))
+                .with_log_rollover(capacity)
+                .archive_only()
+                .spawn()
+                .is_err()
+        );
+    }
+    assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 0);
+}
+
 #[test]
 fn twin_archive_seals_local_metadata_and_optional_catalog() {
     use cu29::prelude::{UnifiedLogRead, UnifiedLogType, UnifiedLoggerRead};

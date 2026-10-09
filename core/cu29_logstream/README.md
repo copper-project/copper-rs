@@ -307,6 +307,11 @@ use the same definitions and features for sender and twin. Configuration capture
 is deferred: the archive's effective configuration string is empty.
 The shared catalog includes streamed payload recipes when onboard task logging is
 disabled, so streaming-only recordings also support standalone decoding.
+Use `.with_log_rollover(bytes)` on the twin builder to bound storage and overwrite
+the oldest data sections while retaining static metadata and the decode catalog.
+The capacity includes metadata, must exceed the configured section size and must be a multiple of 512
+bytes. It must also fit the application's static metadata and one archive section.
+For example, `.with_log_rollover(256 * 1024 * 1024)` keeps a 256 MiB archive.
 Replay retains up to the configured queue capacity in events and pending captures,
 plus one recovery point and one executing frame. Presentation retains up to the
 configured frame and structured-entry capacities; payload storage and thread/runtime
