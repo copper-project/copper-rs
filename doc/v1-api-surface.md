@@ -96,6 +96,11 @@ This file defines the Copper V1 public contract. Anything not listed as stable i
 
 ## Experimental
 
+- `cu29::logstream::CuTwinBuilder`: `with_slab_size`, `with_section_size`,
+  `with_receiver_limits`, `with_replay_capacity`, and `with_log_capacity` configure
+  receiver-side archive and buffering budgets. `SessionRouterLimits::default()`
+  supplies the single-sender 1200-byte-MTU, 64-symbol profile.
+
 - Background empty-input dispatch policy: `background_process_empty` and the defaulted
   `CuAsyncTask<T, O, const PROCESS_EMPTY: bool = false>` parameter.
   Empty inputs are now skipped by default while completed results are collected once.
