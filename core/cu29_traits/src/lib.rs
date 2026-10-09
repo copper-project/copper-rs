@@ -146,12 +146,11 @@ impl<'de> Deserialize<'de> for CuError {
 
 impl Display for CuError {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        let context_str = match &self.cause {
-            Some(c) => c.to_string(),
-            None => "None".to_string(),
-        };
-        write!(f, "{}\n   context:{}", self.message, context_str)?;
-        Ok(())
+        write!(f, "{}\n   context:", self.message)?;
+        match &self.cause {
+            Some(cause) => write!(f, "{cause}"),
+            None => f.write_str("None"),
+        }
     }
 }
 
