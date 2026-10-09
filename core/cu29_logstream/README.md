@@ -100,7 +100,7 @@ uses a 4 MiB bincode decode budget. Use the producing application's string index
 with `extract-text-log` to reconstruct readable text.
 
 A generated live twin exposes `twin.take_log_reader()` once. Its independent
-64-entry ring publishes `ReceivedStructuredLog` after archival succeeds, moving
+bounded ring publishes `ReceivedStructuredLog` after archival succeeds, moving
 the already decoded entry into the display channel. Read `update.frame.entry`
 and render with `rebuild_logline`; `CuTwinStatus::structured_logs` counts archived
 entries. Pausing or dropping either display reader never delays recording.
@@ -223,16 +223,60 @@ while let Some(update) = frames.try_read() {
 let status = twin.stop()?;
 ```
 
+Configure receiver storage and buffering by chaining builder methods. Sizes are
+bytes; capacities count records or entries:
+
+```rust,ignore
+use cu29::logstream::{FiniteObjectLimits, SessionRouterLimits};
+
+let limits = SessionRouterLimits {
+    max_record_bytes: 192 * 1024 * 1024,
+    finite_objects: FiniteObjectLimits::new(192 * 1024 * 1024, 1128, 2),
+    ..Default::default()
+};
+let (mut twin, mut frames) = Ground::twin(rx)
+    .with_log_path("logs/cameras.copper")
+    .with_slab_size(512 * 1024 * 1024)
+    .with_section_size(256 * 1024 * 1024)
+    .with_receiver_limits(limits)
+    .with_replay_capacity(2.try_into()?)
+    .with_frame_capacity(2.try_into()?)
+    .with_log_capacity(64.try_into()?)
+    .spawn()?;
+```
+
+Choose record bounds for the largest complete serialized CopperList, including all
+captured camera outputs and metadata. The sender's `max_record_bytes` must fit the
+receiver's bound. Finite-object limits cover manifests, keyframes and structured
+entries. Size sections for the larger record/object bound plus a 512-byte section
+header and 32 bytes of continuity envelope allowance. Slab and section sizes must
+be multiples of 512 bytes; sections must fit in a slab. The archive grows by adding
+slabs of the configured size.
+
+Defaults are 16 MiB slabs, 128 KiB sections, 4 KiB records, 64 KiB finite objects,
+32 queued replay captures, and 64 retained frames and structured entries. Increase
+record/object limits together with section size. `spawn()` validates local settings
+before creating directories or starting workers. Sender requirements are checked
+when its manifest arrives. FEC geometry supports the 1200-byte-MTU, 64-symbol
+profile. Receiver routing and object concurrency limits are in `SessionRouterLimits`;
+one twin accepts exactly one sender session.
+
+Buffer counts multiply the memory retained for large captures and recovery objects;
+choose them together with byte limits for the ground station's memory budget. The
+example budgets accommodate six raw 3840 × 2160 RGB8 frames plus serialization
+metadata per record. Configure the sender's streaming memory and link bandwidth
+for that workload as well.
+
 `rx` is any `CuStreamRx`, such as the receive half of a UDP resource. Copper owns
 session routing, native recording, the bounded replay worker, status publication,
 and shutdown. The caller owns the frame reader and presentation. Pausing or dropping
 that reader never blocks recording. Dropping the twin stops and joins its workers;
 `stop()` also reports receiver errors and final counters. `archive_only()` records
 without running a twin. Each handle accepts one sender session and a fresh log path.
-The default receiver supports the 1200-byte-MTU, 64-symbol streaming profile, with
-4 KiB records and 64 KiB recovery objects. It retains 32 replay events, 32 pending
-captures, one recovery point, one executing frame and 64 display frames; payload storage and
-thread/runtime allocations are additional. `with_frame_capacity` changes display retention.
+Replay retains up to the configured queue capacity in events and pending captures,
+plus one recovery point and one executing frame. Presentation retains up to the
+configured frame and structured-entry capacities; payload storage and thread/runtime
+allocations are additional.
 
 Production sends the native CopperList format with selected payloads omitted.
 CopperLists carry `id` followed by `msgs`, without runtime lifecycle state.
