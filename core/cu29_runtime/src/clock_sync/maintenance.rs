@@ -7,10 +7,10 @@ use super::ClockSyncRecord;
 use crate::resource::ResourceBundleDecl;
 use alloc::boxed::Box;
 use core::time::Duration;
-use cu29_clock::RobotClock;
 use cu29_clock::sync::{
     ClockDomain, ClockObservation, ClockSync, SyncConfig, SyncError, SyncState, SyncStatus,
 };
+use cu29_clock::{CuDuration, CuInstant, RobotClock};
 use cu29_traits::{CuError, CuResult};
 
 /// Experimental reference provider implemented by Linux adapters and BSPs.
@@ -79,7 +79,7 @@ pub struct ClockMaintenance {
     clock: RobotClock,
     sync: ClockSync,
     config: MaintenanceConfig,
-    next_sample: u64,
+    next_sample: CuInstant,
     started: bool,
     changed: bool,
     record_pending: bool,
@@ -101,7 +101,7 @@ impl ClockMaintenance {
             clock,
             sync,
             config,
-            next_sample: 0,
+            next_sample: CuInstant::from_nanos(0),
             started: false,
             changed: false,
             record_pending: false,
@@ -149,7 +149,7 @@ impl ClockMaintenance {
     }
 
     fn acquire(&mut self) -> CuResult<()> {
-        let start = self.clock.raw_now().0;
+        let start = self.clock.raw_now();
         let domain = self
             .reference
             .as_ref()
@@ -158,8 +158,8 @@ impl ClockMaintenance {
         self.sync.resync(domain).map_err(sync_error)?;
         self.next_sample = start;
         loop {
-            let raw = self.clock.raw_now().0;
-            if raw.saturating_sub(start) >= self.config.acquisition_timeout.as_nanos() as u64 {
+            let raw = self.clock.raw_now();
+            if raw - start >= CuDuration::from(self.config.acquisition_timeout) {
                 return Err(CuError::from("Clock synchronization acquisition timed out"));
             }
             if raw >= self.next_sample {
@@ -175,8 +175,7 @@ impl ClockMaintenance {
                     self.sync.resync(sample.domain).map_err(sync_error)?;
                 }
                 self.accept(capture)?;
-                self.next_sample =
-                    raw.saturating_add(self.config.sample_interval.as_nanos() as u64);
+                self.next_sample = raw + CuDuration::from(self.config.sample_interval);
             }
             match self.sync.update() {
                 Ok(status) if status.state == SyncState::Locked => break,
@@ -286,7 +285,7 @@ impl ClockMaintenance {
         }
         #[cfg(not(feature = "std"))]
         {
-            let raw = self.clock.raw_now().0;
+            let raw = self.clock.raw_now();
             if raw >= self.next_sample {
                 let capture = self
                     .reference
@@ -294,8 +293,7 @@ impl ClockMaintenance {
                     .ok_or(CuError::from("Clock reference missing"))?
                     .poll(&self.clock);
                 self.accept(capture)?;
-                self.next_sample =
-                    raw.saturating_add(self.config.sample_interval.as_nanos() as u64);
+                self.next_sample = raw + CuDuration::from(self.config.sample_interval);
             }
         }
         let status = if self.changed {
