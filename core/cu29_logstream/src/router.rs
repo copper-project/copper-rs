@@ -21,6 +21,22 @@ pub struct SessionRouterLimits {
     pub finite_objects: FiniteObjectLimits,
 }
 
+impl Default for SessionRouterLimits {
+    /// One sender using the 1200-byte-MTU, 64-symbol streaming profile.
+    fn default() -> Self {
+        Self {
+            max_sessions: 1,
+            max_startup_packets: 64,
+            max_recovery_records: 8,
+            max_pending_events: 64,
+            max_record_bytes: 4096,
+            max_buffered_records: 64,
+            equation_capacity: 64,
+            finite_objects: FiniteObjectLimits::new(65536, 1128, 4),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SessionRouterStats {
     pub datagrams_seen: usize,
@@ -676,9 +692,14 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
         limits: SessionRouterLimits,
         manifest: &SessionManifest,
     ) -> Result<ContinuousDecoder<MAX_SYMBOL_SIZE, MAX_WINDOW_SYMBOLS, MAX_EQUATIONS>> {
+        if manifest.requirements.max_record_bytes > limits.max_record_bytes as u64 {
+            return Err(Error::ObjectTooLarge {
+                actual: manifest.requirements.max_record_bytes,
+                maximum: limits.max_record_bytes as u64,
+            });
+        }
         if usize::from(manifest.requirements.symbol_size) > MAX_SYMBOL_SIZE
             || usize::from(manifest.requirements.window_symbols) > MAX_WINDOW_SYMBOLS
-            || manifest.requirements.max_record_bytes > limits.max_record_bytes as u64
             || usize::from(manifest.requirements.window_symbols) > limits.max_buffered_records
         {
             return Err(Error::InvalidConfig(

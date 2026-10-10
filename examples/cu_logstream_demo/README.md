@@ -136,7 +136,14 @@ failure modes; they are demo machinery.
 2. **Build the ground runtime from the same graph and task types.** Follow
    `mod twin` in [src/lib.rs](src/lib.rs), using
    `#[copper_runtime(config = "copperconfig.ron", sim_mode = true)]`.
-   Open a UDP receive endpoint and pass it directly to the generated builder:
+   Open a UDP receive endpoint and pass it directly to the generated builder.
+   [src/receiver.rs](src/receiver.rs) uses named constants for every storage and
+   buffer setting: 4 KiB CopperList records and 64 KiB finite objects match the
+   sender bounds in RON; 128 KiB sections fit those bounds plus the 544 bytes of
+   archive overhead; 16 MiB slabs hold many sections. Replay buffers absorb brief
+   reconstruction slowdowns, while separate CopperList and structured log
+   buffers let UI readers pause. Increase byte bounds and section size together
+   as payloads grow, and budget memory for the number of buffered items:
 
    ```rust,ignore
    use cu29_logstream_udp::CuUdpLogStreamConfig;
@@ -155,8 +162,10 @@ failure modes; they are demo machinery.
    `frames.try_read()`, and `frames.status()` as in
    [src/telemetry.rs](src/telemetry.rs). Read typed outputs through generated
    accessors such as `get_encoders_output()` / `get_kinematics_output()`, and account for `update.missed`.
-   The display retains 64 frames by default; `.with_frame_capacity(...)` changes
-   that bound. For recording alone, use `.archive_only()` before `.spawn()`.
+   Each frame is one reconstructed CopperList. The reader buffers 64 unread
+   CopperLists by default; `.with_frame_capacity(...)` changes that count.
+   A full buffer overwrites the oldest unread item without delaying recording.
+   Structured log entries use a separate buffer set by `.with_log_capacity(...)`. For recording alone, use `.archive_only()` before `.spawn()`.
 4. **Optionally omit reconstructible outputs.** Keep outputs captured initially.
    To save payload bandwidth, mark suitable tasks with
    `streaming: (replay: reconstruct)`, as

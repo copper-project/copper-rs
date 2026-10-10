@@ -37,6 +37,7 @@ raptorq = { workspace = true }
 cu29-build = { workspace = true }
 
 [dev-dependencies]
+tempfile = { workspace = true }
 serde = { workspace = true }
 
 [features]

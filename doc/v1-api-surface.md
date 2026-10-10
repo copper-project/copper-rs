@@ -101,6 +101,11 @@ option select recorded runs identified by `Instantiated` lifecycle records.
 
 ## Experimental
 
+- `cu29::logstream::CuTwinBuilder`: `with_slab_size`, `with_section_size`,
+  `with_receiver_limits`, `with_replay_capacity`, and `with_log_capacity` configure
+  receiver-side archive and buffering budgets. `SessionRouterLimits::default()`
+  supplies the single-sender 1200-byte-MTU, 64-symbol profile.
+
 - `self-describing-logs` feature for automatic startup catalog recording;
   `decode-catalog` for host-side `cu29::value_decode`, and
   `cu29_value::decode`: `ValueDecodeDescription` builds portable wire/schema

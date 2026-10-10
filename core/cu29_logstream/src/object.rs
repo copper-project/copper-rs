@@ -398,7 +398,7 @@ fn validate_sender_config(config: FiniteObjectSenderConfig) -> Result<()> {
     Ok(())
 }
 
-fn validate_limits(limits: FiniteObjectLimits) -> Result<()> {
+pub(crate) fn validate_limits(limits: FiniteObjectLimits) -> Result<()> {
     if limits.max_object_bytes == 0 || limits.max_object_bytes > RFC6330_MAX_TRANSFER_LENGTH {
         return Err(Error::InvalidConfig("invalid RaptorQ maximum object size"));
     }

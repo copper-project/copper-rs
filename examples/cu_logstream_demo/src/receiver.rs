@@ -3,14 +3,36 @@ use crate::{Impairment, Result, prepare_log};
 use cu_logstream_demo::telemetry::Status;
 use cu_logstream_demo::twin::Twin;
 use cu29_logstream::{
-    CuStreamRx, CuStreamRxError, CuTwin, CuTwinReader, FecSymbolKind, RecordKind, WirePacketRef,
+    CuStreamRx, CuStreamRxError, CuTwin, CuTwinReader, FecSymbolKind, FiniteObjectLimits,
+    RecordKind, SessionRouterLimits, WirePacketRef,
 };
 use cu29_logstream_udp::CuUdpLogStreamConfig;
 use std::net::SocketAddr;
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
+
+// Match the sender's complete serialized record/object bounds in copperconfig.ron.
+// CopperLists carry captured messages; finite objects carry recovery keyframes,
+// manifests, and structured log entries.
+const MAX_RECORD_BYTES: usize = 4 * 1024;
+const MAX_OBJECT_BYTES: u64 = 64 * 1024;
+// A section must fit the larger bound plus its 512-byte header and a 32-byte
+// continuity envelope. 128 KiB leaves room for the demo's 64 KiB object bound.
+const SECTION_BYTES: usize = 128 * 1024;
+// A slab holds many sections: 16 MiB is 128 times the section size. New slabs
+// are added as recording grows; this does not cap the total archive size.
+const SLAB_BYTES: usize = 16 * 1024 * 1024;
+// Replay events and pending CopperLists absorb brief reconstruction slowdowns.
+// Each buffer is bounded by this count; overflow requires replay recovery.
+const REPLAY_CAPACITY: NonZeroUsize = NonZeroUsize::new(32).unwrap();
+// These independent UI buffers overwrite the oldest unread items when full.
+// Frames are reconstructed CopperLists; logs are the robot's structured entries.
+// Retaining more items uses more memory; slow readers do not delay recording.
+const FRAME_CAPACITY: NonZeroUsize = NonZeroUsize::new(64).unwrap();
+const LOG_CAPACITY: NonZeroUsize = NonZeroUsize::new(64).unwrap();
 
 #[derive(clap::Args)]
 pub struct ReceiverOptions {
@@ -142,7 +164,22 @@ pub fn start(
         first_packet: None,
         in_outage: false,
     };
-    let builder = Twin::twin(rx).with_log_path(&options.log_base);
+    let limits = SessionRouterLimits {
+        max_record_bytes: MAX_RECORD_BYTES,
+        finite_objects: FiniteObjectLimits {
+            max_object_bytes: MAX_OBJECT_BYTES,
+            ..SessionRouterLimits::default().finite_objects
+        },
+        ..Default::default()
+    };
+    let builder = Twin::twin(rx)
+        .with_log_path(&options.log_base)
+        .with_receiver_limits(limits)
+        .with_section_size(SECTION_BYTES)
+        .with_slab_size(SLAB_BYTES)
+        .with_replay_capacity(REPLAY_CAPACITY)
+        .with_frame_capacity(FRAME_CAPACITY)
+        .with_log_capacity(LOG_CAPACITY);
     let builder = if let Some(tx) = feedback_tx {
         builder.with_feedback(tx)
     } else {
