@@ -61,8 +61,31 @@ tx_channels! {
 }
 ```
 
-With `cu-zenoh-bridge`, `[publish_empty]` means the bridge will still publish a `CuMsg` carrying
-`payload = None`, `tov`, Copper metadata, and the usual Zenoh attachment provenance.
+With `cu-zenoh-bridge`, `[publish_empty]` means the bridge will still publish a sample with an
+empty body and an attachment carrying `tov`, provenance, and a flag marking the payload as absent.
+
+## Wire layout
+
+Each sample carries:
+- **Body**: the payload alone, encoded with the channel's `wire_format`. With `json`, a `Ping { seq, note }`
+  payload is sent as `{"seq":7,"note":"hi"}`.
+- **Attachment**: Copper metadata, bincode-encoded: a layout version byte, the sender's
+  `{subsystem_code, instance_id, cl_id}` provenance, the message `tov`, and whether a payload is present.
+
+On receive, a sample with an attachment gets the sender's `tov` and provenance restored. A sample
+without an attachment is treated as coming from a non-Copper publisher: its body is decoded as the
+payload, `tov` is set to the receive time, and no provenance is recorded. `process_time` is always
+stamped locally by the runtime around `receive`.
+
+All Copper peers on a Zenoh network must run the same Copper version. An attachment with a
+different layout version is rejected with an error naming both versions.
+
+### Talking to non-Copper processes
+
+A non-Copper process publishes the bare payload on an Rx route and subscribes to the bare payload
+on a Tx route, ignoring the attachment. With a `json` channel, that is plain JSON matching the
+payload's serde layout. See `examples/cu_zenoh_bridge_demo` for a Python client talking to a Copper
+app.
 
 Example:
 ```ron
