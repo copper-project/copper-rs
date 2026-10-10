@@ -34,7 +34,7 @@ impl ResourceBundle for PtpBundle {
 }
 
 pub struct MockPtp {
-    anchor: Option<u64>,
+    anchor: Option<CuInstant>,
 }
 impl ClockReference for MockPtp {
     fn create_clock(&self) -> CuResult<RobotClock> {
@@ -54,7 +54,7 @@ impl ClockReference for MockPtp {
         let raw = clock.raw_now();
         Ok(Some(ClockObservation {
             raw_local: raw,
-            parent_ns: EPOCH + raw.0 - *self.anchor.get_or_insert(raw.0),
+            parent_ns: EPOCH + (raw - *self.anchor.get_or_insert(raw)).as_nanos(),
             uncertainty: CuDuration(100),
             domain: DOMAIN,
         }))
