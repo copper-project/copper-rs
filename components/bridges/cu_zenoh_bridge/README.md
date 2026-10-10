@@ -99,3 +99,15 @@ config: {
 ```
 
 The bridge uses a single Zenoh session and declares one publisher/subscriber per configured channel.
+
+## Shared reference timestamps
+
+Enable `clock-sync` on the bridge and configure both Copper applications to
+follow the same reference domain/session. The attachment adds a versioned domain,
+send time and uncertainty after the existing provenance fields. Receiver checks
+combine both clocks' uncertainty and sender drift during transport against the
+receiver's configured budget. Valid `Tov::Time` and both `Tov::Range` endpoints
+retain the shared epoch. Foreign domains, unusable clock quality, malformed ranges
+and over-budget timing clear ToV while preserving payload and message origin.
+Unconfigured peers retain their existing attachment format. Upgrade both peers
+and logreaders when using synchronized recordings.
