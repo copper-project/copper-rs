@@ -29,6 +29,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let signal_handler = cfg!(feature = "signal-handler");
     let parallel_rt_enabled = cfg!(feature = "parallel-rt");
     let logstream_enabled = cfg!(feature = "logstream");
+    let clock_sync_enabled = cfg!(feature = "clock-sync");
     let rt_guard = rtsan_guard_tokens();
 
     if ignore_resources && !sim_mode {
@@ -66,12 +67,18 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             "log_streaming resource bindings cannot be used with ignore_resources".to_string(),
         );
     }
+    if copper_config.runtime.as_ref().and_then(|r| r.clock_sync_config()).is_some() && !clock_sync_enabled {
+        return return_error("runtime.clock requires the cu29 'clock-sync' feature".to_string());
+    }
     let copperlist_count = copper_config
         .logging
         .as_ref()
         .and_then(|logging| logging.copperlist_count)
         .unwrap_or(DEFAULT_COPPERLIST_COUNT);
     let pipeline_selected = copper_config.planner_kind() == PlannerKind::Pipeline;
+    if pipeline_selected && copper_config.runtime.as_ref().and_then(|r| r.clock_sync_config()).is_some() {
+        return return_error("Clock synchronization v0 requires the Serial planner".to_string());
+    }
     if pipeline_selected && !(std && parallel_rt_enabled) {
         return return_error(
             "runtime planner kind Pipeline requires the cu29 'parallel-rt' feature".to_string(),
@@ -219,6 +226,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             fields_named.named.push(parse_quote! { shutdown_completed: bool });
             fields_named.named.push(parse_quote! { stop_reason: ::cu29::curuntime::RuntimeStopReason });
             fields_named.named.push(logger_runtime_field);
+            if clock_sync_enabled {
+                fields_named.named.push(parse_quote! { clock_maintenance: Option<::cu29::clock_sync::ClockMaintenance> });
+                if sim_mode { fields_named.named.push(parse_quote! { replay_clock_sync: Option<::cu29::clock::sync::ClockSync> }); }
+            }
         }
         Unnamed(fields_unnamed) => {
             fields_unnamed.unnamed.push(runtime_field);
@@ -227,6 +238,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             fields_unnamed.unnamed.push(parse_quote! { shutdown_completed: bool });
             fields_unnamed.unnamed.push(parse_quote! { stop_reason: ::cu29::curuntime::RuntimeStopReason });
             fields_unnamed.unnamed.push(logger_runtime_field);
+            if clock_sync_enabled {
+                fields_unnamed.unnamed.push(parse_quote! { clock_maintenance: Option<::cu29::clock_sync::ClockMaintenance> });
+                if sim_mode { fields_unnamed.unnamed.push(parse_quote! { replay_clock_sync: Option<::cu29::clock::sync::ClockSync> }); }
+            }
         }
         Fields::Unit => {
             panic!(
@@ -457,6 +472,41 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 logstream_resource_specs,
             )
         };
+
+        #[cfg(feature = "clock-sync")]
+        let clock_reference_factory = match clock_sync::factory(&copper_config, mission, sim_mode) {
+            Ok(factory) => Some(factory), Err(error) => return return_error(error.to_string()),
+        };
+        #[cfg(not(feature = "clock-sync"))]
+        let clock_reference_factory: Option<proc_macro2::TokenStream> = None;
+        let clock_maintenance_field = clock_sync_enabled.then(|| quote! { pub clock_maintenance: Option<::cu29::clock_sync::ClockMaintenance>, });
+        let clock_maintenance_none = clock_sync_enabled.then(|| quote! { clock_maintenance: None, });
+        let clock_maintenance_destructure = clock_sync_enabled.then(|| quote! { mut clock_maintenance, });
+        let clock_maintenance_init = clock_sync_enabled.then(|| quote! { clock_maintenance, });
+        let replay_clock_init = (clock_sync_enabled && sim_mode).then(|| quote! { replay_clock_sync: None, });
+        let clock_maintenance_compat = (clock_sync_enabled && !sim_mode).then(|| quote! {
+            if clock_maintenance.is_none() {
+                if let Some((reference, settings)) = #mission_mod::clock_reference_instanciator(&config, &mut resources)? {
+                    clock_maintenance = Some(::cu29::clock_sync::ClockMaintenance::new(reference, clock.clone(), settings)?);
+                }
+            }
+        });
+        let clock_start = (clock_sync_enabled && !sim_mode).then(|| quote! {
+            if let Some(maintenance) = &mut self.clock_maintenance { maintenance.start()?; }
+            let next_id = self.copper_runtime.copperlists_manager.next_cl_id();
+            let record = self.clock_maintenance.as_mut().and_then(|maintenance| maintenance.take_record(next_id));
+            if let Some(record) = record { self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::ClockSync(record))?; }
+        });
+        let clock_stop = (clock_sync_enabled && !sim_mode).then(|| quote! {
+            if let Some(maintenance) = &mut self.clock_maintenance { maintenance.stop()?; }
+        });
+        let clock_maintain = (clock_sync_enabled && !sim_mode).then(|| quote! {
+            let clock_result = self.clock_maintenance.as_mut().map(|maintenance| maintenance.maintain()).transpose();
+            let next_id = self.copper_runtime.copperlists_manager.next_cl_id();
+            let record = self.clock_maintenance.as_mut().and_then(|maintenance| maintenance.take_record(next_id));
+            if let Some(record) = record { self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::ClockSync(record))?; }
+            clock_result?;
+        });
 
         let task_ids = task_specs.ids.clone();
         let autogenerated_output_warnings: Vec<proc_macro2::TokenStream> = task_specs
@@ -3499,6 +3549,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #keyframe_finish_pending
                 Ok(())
                 })();
+                let clock_result: CuResult<()> = (|| { #clock_stop Ok(()) })();
+                let result = result.and(clock_result);
                 match result {
                     Ok(()) => {
                         self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::MissionStopped { reason: self.stop_reason })?;
@@ -3543,7 +3595,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let run_methods: proc_macro2::TokenStream = quote! {
 
             #run_one_iteration {
-                let result: CuResult<()> = (|| { #iteration_body })();
+                let result: CuResult<()> = (|| { #clock_maintain #iteration_body })();
                 if let Err(error) = &result {
                     let _ = self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::LifecycleFailed {
                         operation: cu29::curuntime::RuntimeLifecycleOperation::Iteration, error: error.to_string(),
@@ -3567,6 +3619,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             #start_all_tasks {
                 self.lifecycle_running = true;
                 let result: CuResult<()> = (|| {
+                #clock_start
                 let lifecycle_clid = self.copper_runtime.copperlists_manager.last_cl_id();
                 let mut ctx = cu29::context::CuContext::from_runtime_metadata(
                     self.copper_runtime.clock(),
@@ -3653,6 +3706,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 pub log_context: Option<cu29::prelude::SectionContext>,
                 pub resources: ResourceManager,
                 #app_resources_thread_pools_field
+                #clock_maintenance_field
             }
         };
 
@@ -3719,6 +3773,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     log_context: None,
                     resources,
                     #prepare_resources_thread_pools_init
+                    #clock_maintenance_none
                 })
             }
         };
@@ -4026,9 +4081,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     config_source,
                     log_context,
                     resources,
+                    #clock_maintenance_destructure
                     #build_with_resources_thread_pools_destructure
                 } = app_resources;
 
+                #[allow(unused_mut)]
+                let mut resources = resources;
+                #clock_maintenance_compat
                 let log_context = match log_context {
                     Some(context) => context,
                     None => Self::prepare_log_metadata::<S, L>(&unified_logger, &config, instance_id)?,
@@ -4106,6 +4165,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 })?;
                 let application = Ok(#application_name {
                     copper_runtime,
+                    #clock_maintenance_init
+                    #replay_clock_init
                     runtime_lifecycle_sink: Some(Box::new(local_lifecycle_sink)),
                     lifecycle_running: false,
                     shutdown_completed: false,
@@ -4313,12 +4374,39 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         };
 
+        let restore_clock_sync_method = clock_sync_enabled.then(|| quote! {
+            fn restore_clock_sync(&mut self, record: ::cu29::clock_sync::ClockSyncRecord) -> CuResult<()> {
+                let clock = self.copper_runtime.clock();
+                if let Some(sync) = &mut self.replay_clock_sync {
+                    sync.restore(record.snapshot).map_err(|error| CuError::new_with_cause("Replay clock restore failed", error))?;
+                } else {
+                    self.replay_clock_sync = Some(::cu29::clock::sync::ClockSync::from_snapshot(&clock, record.snapshot)
+                        .map_err(|error| CuError::new_with_cause("Replay clock attach failed", error))?);
+                }
+                Ok(())
+            }
+            fn set_recorded_clock_time(&mut self, clock_mock: &RobotClockMock, timestamp: CuTime) -> CuResult<()> {
+                if let Some(sync) = &mut self.replay_clock_sync {
+                    sync.set_replay_time(clock_mock, timestamp).map_err(|error| CuError::new_with_cause("Replay clock time failed", error))?;
+                } else { clock_mock.set_value(timestamp.as_nanos()); }
+                Ok(())
+            }
+        });
+        let replay_set_clock = if clock_sync_enabled {
+            quote! {
+                if let Some(sync) = &mut self.replay_clock_sync {
+                    sync.set_replay_time(clock_mock, timestamp).map_err(|error| CuError::new_with_cause("Replay clock time failed", error))?;
+                } else { clock_mock.set_value(timestamp.as_nanos()); }
+            }
+        } else { quote! { clock_mock.set_value(timestamp.as_nanos()); } };
+
         let recorded_replay_app_impl = if sim_mode {
             Some(quote! {
                 impl<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static>
                     CuRecordedReplayApplication<S, L> for #application_name
                 {
                     type RecordedDataSet = #mission_mod::CuStampedDataSet;
+                    #restore_clock_sync_method
 
                     #[allow(deprecated)] // replays via the deprecated raw iteration on purpose
                     fn replay_recorded_copperlist(
@@ -4356,7 +4444,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             self.copper_runtime_mut().set_forced_keyframe_timestamp(timestamp);
                             self.copper_runtime_mut().lock_keyframe(keyframe);
                         }
-                        clock_mock.set_value(timestamp.as_nanos());
+                        #replay_set_clock
 
                         let mut sim_callback = |step: SimStep<'_>| -> SimOverride {
                             #mission_mod::recorded_replay_step(step, copperlist)
@@ -4431,10 +4519,50 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             None
         };
 
-        let builder_default_clock = if std {
+        let builder_default_clock = if std && !clock_sync_enabled {
             quote! { Some(RobotClock::default()) }
         } else {
             quote! { None }
+        };
+
+        let builder_clock_reference_field = clock_sync_enabled.then(|| quote! {
+            clock_reference: Option<(Box<dyn ::cu29::clock_sync::ClockReference>, ::cu29::clock_sync::MaintenanceConfig)>,
+        });
+        let builder_clock_reference_none = clock_sync_enabled.then(|| quote! { clock_reference: None, });
+        let builder_clock_reference_copy = clock_sync_enabled.then(|| quote! { clock_reference: self.clock_reference, });
+        let builder_with_clock_reference = clock_sync_enabled.then(|| quote! {
+            /// Experimental: selects an explicit parent and required timing/error bounds.
+            pub fn with_clock_reference<P: ::cu29::clock_sync::ClockReference>(mut self, reference: P, config: ::cu29::clock_sync::MaintenanceConfig) -> Self {
+                self.clock_reference = Some((Box::new(reference), config)); self
+            }
+        });
+        let builder_clock_setup = if clock_sync_enabled {
+            let no_parent_clock = if std { quote! { RobotClock::new() } } else {
+                quote! { return Err(CuError::from("Clock missing from builder and reference provider")) }
+            };
+            if sim_mode {
+                quote! { let clock = self.clock.unwrap_or_else(|| RobotClock::mock().0); let clock_maintenance = None; }
+            } else {
+                quote! {
+                    if self.clock_reference.is_some() && config.runtime.as_ref().and_then(|r| r.clock_sync_config()).is_some() {
+                        return Err(CuError::from("Injected clock reference conflicts with runtime.clock.parent"));
+                    }
+                    let selected = match self.clock_reference {
+                        Some(parent) => Some(parent),
+                        None => #mission_mod::clock_reference_instanciator(&config, &mut resources)?,
+                    };
+                    if selected.is_some() && config.planner_kind() == ::cu29::config::PlannerKind::Pipeline {
+                        return Err(CuError::from("Clock synchronization v0 requires the Serial planner"));
+                    }
+                    let clock = match self.clock {
+                        Some(clock) => clock,
+                        None => match &selected { Some((reference, _)) => reference.create_clock()?, None => { #no_parent_clock } },
+                    };
+                    let clock_maintenance = selected.map(|(reference, settings)| ::cu29::clock_sync::ClockMaintenance::new(reference, clock.clone(), settings)).transpose()?;
+                }
+            }
+        } else {
+            quote! { let clock = self.clock.ok_or(CuError::from("Clock missing from builder"))?; }
         };
 
         let builder_logstream_field = logstream_enabled.then(|| {
@@ -4494,6 +4622,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         resources_factory: R,
                         sim_callback: Option<&'a mut F>,
                         #builder_logstream_field
+                        #builder_clock_reference_field
                         _storage: core::marker::PhantomData<S>,
                     }
                 },
@@ -4519,6 +4648,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             resources_factory: #mission_mod::resources_instanciator as fn(&CuConfig) -> CuResult<ResourceManager>,
                             sim_callback: None,
                             #builder_logstream_init
+                            #builder_clock_reference_none
                             _storage: core::marker::PhantomData,
                         }
                     }
@@ -4552,6 +4682,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         config_override: Option<CuConfig>,
                         resources_factory: R,
                         #builder_logstream_field
+                        #builder_clock_reference_field
                         _storage: core::marker::PhantomData<S>,
                     }
                 },
@@ -4572,6 +4703,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             config_override: None,
                             resources_factory: #mission_mod::resources_instanciator as fn(&CuConfig) -> CuResult<ResourceManager>,
                             #builder_logstream_init
+                            #builder_clock_reference_none
                             _storage: core::marker::PhantomData,
                         }
                     }
@@ -4783,6 +4915,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         resources_factory: self.resources_factory,
                         #builder_sim_callback_field_copy
                         #builder_logstream_copy
+                        #builder_clock_reference_copy
                         _storage: core::marker::PhantomData,
                     }
                 }
@@ -4807,6 +4940,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         resources_factory,
                         #builder_sim_callback_field_copy
                         #builder_logstream_copy
+                        #builder_clock_reference_copy
                         _storage: core::marker::PhantomData,
                     }
                 }
@@ -4815,6 +4949,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #builder_with_log_path_method
                 #builder_sim_callback_method
                 #builder_with_logstream_method
+                #builder_with_clock_reference
 
                 /// Builds the application wrapped in its compile-time checked
                 /// lifecycle, in the `Initialized` state: start it with
@@ -4827,12 +4962,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 }
 
                 fn build_impl(self) -> CuResult<#application_name> {
-                    let clock = self
-                        .clock
-                        .ok_or(CuError::from("Clock missing from builder"))?;
+
                     let (config, config_source) = #builder_prepare_config_call;
                     let log_context = #application_name::prepare_log_metadata::<S, L>(&self.unified_logger, &config, self.instance_id)?;
-                    let resources = (self.resources_factory)(&config)?;
+                    #[allow(unused_mut)]
+                    let mut resources = (self.resources_factory)(&config)?;
+                    #builder_clock_setup
                     #builder_build_thread_pools_stmt
                     let app_resources = AppResources {
                         config,
@@ -4840,6 +4975,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         log_context: Some(log_context),
                         resources,
                         #builder_build_thread_pools_init
+                        #clock_maintenance_init
                     };
                     #application_name::build_with_resources(
                         clock,
@@ -5074,6 +5210,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #sim_bridge_channel_defs
                 #resources_module
                 #resources_instanciator_fn
+                #clock_reference_factory
                 #task_mapping_defs
                 #bridge_mapping_defs
                 #(#autogenerated_output_warnings)*
