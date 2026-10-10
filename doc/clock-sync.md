@@ -134,9 +134,12 @@ owns the output epoch: feature-enabled builds have no separate output-offset mem
 or additional output-offset subtraction. Feature availability alone does not
 select a parent or change the clock to a shared epoch.
 
-`raw_now()` reads the undisciplined counter timeline independently of the output
-mapping. Reference captures, acquisition timeouts and sample aging use that
-timeline; discipline updates never alter it. Replay restores the recorded mapping
+`raw_now()` returns `CuInstant` on the undisciplined counter timeline. `now()`
+and `recent()` return `CuTime` on the execution timeline. Raw instants and
+execution timestamps are distinct types; raw deadlines and observations accept
+`CuInstant`, and intervals on either timeline use `CuDuration`. A recorded
+`ClockSnapshot::at(instant)` explicitly maps a raw instant to execution `CuTime`. Reference captures, acquisition timeouts and sample aging
+use the raw timeline; discipline updates never alter it. Replay restores the recorded mapping
 and synchronization status into the same shared state.
 
 ## One parent per clock
@@ -233,7 +236,7 @@ resynchronization and shutdown. The following examples demonstrate this path.
 
 ```rust,ignore
 struct ClockObservation {
-    raw_local: CuTime,         // undisciplined local time at the measured event
+    raw_local: CuInstant,      // undisciplined local time at the measured event
     parent_ns: u64,            // parent time at that SAME event
     uncertainty: CuDuration,   // reference error + capture/read/transport error
     domain: ClockDomain,       // identifies epoch, time scale and clock session

@@ -48,7 +48,10 @@ let clock_with_ref = RobotClock::from_ref_time(ref_time_ns);
 ### Raw Counter Time and Busy Waits
 
 Each `RobotClock` owns its counter calibration. `raw_now()` reads undisciplined
-local time in nanoseconds, while `now()` reads the robot's execution timeline.
+local time as `CuInstant`, while `now()` reads the robot's execution timeline
+as `CuTime`. These types cannot be compared, subtracted, or used interchangeably
+as deadlines or message timestamps. Both use nanoseconds; elapsed intervals use
+`CuDuration`.
 Clones share the same raw origin; compare raw readings within one clock and its
 clones. Synchronization adjusts the execution timeline and leaves raw time unchanged.
 
@@ -64,9 +67,12 @@ let deadline = clock.raw_now() + CuDuration::from_micros(10);
 clock.busy_wait_until(deadline);
 ```
 
-The instance-free `CuInstant`/`Instant` API is replaced by `clock.raw_now()`.
-Replace free `busy_wait_for(duration)` and `busy_wait_until(deadline)` calls with
-the corresponding methods on that clock. Raw reads and waits are available in
+`CuInstant` readings come from `clock.raw_now()`. Reconstruct a captured raw
+reading with `CuInstant::from_nanos(nanos)` using that clock's origin. A recorded
+`ClockSnapshot::at(instant)` maps a raw instant to execution `CuTime`.
+Replace instance-free `CuInstant::now()`/`Instant::now()` and free
+`busy_wait_for(duration)` and `busy_wait_until(deadline)` calls with the
+corresponding methods on that clock. Raw reads and waits are available in
 both `std` and `no_std` builds. Busy waits require an advancing clock; a mock must
 be advanced through its control handle.
 

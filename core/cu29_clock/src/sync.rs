@@ -5,7 +5,7 @@
 
 #[cfg(feature = "clock-sync")]
 use crate::RobotClock;
-use crate::{CuDuration, CuTime};
+use crate::{CuDuration, CuInstant, CuTime};
 use bincode::{Decode, Encode};
 #[cfg(feature = "clock-sync")]
 use core::cell::UnsafeCell;
@@ -33,7 +33,7 @@ pub struct ClockDomain {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
 pub struct ClockObservation {
     /// Undisciplined local counter in nanoseconds.
-    pub raw_local: CuTime,
+    pub raw_local: CuInstant,
     /// TAI/reference time at the capture event.
     pub parent_ns: u64,
     /// Upstream and capture error combined.
@@ -175,15 +175,19 @@ fn ceil_drift(age: u64, ppb: u32) -> u64 {
 
 impl ClockSnapshot {
     /// Evaluates the recorded execution curve at an undisciplined counter time.
-    pub fn at(&self, raw: u64) -> Result<u64, SyncError> {
+    pub fn at(&self, raw: CuInstant) -> Result<CuTime, SyncError> {
         checked_time(
             i128::from(self.time_anchor)
-                + scaled(i128::from(raw) - i128::from(self.raw_anchor), self.rate_ppb),
+                + scaled(
+                    i128::from(raw.as_nanos()) - i128::from(self.raw_anchor),
+                    self.rate_ppb,
+                ),
         )
+        .map(CuTime)
     }
 
     /// Ages the recorded quality against an undisciplined counter time.
-    pub fn status(&self, raw: u64) -> Option<SyncStatus> {
+    pub fn status(&self, raw: CuInstant) -> Option<SyncStatus> {
         let q = self.quality?;
         let mut result = SyncStatus {
             state: q.state,
@@ -196,9 +200,9 @@ impl ClockSnapshot {
             drift_bound_ppb: q.config.drift_bound_ppb,
         };
         if let Some(sample) = q.sample {
-            let age = raw.saturating_sub(sample.raw_local.0);
+            let age = raw.as_nanos().saturating_sub(sample.raw_local.as_nanos());
             let parent = i128::from(sample.parent_ns) + scaled(i128::from(age), q.drift_ppb);
-            let phase = self.at(raw).map(|now| parent - i128::from(now));
+            let phase = self.at(raw).map(|now| parent - i128::from(now.as_nanos()));
             result.sample_age = CuDuration(age);
             if let Ok(phase) = phase
                 && let Ok(offset) = i64::try_from(phase)
@@ -287,10 +291,10 @@ impl SharedClock {
         Ok(())
     }
 
-    pub(crate) fn now(&self, raw: CuTime) -> CuTime {
+    pub(crate) fn now(&self, raw: CuInstant) -> CuTime {
         let (time, synced) = self.read_with(|curve| {
             (
-                curve.at(raw.0).unwrap_or(CuTime::MAX.0),
+                curve.at(raw).unwrap_or(CuTime::MAX).as_nanos(),
                 curve.quality.is_some(),
             )
         });
@@ -356,9 +360,9 @@ impl ClockSync {
         if sample.domain != self.domain {
             return Err(SyncError::WrongDomain);
         }
-        let raw = self.clock.raw_now().0;
-        if sample.raw_local.0 > raw
-            || raw - sample.raw_local.0 > self.config.max_age.0
+        let raw = self.clock.raw_now();
+        if sample.raw_local > raw
+            || raw - sample.raw_local > self.config.max_age
             || sample.uncertainty > self.config.max_error
         {
             return Err(SyncError::InvalidSample);
@@ -368,7 +372,7 @@ impl ClockSync {
             if sample.raw_local <= last.raw_local {
                 return Err(SyncError::InvalidSample);
             }
-            let elapsed = sample.raw_local.0 - last.raw_local.0;
+            let elapsed = (sample.raw_local - last.raw_local).as_nanos();
             let residual =
                 (i128::from(sample.parent_ns) - i128::from(last.parent_ns) - i128::from(elapsed))
                     .unsigned_abs();
@@ -397,7 +401,7 @@ impl ClockSync {
 
     /// Publishes a continuous curve. Initial acquisition is the only epoch step.
     pub fn update(&mut self) -> Result<SyncStatus, SyncError> {
-        let raw = self.clock.raw_now().0;
+        let raw = self.clock.raw_now();
         let mut curve = self.clock.mapping.read();
         if curve
             .status(raw)
@@ -410,7 +414,7 @@ impl ClockSync {
         if let (Some(first), Some(last)) = (self.observations[0], sample)
             && first.raw_local < last.raw_local
         {
-            let delta = i128::from(last.raw_local.0 - first.raw_local.0);
+            let delta = i128::from((last.raw_local - first.raw_local).as_nanos());
             drift = (((i128::from(last.parent_ns) - i128::from(first.parent_ns) - delta) * BILLION
                 / delta)
                 .clamp(
@@ -437,19 +441,20 @@ impl ClockSync {
         if let Some(sample) = sample
             && !self.invalid
         {
-            let age = raw.saturating_sub(sample.raw_local.0);
+            let age = raw.as_nanos().saturating_sub(sample.raw_local.as_nanos());
             let parent =
                 checked_time(i128::from(sample.parent_ns) + scaled(i128::from(age), drift))?;
             if !self.aligned {
-                curve.raw_anchor = raw;
+                curve.raw_anchor = raw.as_nanos();
                 curve.time_anchor = parent;
                 curve.rate_ppb = drift;
             } else {
                 let current = curve
                     .at(raw)?
+                    .as_nanos()
                     .max(self.clock.mapping.last.load(Ordering::SeqCst));
                 let phase = i128::from(parent) - i128::from(current);
-                curve.raw_anchor = raw;
+                curve.raw_anchor = raw.as_nanos();
                 curve.time_anchor = current;
                 // Correct phase over one second, bounded by the requested slew.
                 let slew = phase.clamp(
@@ -543,7 +548,7 @@ impl ClockSync {
         let ticks =
             scaled.div_euclid(rate) + i128::from(delta >= 0 && scaled.rem_euclid(rate) != 0);
         let raw = checked_time(i128::from(curve.raw_anchor) + ticks)?;
-        if curve.at(raw)? != time.0 {
+        if curve.at(CuInstant::from_nanos(raw))? != time {
             return Err(SyncError::OutOfRange);
         }
         mock.set_value(raw);
@@ -589,7 +594,7 @@ mod tests {
 
     fn observe(sync: &mut ClockSync, raw: u64, parent: u64, error: u64) -> Result<(), SyncError> {
         sync.observe(ClockObservation {
-            raw_local: CuTime(raw),
+            raw_local: CuInstant::from_nanos(raw),
             parent_ns: parent,
             uncertainty: CuDuration(error),
             domain: DOMAIN,
@@ -641,14 +646,14 @@ mod tests {
         observe(&mut sync, mock.value(), EPOCH + mock.value() + 20_000, 100).unwrap();
         sync.update().unwrap();
         let snapshot = sync.snapshot();
-        let recorded =
-            [1_999_999_000, 2_000_000_000, 2_000_001_000].map(|raw| snapshot.at(raw).unwrap());
+        let recorded = [1_999_999_000, 2_000_000_000, 2_000_001_000]
+            .map(|raw| snapshot.at(CuInstant::from_nanos(raw)).unwrap());
         for time in recorded.into_iter().rev() {
             sync.restore(snapshot).unwrap();
-            sync.set_replay_time(&mock, CuTime(time)).unwrap();
-            assert_eq!(clock.now().0, time);
-            assert_eq!(clock.recent().0, time);
-            assert_eq!(snapshot.at(mock.value()).unwrap(), time);
+            sync.set_replay_time(&mock, time).unwrap();
+            assert_eq!(clock.now(), time);
+            assert_eq!(clock.recent(), time);
+            assert_eq!(snapshot.at(mock.raw_now()).unwrap(), time);
             assert_eq!(clock.sync_status().unwrap().domain, DOMAIN);
         }
     }
@@ -677,7 +682,7 @@ mod tests {
         assert!(sa.status().drift_ppb < 0);
         assert!(sb.status().drift_ppb > 0);
         assert_eq!(a.recent(), a.clone().now());
-        assert_eq!(a.raw_now(), ma.now());
+        assert_eq!(a.raw_now(), ma.raw_now());
     }
 
     #[test]
@@ -724,7 +729,7 @@ mod tests {
     fn test_reject_domains_reordering_future_and_parent_reset() {
         let (_, mock, mut sync) = locked();
         let sample = ClockObservation {
-            raw_local: mock.now(),
+            raw_local: mock.raw_now(),
             parent_ns: EPOCH,
             uncertainty: CuDuration(100),
             domain: ClockDomain {
