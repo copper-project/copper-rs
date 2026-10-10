@@ -51,6 +51,11 @@ rayon = { workspace = true, optional = true }
 ctrlc = { workspace = true, optional = true }
 
 [features]
+clock-sync = [
+  "cu29-clock/clock-sync",
+  "cu29-runtime/clock-sync",
+  "cu29-derive/clock-sync",
+]
 self-describing-logs = [
   "cu29-runtime/self-describing-logs",
   "cu29-derive/self-describing-logs",

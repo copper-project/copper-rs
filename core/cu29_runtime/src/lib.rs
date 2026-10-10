@@ -16,6 +16,7 @@ mod app_sim;
 #[cfg(feature = "std")]
 #[doc(hidden)]
 pub mod arena;
+pub mod clock_sync;
 pub mod config;
 pub mod context;
 pub mod continuity;

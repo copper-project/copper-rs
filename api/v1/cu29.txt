@@ -5,6 +5,7 @@ pub use cu29::bevy_reflect
 pub use cu29::bincode
 pub use cu29::bundle_resources
 pub use cu29::clock
+pub use cu29::clock_sync
 pub use cu29::config
 pub use cu29::context
 pub use cu29::continuity

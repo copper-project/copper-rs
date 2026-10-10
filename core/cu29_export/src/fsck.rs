@@ -203,9 +203,7 @@ fn print_runtime_lifecycle_record(index: usize, entry: &RuntimeLifecycleRecord) 
                     .unwrap_or_else(|| "n/a".to_string())
             );
         }
-        RuntimeLifecycleEvent::ShutdownCompleted => {
-            println!("      event: ShutdownCompleted");
-        }
+        event => println!("      event: {event:?}"),
     }
 }
 

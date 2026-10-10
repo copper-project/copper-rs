@@ -1,3 +1,5 @@
+#[cfg(feature = "clock-sync")]
+mod clock_sync;
 mod live_twin;
 use proc_macro::TokenStream;
 use quote::{ToTokens, format_ident, quote};

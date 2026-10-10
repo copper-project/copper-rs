@@ -63,10 +63,10 @@ serde_bytes = { workspace = true, optional = true }
 
 # std only dependencies
 clap = { workspace = true, optional = true }
-rayon = { workspace = true, optional = true }      # Used for async tasks
+rayon = { workspace = true, optional = true }                           # Used for async tasks
 tempfile = { workspace = true, optional = true }
-object-pool = { version = "0.6", optional = true } # used for large object pooling, this will never happen in no-std
-rtrb = { version = "0.3.3", optional = true }
+object-pool = { version = "0.6", optional = true }                      # used for large object pooling, this will never happen in no-std
+rtrb = { version = "0.3.3", optional = true, default-features = false }
 memmap2 = { version = "0.9", optional = true }
 
 # Real-time thread-pool scheduling (CPU affinity + scheduler policy/priority).
@@ -93,6 +93,7 @@ serde = { workspace = true }
 tempfile = { workspace = true }
 
 [features]
+clock-sync = ["cu29-clock/clock-sync", "dep:rtrb"]
 self-describing-logs = ["cu29-value/self-describing-logs"]
 default = ["std"]
 # Optional worker handles; absent from monitoring contexts when streaming is disabled.
@@ -122,6 +123,7 @@ remote-debug = [
 std = [
   "dep:clap",
   "dep:rayon",
+  "rtrb?/std",
   "dep:tempfile",
   "dep:object-pool",
   "dep:memmap2",
