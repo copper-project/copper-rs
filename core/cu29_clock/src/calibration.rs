@@ -1,9 +1,4 @@
-use portable_atomic::{AtomicU64, Ordering};
-
-// Frequency estimation for converting raw counter-values to nanoseconds
-static FREQUENCY_NS: AtomicU64 = AtomicU64::new(0);
-static INIT_COUNTER: AtomicU64 = AtomicU64::new(0);
-static INIT_TIME_NS: AtomicU64 = AtomicU64::new(0);
+//! Measure a clock's hardware-counter frequency against its supplied RTC.
 
 const CALIBRATION_PERIOD_NS: u64 = 10_000_000;
 
@@ -11,7 +6,6 @@ const CALIBRATION_PERIOD_NS: u64 = 10_000_000;
 pub(crate) struct Calibration {
     pub counter: u64,
     pub frequency_hz: u64,
-    rtc_ns: u64,
 }
 
 pub(crate) fn measure(
@@ -41,62 +35,7 @@ pub(crate) fn measure(
         return Some(Calibration {
             counter: start_counter,
             frequency_hz: freq_ns,
-            rtc_ns: start_time,
         });
     }
     None
-}
-
-pub(crate) fn install(calibration: Calibration) {
-    FREQUENCY_NS.store(calibration.frequency_hz, Ordering::Relaxed);
-    INIT_COUNTER.store(calibration.counter, Ordering::Relaxed);
-    INIT_TIME_NS.store(calibration.rtc_ns, Ordering::Relaxed);
-}
-
-#[cfg(feature = "clock-sync")]
-pub(crate) fn install_once(calibration: Calibration) {
-    #[cfg(feature = "std")]
-    {
-        static INITIALIZED: std::sync::Once = std::sync::Once::new();
-        INITIALIZED.call_once(|| install(calibration));
-    }
-    // Counter setup on bare metal runs in the BSP's single foreground reader.
-    #[cfg(not(feature = "std"))]
-    if FREQUENCY_NS.load(Ordering::Relaxed) == 0 {
-        install(calibration);
-    }
-}
-
-#[cfg(feature = "clock-sync")]
-pub(crate) fn install_known(counter: u64, frequency_hz: u64) {
-    install_once(Calibration {
-        counter,
-        frequency_hz,
-        rtc_ns: 0,
-    });
-}
-
-/// Calibrates the high-precision clock vs. a real time clock.
-#[cfg(not(feature = "clock-sync"))]
-pub fn calibrate(
-    read_raw_counter: fn() -> u64,
-    read_rtc_ns: impl Fn() -> u64 + Send + Sync + 'static,
-    sleep_ns: impl Fn(u64) + Send + Sync + 'static,
-) {
-    if let Some(calibration) = measure(read_raw_counter, read_rtc_ns, sleep_ns) {
-        install(calibration);
-    }
-}
-
-/// Translate the high-precision counter-value to real time nanoseconds
-pub fn counter_to_nanos(read_raw_counter: fn() -> u64) -> u64 {
-    let freq = FREQUENCY_NS.load(Ordering::Relaxed);
-    let init_counter = INIT_COUNTER.load(Ordering::Relaxed);
-    let init_time_ns = INIT_TIME_NS.load(Ordering::Relaxed);
-    let counter = read_raw_counter();
-    let counter_diff = counter.saturating_sub(init_counter);
-
-    // NOTE: If `freq == 0`, calibration did not succeed (typically broken RTC path).
-    // Panic on division by zero is intentional fail-fast behavior.
-    init_time_ns.saturating_add(((counter_diff as u128 * 1_000_000_000) / freq as u128) as u64)
 }

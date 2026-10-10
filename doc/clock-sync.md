@@ -107,9 +107,11 @@ Unconfigured applications retain their local epoch and behavior.
 
 Select the clock representation at compile time:
 
-- With `cu29-clock/clock-sync` disabled, retain the current `ref_time: CuInstant`
-  field and subtraction-only `now()`/`recent()` path.
-- With the feature enabled, replace `ref_time` with shared mapping state containing
+- Each clock owns its hardware-counter calibration. `raw_now()` is available
+  with or without synchronization and clones retain the same counter origin.
+- With `cu29-clock/clock-sync` disabled, `now()`/`recent()` subtract the clock's
+  raw anchor and add its requested initial time.
+- With the feature enabled, use shared mapping state containing
   `raw_anchor`, `time_anchor` and fixed-point `rate`. Both `now()` and `recent()`
   evaluate this mapping, whether or not a synchronization parent is configured.
   Clock clones share the published mapping and synchronization status.
@@ -128,7 +130,7 @@ to zero and the rate to one, preserving their existing control semantics.
 
 Acquisition establishes the parent's epoch through these same anchors; subsequent
 updates preserve continuity and adjust the rate as specified below. The mapping
-owns the output epoch: feature-enabled builds have no separate `ref_time` member
+owns the output epoch: feature-enabled builds have no separate output-offset member
 or additional output-offset subtraction. Feature availability alone does not
 select a parent or change the clock to a shared epoch.
 
