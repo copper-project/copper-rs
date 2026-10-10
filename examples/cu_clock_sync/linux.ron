@@ -1,0 +1,28 @@
+(
+    resources: [
+        (
+            id: "ptp",
+            provider: "cu_ptp::LinuxPtpBundle",
+            config: {
+                "device": "/dev/ptp0",
+                "management": "/var/run/ptp4lro",
+                "reference_error_ns": 1000000,
+                "allow_local_master": true,
+            },
+        ),
+    ],
+    runtime: (
+        clock: (
+            parent: "ptp.reference",
+            max_error_ns: 20000000,
+            sample_interval_ns: 100000000,
+            acquisition_timeout_ns: 10000000000,
+        ),
+    ),
+    tasks: [
+        (id: "stamp", type: "cu_clock_sync::Timestamp"),
+        (id: "consume", type: "cu_clock_sync::Consume"),
+    ],
+    cnx: [(src: "stamp", dst: "consume", msg: "u64")],
+    logging: (enable_task_logging: true, slab_size_mib: 4, section_size_mib: 1),
+)

@@ -1,6 +1,11 @@
 # Clock synchronization: minimal API proposal
 
-Status: design sketch; new APIs below are proposed, not implemented.
+Status: v0 implementation. The reference discipline, runtime resource wiring,
+Linux PHC/software adapters, board hooks, replay corrections and Zenoh epoch
+metadata are experimental. See [the runnable example](../examples/cu_clock_sync/README.md).
+The runtime currently requires the Serial planner; Pipeline is rejected until
+corrections can be coordinated across in-flight CopperLists. Sections marked v1
+remain proposals.
 
 **Contract:** configuring synchronization makes `RobotClock::now()` and
 `ctx.now()` return the shared reference time in nanoseconds. With PTP, this is
@@ -30,11 +35,12 @@ its ordinary `now()` uses the parent's epoch and tracks its offset and drift.
         (
             id: "ptp",
             provider: "cu_ptp::LinuxPtpBundle",
-            config: { "device": "/dev/ptp0", "management": "/var/run/ptp4l" },
+            config: { "device": "/dev/ptp0", "management": "/var/run/ptp4lro",
+                      "reference_error_ns": 10_000 },
         ),
     ],
     runtime: (
-        clock: (parent: "ptp.reference", max_error_ns: 100_000),
+        clock: (parent: "ptp.reference", max_error_ns: 100_000, sample_interval_ns: 100_000_000),
     ),
     // Existing tasks, bridges and connections follow.
 )
@@ -48,7 +54,7 @@ its ordinary `now()` uses the parent's epoch and tracks its offset and drift.
         (id: "ptp", provider: "crate::board::PtpBundle"),
     ],
     runtime: (
-        clock: (parent: "ptp.reference", max_error_ns: 100_000),
+        clock: (parent: "ptp.reference", max_error_ns: 100_000, sample_interval_ns: 100_000_000),
     ),
     // Existing tasks, bridges and connections follow.
 )
@@ -66,7 +72,7 @@ Application code uses its usual builder and lifecycle on either platform:
 App::builder().build()?.run_until_shutdown()?;
 ```
 
-These RON fields and bundle contracts are proposed. Resolve the parent and
+These RON fields and bundle contracts are implemented in v0. Resolve the parent and
 local-counter setup at code generation; one parent per runtime. In v1 a Zenoh
 reference provider attaches to the named existing bridge session during startup
 and disciplines an overlay by default. Resolve that typed session handle at
@@ -99,8 +105,8 @@ corresponding `cu29-clock/clock-sync` feature for clock storage and discipline.
 Standalone/manual users enable the clock crate's feature directly. Put PHC/Statime
 dependencies in a `cu-ptp` component:
 `linux-phc` for the Linux adapter, `ptp` for protocol/overlay support on either
-platform. Zenoh synchronization is an opt-in bridge feature `ptp-sync`; it
-enables the protocol pieces. Features enable capabilities; RON selects behavior.
+platform. Zenoh v0 epoch attachments use the bridge feature `clock-sync`. The proposed
+v1 protocol transport would have its own opt-in feature. Features enable capabilities; RON selects behavior.
 Unconfigured applications retain their local epoch and behavior.
 
 ### RobotClock storage and read mapping
@@ -210,7 +216,7 @@ contract. Configure it as a resource, or inject it programmatically:
 
 ```rust,ignore
 App::builder()
-    .with_clock_reference(provider)
+    .with_clock_reference(provider, maintenance_config)
     .build()?
     .run_until_shutdown()?;
 ```
@@ -251,10 +257,10 @@ struct SyncConfig {
 
 impl ClockSync {
     fn new(clock: &RobotClock, parent: ClockDomain, config: SyncConfig)
-        -> CuResult<Self>;     // attach to this clock's shared discipline state
-    fn observe(&mut self, sample: ClockObservation) -> CuResult<()>;
-    fn update(&mut self) -> CuResult<SyncStatus>; // acquire/slew the actual now()
-    fn resync(&mut self, parent: ClockDomain) -> CuResult<()>;
+        -> Result<Self, SyncError>; // attach to this clock's shared discipline state
+    fn observe(&mut self, sample: ClockObservation) -> Result<(), SyncError>;
+    fn update(&mut self) -> Result<SyncStatus, SyncError>; // acquire/slew the actual now()
+    fn resync(&mut self, parent: ClockDomain) -> Result<(), SyncError>;
     fn status(&self) -> SyncStatus;              // ages against raw time
 }
 ```
@@ -277,8 +283,8 @@ Linux:
 
 ```rust,ignore
 let clock = RobotClock::new();
-// Proposed adapter: PHC reads + upstream health/time properties from ptp4l.
-let mut parent = LinuxPhc::open("/dev/ptp0", "/var/run/ptp4l")?;
+// PHC reads plus upstream health/time properties from ptp4l.
+let mut parent = LinuxPhc::open("/dev/ptp0", "/var/run/ptp4lro", 10_000)?;
 ```
 
 Bare metal:
@@ -301,8 +307,12 @@ let mut sync = ClockSync::new(&clock, parent.domain(), SyncConfig {
 })?;
 
 // Own cadence/timeout: repeat until Locked before exposing clock to consumers.
-parent.poll()?;
-sync.observe(parent.sample(&clock)?)?; // sample uses raw_now(), not now()
+if let Some(sample) = parent.poll(&clock)? {
+    if sample.domain != sync.status().domain { sync.resync(sample.domain)?; }
+    sync.observe(sample)?; // capture uses raw_now(), not now()
+} else {
+    sync.reference_lost();
+}
 let health = sync.update()?;          // actually disciplines clock.now()
 
 // Once Locked, ordinary clock reads and stamps use the shared epoch.
@@ -325,7 +335,7 @@ software. Normalize reference time to PTP/TAI; UTC requires known leap offsets.
 Statime with native Ethernet. It can expose an adjustable hardware timer or a
 software PTP clock backed by a monotonic counter. Statime's embedded support and
 STM32 example are described in its [crate documentation](https://docs.rs/statime/latest/statime/).
-The proposed `crate::board::PtpBundle` supplies this counter setup and wraps
+A BSP `crate::board::PtpBundle` supplies this counter setup and wraps
 `board::ptp_reference` for runtime maintenance.
 The BSP handles timer rollover/correlation. ISR captures/enqueues; foreground
 runs the service. Keep the current Cortex-M DWT backend's single-reader contract.
