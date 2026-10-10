@@ -7,12 +7,18 @@ static INIT_TIME_NS: AtomicU64 = AtomicU64::new(0);
 
 const CALIBRATION_PERIOD_NS: u64 = 10_000_000;
 
-/// Calibrates the high-precision clock vs. a real time clock
-pub fn calibrate(
+#[derive(Clone, Copy)]
+pub(crate) struct Calibration {
+    pub counter: u64,
+    pub frequency_hz: u64,
+    rtc_ns: u64,
+}
+
+pub(crate) fn measure(
     read_raw_counter: fn() -> u64,
     read_rtc_ns: impl Fn() -> u64 + Send + Sync + 'static,
     sleep_ns: impl Fn(u64) + Send + Sync + 'static,
-) {
+) -> Option<Calibration> {
     let start_counter = read_raw_counter();
     let start_time = read_rtc_ns();
 
@@ -32,9 +38,53 @@ pub fn calibrate(
         let freq_ns_u128 =
             (u128::from(counter_diff) * 1_000_000_000u128) / u128::from(time_diff_ns);
         let freq_ns = u64::try_from(freq_ns_u128).unwrap_or(u64::MAX);
-        FREQUENCY_NS.store(freq_ns, Ordering::Relaxed);
-        INIT_COUNTER.store(start_counter, Ordering::Relaxed);
-        INIT_TIME_NS.store(start_time, Ordering::Relaxed);
+        return Some(Calibration {
+            counter: start_counter,
+            frequency_hz: freq_ns,
+            rtc_ns: start_time,
+        });
+    }
+    None
+}
+
+pub(crate) fn install(calibration: Calibration) {
+    FREQUENCY_NS.store(calibration.frequency_hz, Ordering::Relaxed);
+    INIT_COUNTER.store(calibration.counter, Ordering::Relaxed);
+    INIT_TIME_NS.store(calibration.rtc_ns, Ordering::Relaxed);
+}
+
+#[cfg(feature = "clock-sync")]
+pub(crate) fn install_once(calibration: Calibration) {
+    #[cfg(feature = "std")]
+    {
+        static INITIALIZED: std::sync::Once = std::sync::Once::new();
+        INITIALIZED.call_once(|| install(calibration));
+    }
+    // Counter setup on bare metal runs in the BSP's single foreground reader.
+    #[cfg(not(feature = "std"))]
+    if FREQUENCY_NS.load(Ordering::Relaxed) == 0 {
+        install(calibration);
+    }
+}
+
+#[cfg(feature = "clock-sync")]
+pub(crate) fn install_known(counter: u64, frequency_hz: u64) {
+    install_once(Calibration {
+        counter,
+        frequency_hz,
+        rtc_ns: 0,
+    });
+}
+
+/// Calibrates the high-precision clock vs. a real time clock.
+#[cfg(not(feature = "clock-sync"))]
+pub fn calibrate(
+    read_raw_counter: fn() -> u64,
+    read_rtc_ns: impl Fn() -> u64 + Send + Sync + 'static,
+    sleep_ns: impl Fn(u64) + Send + Sync + 'static,
+) {
+    if let Some(calibration) = measure(read_raw_counter, read_rtc_ns, sleep_ns) {
+        install(calibration);
     }
 }
 

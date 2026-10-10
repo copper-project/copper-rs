@@ -193,3 +193,14 @@ Refresh intentionally:
 ```bash
 just api-update
 ```
+
+### Experimental clock synchronization
+
+`cu29_clock::sync` and `RobotClock::{raw_now, sync_status, new_with_frequency}`
+are experimental APIs. Portable observation/snapshot types are available for
+log decoding; controller and live-clock APIs require `clock-sync`. `ClockSync` owns reference
+discipline for a shared clock; `ClockSnapshot` records its affine mapping and
+quality for offline replay. Existing clock constructors and local clock APIs
+retain their source compatibility. The clock crate uses allocation-free
+`SyncError` results because `cu29_traits` depends on it. Runtime integration
+converts those errors to `CuError`.
