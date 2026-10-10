@@ -2,7 +2,7 @@
 
 use cu29::clock::sync::{ClockDomain, ClockObservation};
 use cu29::clock_sync::ClockReference;
-use cu29::prelude::{CuDuration, CuError, CuResult, CuTime, RobotClock};
+use cu29::prelude::{CuDuration, CuError, CuResult, RobotClock};
 
 /// BSP hooks for an existing PTP service, run in foreground on bare metal.
 ///
@@ -53,9 +53,9 @@ impl<const HZ: u64> ClockReference for BoardPtp<HZ> {
     fn poll(&mut self, clock: &RobotClock) -> CuResult<Option<ClockObservation>> {
         (self.hooks.poll)()?;
         let domain = self.domain();
-        let before = clock.raw_now().0;
+        let before = clock.raw_now();
         let sample = (self.hooks.read)()?;
-        let after = clock.raw_now().0;
+        let after = clock.raw_now();
         if after < before {
             return Err(CuError::from(
                 "Board raw counter moved backward during capture",
@@ -68,10 +68,10 @@ impl<const HZ: u64> ClockReference for BoardPtp<HZ> {
             .map(|(parent_ns, upstream)| {
                 let error = upstream
                     .0
-                    .checked_add((after - before).div_ceil(2))
+                    .checked_add((after - before).as_nanos().div_ceil(2))
                     .ok_or(CuError::from("Board capture uncertainty overflow"))?;
                 Ok(ClockObservation {
-                    raw_local: CuTime(before + (after - before) / 2),
+                    raw_local: before + (after - before) / 2u64,
                     parent_ns,
                     uncertainty: CuDuration(error),
                     domain,

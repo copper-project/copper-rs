@@ -198,9 +198,9 @@ fn capture(
     if !health.ptp_timescale && !health.utc_offset_valid {
         return Ok(None);
     }
-    let before = clock.raw_now().0;
+    let before = clock.raw_now();
     let parent = io.parent_now()?;
-    let after = clock.raw_now().0;
+    let after = clock.raw_now();
     if after < before {
         return Err(CuError::from("Raw clock moved backward during PHC capture"));
     }
@@ -223,10 +223,10 @@ fn capture(
     let uncertainty = policy
         .reference_error_ns
         .checked_add(health.offset_ns.unsigned_abs())
-        .and_then(|error| error.checked_add((after - before).div_ceil(2)))
+        .and_then(|error| error.checked_add((after - before).as_nanos().div_ceil(2)))
         .ok_or(CuError::from("PTP capture uncertainty overflow"))?;
     Ok(Some(ClockObservation {
-        raw_local: CuTime(before + (after - before) / 2),
+        raw_local: before + (after - before) / 2u64,
         parent_ns: tai,
         uncertainty: CuDuration(uncertainty),
         domain: health.domain,
@@ -477,7 +477,7 @@ mod tests {
     fn capture_brackets_raw_counter_and_includes_upstream_error() {
         let (clock, mut io, policy) = fixture();
         let sample = capture(&mut io, &clock, policy).unwrap().unwrap();
-        assert_eq!(sample.raw_local, CuTime(50));
+        assert_eq!(sample.raw_local, CuInstant::from_nanos(50));
         assert_eq!(sample.uncertainty, CuDuration(351));
         assert_eq!(sample.parent_ns, io.time);
     }
