@@ -32,46 +32,6 @@ use alloc::vec::Vec;
 use core::fmt::{Display, Formatter};
 use core::ops::{AddAssign, Div, Mul, SubAssign};
 
-/// High-precision instant in time, represented as nanoseconds since an arbitrary epoch
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct CuInstant(u64);
-
-pub type Instant = CuInstant; // Backward compatibility
-
-impl CuInstant {
-    pub fn now() -> Self {
-        CuInstant(calibration::counter_to_nanos(read_raw_counter))
-    }
-
-    pub fn as_nanos(&self) -> u64 {
-        self.0
-    }
-}
-
-impl Sub for CuInstant {
-    type Output = CuDuration;
-
-    fn sub(self, other: CuInstant) -> CuDuration {
-        CuDuration(self.0.saturating_sub(other.0))
-    }
-}
-
-impl Sub<CuDuration> for CuInstant {
-    type Output = CuInstant;
-
-    fn sub(self, duration: CuDuration) -> CuInstant {
-        CuInstant(self.0.saturating_sub(duration.as_nanos()))
-    }
-}
-
-impl Add<CuDuration> for CuInstant {
-    type Output = CuInstant;
-
-    fn add(self, duration: CuDuration) -> CuInstant {
-        CuInstant(self.0.saturating_add(duration.as_nanos()))
-    }
-}
-
 /// For Robot times, the underlying type is a u64 representing nanoseconds.
 /// It is always positive to simplify the reasoning on the user side.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
@@ -552,22 +512,6 @@ impl Display for CuTime {
     }
 }
 
-/// A busy looping function based on this clock for a duration.
-/// Mainly useful for embedded to spinlocking.
-#[inline(always)]
-pub fn busy_wait_for(duration: CuDuration) {
-    busy_wait_until(CuInstant::now() + duration);
-}
-
-/// A busy looping function based on this until a specific time.
-/// Mainly useful for embedded to spinlocking.
-#[inline(always)]
-pub fn busy_wait_until(time: CuInstant) {
-    while CuInstant::now() < time {
-        core::hint::spin_loop();
-    }
-}
-
 /// Homebrewed `Option<CuDuration>` to avoid using 128bits just to represent an Option.
 #[derive(Copy, Clone, Debug, PartialEq, Encode, Decode, Serialize, Deserialize)]
 #[cfg_attr(feature = "reflect", derive(Reflect))]
@@ -764,11 +708,9 @@ impl From<CuTime> for Tov {
 /// Internal clock implementation that provides high-precision timing
 #[derive(Clone, Debug)]
 struct InternalClock {
-    // For real clocks, this stores the initialization time
-    // For mock clocks, this references the mock state
     mock_state: Option<Arc<AtomicU64>>,
-    #[cfg(feature = "clock-sync")]
-    frequency: Option<(u64, u64)>,
+    // Hardware-counter anchor and measured frequency in Hz, copied by clones.
+    frequency: (u64, u64),
 }
 
 // Implements the std version of the RTC clock
@@ -815,22 +757,11 @@ impl InternalClock {
     ) -> Self {
         initialize();
 
-        #[cfg(feature = "clock-sync")]
-        {
-            let calibration = calibration::measure(read_raw_counter, read_rtc_ns, sleep_ns)
-                .expect("cu29_clock calibration failed: raw counter did not advance");
-            // CuInstant retains its hosted epoch. RobotClock owns its measured
-            // rate, so a later custom RTC cannot recalibrate an existing clock.
-            calibration::install_once(calibration);
-            InternalClock {
-                mock_state: None,
-                frequency: Some((calibration.counter, calibration.frequency_hz)),
-            }
-        }
-        #[cfg(not(feature = "clock-sync"))]
-        {
-            calibration::calibrate(read_raw_counter, read_rtc_ns, sleep_ns);
-            InternalClock { mock_state: None }
+        let calibration = calibration::measure(read_raw_counter, read_rtc_ns, sleep_ns)
+            .expect("cu29_clock calibration failed: raw counter did not advance");
+        InternalClock {
+            mock_state: None,
+            frequency: (calibration.counter, calibration.frequency_hz),
         }
     }
 
@@ -838,28 +769,21 @@ impl InternalClock {
         let mock_state = Arc::new(AtomicU64::new(0));
         let clock = InternalClock {
             mock_state: Some(Arc::clone(&mock_state)),
-            #[cfg(feature = "clock-sync")]
-            frequency: None,
+            frequency: (0, 1_000_000_000),
         };
         (clock, mock_state)
     }
 
-    fn now(&self) -> CuInstant {
+    fn now(&self) -> u64 {
         if let Some(ref mock_state) = self.mock_state {
-            return CuInstant(mock_state.load(Ordering::Relaxed));
+            return mock_state.load(Ordering::Relaxed);
         }
-        #[cfg(feature = "clock-sync")]
-        if let Some((anchor, hz)) = self.frequency {
-            let ticks = read_raw_counter().saturating_sub(anchor);
-            return CuInstant(
-                (u128::from(ticks) * 1_000_000_000 / u128::from(hz)).min(u128::from(u64::MAX))
-                    as u64,
-            );
-        }
-        CuInstant::now()
+        let (anchor, hz) = self.frequency;
+        let ticks = read_raw_counter().saturating_sub(anchor);
+        (u128::from(ticks) * 1_000_000_000 / u128::from(hz)).min(u128::from(u64::MAX)) as u64
     }
 
-    fn recent(&self) -> CuInstant {
+    fn recent(&self) -> u64 {
         // For simplicity, we use the same implementation as now()
         // In a more sophisticated implementation, this could use a cached value
         self.now()
@@ -873,7 +797,9 @@ impl InternalClock {
 pub struct RobotClock {
     inner: InternalClock,
     #[cfg(not(feature = "clock-sync"))]
-    ref_time: CuInstant,
+    raw_anchor: u64,
+    #[cfg(not(feature = "clock-sync"))]
+    time_anchor: u64,
     #[cfg(feature = "clock-sync")]
     mapping: Arc<sync::SharedClock>,
 }
@@ -925,9 +851,11 @@ impl RobotClock {
         Self {
             inner,
             #[cfg(not(feature = "clock-sync"))]
-            ref_time: raw - CuDuration(initial),
+            raw_anchor: raw,
+            #[cfg(not(feature = "clock-sync"))]
+            time_anchor: initial,
             #[cfg(feature = "clock-sync")]
-            mapping: Arc::new(sync::SharedClock::new(raw.0, initial)),
+            mapping: Arc::new(sync::SharedClock::new(raw, initial)),
         }
     }
 
@@ -957,11 +885,10 @@ impl RobotClock {
             return Err(sync::SyncError::InvalidConfig);
         }
         let anchor = read_raw_counter();
-        calibration::install_known(anchor, hz);
         Ok(Self::from_inner(
             InternalClock {
                 mock_state: None,
-                frequency: Some((anchor, hz)),
+                frequency: (anchor, hz),
             },
             0,
         ))
@@ -993,7 +920,10 @@ impl RobotClock {
     pub fn now(&self) -> CuTime {
         #[cfg(not(feature = "clock-sync"))]
         {
-            CuTime((self.inner.now() - self.ref_time).as_nanos())
+            CuTime(
+                self.time_anchor
+                    .saturating_add(self.inner.now().saturating_sub(self.raw_anchor)),
+            )
         }
         #[cfg(feature = "clock-sync")]
         {
@@ -1006,18 +936,48 @@ impl RobotClock {
     pub fn recent(&self) -> CuTime {
         #[cfg(not(feature = "clock-sync"))]
         {
-            CuTime((self.inner.recent() - self.ref_time).as_nanos())
+            CuTime(
+                self.time_anchor
+                    .saturating_add(self.inner.recent().saturating_sub(self.raw_anchor)),
+            )
         }
         #[cfg(feature = "clock-sync")]
         {
-            self.mapping.now(CuTime(self.inner.recent().0))
+            self.mapping.now(CuTime(self.inner.recent()))
         }
     }
 
-    /// Experimental: undisciplined counter time in nanoseconds for reference capture.
-    #[cfg(feature = "clock-sync")]
+    /// Reads undisciplined local counter time in nanoseconds.
+    ///
+    /// Clones share the counter origin and calibration. Independently constructed
+    /// clocks have their own origins; compare raw readings only within one clock
+    /// and its clones. Reference capture and elapsed-time measurements use this
+    /// timeline, which is unaffected by execution-clock synchronization.
+    ///
+    /// ```rust
+    /// use cu29_clock::{CuDuration, RobotClock};
+    ///
+    /// let (clock, control) = RobotClock::mock();
+    /// let start = clock.raw_now();
+    /// control.increment(CuDuration::from_millis(1));
+    /// assert_eq!(clock.raw_now() - start, CuDuration::from_millis(1));
+    /// ```
     pub fn raw_now(&self) -> CuTime {
-        CuTime(self.inner.now().0)
+        CuTime(self.inner.now())
+    }
+
+    /// Spins for a duration measured on this clock's undisciplined timeline.
+    #[inline(always)]
+    pub fn busy_wait_for(&self, duration: CuDuration) {
+        self.busy_wait_until(self.raw_now() + duration);
+    }
+
+    /// Spins until a raw deadline from this clock or one of its clones.
+    #[inline(always)]
+    pub fn busy_wait_until(&self, time: CuTime) {
+        while self.raw_now() < time {
+            core::hint::spin_loop();
+        }
     }
 
     /// Experimental: current domain, uncertainty and synchronization health.
@@ -1064,6 +1024,7 @@ impl bincode::ValueDecode for CuDuration {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "std")]
     use approx::assert_relative_eq;
 
     #[test]
@@ -1088,6 +1049,7 @@ mod tests {
         assert_eq!(a / 2u32, CuDuration(50));
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_robot_clock_monotonic() {
         let clock = RobotClock::new();
@@ -1115,6 +1077,48 @@ mod tests {
         assert_eq!(clock1.now(), clock2.now());
     }
 
+    #[test]
+    fn test_raw_mock_clock_shares_control_with_clones() {
+        let (clock, mock) = RobotClock::mock();
+        let clone = clock.clone();
+        mock.set_value(1_000_000_000);
+        assert_eq!(clock.raw_now(), CuTime(1_000_000_000));
+        assert_eq!(clone.raw_now(), clock.raw_now());
+        mock.decrement(CuDuration(10));
+        assert_eq!(clock.raw_now(), CuTime(999_999_990));
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_custom_rtc_does_not_recalibrate_existing_clones() {
+        let clock = RobotClock::new();
+        let clone = clock.clone();
+        let before = clock.now();
+        let raw_before = clock.raw_now();
+        let rtc = Arc::new(AtomicU64::new(0));
+        let custom =
+            RobotClock::new_with_rtc(move || rtc.fetch_add(10_000_000, Ordering::Relaxed), |_| {});
+        assert!(clock.now() >= before);
+        assert!(clone.raw_now() >= raw_before);
+        assert!(clone.now().0 - before.0 < 1_000_000_000);
+        assert_eq!(clock.inner.frequency, clone.inner.frequency);
+        assert_ne!(clock.inner.frequency, custom.inner.frequency);
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_busy_wait_uses_raw_timeline_with_reference_epoch() {
+        let clock = RobotClock::from_ref_time(5_000_000_000);
+        let duration = CuDuration(100_000);
+        let deadline = clock.raw_now() + duration;
+        clock.busy_wait_until(deadline);
+        assert!(clock.raw_now() >= deadline);
+        let before = clock.raw_now();
+        clock.busy_wait_for(duration);
+        assert!(clock.raw_now() - before >= duration);
+    }
+
+    #[cfg(feature = "std")]
     #[test]
     fn test_from_ref_time() {
         let tolerance_ms = 10f64;
@@ -1256,6 +1260,7 @@ mod tests {
         assert_eq!(day.to_string(), "1.000 d");
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_robot_clock_precision() {
         // Test that RobotClock::now() and RobotClock::recent() return different values

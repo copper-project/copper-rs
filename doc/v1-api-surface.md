@@ -196,11 +196,15 @@ just api-update
 
 ### Experimental clock synchronization
 
-`cu29_clock::sync` and `RobotClock::{raw_now, sync_status, new_with_frequency}`
-are experimental APIs. Portable observation/snapshot types are available for
-log decoding; controller and live-clock APIs require `clock-sync`. `ClockSync` owns reference
+`cu29_clock::sync` and `RobotClock::{raw_now, busy_wait_for, busy_wait_until,
+sync_status, new_with_frequency}` are experimental APIs. Raw-counter reads and
+busy waits are available with or without `clock-sync`; synchronization control,
+status and the known-frequency constructor require it. Portable observation/snapshot
+types are available for log decoding. `ClockSync` owns reference
 discipline for a shared clock; `ClockSnapshot` records its affine mapping and
-quality for offline replay. Existing clock constructors and local clock APIs
-retain their source compatibility. The clock crate uses allocation-free
+quality for offline replay. Existing `RobotClock` constructors and mock controls
+retain their source compatibility. The instance-free `CuInstant`/`Instant` types
+and free busy-wait functions are removed; use `RobotClock::raw_now()` and its
+busy-wait methods with an explicit clock handle. The clock crate uses allocation-free
 `SyncError` results because `cu29_traits` depends on it. Runtime integration
 converts those errors to `CuError`.

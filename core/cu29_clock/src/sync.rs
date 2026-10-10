@@ -610,27 +610,24 @@ mod tests {
 
     #[cfg(feature = "std")]
     #[test]
-    fn test_first_known_frequency_constructor_supports_instant_clock() {
+    fn test_known_frequency_counter_is_local_to_clock() {
         let clock = RobotClock::new_with_frequency(1_000_000_000).unwrap();
-        let instant = crate::CuInstant::now();
-        assert!(crate::CuInstant::now() >= instant);
+        let raw = clock.raw_now();
+        let clone = clock.clone();
+        assert!(clone.raw_now() >= raw);
         assert!(clock.now().0 < 1_000_000_000);
     }
 
     #[cfg(feature = "std")]
     #[test]
-    fn test_custom_and_known_frequency_clocks_do_not_recalibrate_existing_clones() {
+    fn test_known_frequency_clock_does_not_recalibrate_existing_clones() {
         let clock = RobotClock::new();
         let clone = clock.clone();
         let before = clock.now();
-        let rtc = alloc::sync::Arc::new(portable_atomic::AtomicU64::new(0));
-        let custom =
-            RobotClock::new_with_rtc(move || rtc.fetch_add(10_000_000, Ordering::Relaxed), |_| {});
         let _known = RobotClock::new_with_frequency(1).unwrap();
         assert!(clock.now() >= before);
         assert!(clone.now().0 - before.0 < 1_000_000_000);
         assert_eq!(clock.inner.frequency, clone.inner.frequency);
-        assert_ne!(clock.inner.frequency, custom.inner.frequency);
         assert_eq!(
             RobotClock::new_with_frequency(0).unwrap_err(),
             SyncError::InvalidConfig
