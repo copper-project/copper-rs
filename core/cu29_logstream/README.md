@@ -233,49 +233,75 @@ while let Some(update) = frames.try_read() {
 let status = twin.stop()?;
 ```
 
-Configure receiver storage and buffering by chaining builder methods. Sizes are
-bytes; capacities count records or entries:
+Configure receiver storage and buffering with named constants. Sizes are bytes;
+capacities count replay events, reconstructed CopperLists, or structured log entries:
 
 ```rust,ignore
 use cu29::logstream::{FiniteObjectLimits, SessionRouterLimits};
+use std::num::NonZeroUsize;
+
+// Budget for one complete serialized CopperList, including captured messages
+// and metadata, and for one manifest, keyframe, or structured log record.
+const MAX_RECORD_BYTES: usize = 1024 * 1024;
+const MAX_OBJECT_BYTES: u64 = 64 * 1024;
+// Fit the larger bound plus a 512-byte section header and 32-byte continuity
+// envelope; round up to a convenient multiple of 512 bytes.
+const SECTION_BYTES: usize = 2 * 1024 * 1024;
+// Hold many sections per backing file: this slab is 16 times the section size.
+const SLAB_BYTES: usize = 32 * 1024 * 1024;
+// Buffer short replay slowdowns, keeping the retained payload count bounded.
+const REPLAY_CAPACITY: NonZeroUsize = NonZeroUsize::new(32).unwrap();
+// Independent reader buffers: completed CopperLists and structured log entries.
+const FRAME_CAPACITY: NonZeroUsize = NonZeroUsize::new(64).unwrap();
+const LOG_CAPACITY: NonZeroUsize = NonZeroUsize::new(64).unwrap();
 
 let limits = SessionRouterLimits {
-    max_record_bytes: 192 * 1024 * 1024,
-    finite_objects: FiniteObjectLimits::new(192 * 1024 * 1024, 1128, 2),
+    max_record_bytes: MAX_RECORD_BYTES,
+    finite_objects: FiniteObjectLimits {
+        max_object_bytes: MAX_OBJECT_BYTES,
+        ..SessionRouterLimits::default().finite_objects
+    },
     ..Default::default()
 };
 let (mut twin, mut frames) = Ground::twin(rx)
-    .with_log_path("logs/cameras.copper")
-    .with_slab_size(512 * 1024 * 1024)
-    .with_section_size(256 * 1024 * 1024)
+    .with_log_path("logs/received.copper")
     .with_receiver_limits(limits)
-    .with_replay_capacity(2.try_into()?)
-    .with_frame_capacity(2.try_into()?)
-    .with_log_capacity(64.try_into()?)
+    .with_section_size(SECTION_BYTES)
+    .with_slab_size(SLAB_BYTES)
+    .with_replay_capacity(REPLAY_CAPACITY)
+    .with_frame_capacity(FRAME_CAPACITY)
+    .with_log_capacity(LOG_CAPACITY)
     .spawn()?;
 ```
 
-Choose record bounds for the largest complete serialized CopperList, including all
-captured camera outputs and metadata. The sender's `max_record_bytes` must fit the
-receiver's bound. Finite-object limits cover manifests, keyframes and structured
-entries. Size sections for the larger record/object bound plus a 512-byte section
-header and 32 bytes of continuity envelope allowance. Slab and section sizes must
-be multiples of 512 bytes; sections must fit in a slab. The archive grows by adding
-slabs of the configured size.
+Choose record bounds for the largest complete serialized CopperList, including
+all captured outputs and metadata. The sender's advertised record and object
+bounds must fit the receiver's bounds. Finite objects carry manifests, keyframes
+(task-state snapshots), and structured log entries. A section groups archive
+records and must fit the larger record/object bound plus a 512-byte header and
+32 bytes of continuity envelope allowance. Slab and section sizes must be
+multiples of 512 bytes; each section must fit in a slab. Prefer slabs roughly
+10–100 times larger than sections to reduce file turnover. Larger slabs reserve
+more disk space at a time; the archive grows by adding slabs as needed.
 
 Defaults are 16 MiB slabs, 128 KiB sections, 4 KiB records, 64 KiB finite objects,
-32 queued replay captures, and 64 retained frames and structured entries. Increase
-record/object limits together with section size. `spawn()` validates local settings
-before creating directories or starting workers. Sender requirements are checked
-when its manifest arrives. FEC geometry supports the 1200-byte-MTU, 64-symbol
-profile. Receiver routing and object concurrency limits are in `SessionRouterLimits`;
+32 replay events and pending captures per buffer, and 64 unread reconstructed
+CopperLists and structured log entries per reader buffer. Increase record/object
+limits together with section size. `spawn()` validates local settings before
+creating directories or starting workers. Sender requirements are checked when
+its manifest arrives. FEC geometry supports the 1200-byte-MTU, 64-symbol profile.
+Receiver routing and object concurrency limits are in `SessionRouterLimits`;
 one twin accepts exactly one sender session.
 
-Buffer counts multiply the memory retained for large captures and recovery objects;
-choose them together with byte limits for the ground station's memory budget. The
-example budgets accommodate six raw 3840 × 2160 RGB8 frames plus serialization
-metadata per record. Configure the sender's streaming memory and link bandwidth
-for that workload as well.
+Replay buffering absorbs temporary reconstruction slowdowns. Overflow requires
+recovery from a matching keyframe while recording continues. Frame buffering
+holds completed CopperLists for UI or analysis; a frame here is one iteration's
+captured inputs and reconstructed outputs. Structured log buffering holds the
+robot's logging calls, such as `info!` and `debug!`, for `twin.take_log_reader()`.
+Both reader buffers replace the oldest unread item when full; the archive keeps
+the received data. Larger buffers retain more payloads and entries in memory.
+Choose counts together with byte limits for the ground station's memory budget,
+and size the sender's streaming memory and link bandwidth for its payloads.
 
 `rx` is any `CuStreamRx`, such as the receive half of a UDP resource. Copper owns
 session routing, native recording, the bounded replay worker, status publication,
