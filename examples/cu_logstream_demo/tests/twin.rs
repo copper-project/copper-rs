@@ -36,6 +36,157 @@ static ALLOCATOR: CountingAllocator = CountingAllocator;
 
 static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+fn section_contexts(
+    path: &std::path::Path,
+) -> Vec<(cu29::prelude::UnifiedLogType, cu29::prelude::SectionContext)> {
+    use cu29::prelude::*;
+    let mut reader = UnifiedLoggerRead::new(path).unwrap();
+    let mut contexts = Vec::new();
+    loop {
+        let header = reader.raw_skip_section().unwrap();
+        match header.entry_type {
+            UnifiedLogType::LastEntry => break,
+            UnifiedLogType::ApplicationMetadata | UnifiedLogType::ValueDecodeCatalog => {}
+            kind => contexts.push((kind, header.context)),
+        }
+    }
+    contexts
+}
+
+mod mission_context {
+    pub mod sender {
+        use cu29::prelude::*;
+        #[copper_runtime(config = "tests/mission_context.ron")]
+        struct Onboard {}
+        pub type SenderA = a::Onboard;
+        pub type SenderB = b::Onboard;
+    }
+    pub mod twin {
+        use cu29::prelude::*;
+        #[copper_runtime(config = "tests/mission_context.ron", sim_mode = true)]
+        struct Replay {}
+        pub type TwinB = b::Replay;
+    }
+}
+
+#[test]
+fn twin_sections_preserve_the_onboard_construction_instance_and_nondefault_mission() {
+    use cu29::prelude::*;
+    use mission_context::sender::{SenderA, SenderB};
+    use mission_context::twin::TwinB;
+
+    let _serial = SERIAL.lock().unwrap();
+    let logs = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("logs");
+    std::fs::create_dir_all(&logs).unwrap();
+    let directory = tempfile::tempdir_in(logs).unwrap();
+    let onboard = directory.path().join("onboard.copper");
+    let ground = directory.path().join("ground.copper");
+    let socket = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+    socket.set_nonblocking(true).unwrap();
+    let mut config = CuConfig::deserialize_ron(&SenderB::original_config()).unwrap();
+    config.resources[0]
+        .config
+        .as_mut()
+        .unwrap()
+        .set("remote_addr", socket.local_addr().unwrap().to_string());
+    let UnifiedLogger::Write(logger) = UnifiedLoggerBuilder::new()
+        .file_base_name(&onboard)
+        .preallocated_size(cu_logstream_demo::SLAB_BYTES)
+        .write(true)
+        .create(true)
+        .build()
+        .unwrap()
+    else {
+        unreachable!()
+    };
+    let logger = std::sync::Arc::new(std::sync::Mutex::new(logger));
+    // Reserve the first construction, then discard its session before joining B.
+    drop(
+        SenderA::builder()
+            .with_instance_id(7)
+            .with_config(config.clone())
+            .with_logger::<memmap::MmapSectionStorage, UnifiedLoggerWrite>(logger.clone())
+            .build()
+            .unwrap(),
+    );
+    let mut packet = [0; 1200];
+    while socket.recv(&mut packet).is_ok() {}
+    let (mut twin, mut reader) = TwinB::twin(SocketRx(socket))
+        .with_log_path(&ground)
+        .archive_only()
+        .spawn()
+        .unwrap();
+    let (clock, mock) = RobotClock::mock();
+    let app = SenderB::builder()
+        .with_clock(clock)
+        .with_instance_id(41)
+        .with_config(config)
+        .with_logger::<memmap::MmapSectionStorage, UnifiedLoggerWrite>(logger.clone())
+        .build()
+        .unwrap();
+    let mut running = app.start().unwrap();
+    for id in 0..20 {
+        mock.set_value((id + 1) * cu_logstream_demo::TICK_NS);
+        running.run_one_iteration().unwrap();
+        std::thread::sleep(std::time::Duration::from_nanos(cu_logstream_demo::TICK_NS));
+    }
+    drop(running.stop().unwrap());
+    drop(logger);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while reader.status().archived < 20 {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "mission B archive did not receive every list: {:?}",
+            reader.status()
+        );
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+    twin.stop().unwrap();
+    let expected = SectionContext {
+        run_id: 2,
+        instance_id: 41,
+        mission_index: 1,
+    };
+    let sender_sections = section_contexts(&onboard);
+    assert!(
+        sender_sections.iter().any(
+            |(kind, context)| *kind == UnifiedLogType::RuntimeLifecycle && *context == expected
+        )
+    );
+    let archive_sections = section_contexts(&ground);
+    assert!(!archive_sections.is_empty());
+    assert!(
+        archive_sections
+            .iter()
+            .all(|(_, context)| *context == expected)
+    );
+    for kind in [
+        UnifiedLogType::CopperList,
+        UnifiedLogType::FrozenTasks,
+        UnifiedLogType::StructuredLogLine,
+        UnifiedLogType::StreamContinuity,
+    ] {
+        assert!(archive_sections.iter().any(|(actual, _)| *actual == kind));
+    }
+    #[cfg(feature = "self-describing-logs")]
+    {
+        let catalog = |path| {
+            UnifiedLoggerRead::new(path)
+                .unwrap()
+                .read_next_section_type(UnifiedLogType::ValueDecodeCatalog)
+                .unwrap()
+                .unwrap()
+        };
+        assert_eq!(catalog(&onboard), catalog(&ground));
+        assert_eq!(
+            cu29_export::catalog::copperlist_values_reader(&ground, None)
+                .unwrap()
+                .count(),
+            20
+        );
+    }
+}
+
 #[derive(Debug)]
 struct SocketRx(std::net::UdpSocket);
 impl cu29_logstream::CuStreamRx for SocketRx {
@@ -170,6 +321,15 @@ fn twin_rollover_bounds_disk_usage_and_retains_metadata_and_recent_entries() {
                 sender_id: 41,
             },
             DataSet::stream_schema(),
+            cu29_unifiedlog::SectionContext {
+                run_id: 1,
+                instance_id: (StreamIdentity {
+                    session_id: [4; 16],
+                    sender_id: 41,
+                })
+                .sender_id,
+                mission_index: 0,
+            },
         )
         .unwrap();
     let mut packets = Vec::new();
@@ -221,6 +381,12 @@ fn twin_rollover_bounds_disk_usage_and_retains_metadata_and_recent_entries() {
     );
     let mut reader = UnifiedLoggerRead::new(&ground).unwrap();
     assert!(reader.application_metadata().unwrap().is_some());
+    assert!(section_contexts(&ground).iter().all(|(_, context)| *context
+        == SectionContext {
+            run_id: 1,
+            instance_id: 41,
+            mission_index: 0
+        }));
     let mut ids = Vec::new();
     while let Some(section) = reader
         .read_next_section_type(UnifiedLogType::StructuredLogLine)
@@ -263,6 +429,57 @@ fn invalid_twin_rollover_capacity_is_rejected_before_creating_a_log() {
         );
     }
     assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 0);
+}
+
+#[test]
+fn twin_rejects_another_mission_even_when_output_types_match() {
+    use cu29::prelude::*;
+    use cu29_logstream::capture::CaptureDataSet;
+    let _serial = SERIAL.lock().unwrap();
+    let logs = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("logs");
+    std::fs::create_dir_all(&logs).unwrap();
+    let directory = tempfile::tempdir_in(logs).unwrap();
+    let path = directory.path().join("wrong-mission.copper");
+    let config = CuConfig::deserialize_ron(&Twin::original_config()).unwrap();
+    let plan =
+        cu29_logstream::LogStreamPlan::resolve(&config.log_streaming.unwrap().destinations[0])
+            .unwrap();
+    let sender = plan
+        .sender_config(
+            cu29_logstream::StreamIdentity {
+                session_id: [5; 16],
+                sender_id: 41,
+            },
+            DataSet::stream_schema(),
+            SectionContext {
+                run_id: 7,
+                instance_id: 41,
+                mission_index: 1,
+            },
+        )
+        .unwrap();
+    let mut packets = Vec::new();
+    cu29_logstream::FiniteObjectEncoder::new(sender.recovery.finite)
+        .unwrap()
+        .push_record(&sender.recovery.manifest_record, &mut packets)
+        .unwrap();
+    let (mut twin, mut reader) = Twin::twin(PacketRx(packets.into()))
+        .with_log_path(&path)
+        .archive_only()
+        .spawn()
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while !reader.is_closed() {
+        assert!(std::time::Instant::now() < deadline);
+        reader.wait_timeout(std::time::Duration::from_millis(10));
+    }
+    assert!(
+        twin.stop()
+            .unwrap_err()
+            .to_string()
+            .contains("matching sender mission")
+    );
+    assert!(!path.exists());
 }
 
 #[test]
@@ -465,6 +682,7 @@ static RELEASE: std::sync::LazyLock<std::sync::Barrier> =
     std::sync::LazyLock::new(|| std::sync::Barrier::new(2));
 struct BlockedTwin(Twin);
 impl cu29_logstream::twin::LiveReplay for BlockedTwin {
+    const MISSION_INDEX: u32 = <Twin as cu29_logstream::twin::LiveReplay>::MISSION_INDEX;
     fn seal_archive_metadata(
         logger: &mut cu29_unifiedlog::UnifiedLoggerWrite,
     ) -> cu29::CuResult<()> {

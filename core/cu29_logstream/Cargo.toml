@@ -30,7 +30,7 @@ cu29-log-runtime = { workspace = true, optional = true }
 cu29-value = { workspace = true, optional = true }
 cu29-runtime = { workspace = true }
 cu29-traits = { workspace = true }
-cu29-unifiedlog = { workspace = true, optional = true }
+cu29-unifiedlog = { workspace = true }
 raptorq = { workspace = true }
 
 [build-dependencies]
@@ -54,7 +54,6 @@ std = [
   "cu29-log-runtime/std",
   "dep:cu29-value",
   "cu29-value/std",
-  "dep:cu29-unifiedlog",
   "cu29-unifiedlog/std",
   "blake3/std",
   "cu29-runtime/std",

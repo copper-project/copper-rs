@@ -166,6 +166,11 @@ fn udp_feedback_worker_adapts_and_survives_a_lost_return_channel() -> CuResult<(
                 outputs: vec![],
                 reconstruction: vec![],
             },
+            cu29::prelude::SectionContext {
+                run_id: 1,
+                instance_id: identity.sender_id,
+                mission_index: 0,
+            },
         )
         .unwrap();
     let (lists, frames, monitor) = scheduled_feedback_sinks::<default::CuStampedDataSet, _>(
