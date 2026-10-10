@@ -227,7 +227,10 @@ fn configured_twin_archives_large_camera_records_and_keyframes_across_slabs() {
         .collect::<Vec<_>>();
     assert!(slabs.len() >= 2);
     for slab in slabs {
-        assert_eq!(slab.metadata().unwrap().len(), 1024 * 1024);
+        // Closed slabs are trimmed to their used size on the 1.2 branch.
+        let bytes = slab.metadata().unwrap().len();
+        assert!(bytes > 0 && bytes <= 1024 * 1024);
+        assert!(bytes.is_multiple_of(512));
     }
 }
 
