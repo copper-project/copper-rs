@@ -107,9 +107,11 @@ Unconfigured applications retain their local epoch and behavior.
 
 Select the clock representation at compile time:
 
-- With `cu29-clock/clock-sync` disabled, retain the current `ref_time: CuInstant`
-  field and subtraction-only `now()`/`recent()` path.
-- With the feature enabled, replace `ref_time` with shared mapping state containing
+- Each clock owns its hardware-counter calibration. `raw_now()` is available
+  with or without synchronization and clones retain the same counter origin.
+- With `cu29-clock/clock-sync` disabled, `now()`/`recent()` subtract the clock's
+  raw anchor and add its requested initial time.
+- With the feature enabled, use shared mapping state containing
   `raw_anchor`, `time_anchor` and fixed-point `rate`. Both `now()` and `recent()`
   evaluate this mapping, whether or not a synchronization parent is configured.
   Clock clones share the published mapping and synchronization status.
@@ -128,13 +130,16 @@ to zero and the rate to one, preserving their existing control semantics.
 
 Acquisition establishes the parent's epoch through these same anchors; subsequent
 updates preserve continuity and adjust the rate as specified below. The mapping
-owns the output epoch: feature-enabled builds have no separate `ref_time` member
+owns the output epoch: feature-enabled builds have no separate output-offset member
 or additional output-offset subtraction. Feature availability alone does not
 select a parent or change the clock to a shared epoch.
 
-`raw_now()` reads the undisciplined counter timeline independently of the output
-mapping. Reference captures, acquisition timeouts and sample aging use that
-timeline; discipline updates never alter it. Replay restores the recorded mapping
+`raw_now()` returns `CuInstant` on the undisciplined counter timeline. `now()`
+and `recent()` return `CuTime` on the execution timeline. Raw instants and
+execution timestamps are distinct types; raw deadlines and observations accept
+`CuInstant`, and intervals on either timeline use `CuDuration`. A recorded
+`ClockSnapshot::at(instant)` explicitly maps a raw instant to execution `CuTime`. Reference captures, acquisition timeouts and sample aging
+use the raw timeline; discipline updates never alter it. Replay restores the recorded mapping
 and synchronization status into the same shared state.
 
 ## One parent per clock
@@ -231,7 +236,7 @@ resynchronization and shutdown. The following examples demonstrate this path.
 
 ```rust,ignore
 struct ClockObservation {
-    raw_local: CuTime,         // undisciplined local time at the measured event
+    raw_local: CuInstant,      // undisciplined local time at the measured event
     parent_ns: u64,            // parent time at that SAME event
     uncertainty: CuDuration,   // reference error + capture/read/transport error
     domain: ClockDomain,       // identifies epoch, time scale and clock session
