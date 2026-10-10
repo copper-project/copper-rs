@@ -33,6 +33,7 @@ ui_test = { version = "0.30.7", default-features = false, features = ["rustc"] }
 cu29 = { workspace = true }
 
 [features]
+clock-sync = ["cu29-runtime/clock-sync"]
 self-describing-logs = []
 default = ["std", "signal-handler"]
 # enables a more verbose build log showing the code generation.

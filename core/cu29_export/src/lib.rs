@@ -1366,6 +1366,20 @@ Call register_copperlist_python_type::<P>() from Rust before using this function
             RuntimeLifecycleEvent::ShutdownCompleted => {
                 root.set_item("kind", "shutdown_completed")?;
             }
+            #[allow(unreachable_patterns)] // dependency features may enable extended records
+            event => {
+                if let Some(record) = event.clock_sync_record() {
+                    root.set_item("kind", "clock_sync")?;
+                    root.set_item("culistid", record.culistid)?;
+                    let snapshot = serde_json::to_string(&record.snapshot).map_err(|error| {
+                        pyo3::exceptions::PyValueError::new_err(error.to_string())
+                    })?;
+                    root.set_item(
+                        "snapshot",
+                        py.import("json")?.getattr("loads")?.call1((snapshot,))?,
+                    )?;
+                }
+            }
         }
 
         dict_to_namespace(root, py)

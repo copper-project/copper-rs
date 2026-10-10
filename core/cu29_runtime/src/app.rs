@@ -273,6 +273,23 @@ pub trait CuRecordedReplayApplication<S: SectionStorage, L: UnifiedLogWrite<S> +
     /// The generated recorded CopperList payload set for this application.
     type RecordedDataSet: CopperListTuple;
 
+    /// Experimental: restore recorded clock discipline before replaying a boundary.
+    #[cfg(feature = "clock-sync")]
+    fn restore_clock_sync(&mut self, _record: crate::clock_sync::ClockSyncRecord) -> CuResult<()> {
+        Ok(())
+    }
+
+    /// Experimental: sets an output time through the restored raw-counter mapping.
+    #[cfg(feature = "clock-sync")]
+    fn set_recorded_clock_time(
+        &mut self,
+        mock: &RobotClockMock,
+        time: cu29_clock::CuTime,
+    ) -> CuResult<()> {
+        mock.set_value(time.0);
+        Ok(())
+    }
+
     /// Replay one recorded CopperList exactly as logged.
     ///
     /// Generated implementations validate continuity, drain prior asynchronous

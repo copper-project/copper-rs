@@ -1997,7 +1997,12 @@ pub struct LoggingCodecSpec {
 }
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
+#[serde(try_from = "RuntimeConfigInput")]
 pub struct RuntimeConfig {
+    /// Experimental reference-clock configuration; requires `clock-sync`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg(feature = "clock-sync")]
+    pub clock: Option<ClockSyncConfig>,
     /// Set a CopperList execution rate target in Hz
     /// It will act as a rate limiter: if the execution is slower than this rate,
     /// it will continue to execute at "best effort".
@@ -2023,6 +2028,116 @@ pub struct RuntimeConfig {
     /// RON must match the binary that wrote the log.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub planner: Option<PlannerConfig>,
+}
+
+// Preserve legacy unknown-field handling while rejecting a declared clock when
+// this binary cannot discipline it. Keep feature-disabled RuntimeConfig's fields
+// unchanged for applications constructing it directly.
+#[derive(Deserialize)]
+struct RuntimeConfigInput {
+    clock: Option<ClockSyncConfig>,
+    rate_target_hz: Option<u64>,
+    #[serde(default)]
+    thread_pools: Vec<ThreadPoolConfig>,
+    planner: Option<PlannerConfig>,
+}
+impl TryFrom<RuntimeConfigInput> for RuntimeConfig {
+    type Error = &'static str;
+    fn try_from(input: RuntimeConfigInput) -> Result<Self, Self::Error> {
+        #[cfg(not(feature = "clock-sync"))]
+        if input.clock.is_some() {
+            return Err("runtime.clock requires the clock-sync feature");
+        }
+        Ok(Self {
+            #[cfg(feature = "clock-sync")]
+            clock: input.clock,
+            rate_target_hz: input.rate_target_hz,
+            thread_pools: input.thread_pools,
+            planner: input.planner,
+        })
+    }
+}
+
+/// Experimental reference-clock wiring and acquisition/error bounds.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ClockSyncConfig {
+    /// Owned reference resource, resolved by the runtime generator.
+    pub parent: String,
+    /// Required maximum timestamp uncertainty in nanoseconds.
+    pub max_error_ns: u64,
+    /// Raw-time acquisition timeout; defaults to ten seconds.
+    #[serde(default = "clock_acquisition_timeout")]
+    pub acquisition_timeout_ns: u64,
+    /// Raw-time sample interval; defaults to one second.
+    #[serde(default = "clock_sample_interval")]
+    pub sample_interval_ns: u64,
+    /// Maximum raw observation age; defaults to five seconds.
+    #[serde(default = "clock_max_age")]
+    pub max_age_ns: u64,
+    /// Relative holdover oscillator error; defaults to 100 ppm.
+    #[serde(default = "clock_drift_bound")]
+    pub drift_bound_ppb: u32,
+    /// Additional phase correction bound; defaults to 500 ppm.
+    #[serde(default = "clock_slew_bound")]
+    pub max_slew_ppb: u32,
+}
+fn clock_acquisition_timeout() -> u64 {
+    10_000_000_000
+}
+fn clock_sample_interval() -> u64 {
+    1_000_000_000
+}
+fn clock_max_age() -> u64 {
+    5_000_000_000
+}
+fn clock_drift_bound() -> u32 {
+    100_000
+}
+fn clock_slew_bound() -> u32 {
+    500_000
+}
+
+impl ClockSyncConfig {
+    /// Validates timing, resource selection and positive clock-rate bounds.
+    pub fn validate(&self) -> CuResult<()> {
+        if self
+            .parent
+            .split_once('.')
+            .is_none_or(|(bundle, slot)| bundle.is_empty() || slot.is_empty() || slot.contains('.'))
+        {
+            return Err(CuError::from(
+                "runtime.clock.parent must be a bundle.resource path",
+            ));
+        }
+        if self.max_error_ns == 0
+            || self.max_age_ns == 0
+            || self.acquisition_timeout_ns == 0
+            || self.sample_interval_ns == 0
+            || self.sample_interval_ns >= self.acquisition_timeout_ns
+            || u64::from(self.drift_bound_ppb) + u64::from(self.max_slew_ppb) >= 1_000_000_000
+        {
+            return Err(CuError::from(
+                "runtime.clock has invalid acquisition, error, age or rate bounds",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Converts the declarative bounds into maintenance settings.
+    #[cfg(feature = "clock-sync")]
+    pub fn maintenance(&self) -> crate::clock_sync::MaintenanceConfig {
+        crate::clock_sync::MaintenanceConfig {
+            acquisition_timeout: core::time::Duration::from_nanos(self.acquisition_timeout_ns),
+            sample_interval: core::time::Duration::from_nanos(self.sample_interval_ns),
+            sync: cu29_clock::sync::SyncConfig {
+                max_error: cu29_clock::CuDuration(self.max_error_ns),
+                max_age: cu29_clock::CuDuration(self.max_age_ns),
+                drift_bound_ppb: self.drift_bound_ppb,
+                max_slew_ppb: self.max_slew_ppb,
+            },
+        }
+    }
 }
 
 /// Selects the compile-time execution strategy for every mission graph.
@@ -3952,8 +4067,23 @@ impl LoggingConfig {
 }
 
 impl RuntimeConfig {
-    /// Validate runtime loop-rate settings.
+    /// Experimental reference configuration when clock discipline is enabled.
+    pub fn clock_sync_config(&self) -> Option<&ClockSyncConfig> {
+        #[cfg(feature = "clock-sync")]
+        {
+            self.clock.as_ref()
+        }
+        #[cfg(not(feature = "clock-sync"))]
+        {
+            None
+        }
+    }
+
+    /// Validate runtime loop-rate and reference-clock settings.
     pub fn validate(&self) -> CuResult<()> {
+        if let Some(clock) = self.clock_sync_config() {
+            clock.validate()?;
+        }
         if let Some(rate_target_hz) = self.rate_target_hz {
             if rate_target_hz == 0 {
                 return Err(CuError::from(

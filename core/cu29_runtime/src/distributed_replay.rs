@@ -337,6 +337,8 @@ where
     sections: Vec<SectionIndexEntry>,
     total_entries: usize,
     keyframes: Vec<KeyFrame>,
+    #[cfg(feature = "clock-sync")]
+    clock_records: Vec<crate::clock_sync::ClockSyncRecord>,
     started: bool,
     current_idx: Option<usize>,
     last_keyframe: Option<u64>,
@@ -372,6 +374,8 @@ where
             sections,
             total_entries,
             keyframes,
+            #[cfg(feature = "clock-sync")]
+            clock_records: crate::clock_sync::load_clock_sync_records(log_base)?,
             started: false,
             current_idx: None,
             last_keyframe: None,
@@ -411,10 +415,37 @@ where
         if self.started {
             return Ok(());
         }
+        #[cfg(feature = "clock-sync")]
+        if self.total_entries > 0 {
+            let (first, _) = self.copperlist_at(0)?;
+            self.restore_clock_at(
+                first.id,
+                recorded_copperlist_timestamp(first.as_ref())
+                    .ok_or(CuError::from("Recorded CopperList has no clock time"))?,
+            )?;
+        }
         let mut noop = |_step: App::Step<'_>| crate::simulation::SimOverride::ExecuteByRuntime;
         <App as CuSimApplication<S, L>>::start_all_tasks(&mut self.app, &mut noop)?;
         self.started = true;
         Ok(())
+    }
+
+    #[cfg(feature = "clock-sync")]
+    fn restore_clock_at(&mut self, id: u64, time: cu29_clock::CuTime) -> CuResult<()> {
+        if let Some(record) = self
+            .clock_records
+            .iter()
+            .rev()
+            .find(|record| record.culistid <= id)
+            .copied()
+        {
+            <App as CuRecordedReplayApplication<S, L>>::restore_clock_sync(&mut self.app, record)?;
+        }
+        <App as CuRecordedReplayApplication<S, L>>::set_recorded_clock_time(
+            &mut self.app,
+            &self.clock_mock,
+            time,
+        )
     }
 
     fn nearest_keyframe(&self, target_cl_id: u64) -> Option<KeyFrame> {
@@ -427,6 +458,9 @@ where
 
     fn restore_keyframe(&mut self, keyframe: &KeyFrame) -> CuResult<()> {
         <App as CuSimApplication<S, L>>::restore_keyframe(&mut self.app, keyframe)?;
+        #[cfg(feature = "clock-sync")]
+        self.restore_clock_at(keyframe.culistid, keyframe.timestamp)?;
+        #[cfg(not(feature = "clock-sync"))]
         self.clock_mock.set_value(keyframe.timestamp.as_nanos());
         self.last_keyframe = Some(keyframe.culistid);
         Ok(())
@@ -554,6 +588,12 @@ where
                 expected,
                 copperlist.id,
                 keyframe.map(|frame| frame.culistid),
+            )?;
+            #[cfg(feature = "clock-sync")]
+            self.restore_clock_at(
+                copperlist.id,
+                recorded_copperlist_timestamp(copperlist.as_ref())
+                    .ok_or(CuError::from("Recorded CopperList has no clock time"))?,
             )?;
             <App as CuRecordedReplayApplication<S, L>>::replay_recorded_copperlist(
                 &mut self.app,

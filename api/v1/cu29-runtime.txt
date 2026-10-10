@@ -146,6 +146,16 @@ pub type cu29_runtime::app::CuStdAppLifecycle<A, State> = cu29_runtime::app::CuA
 pub type cu29_runtime::app::CuStdSimAppLifecycle<A, State> = cu29_runtime::app::CuSimAppLifecycle<cu29_unifiedlog::memmap::MmapSectionStorage, cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite, A, State>
 pub type cu29_runtime::app::SimTransitionResult<S, L, A, Next> = core::result::Result<cu29_runtime::app::CuSimAppLifecycle<S, L, A, Next>, cu29_runtime::app::SimLifecycleError<S, L, A>>
 pub type cu29_runtime::app::TransitionResult<S, L, A, Next> = core::result::Result<cu29_runtime::app::CuAppLifecycle<S, L, A, Next>, cu29_runtime::app::LifecycleError<S, L, A>>
+pub mod cu29_runtime::clock_sync
+pub struct cu29_runtime::clock_sync::ClockSyncRecord
+pub cu29_runtime::clock_sync::ClockSyncRecord::culistid: u64
+pub cu29_runtime::clock_sync::ClockSyncRecord::snapshot: cu29_clock::sync::ClockSnapshot
+impl cu_bincode::enc::Encode for cu29_runtime::clock_sync::ClockSyncRecord
+pub fn cu29_runtime::clock_sync::ClockSyncRecord::encode<__E: cu_bincode::enc::Encoder>(&self, encoder: &mut __E) -> core::result::Result<(), cu_bincode::error::EncodeError>
+impl<'__de, __Context> cu_bincode::de::BorrowDecode<'__de, __Context> for cu29_runtime::clock_sync::ClockSyncRecord
+pub fn cu29_runtime::clock_sync::ClockSyncRecord::borrow_decode<__D: cu_bincode::de::BorrowDecoder<'__de, Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
+impl<__Context> cu_bincode::de::Decode<__Context> for cu29_runtime::clock_sync::ClockSyncRecord
+pub fn cu29_runtime::clock_sync::ClockSyncRecord::decode<__D: cu_bincode::de::Decoder<Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
 pub mod cu29_runtime::config
 pub use cu29_runtime::config::Incoming
 pub use cu29_runtime::config::Outgoing
@@ -245,6 +255,16 @@ pub cu29_runtime::config::BridgeConfig::run_in_sim: core::option::Option<bool>
 pub cu29_runtime::config::BridgeConfig::type_: alloc::string::String
 impl cu29_runtime::config::BridgeConfig
 pub fn cu29_runtime::config::BridgeConfig::is_run_in_sim(&self) -> bool
+pub struct cu29_runtime::config::ClockSyncConfig
+pub cu29_runtime::config::ClockSyncConfig::acquisition_timeout_ns: u64
+pub cu29_runtime::config::ClockSyncConfig::drift_bound_ppb: u32
+pub cu29_runtime::config::ClockSyncConfig::max_age_ns: u64
+pub cu29_runtime::config::ClockSyncConfig::max_error_ns: u64
+pub cu29_runtime::config::ClockSyncConfig::max_slew_ppb: u32
+pub cu29_runtime::config::ClockSyncConfig::parent: alloc::string::String
+pub cu29_runtime::config::ClockSyncConfig::sample_interval_ns: u64
+impl cu29_runtime::config::ClockSyncConfig
+pub fn cu29_runtime::config::ClockSyncConfig::validate(&self) -> cu29_traits::CuResult<()>
 pub struct cu29_runtime::config::Cnx
 pub cu29_runtime::config::Cnx::dst: alloc::string::String
 pub cu29_runtime::config::Cnx::dst_channel: core::option::Option<alloc::string::String>
@@ -496,6 +516,7 @@ pub cu29_runtime::config::RuntimeConfig::planner: core::option::Option<cu29_runt
 pub cu29_runtime::config::RuntimeConfig::rate_target_hz: core::option::Option<u64>
 pub cu29_runtime::config::RuntimeConfig::thread_pools: alloc::vec::Vec<cu29_runtime::config::ThreadPoolConfig>
 impl cu29_runtime::config::RuntimeConfig
+pub fn cu29_runtime::config::RuntimeConfig::clock_sync_config(&self) -> core::option::Option<&cu29_runtime::config::ClockSyncConfig>
 pub fn cu29_runtime::config::RuntimeConfig::validate(&self) -> cu29_traits::CuResult<()>
 pub struct cu29_runtime::config::ThreadPoolConfig
 pub cu29_runtime::config::ThreadPoolConfig::affinity: core::option::Option<alloc::vec::Vec<usize>>
@@ -898,6 +919,8 @@ pub cu29_runtime::curuntime::RuntimeLifecycleEvent::Panic::file: core::option::O
 pub cu29_runtime::curuntime::RuntimeLifecycleEvent::Panic::line: core::option::Option<u32>
 pub cu29_runtime::curuntime::RuntimeLifecycleEvent::Panic::message: alloc::string::String
 pub cu29_runtime::curuntime::RuntimeLifecycleEvent::ShutdownCompleted
+impl cu29_runtime::curuntime::RuntimeLifecycleEvent
+pub fn cu29_runtime::curuntime::RuntimeLifecycleEvent::clock_sync_record(&self) -> core::option::Option<&cu29_runtime::clock_sync::ClockSyncRecord>
 impl cu_bincode::enc::Encode for cu29_runtime::curuntime::RuntimeLifecycleEvent
 pub fn cu29_runtime::curuntime::RuntimeLifecycleEvent::encode<__E: cu_bincode::enc::Encoder>(&self, encoder: &mut __E) -> core::result::Result<(), cu_bincode::error::EncodeError>
 impl<'__de, __Context> cu_bincode::de::BorrowDecode<'__de, __Context> for cu29_runtime::curuntime::RuntimeLifecycleEvent
