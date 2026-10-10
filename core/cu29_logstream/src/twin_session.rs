@@ -87,42 +87,95 @@ impl<A: LiveReplay, R: CuStreamRx + 'static> CuTwinBuilder<A, R> {
         self
     }
 
-    /// Backing file size in bytes. Defaults to 16 MiB; additional slabs grow the archive.
+    /// Sets the size of each archive backing file (slab), in bytes. Defaults to 16 MiB.
+    ///
+    /// The archive adds another slab when the current one fills; this is not a
+    /// limit on total recording size. A slab must fit the largest section used
+    /// to store CopperLists, keyframes, or structured logs. Prefer a slab roughly
+    /// 10–100 times larger than a section to hold many sections per file and
+    /// reduce file turnover. Larger slabs reserve more disk space at a time.
+    /// Both slab and section sizes must be multiples of 512 bytes.
     pub fn with_slab_size(mut self, bytes: usize) -> Self {
         self.slab_bytes = bytes;
         self
     }
 
-    /// Section allocation in bytes, including its 512-byte header.
-    /// Defaults to 128 KiB. Must fit the configured record and finite-object bounds,
-    /// plus 32 bytes for native continuity envelopes, and must fit in a slab.
+    /// Sets the size of an archive section, in bytes. Defaults to 128 KiB.
+    ///
+    /// Sections group records such as CopperLists, keyframes, and structured log
+    /// entries inside a slab. A complete record must fit within one section.
+    /// Choose at least the larger of `max_record_bytes` and
+    /// `finite_objects.max_object_bytes` from [`Self::with_receiver_limits`],
+    /// plus 512 bytes for the section header and 32 bytes for the archive's
+    /// continuity envelope. Round up to a multiple of 512 bytes.
+    ///
+    /// Increase this alongside receive bounds when captures or task-state
+    /// snapshots grow. The section must fit in [`Self::with_slab_size`]; keeping
+    /// slabs much larger lets each file hold many sections.
     pub fn with_section_size(mut self, bytes: usize) -> Self {
         self.section_bytes = bytes;
         self
     }
 
-    /// Receiver-local record, object and routing budgets for one sender.
-    /// FEC geometry remains the 1200-byte-MTU, 64-symbol profile.
+    /// Sets receive size and buffering limits for one sender session.
     /// Defaults to [`SessionRouterLimits::default`].
+    ///
+    /// `max_record_bytes` bounds one complete serialized CopperList record
+    /// (default: 4 KiB). `finite_objects.max_object_bytes` bounds one manifest,
+    /// keyframe, or structured log record (default: 64 KiB). Match or exceed
+    /// the sender's advertised bounds so its captures and recovery snapshots
+    /// can be received, and increase [`Self::with_section_size`] to fit them.
+    ///
+    /// The remaining limits bound records, packets, recovery data, and objects
+    /// buffered during decoding. Larger sizes and concurrency limits increase
+    /// receiver memory use; they are not a total process memory budget.
+    /// `max_sessions` must be 1. The packet profile remains a 1200-byte MTU with
+    /// at most 1128-byte symbols and 64 FEC equations.
     pub fn with_receiver_limits(mut self, limits: SessionRouterLimits) -> Self {
         self.receiver_limits = limits;
         self
     }
 
-    /// Captures waiting for reconstruction. Defaults to 32.
-    /// An overflow triggers recovery while native recording continues.
+    /// Sets buffering between recording and task replay. Defaults to 32.
+    ///
+    /// This bounds both the queued replay events (captured CopperLists and
+    /// recovery keyframes) and the pending CopperLists waiting for matching
+    /// replay state. One recovery keyframe and one executing CopperList are
+    /// retained in addition to these buffers.
+    ///
+    /// Increase this to absorb short replay slowdowns; reduce it to retain fewer
+    /// payloads in memory. Overflow interrupts reconstruction until a matching
+    /// recovery point is available. Received data continues to be recorded in
+    /// the archive. This setting is unused with [`Self::archive_only`].
     pub fn with_replay_capacity(mut self, capacity: NonZeroUsize) -> Self {
         self.replay_capacity = capacity;
         self
     }
 
-    /// Structured entries retained for presentation. Defaults to 64.
+    /// Sets the number of unread structured log entries buffered for
+    /// [`CuTwin::take_log_reader`]. Defaults to 64 entries.
+    ///
+    /// These are the robot's structured logging calls (such as `info!` and
+    /// `debug!`), published after being saved in the archive. Increase this to
+    /// let the log reader pause longer at the cost of retaining more entries in
+    /// memory. When full, the buffer replaces the oldest unread entry. Reading
+    /// slowly never blocks recording; overwritten entries remain in the archive.
     pub fn with_log_capacity(mut self, capacity: NonZeroUsize) -> Self {
         self.log_capacity = capacity;
         self
     }
 
-    /// Presentation retention only; slowing the reader never delays recording.
+    /// Sets the number of unread reconstructed CopperLists buffered for the
+    /// returned [`CuTwinReader`]. Defaults to 64.
+    ///
+    /// Each [`TwinFrame`] contains one CopperList with its captured inputs and
+    /// locally reconstructed outputs, plus sender identity and receive time.
+    /// Increase this to absorb pauses in a UI or analysis reader; reduce it to
+    /// retain fewer message payloads in memory. When full, the buffer replaces
+    /// the oldest unread CopperList and the reader reports how many it missed.
+    /// Recording and task replay continue independently of reader consumption.
+    /// Network packets and recovery keyframes have separate receive/replay
+    /// buffers; this capacity counts completed CopperLists.
     pub fn with_frame_capacity(mut self, capacity: NonZeroUsize) -> Self {
         self.frame_capacity = capacity;
         self
