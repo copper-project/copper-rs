@@ -1,3 +1,5 @@
+//! Monotonic robot time, controlled test clocks, and optional reference discipline.
+
 #![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
@@ -6,6 +8,7 @@ extern crate approx;
 
 mod calibration;
 mod raw_counter;
+pub mod sync;
 
 pub use raw_counter::*;
 
@@ -764,6 +767,8 @@ struct InternalClock {
     // For real clocks, this stores the initialization time
     // For mock clocks, this references the mock state
     mock_state: Option<Arc<AtomicU64>>,
+    #[cfg(feature = "clock-sync")]
+    frequency: Option<(u64, u64)>,
 }
 
 // Implements the std version of the RTC clock
@@ -810,25 +815,48 @@ impl InternalClock {
     ) -> Self {
         initialize();
 
-        // Initialize the frequency calibration
-        calibration::calibrate(read_raw_counter, read_rtc_ns, sleep_ns);
-        InternalClock { mock_state: None }
+        #[cfg(feature = "clock-sync")]
+        {
+            let calibration = calibration::measure(read_raw_counter, read_rtc_ns, sleep_ns)
+                .expect("cu29_clock calibration failed: raw counter did not advance");
+            // CuInstant retains its hosted epoch. RobotClock owns its measured
+            // rate, so a later custom RTC cannot recalibrate an existing clock.
+            calibration::install_once(calibration);
+            InternalClock {
+                mock_state: None,
+                frequency: Some((calibration.counter, calibration.frequency_hz)),
+            }
+        }
+        #[cfg(not(feature = "clock-sync"))]
+        {
+            calibration::calibrate(read_raw_counter, read_rtc_ns, sleep_ns);
+            InternalClock { mock_state: None }
+        }
     }
 
     fn mock() -> (Self, Arc<AtomicU64>) {
         let mock_state = Arc::new(AtomicU64::new(0));
         let clock = InternalClock {
             mock_state: Some(Arc::clone(&mock_state)),
+            #[cfg(feature = "clock-sync")]
+            frequency: None,
         };
         (clock, mock_state)
     }
 
     fn now(&self) -> CuInstant {
         if let Some(ref mock_state) = self.mock_state {
-            CuInstant(mock_state.load(Ordering::Relaxed))
-        } else {
-            CuInstant::now()
+            return CuInstant(mock_state.load(Ordering::Relaxed));
         }
+        #[cfg(feature = "clock-sync")]
+        if let Some((anchor, hz)) = self.frequency {
+            let ticks = read_raw_counter().saturating_sub(anchor);
+            return CuInstant(
+                (u128::from(ticks) * 1_000_000_000 / u128::from(hz)).min(u128::from(u64::MAX))
+                    as u64,
+            );
+        }
+        CuInstant::now()
     }
 
     fn recent(&self) -> CuInstant {
@@ -844,7 +872,10 @@ impl InternalClock {
 #[derive(Clone, Debug)]
 pub struct RobotClock {
     inner: InternalClock,
+    #[cfg(not(feature = "clock-sync"))]
     ref_time: CuInstant,
+    #[cfg(feature = "clock-sync")]
+    mapping: Arc<sync::SharedClock>,
 }
 
 /// A mock clock that can be controlled by the user.
@@ -884,89 +915,115 @@ impl RobotClockMock {
 }
 
 impl RobotClock {
-    /// Whether this clock is driven explicitly by a RobotClockMock. Physical link
-    /// pacing must select a running clock when application time is mocked.
+    /// Whether time is controlled explicitly by a mock handle.
     pub fn is_mock(&self) -> bool {
         self.inner.mock_state.is_some()
     }
 
-    /// Creates a RobotClock using now as its reference time.
-    /// It will start at 0ns incrementing monotonically.
-    /// This uses the std System Time as a reference clock.
-    #[cfg(feature = "std")]
-    pub fn new() -> Self {
-        let clock = InternalClock::new(read_rtc_ns, sleep_ns);
-        let ref_time = clock.now();
-        RobotClock {
-            inner: clock,
-            ref_time,
+    fn from_inner(inner: InternalClock, initial: u64) -> Self {
+        let raw = inner.now();
+        Self {
+            inner,
+            #[cfg(not(feature = "clock-sync"))]
+            ref_time: raw - CuDuration(initial),
+            #[cfg(feature = "clock-sync")]
+            mapping: Arc::new(sync::SharedClock::new(raw.0, initial)),
         }
     }
 
-    /// Builds a RobotClock using a reference RTC clock to calibrate with.
-    /// This is mandatory to use with the no-std platforms as we have no idea where to find a reference clock.
+    /// Creates a clock with a local epoch using the host RTC for calibration.
+    #[cfg(feature = "std")]
+    pub fn new() -> Self {
+        Self::from_inner(InternalClock::new(read_rtc_ns, sleep_ns), 0)
+    }
+
+    /// Calibrates the architecture counter against an application RTC.
     pub fn new_with_rtc(
         read_rtc_ns: impl Fn() -> u64 + Send + Sync + 'static,
         sleep_ns: impl Fn(u64) + Send + Sync + 'static,
     ) -> Self {
-        let clock = InternalClock::new(read_rtc_ns, sleep_ns);
-        let ref_time = clock.now();
-        RobotClock {
-            inner: clock,
-            ref_time,
-        }
+        Self::from_inner(InternalClock::new(read_rtc_ns, sleep_ns), 0)
     }
 
-    /// Builds a monotonic clock starting at the given reference time.
+    /// Creates a clock from a known positive architecture-counter frequency.
+    ///
+    /// Experimental. The BSP initializes its counter before calling this method.
+    /// Calibration is local to this clock and does not change existing clocks.
+    /// Cortex-M callers must retain the backend's single-reader contract and read
+    /// often enough to extend the hardware counter before it wraps.
+    #[cfg(feature = "clock-sync")]
+    pub fn new_with_frequency(hz: u64) -> Result<Self, sync::SyncError> {
+        if hz == 0 {
+            return Err(sync::SyncError::InvalidConfig);
+        }
+        let anchor = read_raw_counter();
+        calibration::install_known(anchor, hz);
+        Ok(Self::from_inner(
+            InternalClock {
+                mock_state: None,
+                frequency: Some((anchor, hz)),
+            },
+            0,
+        ))
+    }
+
+    /// Builds a monotonic clock starting at the requested reference time.
     #[cfg(feature = "std")]
     pub fn from_ref_time(ref_time_ns: u64) -> Self {
-        let clock = InternalClock::new(read_rtc_ns, sleep_ns);
-        let ref_time = clock.now() - CuDuration(ref_time_ns);
-        RobotClock {
-            inner: clock,
-            ref_time,
-        }
+        Self::from_inner(InternalClock::new(read_rtc_ns, sleep_ns), ref_time_ns)
     }
 
-    /// Overrides the RTC with a custom implementation, should be the same as the new_with_rtc.
+    /// Builds a clock starting at the requested time using an application RTC.
     pub fn from_ref_time_with_rtc(
         read_rtc_ns: fn() -> u64,
         sleep_ns: fn(u64),
         ref_time_ns: u64,
     ) -> Self {
-        let clock = InternalClock::new(read_rtc_ns, sleep_ns);
-        let ref_time = clock.now() - CuDuration(ref_time_ns);
-        RobotClock {
-            inner: clock,
-            ref_time,
+        Self::from_inner(InternalClock::new(read_rtc_ns, sleep_ns), ref_time_ns)
+    }
+
+    /// Builds a clock controlled by a mock, shared by all clones.
+    pub fn mock() -> (Self, RobotClockMock) {
+        let (inner, state) = InternalClock::mock();
+        (Self::from_inner(inner, 0), RobotClockMock(state))
+    }
+
+    /// Reads execution time: local elapsed time, or the selected reference epoch.
+    #[inline]
+    pub fn now(&self) -> CuTime {
+        #[cfg(not(feature = "clock-sync"))]
+        {
+            CuTime((self.inner.now() - self.ref_time).as_nanos())
+        }
+        #[cfg(feature = "clock-sync")]
+        {
+            self.mapping.now(self.raw_now())
         }
     }
 
-    /// Build a fake clock with a reference time of 0.
-    /// The RobotMock interface enables you to control all the clones of the clock given.
-    pub fn mock() -> (Self, RobotClockMock) {
-        let (clock, mock_state) = InternalClock::mock();
-        let ref_time = clock.now();
-        (
-            RobotClock {
-                inner: clock,
-                ref_time,
-            },
-            RobotClockMock(mock_state),
-        )
-    }
-
-    /// Now returns the time that passed since the reference time, usually the start time.
-    /// It is a monotonically increasing value.
-    #[inline]
-    pub fn now(&self) -> CuTime {
-        CuTime::from_nanos((self.inner.now() - self.ref_time).as_nanos())
-    }
-
-    /// A less precise but quicker time
+    /// Reads the same timeline through the backend's recent-time operation.
     #[inline]
     pub fn recent(&self) -> CuTime {
-        CuTime::from_nanos((self.inner.recent() - self.ref_time).as_nanos())
+        #[cfg(not(feature = "clock-sync"))]
+        {
+            CuTime((self.inner.recent() - self.ref_time).as_nanos())
+        }
+        #[cfg(feature = "clock-sync")]
+        {
+            self.mapping.now(CuTime(self.inner.recent().0))
+        }
+    }
+
+    /// Experimental: undisciplined counter time in nanoseconds for reference capture.
+    #[cfg(feature = "clock-sync")]
+    pub fn raw_now(&self) -> CuTime {
+        CuTime(self.inner.now().0)
+    }
+
+    /// Experimental: current domain, uncertainty and synchronization health.
+    #[cfg(feature = "clock-sync")]
+    pub fn sync_status(&self) -> Option<sync::SyncStatus> {
+        self.mapping.read().status(self.raw_now().0)
     }
 }
 
