@@ -144,7 +144,7 @@ mod tests {
         for raw in [0, 100_000] {
             mock.set_value(raw);
             sync.observe(ClockObservation {
-                raw_local: CuTime(raw),
+                raw_local: CuInstant::from_nanos(raw),
                 parent_ns: 1_000_000 + raw,
                 uncertainty: CuDuration(100),
                 domain,
