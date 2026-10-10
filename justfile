@@ -31,6 +31,7 @@ self-describing-logs-check:
 	cargo test -p cu29-export --lib
 	cargo test -p cu29-export --features self-describing-logs
 	cargo test -p cu29-export --features self-describing-logs,cu29/flat-copperlist-encoding
+	cargo test -p cu-logstream-demo --features self-describing-logs --test twin
 	cargo clippy -p cu29-value -p cu29-value-types -p cu29-units -p cu29-build --all-targets --features cu29-value/decode-catalog,cu29-value/self-describing-logs -- --deny warnings
 	cargo clippy -p cu29 --lib --test value_decode --features decode-catalog -- --deny warnings
 	cargo clippy -p cu-self-describing-logs --all-targets --features self-describing-logs -- --deny warnings

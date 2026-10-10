@@ -1,0 +1,9 @@
+(
+    includes: [(path: "../copperconfig.ron")],
+    logging: (
+        enable_task_logging: false,
+        enable_keyframe_logging: false,
+        keyframe_interval: 16,
+        copperlist_count: 8,
+    ),
+)

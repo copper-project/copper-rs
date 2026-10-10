@@ -36,6 +36,179 @@ static ALLOCATOR: CountingAllocator = CountingAllocator;
 
 static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+#[derive(Debug)]
+struct SocketRx(std::net::UdpSocket);
+impl cu29_logstream::CuStreamRx for SocketRx {
+    fn try_recv(
+        &mut self,
+        packet: &mut [u8],
+    ) -> Result<Option<usize>, cu29_logstream::CuStreamRxError> {
+        match self.0.recv(packet) {
+            Ok(len) => Ok(Some(len)),
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
+            Err(_) => Err(cu29_logstream::CuStreamRxError::Failed(
+                "test UDP receive failed",
+            )),
+        }
+    }
+}
+
+#[cfg(feature = "self-describing-logs")]
+mod stream_only {
+    pub mod sender {
+        use cu29::prelude::*;
+        #[copper_runtime(config = "tests/stream_only.ron")]
+        struct Onboard {}
+        pub type App = default::Onboard;
+    }
+    pub mod twin {
+        use cu29::prelude::*;
+        #[copper_runtime(config = "tests/stream_only.ron", sim_mode = true)]
+        struct Replay {}
+        pub type App = default::Replay;
+    }
+}
+
+#[cfg(feature = "self-describing-logs")]
+#[test]
+fn twin_catalog_describes_streamed_payloads_when_onboard_task_logging_is_disabled() {
+    use cu29::prelude::*;
+    type Sender = stream_only::sender::App;
+    type Receiver = stream_only::twin::App;
+    let _serial = SERIAL.lock().unwrap();
+    let logs = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("logs");
+    std::fs::create_dir_all(&logs).unwrap();
+    let directory = tempfile::tempdir_in(logs).unwrap();
+    let onboard = directory.path().join("onboard.copper");
+    let ground = directory.path().join("ground.copper");
+    let socket = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+    socket.set_nonblocking(true).unwrap();
+    let address = socket.local_addr().unwrap();
+    let (mut twin, mut reader) = Receiver::twin(SocketRx(socket))
+        .with_log_path(&ground)
+        .archive_only()
+        .spawn()
+        .unwrap();
+    let mut config = CuConfig::deserialize_ron(&Sender::original_config()).unwrap();
+    config.resources[0]
+        .config
+        .as_mut()
+        .unwrap()
+        .set("remote_addr", address.to_string());
+    let app = Sender::builder()
+        .with_config(config)
+        .with_instance_id(41)
+        .with_log_path(&onboard, Some(cu_logstream_demo::SLAB_BYTES))
+        .unwrap()
+        .build()
+        .unwrap();
+    let mut running = app.start().unwrap();
+    for _ in 0..4 {
+        running.run_one_iteration().unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    drop(running.stop().unwrap());
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while reader.status().archived < 4 {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "stream-only archive did not receive every list: {:?}",
+            reader.status()
+        );
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+    twin.stop().unwrap();
+    assert!(read_lists(&onboard).unwrap().is_empty());
+    let catalog = |path| {
+        UnifiedLoggerRead::new(path)
+            .unwrap()
+            .read_next_section_type(UnifiedLogType::ValueDecodeCatalog)
+            .unwrap()
+            .unwrap()
+    };
+    assert_eq!(catalog(&onboard), catalog(&ground));
+    let values = cu29_export::catalog::copperlist_values_reader(&ground, None)
+        .unwrap()
+        .collect::<CuResult<Vec<_>>>()
+        .unwrap();
+    assert_eq!(values.len(), 4);
+    assert!(values.iter().all(|list| list.msgs[0].payload.is_some()));
+}
+
+#[test]
+fn twin_archive_seals_local_metadata_and_optional_catalog() {
+    use cu29::prelude::{UnifiedLogRead, UnifiedLogType, UnifiedLoggerRead};
+
+    let _serial = SERIAL.lock().unwrap();
+    let logs = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("logs");
+    std::fs::create_dir_all(&logs).unwrap();
+    let directory = tempfile::tempdir_in(logs).unwrap();
+    let onboard = directory.path().join("onboard.copper");
+    let ground = directory.path().join("ground.copper");
+    let socket = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+    let address = socket.local_addr().unwrap();
+    socket.set_nonblocking(true).unwrap();
+    let (mut twin, mut reader) = Twin::twin(SocketRx(socket))
+        .with_log_path(&ground)
+        .archive_only()
+        .spawn()
+        .unwrap();
+    run_sender(address, &onboard, 20, 0).unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while reader.status().archived < 20 {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "archive did not receive every list: {:?}",
+            reader.status()
+        );
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+    twin.stop().unwrap();
+    let mut reader = UnifiedLoggerRead::new(&ground).unwrap();
+    let metadata = reader.application_metadata().unwrap().unwrap();
+    assert_eq!(metadata.app_name, "cu-logstream-demo");
+    assert_eq!(metadata.missions, ["default"]);
+    assert!(metadata.effective_config_ron.is_empty());
+    let catalog = reader
+        .read_next_section_type(UnifiedLogType::ValueDecodeCatalog)
+        .unwrap();
+    #[cfg(not(feature = "self-describing-logs"))]
+    assert!(catalog.is_none());
+    #[cfg(feature = "self-describing-logs")]
+    {
+        let mut sender = UnifiedLoggerRead::new(&onboard).unwrap();
+        let sender_catalog = sender
+            .read_next_section_type(UnifiedLogType::ValueDecodeCatalog)
+            .unwrap();
+        assert!(catalog.is_some());
+        assert_eq!(catalog, sender_catalog, "twin and sender catalogs differ");
+        let values = cu29_export::catalog::copperlist_values_reader(&ground, None)
+            .unwrap()
+            .collect::<cu29::CuResult<Vec<_>>>()
+            .unwrap();
+        let lists = read_lists(&onboard).unwrap();
+        assert_eq!(values.len(), lists.len());
+        for (value, list) in values.iter().zip(&lists) {
+            assert_eq!(value.id, list.id);
+            assert!(value.msgs[0].payload.is_some());
+            assert!(value.msgs[1].payload.is_none());
+            assert!(!value.msgs[1].captured_payload_present);
+            assert_eq!(
+                cu29::bincode::encode_to_vec(
+                    &value.msgs[0].metadata,
+                    cu29::bincode::config::standard()
+                )
+                .unwrap(),
+                cu29::bincode::encode_to_vec(
+                    &list.msgs.get_encoders_output().metadata,
+                    cu29::bincode::config::standard()
+                )
+                .unwrap()
+            );
+        }
+    }
+}
+
 fn fixture() -> (Vec<List>, Vec<cu29::curuntime::KeyFrame>) {
     let logs = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("logs");
     std::fs::create_dir_all(&logs).unwrap();
@@ -162,6 +335,11 @@ static RELEASE: std::sync::LazyLock<std::sync::Barrier> =
     std::sync::LazyLock::new(|| std::sync::Barrier::new(2));
 struct BlockedTwin(Twin);
 impl cu29_logstream::twin::LiveReplay for BlockedTwin {
+    fn seal_archive_metadata(
+        logger: &mut cu29_unifiedlog::UnifiedLoggerWrite,
+    ) -> cu29::CuResult<()> {
+        <Twin as cu29_logstream::twin::LiveReplay>::seal_archive_metadata(logger)
+    }
     type DataSet = DataSet;
     fn build_twin() -> cu29::CuResult<(Self, cu29::clock::RobotClockMock)> {
         let (app, clock) = Twin::build_twin()?;

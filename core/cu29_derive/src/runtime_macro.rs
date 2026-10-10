@@ -4133,9 +4133,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     layout: cu29::prelude::ValueDecodeCatalogLayout::#layout,
                     missions: &[#(super::#modules::VALUE_DECODE_CATALOG_MISSION),*],
                 };
-                logger.seal_metadata(&metadata, Some(&cu29::prelude::CompressedCatalog(&catalog)))?;
+                logger.seal_metadata(metadata, Some(&cu29::prelude::CompressedCatalog(&catalog)))?;
             }
-        } else { quote! { logger.seal_metadata::<()>(&metadata, None)?; } };
+        } else { quote! { logger.seal_metadata::<()>(metadata, None)?; } };
         let app_inherent_impl = quote! {
             impl #application_name {
                 #stop_components
@@ -4148,10 +4148,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 }
 
                 #[doc(hidden)]
-                fn prepare_log_metadata<S: SectionStorage, L: UnifiedLogWrite<S>>(
-                    logger: &Arc<Mutex<L>>, config: &CuConfig, instance_id: u32,
-                ) -> CuResult<cu29::prelude::SectionContext> {
-                    let metadata = cu29::prelude::ApplicationMetadata {
+                fn application_log_metadata(effective_config_ron: String) -> cu29::prelude::ApplicationMetadata {
+                    cu29::prelude::ApplicationMetadata {
                         app_type: stringify!(#application_name).to_string(),
                         app_name: env!("CARGO_PKG_NAME").to_string(),
                         app_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -4159,12 +4157,27 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         git_dirty: #git_dirty_tokens,
                         subsystem_id: Self::subsystem().id().map(str::to_string),
                         subsystem_code: Self::subsystem().code(),
-                        effective_config_ron: config.serialize_ron()?,
+                        effective_config_ron,
                         missions: vec![#(#mission_names.to_string()),*],
                         catalog_offset: 0,
-                    };
-                    #metadata_log_lock
+                    }
+                }
+
+                #[doc(hidden)]
+                fn seal_log_metadata<S: SectionStorage, L: UnifiedLogWrite<S>>(
+                    logger: &mut L, metadata: &cu29::prelude::ApplicationMetadata,
+                ) -> CuResult<()> {
                     #seal_metadata
+                    Ok(())
+                }
+
+                #[doc(hidden)]
+                fn prepare_log_metadata<S: SectionStorage, L: UnifiedLogWrite<S>>(
+                    logger: &Arc<Mutex<L>>, config: &CuConfig, instance_id: u32,
+                ) -> CuResult<cu29::prelude::SectionContext> {
+                    let metadata = Self::application_log_metadata(config.serialize_ron()?);
+                    #metadata_log_lock
+                    Self::seal_log_metadata::<S, L>(&mut *logger, &metadata)?;
                     logger.construction_context(instance_id, #mission_index)
                 }
 
