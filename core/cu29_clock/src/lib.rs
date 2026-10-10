@@ -32,6 +32,82 @@ use alloc::vec::Vec;
 use core::fmt::{Display, Formatter};
 use core::ops::{AddAssign, Div, Mul, SubAssign};
 
+/// An instant on one robot clock's undisciplined local timeline, in nanoseconds.
+///
+/// Obtain readings through [`RobotClock::raw_now`]. Compare instants only within
+/// that clock and its clones, which share an origin and counter calibration.
+/// Execution timestamps use [`CuTime`]; converting an instant to execution time
+/// requires the clock's mapping.
+///
+/// ```rust
+/// use cu29_clock::{CuDuration, RobotClock};
+///
+/// let (clock, control) = RobotClock::mock();
+/// let start = clock.raw_now();
+/// control.increment(CuDuration::from_millis(1));
+/// let deadline = start + CuDuration::from_millis(1);
+/// assert_eq!(clock.raw_now(), deadline);
+/// assert_eq!(deadline - start, CuDuration::from_millis(1));
+/// ```
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(feature = "reflect", derive(Reflect))]
+#[repr(transparent)]
+pub struct CuInstant(u64);
+
+impl CuInstant {
+    /// Reconstructs an instant from a raw reading in the same clock's timeline.
+    pub const fn from_nanos(nanos: u64) -> Self {
+        Self(nanos)
+    }
+
+    /// Returns nanoseconds on the undisciplined local timeline.
+    pub const fn as_nanos(&self) -> u64 {
+        self.0
+    }
+}
+
+impl Sub for CuInstant {
+    type Output = CuDuration;
+
+    fn sub(self, other: Self) -> Self::Output {
+        CuDuration(self.0.saturating_sub(other.0))
+    }
+}
+
+impl Sub<CuDuration> for CuInstant {
+    type Output = Self;
+
+    fn sub(self, duration: CuDuration) -> Self::Output {
+        Self(self.0.saturating_sub(duration.as_nanos()))
+    }
+}
+
+impl Add<CuDuration> for CuInstant {
+    type Output = Self;
+
+    fn add(self, duration: CuDuration) -> Self::Output {
+        Self(self.0.saturating_add(duration.as_nanos()))
+    }
+}
+
+impl Encode for CuInstant {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        self.0.encode(encoder)
+    }
+}
+
+impl<Context> Decode<Context> for CuInstant {
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+        Ok(Self(u64::decode(decoder)?))
+    }
+}
+
+impl<'de, Context> BorrowDecode<'de, Context> for CuInstant {
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        Ok(Self(u64::decode(decoder)?))
+    }
+}
+
 /// For Robot times, the underlying type is a u64 representing nanoseconds.
 /// It is always positive to simplify the reasoning on the user side.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
@@ -827,10 +903,18 @@ impl RobotClockMock {
         mock_state.load(Ordering::Relaxed)
     }
 
-    /// A convenient way to get the current time from the mocking side.
+    /// Returns the controlled counter as a legacy [`CuTime`] value.
+    ///
+    /// For execution time, read [`RobotClock::now`] on the associated clock.
+    /// For raw instants, use [`Self::raw_now`].
     pub fn now(&self) -> CuTime {
         let Self(mock_state) = self;
         CuTime(mock_state.load(Ordering::Relaxed))
+    }
+
+    /// Reads the controlled undisciplined timeline of the associated clock.
+    pub fn raw_now(&self) -> CuInstant {
+        CuInstant(self.0.load(Ordering::Relaxed))
     }
 
     /// Sets the absolute value of the time.
@@ -943,7 +1027,7 @@ impl RobotClock {
         }
         #[cfg(feature = "clock-sync")]
         {
-            self.mapping.now(CuTime(self.inner.recent()))
+            self.mapping.now(CuInstant(self.inner.recent()))
         }
     }
 
@@ -962,8 +1046,8 @@ impl RobotClock {
     /// control.increment(CuDuration::from_millis(1));
     /// assert_eq!(clock.raw_now() - start, CuDuration::from_millis(1));
     /// ```
-    pub fn raw_now(&self) -> CuTime {
-        CuTime(self.inner.now())
+    pub fn raw_now(&self) -> CuInstant {
+        CuInstant(self.inner.now())
     }
 
     /// Spins for a duration measured on this clock's undisciplined timeline.
@@ -974,7 +1058,7 @@ impl RobotClock {
 
     /// Spins until a raw deadline from this clock or one of its clones.
     #[inline(always)]
-    pub fn busy_wait_until(&self, time: CuTime) {
+    pub fn busy_wait_until(&self, time: CuInstant) {
         while self.raw_now() < time {
             core::hint::spin_loop();
         }
@@ -983,7 +1067,7 @@ impl RobotClock {
     /// Experimental: current domain, uncertainty and synchronization health.
     #[cfg(feature = "clock-sync")]
     pub fn sync_status(&self) -> Option<sync::SyncStatus> {
-        self.mapping.read().status(self.raw_now().0)
+        self.mapping.read().status(self.raw_now())
     }
 }
 
@@ -1011,6 +1095,16 @@ impl bincode::ValueDecode for CuTime {
         )];
 }
 
+impl bincode::ValueDecode for CuInstant {
+    const DECODE: &'static bincode::ValueDecodeSpec = <u64 as bincode::ValueDecode>::DECODE;
+    const METADATA: &'static [bincode::value_decode::ValueMetadata] =
+        &[bincode::value_decode::ValueMetadata::Quantity(
+            bincode::value_decode::QuantityMetadata::time(
+                bincode::value_decode::TimeStorageUnit::Nanosecond,
+            ),
+        )];
+}
+
 impl bincode::ValueDecode for CuDuration {
     const DECODE: &'static bincode::ValueDecodeSpec = <u64 as bincode::ValueDecode>::DECODE;
     const METADATA: &'static [bincode::value_decode::ValueMetadata] =
@@ -1026,6 +1120,63 @@ mod tests {
     use super::*;
     #[cfg(feature = "std")]
     use approx::assert_relative_eq;
+
+    #[test]
+    fn test_raw_instant_arithmetic_and_mock_readings() {
+        let (clock, mock) = RobotClock::mock();
+        let start = clock.raw_now();
+        let duration = CuDuration::from_millis(1);
+        mock.increment(duration);
+        assert_eq!(clock.raw_now(), start + duration);
+        assert_eq!(mock.raw_now(), clock.raw_now());
+        assert_eq!(clock.raw_now() - start, duration);
+        assert_eq!(clock.raw_now() - duration, start);
+        assert_eq!(start - clock.raw_now(), CuDuration(0));
+        assert_eq!(start - duration, start);
+        let last = CuInstant::from_nanos(u64::MAX);
+        assert_eq!(last + duration, last);
+        assert_eq!(
+            core::mem::size_of::<CuInstant>(),
+            core::mem::size_of::<u64>()
+        );
+    }
+
+    #[test]
+    fn test_raw_observation_preserves_timestamp_encoding() {
+        let domain = sync::ClockDomain {
+            id: 1,
+            identity: *b"testroot",
+            session: 2,
+        };
+        for nanos in [0, 250, 1_000_000_000, CuTime::MAX.as_nanos()] {
+            let instant = CuInstant::from_nanos(nanos);
+            let encoded = bincode::encode_to_vec(instant, bincode::config::standard()).unwrap();
+            assert_eq!(
+                encoded,
+                bincode::encode_to_vec(CuTime(nanos), bincode::config::standard()).unwrap()
+            );
+            let (decoded, consumed): (CuInstant, _) =
+                bincode::decode_from_slice(&encoded, bincode::config::standard()).unwrap();
+            assert_eq!(decoded, instant);
+            assert_eq!(consumed, encoded.len());
+            let observation = sync::ClockObservation {
+                raw_local: instant,
+                parent_ns: 10_000_000_000,
+                uncertainty: CuDuration(100),
+                domain,
+            };
+            let legacy = (
+                CuTime(nanos),
+                observation.parent_ns,
+                observation.uncertainty,
+                domain,
+            );
+            assert_eq!(
+                bincode::encode_to_vec(observation, bincode::config::standard()).unwrap(),
+                bincode::encode_to_vec(legacy, bincode::config::standard()).unwrap()
+            );
+        }
+    }
 
     #[test]
     fn test_cuduration_comparison_operators() {
@@ -1082,10 +1233,10 @@ mod tests {
         let (clock, mock) = RobotClock::mock();
         let clone = clock.clone();
         mock.set_value(1_000_000_000);
-        assert_eq!(clock.raw_now(), CuTime(1_000_000_000));
+        assert_eq!(clock.raw_now(), CuInstant::from_nanos(1_000_000_000));
         assert_eq!(clone.raw_now(), clock.raw_now());
         mock.decrement(CuDuration(10));
-        assert_eq!(clock.raw_now(), CuTime(999_999_990));
+        assert_eq!(clock.raw_now(), CuInstant::from_nanos(999_999_990));
     }
 
     #[cfg(feature = "std")]
