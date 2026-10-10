@@ -94,12 +94,48 @@ discipline and never starts live parent I/O.
 ### Features
 
 Keep observation/discipline arithmetic in `cu29-clock` without platform dependencies.
-Add one opt-in `cu29/clock-sync` feature for runtime integration. Put PHC/Statime
+Add one opt-in `cu29/clock-sync` feature for runtime integration, enabling the
+corresponding `cu29-clock/clock-sync` feature for clock storage and discipline.
+Standalone/manual users enable the clock crate's feature directly. Put PHC/Statime
 dependencies in a `cu-ptp` component:
 `linux-phc` for the Linux adapter, `ptp` for protocol/overlay support on either
 platform. Zenoh synchronization is an opt-in bridge feature `ptp-sync`; it
 enables the protocol pieces. Features enable capabilities; RON selects behavior.
-Unconfigured applications retain their existing clock path.
+Unconfigured applications retain their local epoch and behavior.
+
+### RobotClock storage and read mapping
+
+Select the clock representation at compile time:
+
+- With `cu29-clock/clock-sync` disabled, retain the current `ref_time: CuInstant`
+  field and subtraction-only `now()`/`recent()` path.
+- With the feature enabled, replace `ref_time` with shared mapping state containing
+  `raw_anchor`, `time_anchor` and fixed-point `rate`. Both `now()` and `recent()`
+  evaluate this mapping, whether or not a synchronization parent is configured.
+  Clock clones share the published mapping and synchronization status.
+
+The mapping is:
+
+```text
+now = time_anchor + rate * (raw - raw_anchor)
+```
+
+Here `raw` is undisciplined local counter time expressed in nanoseconds. Initialize
+an unconfigured clock with `raw_anchor` at construction, `time_anchor = 0` and
+`rate = 1`, preserving the local epoch. The `from_ref_time` constructors instead
+set `time_anchor` to their requested initial time. Mocks initialize both anchors
+to zero and the rate to one, preserving their existing control semantics.
+
+Acquisition establishes the parent's epoch through these same anchors; subsequent
+updates preserve continuity and adjust the rate as specified below. The mapping
+owns the output epoch: feature-enabled builds have no separate `ref_time` member
+or additional output-offset subtraction. Feature availability alone does not
+select a parent or change the clock to a shared epoch.
+
+`raw_now()` reads the undisciplined counter timeline independently of the output
+mapping. Reference captures, acquisition timeouts and sample aging use that
+timeline; discipline updates never alter it. Replay restores the recorded mapping
+and synchronization status into the same shared state.
 
 ## One parent per clock
 
