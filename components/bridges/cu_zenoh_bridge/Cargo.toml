@@ -39,3 +39,10 @@ zenoh = { workspace = true, default-features = false, features = [
   "transport_tcp",
   "transport_udp",
 ] }
+
+[features]
+default = []
+clock-sync = ["cu29/clock-sync"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

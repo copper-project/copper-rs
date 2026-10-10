@@ -1,3 +1,4 @@
+mod clock_sync;
 use cu29::cubridge::{
     BridgeChannel, BridgeChannelConfig, BridgeChannelInfo, BridgeChannelSet, CuBridge,
 };
@@ -300,30 +301,19 @@ where
     }
 
     fn encode_attachment(ctx: &CuContext) -> CuResult<Vec<u8>> {
-        bincode::encode_to_vec(
-            CopperBridgeAttachment {
-                subsystem_code: ctx.subsystem_code(),
-                instance_id: ctx.instance_id(),
-                cl_id: ctx.cl_id(),
-            },
-            bincode::config::standard(),
-        )
-        .map_err(|e| CuError::new_with_cause("ZenohBridge: attachment encode failed", e))
+        let origin = CopperBridgeAttachment {
+            subsystem_code: ctx.subsystem_code(),
+            instance_id: ctx.instance_id(),
+            cl_id: ctx.cl_id(),
+        };
+        clock_sync::encode(origin, ctx)
     }
 
-    fn decode_attachment(sample: &zenoh::sample::Sample) -> CuResult<Option<CuMsgOrigin>> {
+    fn decode_attachment(sample: &zenoh::sample::Sample) -> CuResult<clock_sync::Attachment> {
         let Some(attachment) = sample.attachment() else {
-            return Ok(None);
+            return Ok(clock_sync::Attachment::default());
         };
-        let attachment_bytes = attachment.to_bytes();
-        let (decoded, _): (CopperBridgeAttachment, usize) =
-            bincode::decode_from_slice(attachment_bytes.as_ref(), bincode::config::standard())
-                .map_err(|e| CuError::new_with_cause("ZenohBridge: attachment decode failed", e))?;
-        Ok(Some(CuMsgOrigin {
-            subsystem_code: decoded.subsystem_code,
-            instance_id: decoded.instance_id,
-            cl_id: decoded.cl_id,
-        }))
+        clock_sync::decode(attachment.to_bytes().as_ref())
     }
 }
 
@@ -513,11 +503,12 @@ where
         }
         .map_err(|e| CuError::from(format!("ZenohBridge: receive failed: {e}")))?;
         if let Some(sample) = sample {
-            let origin = Self::decode_attachment(&sample)?;
+            let attachment = Self::decode_attachment(&sample)?;
             let payload = sample.payload().to_bytes();
             let decoded = Self::decode_message(rx_channel.wire_format, payload.as_ref())?;
             *msg = decoded;
-            if let Some(origin) = origin {
+            clock_sync::validate_tov(&mut msg.tov, &attachment, ctx);
+            if let Some(origin) = attachment.origin {
                 msg.metadata.set_origin(origin);
             } else {
                 msg.metadata.clear_origin();
