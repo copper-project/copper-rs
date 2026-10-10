@@ -57,7 +57,7 @@ impl ResourceBundle for MockPtpBundle {
 
 /// Deterministic parent model with a 20 ppm relative rate difference.
 pub struct MockPtp {
-    anchor: Option<u64>,
+    anchor: Option<CuInstant>,
 }
 const DOMAIN: ClockDomain = ClockDomain {
     id: 0,
@@ -76,7 +76,7 @@ impl ClockReference for MockPtp {
     }
     fn poll(&mut self, clock: &RobotClock) -> CuResult<Option<ClockObservation>> {
         let raw = clock.raw_now();
-        let elapsed = raw.0 - *self.anchor.get_or_insert(raw.0);
+        let elapsed = (raw - *self.anchor.get_or_insert(raw)).as_nanos();
         Ok(Some(ClockObservation {
             raw_local: raw,
             parent_ns: 1_800_000_000_000_000_000 + elapsed + elapsed / 50_000,
