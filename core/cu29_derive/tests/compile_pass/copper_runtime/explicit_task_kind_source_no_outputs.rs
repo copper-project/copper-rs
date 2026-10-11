@@ -21,7 +21,7 @@ impl CuSrcTask for SingleSource {
 }
 
 #[copper_runtime(
-    config = "config/explicit_task_kind_source_no_outputs_valid.ron",
+    config = "tests/config/explicit_task_kind_source_no_outputs_valid.ron",
     sim_mode = true,
     ignore_resources = true
 )]

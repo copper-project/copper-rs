@@ -64,8 +64,8 @@ impl CuSinkTask for IntSink {
     }
 }
 
-#[copper_runtime(
-    config = "config/multi_output_task_subset_without_nc.ron",
+#[copper_runtime( //~ E0277
+    config = "tests/config/multi_output_task_subset_without_nc.ron",
     sim_mode = true,
     ignore_resources = true
 )]

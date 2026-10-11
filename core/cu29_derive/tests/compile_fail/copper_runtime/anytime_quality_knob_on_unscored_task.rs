@@ -78,7 +78,11 @@ impl CuSinkTask for IntSink {
     }
 }
 
-#[copper_runtime(config = "config/anytime_quality_knob_on_unscored_invalid.ron")]
+#[copper_runtime(config = "tests/config/anytime_quality_knob_on_unscored_invalid.ron")]
+//~^ E0277
+//~| E0599
+//~| E0599
+//~| E0599
 struct App {}
 
 fn main() {}

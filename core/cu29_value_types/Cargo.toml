@@ -1,0 +1,20 @@
+[package]
+name = "cu29-value-types"
+description = "Allocation-free Copper value description and metadata vocabulary"
+version.workspace = true
+edition.workspace = true
+rust-version = "1.92.0"
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+categories.workspace = true
+keywords.workspace = true
+readme = "README.md"
+
+[dependencies]
+serde = { workspace = true, optional = true }
+
+[features]
+default = []
+serde = ["dep:serde"]

@@ -15,11 +15,6 @@ resim-debug debug_base="copper/projects/{{project-name|snake_case}}/debug/v1" lo
 graph config="copperconfig.ron" output="graph.svg":
   cargo run --bin {{project-name|kebab_case}}-view -- graph --config "{% raw %}{{config}}{% endraw %}" --output "{% raw %}{{output}}{% endraw %}" --open
 
-# Compatibility alias for the former graph recipe.
-dag config="copperconfig.ron" output="graph.svg":
-  @echo "just dag is deprecated; use just graph" >&2
-  just graph "{% raw %}{{config}}{% endraw %}" "{% raw %}{{output}}{% endraw %}"
-
 graph-log config="copperconfig.ron" log="logs/{{project-name|kebab_case}}.copper" output="graph-log.svg":
   cargo run --bin {{project-name|kebab_case}}-view -- graph --config "{% raw %}{{config}}{% endraw %}" --log "{% raw %}{{log}}{% endraw %}" --output "{% raw %}{{output}}{% endraw %}" --open
 

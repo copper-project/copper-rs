@@ -21,7 +21,7 @@ impl CuSrcTask for BackgroundSource {
 }
 
 #[copper_runtime(
-    config = "config/sim_background_source_placeholder_valid.ron",
+    config = "tests/config/sim_background_source_placeholder_valid.ron",
     sim_mode = true
 )]
 struct App {}

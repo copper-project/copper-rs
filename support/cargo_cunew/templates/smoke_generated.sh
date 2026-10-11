@@ -16,6 +16,7 @@ smoke_project() {
   (
     cd "$dir"
     cargo +"$toolchain" build
+    cargo +"$toolchain" build --features self-describing-logs
     cargo +"$toolchain" build --profile debug-optimized --features sim-debug --bins
     mkdir -p target/pgs
     cp copperconfig.ron target/pgs/selected.config.ron
@@ -28,6 +29,7 @@ smoke_workspace() {
   (
     cd "$dir"
     cargo +"$toolchain" build
+    cargo +"$toolchain" build --features self-describing-logs
     cargo +"$toolchain" build --profile debug-optimized -p cu_example_app --features sim-debug --bins
     mkdir -p apps/cu_example_app/target/pgs
     cp apps/cu_example_app/copperconfig.ron apps/cu_example_app/target/pgs/selected.config.ron

@@ -30,8 +30,23 @@ use core::cmp::Ordering;
 use core::fmt::{Display, Formatter};
 use core::hash::{Hash, Hasher};
 use cu29_clock::CuTime;
+pub use cu29_value_types::{
+    Quantity, QuantityMetadata, RecordShape, Scalar, StorageUnit, TimeStorageUnit, ValueMetadata,
+};
 use ordered_float::OrderedFloat;
 use serde::Deserialize;
+
+#[cfg(feature = "decode-catalog")]
+pub mod catalog;
+#[cfg(any(feature = "self-describing-logs", feature = "decode-catalog"))]
+pub mod catalog_format;
+#[cfg(any(feature = "self-describing-logs", feature = "decode-catalog"))]
+#[doc(hidden)]
+pub mod catalog_stream;
+#[cfg(feature = "decode-catalog")]
+pub mod decode;
+#[cfg(feature = "decode-catalog")]
+mod metadata;
 
 mod bdec;
 mod benc;
@@ -1251,3 +1266,6 @@ mod tests {
         assert!(huge.deserialize_into::<i64>().is_err());
     }
 }
+
+#[cfg(all(test, feature = "decode-catalog", feature = "self-describing-logs"))]
+mod decode_tests;

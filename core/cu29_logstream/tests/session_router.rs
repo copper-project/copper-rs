@@ -718,14 +718,17 @@ fn manifest_requirements_cannot_exceed_receiver_local_limits() {
                 break;
             }
         }
-        assert!(matches!(
-            rejection,
-            Some(cu29_logstream::ReceiveError::Stream(
-                cu29_logstream::Error::InvalidConfig(
-                    "session manifest exceeds receiver-local limits"
-                )
-            ))
-        ));
+        let expected = if sender.continuous.max_record_bytes > limits.max_record_bytes {
+            cu29_logstream::Error::ObjectTooLarge {
+                actual: sender.continuous.max_record_bytes as u64,
+                maximum: limits.max_record_bytes as u64,
+            }
+        } else {
+            cu29_logstream::Error::InvalidConfig("session manifest exceeds receiver-local limits")
+        };
+        assert!(
+            matches!(rejection, Some(cu29_logstream::ReceiveError::Stream(error)) if error == expected)
+        );
         assert_eq!(router.stats().manifests_accepted, 0);
         assert!(
             router

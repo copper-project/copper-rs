@@ -23,12 +23,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - repo: zed
-            ref: master
-            notify_on_pr: false
-          - repo: cu-vitfly
-            ref: main
-            notify_on_pr: false
           - repo: cu-timetraveler
             ref: main
             notify_on_pr: true

@@ -36,6 +36,3 @@ smoke: record
 	#!/usr/bin/env bash
 	set -euo pipefail
 	cargo run --profile debug-optimized -p {{package}} -- smoke
-
-# Run the full end-to-end demo in one command.
-demo: smoke

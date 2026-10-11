@@ -1,7 +1,6 @@
 use crate::runs::RunReader;
 use bincode::config::standard;
 use bincode::decode_from_std_read;
-use bincode::error::DecodeError;
 use cu29::prelude::*;
 use cu29::{CopperListTuple, CuResult};
 use num_format::{Locale, ToFormattedString};
@@ -173,46 +172,15 @@ impl EntropySamples {
 fn print_runtime_lifecycle_record(index: usize, entry: &RuntimeLifecycleRecord) {
     println!("    RuntimeLifecycle #{index} @{}", entry.timestamp);
     match &entry.event {
-        RuntimeLifecycleEvent::Instantiated {
-            config_source,
-            effective_config_ron,
-            stack,
-        } => {
-            println!("      event: Instantiated");
-            println!("      config_source: {config_source:?}");
-            println!("      stack:");
-            println!("        app_name: {}", stack.app_name);
-            println!("        app_version: {}", stack.app_version);
-            println!(
-                "        git_commit: {}",
-                stack.git_commit.as_deref().unwrap_or("n/a")
-            );
-            println!(
-                "        git_dirty: {}",
-                stack
-                    .git_dirty
-                    .map(|v| if v { "true" } else { "false" })
-                    .unwrap_or("n/a")
-            );
-            println!(
-                "        subsystem_id: {}",
-                stack.subsystem_id.as_deref().unwrap_or("n/a")
-            );
-            println!("        subsystem_code: {}", stack.subsystem_code);
-            println!("        instance_id: {}", stack.instance_id);
-            println!("      effective_config_ron:");
-            for line in effective_config_ron.lines() {
-                println!("        {line}");
-            }
+        RuntimeLifecycleEvent::Instantiated { config_source } => {
+            println!("      event: Instantiated ({config_source:?})");
         }
-        RuntimeLifecycleEvent::MissionStarted { mission } => {
-            println!("      event: MissionStarted");
-            println!("      mission: {mission}");
+        RuntimeLifecycleEvent::MissionStarted => println!("      event: MissionStarted"),
+        RuntimeLifecycleEvent::MissionStopped { reason } => {
+            println!("      event: MissionStopped ({reason:?})")
         }
-        RuntimeLifecycleEvent::MissionStopped { mission, reason } => {
-            println!("      event: MissionStopped");
-            println!("      mission: {mission}");
-            println!("      reason: {reason}");
+        RuntimeLifecycleEvent::LifecycleFailed { operation, error } => {
+            println!("      event: LifecycleFailed ({operation:?}): {error}")
         }
         RuntimeLifecycleEvent::Panic {
             message,
@@ -241,6 +209,35 @@ fn print_runtime_lifecycle_record(index: usize, entry: &RuntimeLifecycleRecord) 
     }
 }
 
+pub(crate) fn process_time_bounds(
+    times: impl IntoIterator<Item = PartialCuTimeRange>,
+) -> (OptionCuTime, OptionCuTime) {
+    let mut first = OptionCuTime::none();
+    let mut last = OptionCuTime::none();
+    for time in times {
+        observe_process_times(&mut first, &mut last, time.start, time.end);
+    }
+    (first, last)
+}
+
+fn observe_process_times(
+    first: &mut OptionCuTime,
+    last: &mut OptionCuTime,
+    start: OptionCuTime,
+    end: OptionCuTime,
+) {
+    if let Some(start) = Option::<CuTime>::from(start)
+        && Option::<CuTime>::from(*first).is_none_or(|first| start < first)
+    {
+        *first = start.into();
+    }
+    if let Some(end) = Option::<CuTime>::from(end)
+        && Option::<CuTime>::from(*last).is_none_or(|last| end > last)
+    {
+        *last = end.into();
+    }
+}
+
 pub(crate) fn check<P>(
     dl: &mut RunReader,
     verbose: u8,
@@ -249,6 +246,40 @@ pub(crate) fn check<P>(
 where
     P: CopperListTuple,
 {
+    let mut decode = |bytes: &[u8]| {
+        let (entry, used) = bincode::decode_from_slice::<CopperList<P>, _>(bytes, standard())
+            .map_err(|error| CuError::new_with_cause("Corrupted CopperList", error))?;
+        let messages = entry.cumsgs();
+        let (start, end) =
+            process_time_bounds(messages.iter().map(|msg| msg.metadata().process_time()));
+        Ok(CheckedCopperList {
+            id: entry.id,
+            used,
+            start,
+            end,
+        })
+    };
+    check_with(dl, verbose, dump_runtime_lifecycle, Some(&mut decode))
+}
+
+pub(crate) struct CheckedCopperList {
+    pub id: u64,
+    pub used: usize,
+    pub start: OptionCuTime,
+    pub end: OptionCuTime,
+}
+
+type CopperListCheck<'a> = dyn FnMut(&[u8]) -> CuResult<CheckedCopperList> + 'a;
+
+pub(crate) fn check_with(
+    dl: &mut RunReader,
+    verbose: u8,
+    dump_runtime_lifecycle: bool,
+    mut decode: Option<&mut CopperListCheck<'_>>,
+) -> CuResult<()> {
+    if decode.is_none() {
+        println!("Structural check: CopperList payload decoding requires fsck --deep.");
+    }
     let header = dl.raw_main_header();
 
     if verbose > 0 {
@@ -267,9 +298,16 @@ where
     let mut runtime_lifecycle_size: usize = 0;
     let mut runtime_lifecycle_events: usize = 0;
     let mut sl_entries: usize = 0;
+    let mut catalog_present = false;
+    let mut catalog_size: usize = 0;
+    #[cfg(feature = "self-describing-logs")]
+    let mut catalog_decompressed_size: Option<usize> = None;
+    #[cfg(feature = "self-describing-logs")]
+    let mut catalog_section = crate::catalog::CatalogSection::default();
 
     let result = 'scan: loop {
         // for _ in 0..4 {
+        let position = dl.position();
         let section = dl.raw_read_section();
         match section {
             Ok((header, content)) => {
@@ -280,6 +318,7 @@ where
                 }
 
                 match header.entry_type {
+                    UnifiedLogType::ApplicationMetadata => {}
                     UnifiedLogType::StructuredLogLine => {
                         structured_log_size += content.len();
                         let mut reader = Cursor::new(content.as_slice());
@@ -299,49 +338,56 @@ where
                         cls_size += content.len();
                         cls_entropy.observe(&content);
 
-                        let mut reader = Cursor::new(content.as_slice());
+                        let Some(decode) = decode.as_mut() else {
+                            continue;
+                        };
+                        let mut offset = 0;
                         let mut first_cl = None;
                         let mut section_last_cl = None;
-                        let mut first_ts: OptionCuTime = OptionCuTime::none();
-                        while reader.position() < content.len() as u64 {
-                            let entry_start = reader.position() as usize;
-                            let entry = match decode_from_std_read::<CopperList<P>, _, _>(
-                                &mut reader,
-                                standard(),
-                            ) {
-                                Ok(entry) => entry,
+                        let mut first_ts = OptionCuTime::none();
+                        while offset < content.len() {
+                            let entry = match decode(&content[offset..]) {
+                                Ok(entry)
+                                    if entry.used > 0 && entry.used <= content.len() - offset =>
+                                {
+                                    entry
+                                }
+                                Ok(_) => {
+                                    break 'scan Err(
+                                        "CopperList decoder consumed an invalid byte count".into(),
+                                    );
+                                }
                                 Err(error) => {
-                                    let after = copperlist_sequence
-                                        .last_id
-                                        .map_or_else(|| "start".to_string(), |id| format!("#{id}"));
-                                    println!("CopperList after {after} is corrupted: {error:?}");
-                                    break;
+                                    break 'scan Err(CuError::from(format!(
+                                        "CopperList at section byte {} record byte {}: {error}",
+                                        position.0, offset,
+                                    )));
                                 }
                             };
-                            let entry_end = reader.position() as usize;
-                            cl_entropy_samples.observe(&content[entry_start..entry_end]);
+                            cl_entropy_samples.observe(&content[offset..offset + entry.used]);
+                            offset += entry.used;
                             if let Some(last) = copperlist_sequence.last_id
                                 && entry.id <= last
                             {
                                 break 'scan Err(CuError::from(format!(
                                     "CopperList IDs must increase within a recorded run: {} after {}",
-                                    entry.id, last,
+                                    entry.id, last
                                 )));
                             }
                             copperlist_sequence.observe(entry.id);
                             section_last_cl = Some(entry.id);
-                            if first_ts.is_none() {
+                            if first_cl.is_none() {
                                 first_cl = Some(entry.id);
-                                if let Some(first) = entry.cumsgs().first() {
-                                    first_ts = first.metadata().process_time().start;
-                                }
-                                if overall_first_ts.is_none() {
-                                    overall_first_ts = first_ts;
-                                }
                             }
-                            if let Some(last_msg) = entry.cumsgs().last() {
-                                last_ts = last_msg.metadata().process_time().end;
+                            if first_ts.is_none() {
+                                first_ts = entry.start;
                             }
+                            observe_process_times(
+                                &mut overall_first_ts,
+                                &mut last_ts,
+                                entry.start,
+                                entry.end,
+                            );
                         }
                         if verbose > 0 {
                             match (first_cl, section_last_cl) {
@@ -379,34 +425,23 @@ where
                     }
                     UnifiedLogType::RuntimeLifecycle => {
                         runtime_lifecycle_size += content.len();
-                        let mut reader: Cursor<Vec<u8>> = Cursor::new(content);
-                        loop {
-                            match decode_from_std_read::<RuntimeLifecycleRecord, _, _>(
+                        let mut reader = Cursor::new(content.as_slice());
+                        while reader.position() < content.len() as u64 {
+                            let entry = match decode_from_std_read::<RuntimeLifecycleRecord, _, _>(
                                 &mut reader,
                                 standard(),
                             ) {
-                                Ok(entry) => {
-                                    runtime_lifecycle_events += 1;
-                                    if dump_runtime_lifecycle {
-                                        print_runtime_lifecycle_record(
-                                            runtime_lifecycle_events,
-                                            &entry,
-                                        );
-                                    }
+                                Ok(entry) => entry,
+                                Err(error) => {
+                                    break 'scan Err(CuError::new_with_cause(
+                                        "Corrupted runtime lifecycle record",
+                                        error,
+                                    ));
                                 }
-                                Err(DecodeError::UnexpectedEnd { .. }) => break,
-                                Err(DecodeError::Io { inner, .. })
-                                    if inner.kind() == std::io::ErrorKind::UnexpectedEof =>
-                                {
-                                    break;
-                                }
-                                Err(e) => {
-                                    println!(
-                                        "RuntimeLifecycle section entry #{} is corrupted: {e:?}",
-                                        runtime_lifecycle_events + 1
-                                    );
-                                    break;
-                                }
+                            };
+                            runtime_lifecycle_events += 1;
+                            if dump_runtime_lifecycle {
+                                print_runtime_lifecycle_record(runtime_lifecycle_events, &entry);
                             }
                         }
                     }
@@ -442,6 +477,15 @@ where
                             remaining = &remaining[used..];
                         }
                     }
+                    UnifiedLogType::ValueDecodeCatalog => {
+                        catalog_present = true;
+                        catalog_size += content.len();
+                        #[cfg(feature = "self-describing-logs")]
+                        catalog_section.set(&content)?;
+                        if verbose > 0 {
+                            println!("    ValueDecodeCatalog: {} bytes", content.len());
+                        }
+                    }
                     UnifiedLogType::LastEntry => {
                         if header.is_open {
                             break Err(CuError::from(
@@ -465,6 +509,23 @@ where
             }
         }
     };
+
+    #[cfg(feature = "self-describing-logs")]
+    let result = result.and_then(|()| {
+        if catalog_present {
+            let catalog = catalog_section.decode()?;
+            catalog_decompressed_size = Some(
+                bincode::encode_into_std_write(&catalog, &mut std::io::sink(), standard())
+                    .map_err(|error| {
+                        CuError::new_with_cause(
+                            "Could not measure decompressed catalog size",
+                            error,
+                        )
+                    })?,
+            );
+        }
+        Ok(())
+    });
 
     let total_time_nanos = if !overall_first_ts.is_none() && !last_ts.is_none() {
         (last_ts.unwrap() - overall_first_ts.unwrap()).as_nanos() as f64
@@ -513,13 +574,17 @@ where
         let total_time = last_ts.unwrap() - overall_first_ts.unwrap();
         println!("  Total time       -> {total_time}");
     } else {
-        println!("  Total time       -> n/a (no copperlists)");
+        println!("  Total time       -> n/a (no recorded process timestamps)");
     }
     println!(
         "  Total used size  -> {} bytes",
         useful_size.to_formatted_string(l)
     );
-    println!("  Logging rate     -> {mib_per_sec:.02} MiB/s (effective)");
+    if total_time_nanos > 0.0 {
+        println!("  Logging rate     -> {mib_per_sec:.02} MiB/s (effective)");
+    } else {
+        println!("  Logging rate     -> n/a (no positive recorded duration)");
+    }
 
     println!();
     println!(
@@ -557,11 +622,11 @@ where
             println!("    ... and {omitted} more hole range(s)");
         }
     }
-    println!(
-        "  CL rate          -> {}.{:02} Hz",
-        (cl_rate.trunc() as u64).to_formatted_string(&Locale::en),
-        (cl_rate.fract() * 100.0).round() as u64
-    );
+    if total_time_nanos > 0.0 {
+        println!("  CL rate          -> {cl_rate:.02} Hz");
+    } else {
+        println!("  CL rate          -> n/a (no positive recorded duration)");
+    }
     println!(
         "  CL total size    -> {} bytes",
         cls_size.to_formatted_string(l)
@@ -585,7 +650,11 @@ where
     }
     println!();
     println!("  # of Keyframes   -> {}", keyframes.to_formatted_string(l));
-    println!("  KF rate          -> {kf_rate:.2} Hz");
+    if total_time_nanos > 0.0 {
+        println!("  KF rate          -> {kf_rate:.2} Hz");
+    } else {
+        println!("  KF rate          -> n/a (no positive recorded duration)");
+    }
     println!(
         "  KF total size    -> {} bytes",
         kfs_size.to_formatted_string(l)
@@ -608,6 +677,23 @@ where
         "  Lifecycle total size  -> {} bytes",
         runtime_lifecycle_size.to_formatted_string(l)
     );
+    println!();
+    println!(
+        "  Catalog present       -> {}",
+        if catalog_present { "yes" } else { "no" }
+    );
+    println!(
+        "  Catalog compressed    -> {} bytes",
+        catalog_size.to_formatted_string(l)
+    );
+    #[cfg(feature = "self-describing-logs")]
+    match catalog_decompressed_size {
+        Some(size) => println!(
+            "  Catalog decompressed  -> {} bytes",
+            size.to_formatted_string(l)
+        ),
+        None => println!("  Catalog decompressed  -> n/a"),
+    }
 
     result
 }
@@ -615,6 +701,53 @@ where
 #[cfg(test)]
 mod tests {
     use super::{ByteEntropy, CopperListHole, CopperListSequence, EntropySamples, EntropySummary};
+
+    #[test]
+    fn process_time_bounds_find_interior_slots_with_empty_boundaries() {
+        use super::process_time_bounds;
+        use cu29::prelude::{CuTime, OptionCuTime, PartialCuTimeRange};
+
+        let time = |start: u64, end: u64| PartialCuTimeRange {
+            start: CuTime::from(start).into(),
+            end: CuTime::from(end).into(),
+        };
+        let (start, end) = process_time_bounds([
+            PartialCuTimeRange::default(),
+            time(200, 400),
+            time(100, 300),
+            PartialCuTimeRange::default(),
+        ]);
+        assert_eq!(Option::<CuTime>::from(start), Some(CuTime::from(100u64)));
+        assert_eq!(Option::<CuTime>::from(end), Some(CuTime::from(400u64)));
+        assert_eq!(
+            process_time_bounds([]),
+            (OptionCuTime::none(), OptionCuTime::none())
+        );
+    }
+
+    #[test]
+    fn process_time_bounds_skip_absent_slots_and_preserve_extrema() {
+        use super::observe_process_times;
+        use cu29::prelude::{CuTime, OptionCuTime};
+
+        let mut first = OptionCuTime::none();
+        let mut last = OptionCuTime::none();
+        for (start, end) in [
+            (None, None),
+            (Some(100), Some(200)),
+            (Some(50), Some(150)),
+            (None, None),
+        ] {
+            observe_process_times(
+                &mut first,
+                &mut last,
+                start.map(CuTime::from).into(),
+                end.map(CuTime::from).into(),
+            );
+        }
+        assert_eq!(Option::<CuTime>::from(first), Some(CuTime::from(50u64)));
+        assert_eq!(Option::<CuTime>::from(last), Some(CuTime::from(200u64)));
+    }
 
     #[test]
     fn empty_entropy_is_absent() {

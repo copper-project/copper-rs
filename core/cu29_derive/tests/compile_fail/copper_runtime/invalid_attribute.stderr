@@ -1,5 +1,0 @@
-error: expected string literal
- --> tests/compile_fail/copper_runtime/invalid_attribute.rs:5:27
-  |
-5 | #[copper_runtime(config = CONFIG_FILE)]
-  |                           ^^^^^^^^^^^

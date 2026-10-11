@@ -17,3 +17,5 @@ copper_version = { prompt = "Enter the cu29 version to use for crates.io depende
 copper_export_version = { prompt = "Enter the cu29-export version to use for crates.io dependencies:", default = "1.0.0", type = "string" }
 copper_git_url = { prompt = "Enter the Copper git URL to use for git dependencies:", default = "https://github.com/copper-project/copper-rs.git", type = "string" }
 copper_git_ref_snippet = { prompt = "Optional extra git dependency fields such as , branch = \"master\":", default = "", type = "string" }
+copper_build_version = { prompt = "Enter the cu29-build version:", default = "1.0.0", type = "string" }
+copper_memmon_version = { prompt = "Enter the cu-memmon version:", default = "1.0.0", type = "string" }

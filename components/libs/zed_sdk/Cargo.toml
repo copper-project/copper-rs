@@ -1,0 +1,32 @@
+[package]
+name = "zed-sdk"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Safe Rust wrapper for the Stereolabs ZED C API"
+readme = "README.md"
+repository.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "zed_viz_demo"
+path = "src/bin/zed_viz_demo.rs"
+required-features = ["demo"]
+
+[features]
+default = []
+demo = []
+
+[dependencies]
+eframe = { workspace = true }
+zed-sdk-sys = { workspace = true }
+
+[package.metadata.cargo-shear]
+ignored = []
+
+[package.metadata.copper]
+ci_exclude_workspace_os = ["macos"]

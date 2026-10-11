@@ -102,7 +102,7 @@ fn main() {
             eprintln!("Failed to get file metadata: {e}");
         }
     }
-    let (current_slab_used, _current_slab_offsets, _back_slab_in_flight) =
-        unified_logger.lock().unwrap().stats();
-    assert!(current_slab_used > MIN_USED_BYTES); // in the ron file we said:  section_size_mib: 100 so at least that amount should be used before it the logger is closed and trimmed
+    let status = unified_logger.lock().unwrap().status();
+    // The configured 100 MiB section reserves that space until it is reclaimed.
+    assert!(status.total_used_space > MIN_USED_BYTES);
 }

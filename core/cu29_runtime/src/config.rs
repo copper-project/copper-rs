@@ -106,6 +106,7 @@ pub struct NodeLogging {
     #[serde(skip_serializing_if = "Option::is_none")]
     codec: Option<String>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    #[serde(serialize_with = "serialize_ordered_map")]
     codecs: HashMap<String, String>,
     /// Logging policy applied to the source's pool-acquired `CuHandle`s. Surfaced
     /// in user RON config as e.g. `logging: ( handle_content: "touched_only" )`.
@@ -380,6 +381,7 @@ pub struct Node {
 
     /// Resources requested by the task.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "serialize_optional_ordered_map")]
     resources: Option<HashMap<String, String>>,
 
     /// Missions for which this task is run.
@@ -393,6 +395,11 @@ pub struct Node {
     /// (`background: (pool: "vision")`).
     #[serde(skip_serializing_if = "Option::is_none")]
     background: Option<BackgroundConfig>,
+
+    /// Dispatch empty inputs as background jobs. Completed results are collected on empty ticks.
+    /// Requires a regular background task; defaults to false (empty inputs are skipped).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    background_process_empty: Option<bool>,
 
     /// Anytime refinement policy for this task (base + bounded refinements).
     ///
@@ -438,6 +445,7 @@ impl Node {
             resources: None,
             missions: None,
             background: None,
+            background_process_empty: None,
             anytime: None,
             run_in_sim: None,
             logging: None,
@@ -496,6 +504,13 @@ impl Node {
             Some(BackgroundConfig::Pool { .. }) => true,
             None => false,
         }
+    }
+
+    /// Compile-time empty-input policy consumed by runtime generation.
+    #[doc(hidden)]
+    #[allow(dead_code)]
+    pub fn background_process_empty(&self) -> bool {
+        self.background_process_empty.unwrap_or(false)
     }
 
     /// Name of the thread pool this task should run on when backgrounded.
@@ -726,6 +741,7 @@ fn validate_bridge_channel(
 pub struct ResourceBundleConfig {
     /// Resource inputs consumed by this provider at startup.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "serialize_optional_ordered_map")]
     pub resources: Option<HashMap<String, String>>,
     pub id: String,
     #[serde(rename = "provider")]
@@ -852,6 +868,7 @@ pub struct BridgeConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub config: Option<ComponentConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "serialize_optional_ordered_map")]
     pub resources: Option<HashMap<String, String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub missions: Option<Vec<String>>,
@@ -2265,6 +2282,7 @@ impl ConfigPredicate {
 pub struct IncludesConfig {
     pub path: String,
     #[serde(default)]
+    #[serde(serialize_with = "serialize_ordered_map")]
     pub params: HashMap<String, Value>,
     #[serde(default)]
     pub missions: Option<Vec<String>>,
@@ -2696,6 +2714,21 @@ impl<'de> Deserialize<'de> for CuConfig {
     }
 }
 
+fn serialize_ordered_map<T: Serialize, S: Serializer>(
+    map: &HashMap<String, T>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    map.iter().collect::<BTreeMap<_, _>>().serialize(serializer)
+}
+fn serialize_optional_ordered_map<T: Serialize, S: Serializer>(
+    map: &Option<HashMap<String, T>>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    map.as_ref()
+        .map(|map| map.iter().collect::<BTreeMap<_, _>>())
+        .serialize(serializer)
+}
+
 impl Serialize for CuConfig {
     /// This is a custom serialization to make this implementation independent of petgraph.
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -2780,9 +2813,10 @@ impl Serialize for CuConfig {
                 .serialize(serializer)
             }
             Missions(graphs) => {
+                let graphs = graphs.iter().collect::<BTreeMap<_, _>>();
                 let missions = graphs
                     .keys()
-                    .map(|id| MissionsConfig { id: id.clone() })
+                    .map(|id| MissionsConfig { id: (*id).clone() })
                     .collect();
 
                 // Collect all unique tasks across missions
@@ -3255,6 +3289,32 @@ impl CuConfig {
             }
         }
         Ok(())
+    }
+
+    fn validate_background_input_configs(&self) -> CuResult<()> {
+        let validate = |graph: &CuGraph| -> CuResult<()> {
+            for (node_id, node) in graph.get_all_nodes() {
+                if node.background_process_empty()
+                    && (!node.is_background()
+                        || resolve_task_kind_for_id(graph, node_id)? != TaskKind::Regular)
+                {
+                    return Err(CuError::from(format!(
+                        "Task '{}': background_process_empty requires a regular background task",
+                        node.id
+                    )));
+                }
+            }
+            Ok(())
+        };
+        match &self.graphs {
+            Simple(graph) => validate(graph),
+            Missions(graphs) => {
+                for graph in graphs.values() {
+                    validate(graph)?;
+                }
+                Ok(())
+            }
+        }
     }
 
     fn validate_stateless_configs(&self) -> CuResult<()> {
@@ -4757,6 +4817,7 @@ fn config_representation_to_config(representation: CuConfigRepresentation) -> Cu
     cuconfig.validate_logging_config()?;
     cuconfig.validate_runtime_config()?;
     cuconfig.validate_stateless_configs()?;
+    cuconfig.validate_background_input_configs()?;
     cuconfig.validate_anytime_configs()?;
     cuconfig.validate_constants()?;
     cuconfig.validate_log_streaming_config()?;

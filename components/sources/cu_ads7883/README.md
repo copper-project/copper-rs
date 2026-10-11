@@ -79,9 +79,6 @@ In your Copper RON config file, add the following:
     ]
 ```
 
-## Justfile command
-
-- `just deploy-cu-ads7883-tests` — cross-compile tests for `arm-unknown-linux-musleabihf` and scp the test binary plus config to `copper7:testads7883`.
 
 With no config will take the `/dev/spidev0.0` device and the default SPI speed of 48MHz (maxing it out at 3MSPS).
 
@@ -124,9 +121,3 @@ where
 /// This is the type of message that the ADS7883 driver will send.
 pub type ADSReadingMsg = ADCReadingMsg<u16>;
 ```
-
-
-
-
-
-

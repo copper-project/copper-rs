@@ -16,7 +16,7 @@ use crc_any::CRCu8;
 use heapless::Vec as HeaplessVec;
 use packed_struct::{PackedStruct, types::bits::ByteArray as PackedByteArray};
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Default, PartialEq)]
 pub struct MspPacketData(pub(crate) MspPacketDataBuffer);
 pub const MSP_MAX_PAYLOAD_LEN: usize = 255;
 const MSP_V2_FRAME_ID: u8 = 255;
@@ -46,12 +46,6 @@ impl Debug for MspPacketData {
             write!(f, "{byte:02X}")?;
         }
         Ok(())
-    }
-}
-
-impl Default for MspPacketData {
-    fn default() -> Self {
-        MspPacketData(MspPacketDataBuffer::new())
     }
 }
 

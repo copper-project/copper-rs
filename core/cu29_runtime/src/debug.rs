@@ -647,9 +647,12 @@ where
             if let Some(ts) = ts {
                 self.clock_mock.set_value(ts.as_nanos());
             }
-            let clock_for_cb = self.robot_clock.clone();
-            let clock_mock_for_cb = self.clock_mock.clone();
-            let mut cb = (self.build_callback)(entry.as_ref(), clock_for_cb, clock_mock_for_cb);
+            let mut cb = build_replay_callback(
+                &self.build_callback,
+                entry.as_ref(),
+                self.robot_clock.clone(),
+                self.clock_mock.clone(),
+            );
             self.app.run_one_iteration(&mut cb)?;
             self.normalize_runtime_copperlist_snapshot(entry.as_ref())?;
             replayed += 1;
@@ -1131,6 +1134,21 @@ fn nearest_replay_keyframe(keyframes: &[KeyFrame], target_culistid: u64) -> Opti
         .filter(|kf| kf.culistid <= target_culistid)
         .max_by_key(|kf| kf.culistid)
         .cloned()
+}
+
+// Keep the callback factory output generic to avoid a nightly borrow-checker ICE
+// when normalizing the higher-ranked Step projection inside a boxed callback.
+fn build_replay_callback<'a, P, CB, Callback>(
+    build_callback: &CB,
+    entry: &'a crate::copperlist::CopperList<P>,
+    clock: RobotClock,
+    clock_mock: RobotClockMock,
+) -> Callback
+where
+    P: CopperListTuple,
+    CB: Fn(&'a crate::copperlist::CopperList<P>, RobotClock, RobotClockMock) -> Callback,
+{
+    build_callback(entry, clock, clock_mock)
 }
 
 #[cfg(test)]

@@ -1,8 +1,0 @@
-error: Section size (2 MiB) cannot be larger than slab size (1 MiB). Adjust the parameters accordingly.
-          context:None
- --> tests/compile_fail/copper_runtime/invalid_logging_config.rs:3:1
-  |
-3 | #[copper_runtime(config = "config/invalid_logging_config.ron")]
-  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  |
-  = note: this error originates in the attribute macro `copper_runtime` (in Nightly builds, run with -Z macro-backtrace for more info)

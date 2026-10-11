@@ -146,12 +146,11 @@ impl<'de> Deserialize<'de> for CuError {
 
 impl Display for CuError {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        let context_str = match &self.cause {
-            Some(c) => c.to_string(),
-            None => "None".to_string(),
-        };
-        write!(f, "{}\n   context:{}", self.message, context_str)?;
-        Ok(())
+        write!(f, "{}\n   context:", self.message)?;
+        match &self.cause {
+            Some(cause) => write!(f, "{cause}"),
+            None => f.write_str("None"),
+        }
     }
 }
 
@@ -459,6 +458,8 @@ pub enum UnifiedLogType {
     LastEntry,         // This is a special entry that is used to signal the end of the log.
     RuntimeLifecycle,  // Runtime lifecycle events (mission/config/stack context).
     StreamContinuity,  // Received archive provenance, gaps and verified restart boundaries.
+    ApplicationMetadata,
+    ValueDecodeCatalog,
 }
 /// Represent the minimum set of traits to be usable as Metadata in Copper.
 pub trait Metadata: Default + Debug + Clone + Encode + Decode<()> + Serialize {}
@@ -945,6 +946,11 @@ impl defmt::Format for CuCompactString {
             defmt::write!(f, "CuCompactString({})", defmt::Display2Format(&self.0));
         }
     }
+}
+
+impl bincode::ValueDecode for CuCompactString {
+    const DECODE: &'static bincode::ValueDecodeSpec =
+        <alloc::string::String as bincode::ValueDecode>::DECODE;
 }
 
 #[cfg(test)]

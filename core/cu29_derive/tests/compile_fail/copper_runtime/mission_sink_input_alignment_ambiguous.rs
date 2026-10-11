@@ -60,7 +60,7 @@ impl CuSinkTask for AmbiguousSink {
     }
 }
 
-#[copper_runtime(config = "config/mission_sink_input_alignment_ambiguous_invalid.ron")]
+#[copper_runtime(config = "tests/config/mission_sink_input_alignment_ambiguous_invalid.ron")] //~ ERROR: Task 'sink' has ambiguous input alignment
 struct App {}
 
 fn main() {}

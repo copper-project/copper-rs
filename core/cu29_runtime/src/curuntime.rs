@@ -511,6 +511,23 @@ pub struct SyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usiz
 }
 
 impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, NBCL> {
+    #[doc(hidden)]
+    pub fn close_output(&mut self) -> CuResult<()> {
+        self.finish_pending()?;
+        if let Some(sink) = &mut self.sink {
+            sink.flush()?;
+        }
+        self.sink.take();
+        #[cfg(feature = "std")]
+        {
+            if let Some(sink) = &mut self.keyframe_sink {
+                sink.flush()?;
+            }
+            self.keyframe_sink.take();
+        }
+        Ok(())
+    }
+
     pub fn new(sink: Option<Box<CompletedCopperListSink<P>>>) -> CuResult<Self>
     where
         P: CuListZeroedInit,
@@ -846,6 +863,11 @@ pub struct AsyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usi
 
 #[cfg(all(feature = "std", feature = "async-cl-io"))]
 impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P, NBCL> {
+    #[doc(hidden)]
+    pub fn close_output(&mut self) -> CuResult<()> {
+        self.shutdown_worker()
+    }
+
     pub fn new(sink: Option<Box<CompletedCopperListSink<P>>>) -> CuResult<Self>
     where
         P: CuListZeroedInit + AsyncCopperListPayload + 'static,
@@ -1778,6 +1800,21 @@ impl KeyFramesManager {
         {
             0
         }
+    }
+
+    #[doc(hidden)]
+    pub fn close_output(&mut self) -> CuResult<()> {
+        self.finish_pending()?;
+        #[cfg(all(feature = "std", feature = "async-cl-io"))]
+        self.shutdown_worker()?;
+        #[cfg(not(all(feature = "std", feature = "async-cl-io")))]
+        {
+            if let Some(sink) = &mut self.sink {
+                sink.flush()?;
+            }
+            self.sink.take();
+        }
+        Ok(())
     }
 
     #[doc(hidden)]
@@ -2814,24 +2851,38 @@ pub struct RuntimeLifecycleStackInfo {
     pub instance_id: u32,
 }
 
-/// Runtime lifecycle events emitted in the dedicated lifecycle section.
+/// Why a successful stop was requested.
+#[derive(Clone, Copy, Encode, Decode, Debug, PartialEq, Eq)]
+pub enum RuntimeStopReason {
+    Requested,
+    Completed,
+    Error,
+    Panic,
+}
+
+/// The lifecycle operation that failed.
+#[derive(Clone, Copy, Encode, Decode, Debug, PartialEq, Eq)]
+pub enum RuntimeLifecycleOperation {
+    Start,
+    Stop,
+    Iteration,
+    Shutdown,
+}
+
+/// Runtime lifecycle events. Identity and configuration live in static metadata and section headers.
 #[derive(Clone, Encode, Decode, Debug, PartialEq, Eq)]
 pub enum RuntimeLifecycleEvent {
     Instantiated {
         config_source: RuntimeLifecycleConfigSource,
-        effective_config_ron: String,
-        stack: RuntimeLifecycleStackInfo,
     },
-    MissionStarted {
-        mission: String,
-    },
+    MissionStarted,
     MissionStopped {
-        mission: String,
-        // TODO(lifecycle): replace free-form reason with a typed stop reason enum once
-        // std/no-std behavior and panic integration are split in a follow-up PR.
-        reason: String,
+        reason: RuntimeStopReason,
     },
-    // TODO(lifecycle): wire panic hook / no_std equivalent to emit this event consistently.
+    LifecycleFailed {
+        operation: RuntimeLifecycleOperation,
+        error: String,
+    },
     Panic {
         message: String,
         file: Option<String>,

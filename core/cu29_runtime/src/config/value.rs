@@ -22,7 +22,9 @@ use serde::{Deserialize, Deserializer, Serialize};
 /// It is a map of key-value pairs.
 /// It is given to the new method of the task implementation.
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
-pub struct ComponentConfig(pub HashMap<String, Value>);
+pub struct ComponentConfig(
+    #[serde(serialize_with = "super::serialize_ordered_map")] pub HashMap<String, Value>,
+);
 
 /// Mapping between resource binding names and bundle-scoped resource ids.
 #[allow(dead_code)]

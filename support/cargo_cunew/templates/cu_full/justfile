@@ -15,11 +15,6 @@ resim-debug app="cu_example_app" log="apps/cu_example_app/logs/cu_example_app.co
 graph app="cu_example_app" config="" output="":
   cargo run -p cu29-view-helper -- graph --app "{% raw %}{{app}}{% endraw %}" --config "{% raw %}{{config}}{% endraw %}" --output "{% raw %}{{output}}{% endraw %}" --open
 
-# Compatibility alias for the former graph recipe.
-dag app="cu_example_app" config="" output="":
-  @echo "just dag is deprecated; use just graph" >&2
-  just graph "{% raw %}{{app}}{% endraw %}" "{% raw %}{{config}}{% endraw %}" "{% raw %}{{output}}{% endraw %}"
-
 graph-log app="cu_example_app" config="" log="apps/cu_example_app/logs/cu_example_app.copper" output="":
   cargo run -p cu29-view-helper -- graph --app "{% raw %}{{app}}{% endraw %}" --config "{% raw %}{{config}}{% endraw %}" --log "{% raw %}{{log}}{% endraw %}" --output "{% raw %}{{output}}{% endraw %}" --open
 

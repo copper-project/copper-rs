@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize, Serializer};
 #[derive(
     Default, Debug, Encode, Decode, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Reflect,
 )]
+#[bincode(describe)]
 pub struct CuDepthMapFormat {
     pub width: u32,
     pub height: u32,
@@ -230,7 +231,6 @@ where
     A: ArrayLike<Element = E::Sample> + Send + Sync + 'static,
 {
     pub format: CuDepthMapFormat,
-    #[reflect(ignore)]
     pub buffer_handle: CuHandle<A>,
     #[reflect(ignore)]
     encoding: PhantomData<E>,
@@ -272,6 +272,29 @@ where
         Encode::encode(&self.format, encoder)?;
         Encode::encode(&self.buffer_handle, encoder)
     }
+}
+
+impl<A, E> bincode::ValueDecode for CuDepthMap<A, E>
+where
+    E: CuDepthEncoding,
+    A: ArrayLike<Element = E::Sample> + Send + Sync + 'static,
+    CuHandle<A>: bincode::ValueDecode,
+{
+    const DECODE: &'static bincode::ValueDecodeSpec = &bincode::ValueDecodeSpec::Record {
+        shape: bincode::value_decode::RecordShape::Struct,
+        fields: &[
+            bincode::value_decode::ValueDecodeField {
+                selector: bincode::value_decode::FieldSelector::Named("format"),
+                declaration_index: 0,
+                value: bincode::value_decode::ValueDecodeRef::of::<CuDepthMapFormat>(),
+            },
+            bincode::value_decode::ValueDecodeField {
+                selector: bincode::value_decode::FieldSelector::Named("buffer_handle"),
+                declaration_index: 1,
+                value: bincode::value_decode::ValueDecodeRef::of::<CuHandle<A>>(),
+            },
+        ],
+    };
 }
 
 impl<A, E> Decode<()> for CuDepthMap<A, E>
@@ -551,6 +574,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cu29_value::decode::{ValueDecodeDescription, ValueDecodeLimits};
 
     type U16MillimeterDepth = CuDepthMap<Vec<u16>, CuDepthInteger<u16, CuDepthMillimeter>>;
 
@@ -559,6 +583,32 @@ mod tests {
         height: 2,
         stride: 4,
     };
+
+    #[test]
+    fn test_catalog_decodes_native_integer_depth() {
+        let sample = U16MillimeterDepth::new_encoded(
+            CuDepthMapFormat {
+                width: 3,
+                height: 1,
+                stride: 3,
+            },
+            CuHandle::new_detached(vec![0u16, 1000, 65535]),
+        );
+        let config = bincode::config::standard();
+        let bytes = bincode::encode_to_vec(&sample, config).unwrap();
+        let description = ValueDecodeDescription::from_type::<U16MillimeterDepth>().unwrap();
+        let (decoded, used) = description
+            .decode(&bytes, config, ValueDecodeLimits::default())
+            .unwrap();
+        assert_eq!(used, bytes.len());
+        let Value::Map(fields) = decoded else {
+            panic!("expected named depth fields")
+        };
+        assert_eq!(
+            fields[&Value::String("buffer_handle".into())],
+            Value::Seq(vec![Value::U16(0), Value::U16(1000), Value::U16(65535)])
+        );
+    }
 
     #[test]
     fn padded_depth_map_indexes_distances_in_meters() {

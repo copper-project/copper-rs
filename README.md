@@ -15,6 +15,7 @@
   <img src="https://img.shields.io/badge/Rust-1.95+-orange.svg" alt="Rust 1.95 or newer" />
   <a href="https://copper-project.github.io/copper-rs-book/"><img src="https://img.shields.io/badge/book-read-blue" alt="Read the Copper book" /></a>
   <a href="https://copper-project.github.io/copper-rs/"><img src="https://img.shields.io/badge/docs-read-blue" alt="Copper documentation" /></a>
+  <a href="https://github.com/copper-project/copper-rs/wiki/Copper-Release-Notes"><img src="https://img.shields.io/badge/release_notes-read-blue" alt="Copper release notes" /></a>
   <a href="https://discord.gg/VkCG7Sb9Kw"><img src="https://img.shields.io/discord/1305916875741597826?logo=discord" alt="Copper Discord" /></a>
 </p>
 
@@ -81,7 +82,7 @@ cd hello_copper
 cargo run
 ```
 
-In about 30 seconds, you have a typed `source → task → sink` graph that prints its
+The generated app has a typed `source → task → sink` graph that prints its
 first messages and records `logs/hello-copper.copper`. Start with
 `copperconfig.ron`, `src/main.rs`, and `src/tasks.rs`; the generated `justfile`
 also provides helpers for logs, CopperLists, topology (`just graph`), the exact
@@ -127,10 +128,13 @@ bandwidth. Try the [telemetry demo](examples/cu_logstream_demo#native-telemetry-
   </tr>
   <tr>
     <td><strong>Project</strong></td>
-    <td><a href="https://copper-project.github.io/copper-rs/Supported-Platforms">Supported platforms</a> · <a href="https://copper-project.github.io/copper-rs/Roadmap">Roadmap</a> · <a href="https://copper-project.github.io/copper-rs/Copper-Release-Notes">Release notes</a></td>
+    <td><a href="https://copper-project.github.io/copper-rs/Supported-Platforms">Supported platforms</a> · <a href="https://copper-project.github.io/copper-rs/Copper-Release-Notes">Release notes</a></td>
   </tr>
   <tr>
     <td><strong>Community</strong></td>
     <td><a href="https://github.com/copper-project/copper-rs/blob/master/CONTRIBUTING.md">Contributing</a> · <a href="https://github.com/copper-project/copper-rs/discussions">GitHub Discussions</a> · <a href="https://discord.gg/VkCG7Sb9Kw">Discord</a></td>
   </tr>
 </table>
+
+Codec, ZED camera, and ViTFly inference crates are maintained in this workspace.
+See [in-tree crates and verification](doc/monorepo-components.md).

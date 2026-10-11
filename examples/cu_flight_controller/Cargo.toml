@@ -64,7 +64,7 @@ libm = { version = "0.2", default-features = false }
 # --> host dependencies <--
 
 ## End-to-end compute dependencies
-cu-zed = { version = "=1.3.0-dev", optional = true }
+cu-zed = { workspace = true, optional = true }
 cu-zenoh-bridge = { path = "../../components/bridges/cu_zenoh_bridge", version = "1.3.0-dev", optional = true }
 cu-ratelimit = { path = "../../components/tasks/cu_ratelimit", version = "1.3.0-dev", optional = true }
 
@@ -110,7 +110,7 @@ cortex-m = { workspace = true, features = [
 ], optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-cu-vitfly = { version = "=1.3.0-dev", default-features = false, optional = true }
+cu-vitfly = { workspace = true, optional = true }
 cu-consolemon = { workspace = true, optional = true }
 cu-bevymon = { workspace = true, optional = true }
 cu-memmon = { path = "../../components/monitors/cu_memmon", version = "1.3.0-dev", default-features = false, features = [
@@ -178,10 +178,12 @@ bevy = { workspace = true, default-features = false, features = [
 
 [features]
 default = ["sim", "forest-world"]
+self-describing-logs = ["cu29?/self-describing-logs"]
 forest-world = []
 urban-world = []
 autonomous-demo = []
 sim_core = [
+  "self-describing-logs",
   "dep:cu29",
   "cu29/std",
   "cu29/sysclock-perf",
@@ -205,6 +207,7 @@ textlogs = [
 
 
 firmware = [
+  "self-describing-logs",
   "dep:cu29",
   "cu29/defmt",
   "dep:defmt",
@@ -240,6 +243,7 @@ firmware = [
   "cu-logmon/defmt",
 ]
 end2end = [
+  "self-describing-logs",
   "dep:cu29",
   "cu29/std",
   "cu29/signal-handler",
@@ -287,6 +291,7 @@ sim = [
   "dep:cu-zenoh-bridge",
   "dep:cu-ratelimit",
   "cu29/reflect",
+  "cu-msp-bridge/reflect",
   "dep:cu-consolemon",
   "dep:cached-path",
   "dep:evdev",
@@ -366,7 +371,7 @@ path = "tests/config_matrix.rs"
 required-features = ["logreader"]
 
 [dev-dependencies]
-cu29-export = { workspace = true }
+cu29-export = { workspace = true, features = ["self-describing-logs"] }
 tempfile = { workspace = true }
 
 [build-dependencies]

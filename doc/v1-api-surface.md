@@ -36,7 +36,7 @@ option select recorded runs identified by `Instantiated` lifecycle records.
 - Task and bridge authoring APIs:
   - `CuSrcTask`
   - `CuTask`
-  - `CuStatelessTask`
+  - `CuStatelessTask` (`Reflect + Send + Sync`; no `Freezable` requirement)
   - `CuSinkTask`
   - `CuBridge`
   - `CuMsg`
@@ -101,6 +101,46 @@ option select recorded runs identified by `Instantiated` lifecycle records.
 
 ## Experimental
 
+- `cu29::logstream::CuTwinBuilder`: `with_slab_size`, `with_section_size`,
+  `with_receiver_limits`, `with_replay_capacity`, and `with_log_capacity` configure
+  receiver-side archive and buffering budgets. `SessionRouterLimits::default()`
+  supplies the single-sender 1200-byte-MTU, 64-symbol profile.
+
+- `self-describing-logs` feature for automatic startup catalog recording;
+  `decode-catalog` for host-side `cu29::value_decode`, and
+  `cu29_value::decode`: `ValueDecodeDescription` builds portable wire/schema
+  descriptions and decodes native payload bytes to `Value` trees offline.
+- `cu29::prelude::{ValueDecode, ValueDecodeSpec}` are always available. The
+  companion trait and static wire operations are supplied by `cu-bincode`;
+  `#[bincode(describe)]` generates descriptions for individual `Encode` types.
+  `cu29::prelude::{ValueDecodeDescription, ValueDecodeLimits}` requires
+  `decode-catalog` for offline tooling.
+- `cu29::value_decode_catalog` and `cu29_value::catalog`: versioned shared payload
+  catalogs and offline decompression. The startup writer borrows native recipes,
+  shares one graph across compiled mission slot maps, and compresses into the
+  static metadata section using fixed working memory. Catalog version 1 includes
+  a bincode version field, typed metadata, Heatshrink compression and a
+  length/checksum footer.
+- `cu29_export::catalog`: experimental shared catalog loading and fallible
+  run-scoped standalone CopperList value readers. `ValueDecodeDescription::validate`
+  checks complete graphs; `decode_at` decodes selected bindings without graph copies.
+  Catalog CLI formats/decoder selection and registration-free Python catalog
+  functions are experimental. Internal shared allocation budgets are hidden.
+- `cu29-value-types` and its `cu29_value` / `cu29::prelude` re-exports:
+  `Quantity`, `QuantityMetadata`, `StorageUnit`, `TimeStorageUnit`, and
+  `ValueMetadata`. `ValueDecode::METADATA` attaches the Copper-owned vocabulary
+  to schemas; `ValueDecodeMetadata` preserves future IDs in portable descriptions.
+  `Scalar` and `RecordShape` are shared with the codec and retain their existing
+  `ValueDecodeScalar` and `ValueDecodeShape` aliases in `cu29_value::decode`.
+- Standard `ValueDecode` implementations for Copper time, compact strings,
+  quantities, `CuArray`, `CuArrayVec`, and pooled buffer handles.
+
+- Background empty-input dispatch policy: `background_process_empty` and the defaulted
+  `CuAsyncTask<T, O, const PROCESS_EMPTY: bool = false>` parameter.
+  Empty inputs are now skipped by default while completed results are collected once.
+  This corrects a specification bug to match the intended behavior. Set
+  `background_process_empty: true` to opt into dispatching empty inputs.
+
 - LogStream session manifests and `ReceiverRequirements` decoder geometry/bounds.
 - `remote-debug` feature and `cu29::remote_debug`.
 - `parallel-rt` feature and parallel executor APIs.
@@ -111,7 +151,9 @@ option select recorded runs identified by `Instantiated` lifecycle records.
   - `high-precision-limiter`
 - Low-level logging codec registry APIs in `cu29::logcodec`.
 - Low-level monitoring probes and allocation counters.
-- Direct unified-log section/header structs.
+- Direct unified-log section/header structs, `ApplicationMetadata`, `SectionContext`,
+  `CapacityPolicy`, and the metadata-aware unreleased format v2. Lifecycle records
+  use `RuntimeStopReason` and `RuntimeLifecycleOperation`.
 
 ## Internal
 
@@ -129,6 +171,7 @@ option select recorded runs identified by `Instantiated` lifecycle records.
 - `AsyncCopperListsManager`.
 - `OwnedCopperListSubmission`.
 - Generated mission modules and generated helper functions.
+- `cu29_unifiedlog::byte_log`: shared storage-adapter implementation.
 - Direct task tuple and bridge tuple access through `copper_runtime_mut()`.
 
 ## Deprecated

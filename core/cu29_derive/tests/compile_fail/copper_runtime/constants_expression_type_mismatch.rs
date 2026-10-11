@@ -20,7 +20,7 @@ impl CuSrcTask for ConstantSource {
     }
 }
 
-#[copper_runtime(config = "config/constants_expression_type_mismatch.ron")]
+#[copper_runtime(config = "tests/config/constants_expression_type_mismatch.ron")] //~ E0308
 struct App {}
 
 fn main() {}

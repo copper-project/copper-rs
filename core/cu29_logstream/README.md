@@ -56,9 +56,7 @@ preserves the received payloads and timestamps.
 - Optional feedback reports receiver health and adjusts future continuous FEC within explicit bounds.
   A duplex resource may share stream TX and feedback RX; one receive owner consumes each logical endpoint.
 
-Run `just logstream-receiver-check` from the repository root to test reception,
-archival, and replay continuity. See the Rust API docs for receiver limits and
-event handling.
+See the Rust API docs for receiver limits and event handling.
 
 ## Structured log records
 
@@ -102,16 +100,12 @@ uses a 4 MiB bincode decode budget. Use the producing application's string index
 with `extract-text-log` to reconstruct readable text.
 
 A generated live twin exposes `twin.take_log_reader()` once. Its independent
-64-entry ring publishes `ReceivedStructuredLog` after archival succeeds, moving
+bounded ring publishes `ReceivedStructuredLog` after archival succeeds, moving
 the already decoded entry into the display channel. Read `update.frame.entry`
 and render with `rebuild_logline`; `CuTwinStatus::structured_logs` counts archived
 entries. Pausing or dropping either display reader never delays recording.
 Custom archive consumers can obtain the same owned value with
 `archive.take_structured_log()` immediately after `accept`.
-
-Run `just logstream-structured-check` for binary preservation, allocation, local
-section rollover, loss/reordering, shutdown, generated wiring, and telemetry UI
-coverage.
 
 ## Ground-side telemetry
 
@@ -150,8 +144,7 @@ Both still share a process failure boundary.
 The [Ratatui demo](../../examples/cu_logstream_demo#native-telemetry-screen)
 shows typed robot outputs and a pause control. Live deterministic task
 reconstruction and generated mission dispatch are subsequent steps; displaying
-captured payloads alone does not recover task state. Run
-`just logstream-telemetry-check` for the integration and regression checks.
+captured payloads alone does not recover task state.
 
 ## Sender storage and lifecycle
 
@@ -186,9 +179,6 @@ test clock. Structured logging adds the bounded byte copy described above; CL an
 RobotClock and drive `poll` themselves. The std driver owns thread wakeups.
 Immediate `ContinuousCopperListSink` and `RecoveryPointSink` remain available
 for codec tests/custom integration and do not enforce pacing themselves.
-
-Run `just logstream-pacing-check` for scheduler, worker lifecycle, and UDP demo
-checks, including recovery after the entire initial bootstrap transmission is lost.
 
 ## Live Copper twin
 
@@ -233,16 +223,86 @@ while let Some(update) = frames.try_read() {
 let status = twin.stop()?;
 ```
 
+Configure receiver storage and buffering with named constants. Sizes are bytes;
+capacities count replay events, reconstructed CopperLists, or structured log entries:
+
+```rust,ignore
+use cu29::logstream::{FiniteObjectLimits, SessionRouterLimits};
+use std::num::NonZeroUsize;
+
+// Budget for one complete serialized CopperList, including captured messages
+// and metadata, and for one manifest, keyframe, or structured log record.
+const MAX_RECORD_BYTES: usize = 1024 * 1024;
+const MAX_OBJECT_BYTES: u64 = 64 * 1024;
+// Fit the larger bound plus a 512-byte section header and 32-byte continuity
+// envelope; round up to a convenient multiple of 512 bytes.
+const SECTION_BYTES: usize = 2 * 1024 * 1024;
+// Hold many sections per backing file: this slab is 16 times the section size.
+const SLAB_BYTES: usize = 32 * 1024 * 1024;
+// Buffer short replay slowdowns, keeping the retained payload count bounded.
+const REPLAY_CAPACITY: NonZeroUsize = NonZeroUsize::new(32).unwrap();
+// Independent reader buffers: completed CopperLists and structured log entries.
+const FRAME_CAPACITY: NonZeroUsize = NonZeroUsize::new(64).unwrap();
+const LOG_CAPACITY: NonZeroUsize = NonZeroUsize::new(64).unwrap();
+
+let limits = SessionRouterLimits {
+    max_record_bytes: MAX_RECORD_BYTES,
+    finite_objects: FiniteObjectLimits {
+        max_object_bytes: MAX_OBJECT_BYTES,
+        ..SessionRouterLimits::default().finite_objects
+    },
+    ..Default::default()
+};
+let (mut twin, mut frames) = Ground::twin(rx)
+    .with_log_path("logs/received.copper")
+    .with_receiver_limits(limits)
+    .with_section_size(SECTION_BYTES)
+    .with_slab_size(SLAB_BYTES)
+    .with_replay_capacity(REPLAY_CAPACITY)
+    .with_frame_capacity(FRAME_CAPACITY)
+    .with_log_capacity(LOG_CAPACITY)
+    .spawn()?;
+```
+
+Choose record bounds for the largest complete serialized CopperList, including
+all captured outputs and metadata. The sender's advertised record and object
+bounds must fit the receiver's bounds. Finite objects carry manifests, keyframes
+(task-state snapshots), and structured log entries. A section groups archive
+records and must fit the larger record/object bound plus a 512-byte header and
+32 bytes of continuity envelope allowance. Slab and section sizes must be
+multiples of 512 bytes; each section must fit in a slab. Prefer slabs roughly
+10–100 times larger than sections to reduce file turnover. Larger slabs reserve
+more disk space at a time; the archive grows by adding slabs as needed.
+
+Defaults are 16 MiB slabs, 128 KiB sections, 4 KiB records, 64 KiB finite objects,
+32 replay events and pending captures per buffer, and 64 unread reconstructed
+CopperLists and structured log entries per reader buffer. Increase record/object
+limits together with section size. `spawn()` validates local settings before
+creating directories or starting workers. Sender requirements are checked when
+its manifest arrives. FEC geometry supports the 1200-byte-MTU, 64-symbol profile.
+Receiver routing and object concurrency limits are in `SessionRouterLimits`;
+one twin accepts exactly one sender session.
+
+Replay buffering absorbs temporary reconstruction slowdowns. Overflow requires
+recovery from a matching keyframe while recording continues. Frame buffering
+holds completed CopperLists for UI or analysis; a frame here is one iteration's
+captured inputs and reconstructed outputs. Structured log buffering holds the
+robot's logging calls, such as `info!` and `debug!`, for `twin.take_log_reader()`.
+Both reader buffers replace the oldest unread item when full; the archive keeps
+the received data. Larger buffers retain more payloads and entries in memory.
+Choose counts together with byte limits for the ground station's memory budget,
+and size the sender's streaming memory and link bandwidth for its payloads.
+
 `rx` is any `CuStreamRx`, such as the receive half of a UDP resource. Copper owns
 session routing, native recording, the bounded replay worker, status publication,
 and shutdown. The caller owns the frame reader and presentation. Pausing or dropping
 that reader never blocks recording. Dropping the twin stops and joins its workers;
 `stop()` also reports receiver errors and final counters. `archive_only()` records
 without running a twin. Each handle accepts one sender session and a fresh log path.
-The default receiver supports the 1200-byte-MTU, 64-symbol streaming profile, with
-4 KiB records and 64 KiB recovery objects. It retains 32 replay events, 32 pending
-captures, one recovery point, one executing frame and 64 display frames; payload storage and
-thread/runtime allocations are additional. `with_frame_capacity` changes display retention.
+Replay retains up to the configured queue capacity in events and pending captures,
+plus one recovery point and one executing frame. Presentation retains up to the
+configured frame and structured-entry capacities; payload storage and thread/runtime
+allocations are additional.
 
 Production sends the native CopperList format with selected payloads omitted.
 CopperLists carry `id` followed by `msgs`, without runtime lifecycle state.
@@ -354,12 +414,8 @@ captures and labels them Reconstructed, never Verified.
 Only debug captures that pass comparison are labeled Verified. A mismatch suppresses
 reconstructed frames until the next matching recovery point; native recording continues. Debug
 digests are consumed live and do not add archive sections or change offline log readers.
-Use `just telemetry-verify` and `just sender-verify` to run the development checks.
-`just resim` reconstructs ordinary capture archives offline; the demo's verification
-command compares the result against the full onboard log.
-
-Run `just logstream-twin-check` for allocation/native-format checks, both verification
-modes, worker lifecycle, reader isolation, and the UDP loss/recovery/replay scenarios.
+See the [UDP demo](../../examples/cu_logstream_demo) for live verification
+and offline replay.
 
 ## Optional receiver feedback
 
@@ -401,7 +457,7 @@ or excessive reports cannot refresh health. After timeout, state is stale and th
 per report period toward baseline. Bitrate, burst, latency, memory, FEC window/field/density, and object FEC
 stay fixed. Feedback failure never stops capture or autonomous recovery; snapshots retain failure state.
 
-Loss excludes the active coding window and unseen history/tails. Reports and adaptation stay on stream workers. Run `just logstream-feedback-check`.
+Loss excludes the active coding window and unseen history/tails. Reports and adaptation stay on stream workers.
 
 ### TUI bandwidth panel
 
@@ -417,4 +473,4 @@ horizontally and vertically on small terminals or when several destinations are 
 Generated apps attach read-only worker handles through `CuMonitoringRuntime`. Console and Bevy monitors
 pass those handles to the shared TUI model; custom monitor frontends can use `runtime.log_streams()`.
 Snapshots are published on sender workers and sampled by the presentation thread. The task path gains
-no monitoring callbacks, serialization, or synchronization. Run `just logstream-monitor-check`.
+no monitoring callbacks, serialization, or synchronization.

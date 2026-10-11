@@ -33,3 +33,4 @@ defmt = ["dep:defmt"]                                    # this is only used for
 
 [dev-dependencies]
 serde_json = "1.0"
+cu29-runtime = { workspace = true, features = ["std"] }

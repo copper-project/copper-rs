@@ -121,7 +121,7 @@ fn viewer_command(tool: &str) -> Result<Command, String> {
         let mut command = Command::new("cargo");
         command.args(["install", "--locked", "--root", "target/viewer-tools"]);
         {% if copper_source == "crates.io" %}
-        command.args([tool, "--version", "{{copper_version}}", "--bin", tool]);
+        command.args([tool, "--version", "~{{copper_version}}", "--bin", tool]);
         {% elsif copper_source == "git" %}
         command.args(["--git", r#"{{copper_git_url}}"#]);
         {% if copper_git_branch != "__none__" %}

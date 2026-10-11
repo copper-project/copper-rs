@@ -22,21 +22,17 @@ use crate::debug::{
     SectionIndexEntry, build_read_logger, decode_copperlists, index_log, read_section_at,
 };
 use crate::simulation::recorded_copperlist_timestamp;
-use bincode::config::standard;
-use bincode::decode_from_std_read;
-use bincode::error::DecodeError;
 use cu29_clock::{RobotClock, RobotClockMock};
 use cu29_traits::{CopperListTuple, CuError, CuResult, ErasedCuStampedDataSet, UnifiedLogType};
 use cu29_unifiedlog::memmap::MmapSectionStorage;
 use cu29_unifiedlog::{
     NoopLogger, NoopSectionStorage, SectionStorage, UnifiedLogWrite, UnifiedLogger,
-    UnifiedLoggerBuilder, UnifiedLoggerIOReader, UnifiedLoggerRead, UnifiedLoggerWrite,
+    UnifiedLoggerBuilder, UnifiedLoggerRead, UnifiedLoggerWrite,
 };
 use std::any::type_name;
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use std::fs;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -84,48 +80,59 @@ impl DistributedReplayLog {
             ));
         };
 
-        let mut reader = UnifiedLoggerIOReader::new(read_logger, UnifiedLogType::RuntimeLifecycle);
-        let mut instantiated: Option<(
-            RuntimeLifecycleConfigSource,
-            String,
-            RuntimeLifecycleStackInfo,
-        )> = None;
+        let mut reader = read_logger;
+        let metadata = reader
+            .application_metadata()?
+            .ok_or(CuError::from("Log has no application metadata"))?;
+        let effective_config_ron = metadata.effective_config_ron.clone();
+        let mut first_run = None;
+        let mut instance_id = None;
         let mut mission = None;
-
-        while let Some(record) =
-            read_next_entry::<RuntimeLifecycleRecord>(&mut reader).map_err(|err| {
-                CuError::from(format!(
-                    "Failed to decode runtime lifecycle for '{}': {err}",
-                    base_path.display()
-                ))
-            })?
-        {
-            match record.event {
-                RuntimeLifecycleEvent::Instantiated {
-                    config_source,
-                    effective_config_ron,
-                    stack,
-                } if instantiated.is_none() => {
-                    instantiated = Some((config_source, effective_config_ron, stack));
-                }
-                RuntimeLifecycleEvent::MissionStarted {
-                    mission: started_mission,
-                } if mission.is_none() => {
-                    mission = Some(started_mission);
-                }
-                _ => {}
-            }
-
-            if instantiated.is_some() && mission.is_some() {
+        let mut config_source = RuntimeLifecycleConfigSource::BundledDefault;
+        loop {
+            let (header, content) = cu29_unifiedlog::UnifiedLogRead::raw_read_section(&mut reader)?;
+            if header.entry_type == UnifiedLogType::LastEntry {
                 break;
             }
+            if header.context.run_id != 0 && instance_id.is_none() {
+                first_run = Some(header.context.run_id);
+                instance_id = Some(header.context.instance_id);
+                mission = Some(
+                    metadata
+                        .missions
+                        .get(header.context.mission_index as usize)
+                        .ok_or(CuError::from("Invalid mission index"))?
+                        .clone(),
+                );
+            }
+            if header.entry_type == UnifiedLogType::RuntimeLifecycle
+                && Some(header.context.run_id) == first_run
+            {
+                let mut remaining = content.as_slice();
+                while !remaining.is_empty() {
+                    let (record, used) = bincode::decode_from_slice::<RuntimeLifecycleRecord, _>(
+                        remaining,
+                        bincode::config::standard(),
+                    )
+                    .map_err(|e| CuError::new_with_cause("Invalid lifecycle record", e))?;
+                    if let RuntimeLifecycleEvent::Instantiated {
+                        config_source: source,
+                    } = record.event
+                    {
+                        config_source = source;
+                    }
+                    remaining = &remaining[used..];
+                }
+            }
         }
-
-        let Some((config_source, effective_config_ron, stack)) = instantiated else {
-            return Err(CuError::from(format!(
-                "Copper log '{}' has no RuntimeLifecycle::Instantiated record",
-                base_path.display()
-            )));
+        let stack = RuntimeLifecycleStackInfo {
+            app_name: metadata.app_name,
+            app_version: metadata.app_version,
+            git_commit: metadata.git_commit,
+            git_dirty: metadata.git_dirty,
+            subsystem_id: metadata.subsystem_id,
+            subsystem_code: metadata.subsystem_code,
+            instance_id: instance_id.unwrap_or_default(),
         };
 
         Ok(Self {
@@ -1617,20 +1624,6 @@ fn slab_zero_path(base_path: &Path) -> Option<PathBuf> {
     Some(slab_zero)
 }
 
-fn read_next_entry<T: bincode::Decode<()>>(src: &mut impl Read) -> CuResult<Option<T>> {
-    match decode_from_std_read::<T, _, _>(src, standard()) {
-        Ok(entry) => Ok(Some(entry)),
-        Err(DecodeError::UnexpectedEnd { .. }) => Ok(None),
-        Err(DecodeError::Io { inner, .. }) if inner.kind() == std::io::ErrorKind::UnexpectedEof => {
-            Ok(None)
-        }
-        Err(err) => Err(CuError::new_with_cause(
-            "Failed to decode bincode entry during distributed replay discovery",
-            err,
-        )),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1646,7 +1639,6 @@ mod tests {
     use cu29_clock::CuTime;
     use cu29_traits::{ErasedCuStampedData, ErasedCuStampedDataSet, MatchingTasks, WriteStream};
     use cu29_unifiedlog::memmap::MmapSectionStorage;
-    use cu29_unifiedlog::stream_write;
     use serde::Serialize;
     use std::sync::{Arc, Mutex};
     use tempfile::TempDir;
@@ -1682,25 +1674,40 @@ mod tests {
         };
 
         let logger = Arc::new(Mutex::new(writer));
-        let mut stream = stream_write::<RuntimeLifecycleRecord, MmapSectionStorage>(
-            logger.clone(),
-            UnifiedLogType::RuntimeLifecycle,
-            4096,
-        )?;
+        let metadata = cu29_unifiedlog::ApplicationMetadata {
+            app_type: "Test".into(),
+            app_name: stack.app_name.clone(),
+            app_version: stack.app_version.clone(),
+            git_commit: stack.git_commit.clone(),
+            git_dirty: stack.git_dirty,
+            subsystem_id: stack.subsystem_id.clone(),
+            subsystem_code: stack.subsystem_code,
+            effective_config_ron: "(runtime: ())".into(),
+            missions: vec![mission.unwrap_or("default").into()],
+            catalog_offset: 0,
+        };
+        let context = {
+            let mut logger = logger.lock().unwrap();
+            logger.seal_metadata::<()>(&metadata, None)?;
+            logger.construction_context(stack.instance_id, 0)?
+        };
+        let mut stream =
+            cu29_unifiedlog::stream_write_context::<RuntimeLifecycleRecord, MmapSectionStorage>(
+                logger.clone(),
+                UnifiedLogType::RuntimeLifecycle,
+                4096,
+                context,
+            )?;
         stream.log(&RuntimeLifecycleRecord {
             timestamp: CuTime::default(),
             event: RuntimeLifecycleEvent::Instantiated {
                 config_source: RuntimeLifecycleConfigSource::ExternalFile,
-                effective_config_ron: "(runtime: ())".to_string(),
-                stack,
             },
         })?;
-        if let Some(mission) = mission {
+        if mission.is_some() {
             stream.log(&RuntimeLifecycleRecord {
                 timestamp: CuTime::from_nanos(1),
-                event: RuntimeLifecycleEvent::MissionStarted {
-                    mission: mission.to_string(),
-                },
+                event: RuntimeLifecycleEvent::MissionStarted,
             })?;
         }
         drop(stream);

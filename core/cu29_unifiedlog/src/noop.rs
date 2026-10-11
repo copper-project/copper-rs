@@ -62,7 +62,9 @@ impl UnifiedLogWrite<NoopSectionStorage> for NoopLogger {
             magic: SECTION_MAGIC,
             block_size: SECTION_HEADER_COMPACT_SIZE,
             entry_type,
-            offset_to_next_section: allocated_size.min(u32::MAX as usize) as u32,
+            allocated: allocated_size as u64,
+            next_section: 0,
+            context: crate::SectionContext::default(),
             used: 0,
             is_open: true,
         };
@@ -77,6 +79,14 @@ impl UnifiedLogWrite<NoopSectionStorage> for NoopLogger {
         if let Ok(used) = section.get_storage_mut().flush() {
             self.total_used_space = self.total_used_space.saturating_add(used);
         }
+    }
+
+    fn seal_metadata<C: Encode>(
+        &mut self,
+        _: &crate::ApplicationMetadata,
+        _: Option<&C>,
+    ) -> CuResult<()> {
+        Ok(())
     }
 
     fn status(&self) -> UnifiedLogStatus {

@@ -2,7 +2,7 @@ import "../../../support/just/viewers.just"
 
 # Run software checks.
 default:
-    just --justfile ../../../justfile hc12-check
+    cargo test -p cu-hc12
 
 # Echo on one HC-12 (edit examples/echo.ron to match wiring first).
 echo:

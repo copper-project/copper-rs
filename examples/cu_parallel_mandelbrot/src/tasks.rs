@@ -770,8 +770,6 @@ pub struct MandelbrotIterBand {
     band: IterBandConfig,
 }
 
-impl Freezable for MandelbrotIterBand {}
-
 impl CuStatelessTask for MandelbrotIterBand {
     type Resources<'r> = ();
     type Input<'m> = input_msg!(MandelbrotStripe);

@@ -1,4 +1,5 @@
 [default.extend-words]
+flate = "flate"
 mis = "mis"
 ratatui = "ratatui"
 numer = "numer"

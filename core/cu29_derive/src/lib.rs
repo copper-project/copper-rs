@@ -804,6 +804,46 @@ fn gen_culist_support(
         })
         .collect();
 
+    let catalog_description = if cfg!(feature = "self-describing-logs") {
+        let mut slots = Vec::new();
+        let mut error = None;
+        for (index, (task_id, msg_type, payload_type)) in task_output_specs.iter().enumerate() {
+            let captured = cuconfig
+                .logging
+                .as_ref()
+                .is_none_or(|logging| logging.enable_task_logging)
+                && cuconfig
+                    .find_task_node(mission_label, task_id)
+                    .is_none_or(|node| node.is_logging_enabled());
+            let payload = if !captured {
+                quote! { None }
+            } else if let Some(codec) = &flat_codec_bindings[index] {
+                error = Some(format!(
+                    "Task '{task_id}' output '{msg_type}' uses logging codec '{}', which needs a catalog description of its encoded representation.",
+                    codec.codec_type_path
+                ));
+                quote! { None }
+            } else {
+                quote! { Some(cu29::bincode::value_decode::ValueDecodeRef::of::<#payload_type>()) }
+            };
+            slots.push(quote! { cu29::catalog_stream::CatalogSlot { task_id: #task_id, msg_type: #msg_type, payload: #payload } });
+        }
+        let error = match error {
+            Some(error) => quote! { Some(#error) },
+            None => quote! { None },
+        };
+        quote! {
+            #[allow(dead_code)]
+            pub const VALUE_DECODE_CATALOG_MISSION: cu29::catalog_stream::CatalogMission = cu29::catalog_stream::CatalogMission {
+                slots: &[#(#slots),*],
+            };
+            #[allow(dead_code)]
+            pub const VALUE_DECODE_CATALOG_ERROR: Option<&'static str> = #error;
+        }
+    } else {
+        quote! {}
+    };
+
     // Generate bridge channel getter methods
     for spec in bridge_specs {
         for channel in &spec.rx_channels {
@@ -840,6 +880,7 @@ fn gen_culist_support(
     // This generates a way to get the metadata of every single message of a culist at low cost
     quote! {
         #capture_support
+        #catalog_description
         #collect_metadata_function
         #compute_payload_bytes_fn
         #default_config_ron_const
@@ -1695,7 +1736,9 @@ impl CuTaskSpecSet {
             .zip(background_flags.iter())
             .zip(output_types.iter())
             .zip(async_inner_task_types.iter())
-            .map(|(((((name_type, name), cutype), &background), output_type), inner_type)| {
+            .zip(all_id_nodes.iter())
+            .map(|((((((name_type, name), cutype), &background), output_type), inner_type), (_, node))| {
+                let process_empty = node.background_process_empty();
                 if background {
                     if let Some(output_type) = output_type {
                         match cutype {
@@ -1703,7 +1746,7 @@ impl CuTaskSpecSet {
                                 parse_quote!(CuAsyncSrcTask<#inner_type, #output_type>)
                             }
                             CuTaskType::Regular => {
-                                parse_quote!(CuAsyncTask<#inner_type, #output_type>)
+                                parse_quote!(CuAsyncTask<#inner_type, #output_type, #process_empty>)
                             }
                             CuTaskType::Sink => {
                                 panic!("CuSinkTask {name} cannot be a background task, it should be a regular task.");
@@ -1728,7 +1771,9 @@ impl CuTaskSpecSet {
             .zip(background_flags.iter())
             .zip(output_types.iter())
             .zip(async_inner_task_types.iter())
-            .map(|(((((name_type, name), cutype), &background), output_type), inner_type)| {
+            .zip(all_id_nodes.iter())
+            .map(|((((((name_type, name), cutype), &background), output_type), inner_type), (_, node))| {
+                let process_empty = node.background_process_empty();
                 if background {
                     if let Some(output_type) = output_type {
                         match cutype {
@@ -1736,7 +1781,7 @@ impl CuTaskSpecSet {
                                 parse_quote!(CuAsyncSrcTask::<#inner_type, #output_type>)
                             }
                             CuTaskType::Regular => {
-                                parse_quote!(CuAsyncTask::<#inner_type, #output_type>)
+                                parse_quote!(CuAsyncTask::<#inner_type, #output_type, #process_empty>)
                             }
                             CuTaskType::Sink => {
                                 panic!("CuSinkTask {name} cannot be a background task, it should be a regular task.");
@@ -5155,7 +5200,12 @@ fn generate_task_execution_tokens(
         setup: task_setup,
         instance: task_instance,
     } = task_tokens;
-    let freeze_task = keyframe_freeze_task_tokens(keyframe_logging_enabled, &task_instance);
+    let keyframe_state = if task_specs.stateless_flags[task_index] {
+        quote! { cu29::cutask::CuStatelessTaskState }
+    } else {
+        task_instance.clone()
+    };
+    let freeze_task = keyframe_freeze_task_tokens(keyframe_logging_enabled, &keyframe_state);
     let comment_str = format!(
         "DEBUG ->> {} ({:?}) Id:{} I:{:?} O:{:?}",
         step.node.get_id(),
@@ -6272,9 +6322,8 @@ fn runtime_task_type_for_index(
         }
         CuTaskType::Regular => {
             if background {
-                if let Some(out_ty) = output_type {
-                    let inner = &task_specs.async_inner_task_types[index];
-                    parse_quote!(CuAsyncTask<#inner, #out_ty>)
+                if output_type.is_some() {
+                    task_specs.task_types[index].clone()
                 } else {
                     panic!("{task_id}: If a task is background, it has to have an output");
                 }

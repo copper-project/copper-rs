@@ -39,8 +39,8 @@ impl CuSinkTask for FrameSink {
     }
 }
 
-#[copper_runtime(
-    config = "config/handle_content_on_non_aware_payload.ron",
+#[copper_runtime( //~ E0277
+    config = "tests/config/handle_content_on_non_aware_payload.ron",
     sim_mode = true,
     ignore_resources = true
 )]

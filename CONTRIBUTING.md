@@ -80,6 +80,7 @@ Prefer the root `justfile` over copying long Cargo command lines:
 | --- | --- |
 | Most pull requests | `just` or `just pr-check` |
 | Formatting, typos, and clippy only | `just lint` |
+| Workflow configuration and change classification | `just ci-config-check` (requires `actionlint`) |
 | Host/runtime behavior across the std feature matrix | `just std-ci` |
 | Shared, embedded-facing, or `no_std` code | `just nostd-ci` |
 | Coverage-sensitive behavior | `just coverage` |
@@ -91,6 +92,54 @@ validates a reduced core surface, and embedded coverage is compile-time rather t
 hardware-in-the-loop. See
 [Supported Platforms](https://copper-project.github.io/copper-rs/Supported-Platforms)
 for the public platform matrix.
+
+Workspace checks use `support/ci/workspace_excludes.py` to read
+`package.metadata.copper`. Set `ci_exclude_workspace = true` to exclude a package
+on every runner, or `ci_exclude_workspace_os = ["macos"]` to exclude it on specific
+runner operating systems (`linux`, `macos`, or `windows`). macOS checks include
+the portable `cu-zed` payload and projection code and exclude the native ZED SDK
+wrappers.
+
+Actions uses standard GitHub-hosted runners. Documentation-only changes run the
+formatting gate and CI status check; code and build-configuration changes run the
+full matrix and PR coverage. Docs publishing reuses an unexpired master coverage
+artifact for documentation-only changes and regenerates it when none is available.
+CI images refresh weekly and whenever their Docker inputs change. Actions
+dependency updates are grouped into one weekly pull request.
+
+Build-job summaries report elapsed time and sampled disk headroom, plus available
+memory on Linux. Samples run every 15 seconds after checkout through the final
+measurement step; container pulls and post-job cache saves are outside that window.
+Use the Actions job timestamps when comparing total job durations.
+
+## Compile Tests
+
+Run `just compile-tests` for the proc-macro, lifecycle, and value-description
+compile fixtures, or `just compile-tests beta` to check the next compiler release. The harness
+uses `ui_test` to check structured diagnostics and combines the successful fixtures
+into one compile-pass application.
+
+For a Rust diagnostic, put its error code beside the failing statement:
+
+```rust
+let _ = app.start(); //~ E0382
+```
+
+For a Copper diagnostic without an error code, match a short, meaningful part of
+the message with `//~ ERROR: cannot be larger than slab size`. Use `//~^` to attach
+an assertion to the preceding line and `//~|` to attach additional assertions to
+the same location. Every error needs an assertion; warnings and contextual notes
+are allowed.
+
+Message assertions also accept regular expressions, such as
+`//~ ERROR: /cannot find (type|value)/`, when multiple compiler versions use different
+wording or error codes for the same failure. Prefer a code assertion when it is
+consistent across supported compilers. Keep patterns specific enough to identify
+the intended failure. The harness ignores rendered output and does not require
+stderr snapshots or blessing.
+
+Use this harness for new compile-fail tests. Assert structured diagnostics rather
+than rendered compiler output, which changes across compiler releases.
 
 ## Design Expectations
 
@@ -166,4 +215,6 @@ Update `.pre-commit-config.yaml` if the shared hook configuration needs to chang
 </details>
 
 Maintainer release branches, versioning, tagging, and backporting are documented in
-[RELEASING.md](RELEASING.md).
+[RELEASING.md](RELEASING.md). Every stable minor and patch release also needs a
+published GitHub Release using its entry from the global Copper Release Notes;
+follow the [GitHub release checklist](RELEASING.md#github-release-checklist).

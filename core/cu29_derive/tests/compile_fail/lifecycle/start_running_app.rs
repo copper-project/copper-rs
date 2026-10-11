@@ -5,7 +5,7 @@
 use cu29::prelude::*;
 
 fn double_start<A: CuStdApplication>(app: CuStdAppLifecycle<A, Running>) {
-    let _ = app.start();
+    let _ = app.start(); //~ E0599
 }
 
 fn main() {}

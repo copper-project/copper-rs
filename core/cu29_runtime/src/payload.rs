@@ -332,3 +332,19 @@ impl<T: Clone> CuLatchedState<T> {
         }
     }
 }
+
+impl<T: Clone + bincode::ValueDecode, const N: usize> bincode::ValueDecode for CuArray<T, N> {
+    const DECODE: &'static bincode::ValueDecodeSpec = &bincode::ValueDecodeSpec::Sequence {
+        element: bincode::value_decode::ValueDecodeRef::of::<T>(),
+        count: bincode::value_decode::Scalar::U32,
+        capacity: Some(N),
+    };
+}
+
+impl<T: Clone + bincode::ValueDecode, const N: usize> bincode::ValueDecode for CuArrayVec<T, N> {
+    const DECODE: &'static bincode::ValueDecodeSpec = &bincode::ValueDecodeSpec::Sequence {
+        element: bincode::value_decode::ValueDecodeRef::of::<T>(),
+        count: bincode::value_decode::Scalar::U64,
+        capacity: Some(N),
+    };
+}

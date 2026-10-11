@@ -1,16 +1,16 @@
+mod templates;
+
 use std::env;
-use std::fs;
 use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
-use cargo_generate::{GenerateArgs, TemplatePath, Vcs, generate};
 use clap::{Parser, ValueEnum};
-use include_dir::{Dir, DirEntry, include_dir};
+use include_dir::{Dir, include_dir};
 use pathdiff::diff_paths;
+use semver::Version;
 use serde::Deserialize;
-use tempfile::TempDir;
 
 static BUNDLED_TEMPLATES: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/templates");
 
@@ -66,7 +66,7 @@ pub struct Cli {
     #[arg(long)]
     pub no_vcs: bool,
 
-    /// Increase cargo-generate verbosity.
+    /// Print generated file paths.
     #[arg(long)]
     pub verbose: bool,
 
@@ -120,13 +120,15 @@ impl SourceKind {
 struct CopperVersions {
     cu29: String,
     cu29_export: String,
+    cu29_build: String,
+    cu_memmon: String,
 }
 
 #[derive(Debug, Clone)]
 struct ResolvedOptions {
     project_name: String,
     destination_dir: PathBuf,
-    vcs: Vcs,
+    initialize_git: bool,
     defines: Vec<String>,
 }
 
@@ -138,31 +140,7 @@ fn run_with_versions(cli: Cli, versions_override: Option<CopperVersions>) -> Res
     validate_git_options(&cli)?;
     let target = resolve_target(&cli)?;
     let resolved = resolve_options(&cli, target, versions_override)?;
-    let bundled = materialize_bundled_templates()?;
-
-    let args = GenerateArgs {
-        name: Some(resolved.project_name),
-        destination: Some(resolved.destination_dir),
-        allow_commands: true,
-        define: resolved.defines,
-        no_workspace: true,
-        silent: true,
-        verbose: cli.verbose,
-        vcs: Some(resolved.vcs),
-        template_path: TemplatePath {
-            path: Some(
-                bundled
-                    .path()
-                    .join(cli.template.subfolder())
-                    .to_string_lossy()
-                    .into_owned(),
-            ),
-            ..TemplatePath::default()
-        },
-        ..GenerateArgs::default()
-    };
-
-    generate(args).context("failed to generate Copper project")
+    templates::generate(&cli, &resolved, target).context("failed to generate Copper project")
 }
 
 fn resolve_options(
@@ -187,6 +165,12 @@ fn resolve_options(
             )
         })?;
 
+    let project_name = if heck::ToSnakeCase::to_snake_case(project_name.as_str()) == project_name {
+        project_name
+    } else {
+        heck::ToKebabCase::to_kebab_case(project_name.as_str())
+    };
+
     let destination_dir = project_path
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
@@ -196,13 +180,16 @@ fn resolve_options(
     let destination_root = absolutize(&destination_dir)?;
     let generated_root = destination_root.join(&project_name);
 
-    let versions = versions_override.unwrap_or_else(|| match cli.source {
-        SourceKind::CratesIo => resolve_crates_io_versions(),
-        _ => CopperVersions {
+    let versions = match versions_override {
+        Some(versions) => versions,
+        None if cli.source == SourceKind::CratesIo => fetch_stable_versions()?,
+        None => CopperVersions {
             cu29: DEFAULT_COPPER_VERSION.to_owned(),
             cu29_export: DEFAULT_COPPER_VERSION.to_owned(),
+            cu29_build: DEFAULT_COPPER_VERSION.to_owned(),
+            cu_memmon: DEFAULT_COPPER_VERSION.to_owned(),
         },
-    });
+    };
 
     let copper_root = match cli.source {
         SourceKind::Local => Some(resolve_copper_root(cli, &destination_root)?),
@@ -220,7 +207,7 @@ fn resolve_options(
     Ok(ResolvedOptions {
         project_name,
         destination_dir,
-        vcs: if cli.no_vcs { Vcs::None } else { Vcs::Git },
+        initialize_git: !cli.no_vcs,
         defines,
     })
 }
@@ -281,6 +268,8 @@ fn build_defines(
         format!("copper_source={}", cli.source.as_template_value()),
         format!("copper_version={}", versions.cu29),
         format!("copper_export_version={}", versions.cu29_export),
+        format!("copper_build_version={}", versions.cu29_build),
+        format!("copper_memmon_version={}", versions.cu_memmon),
         format!("copper_git_url={}", cli.git_url),
         format!(
             "copper_git_branch={}",
@@ -357,59 +346,60 @@ fn is_copper_root(path: &Path) -> bool {
         && path.join("support/cargo_cunew/templates").is_dir()
 }
 
-fn resolve_crates_io_versions() -> CopperVersions {
-    fetch_latest_stable_versions().unwrap_or_else(|error| {
-        eprintln!(
-            "warning: failed to query crates.io for Copper versions ({error:#}); falling back to {DEFAULT_COPPER_VERSION}"
-        );
-        CopperVersions {
-            cu29: DEFAULT_COPPER_VERSION.to_owned(),
-            cu29_export: DEFAULT_COPPER_VERSION.to_owned(),
-        }
-    })
-}
-
-fn fetch_latest_stable_versions() -> Result<CopperVersions> {
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(5))
+fn fetch_stable_versions() -> Result<CopperVersions> {
+    let client: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_global(Some(Duration::from_secs(10)))
         .user_agent(format!("cargo-cunew/{}", env!("CARGO_PKG_VERSION")))
         .build()
-        .context("failed to build crates.io HTTP client")?;
-
+        .into();
+    let release =
+        Version::parse(DEFAULT_COPPER_VERSION).context("invalid cargo-cunew package version")?;
     Ok(CopperVersions {
-        cu29: fetch_crate_version(&client, "cu29")?,
-        cu29_export: fetch_crate_version(&client, "cu29-export")?,
+        cu29: fetch_crate_version(&client, "cu29", &release)?,
+        cu29_export: fetch_crate_version(&client, "cu29-export", &release)?,
+        cu29_build: fetch_crate_version(&client, "cu29-build", &release)?,
+        cu_memmon: fetch_crate_version(&client, "cu-memmon", &release)?,
     })
 }
 
-fn fetch_crate_version(client: &reqwest::blocking::Client, crate_name: &str) -> Result<String> {
-    let response = client
+fn fetch_crate_version(
+    client: &ureq::Agent,
+    crate_name: &str,
+    release: &Version,
+) -> Result<String> {
+    let payload: CratesIoResponse = client
         .get(format!("{CRATES_IO_API}/{crate_name}"))
-        .send()
-        .with_context(|| format!("failed to query crates.io for {crate_name}"))?
-        .error_for_status()
-        .with_context(|| format!("crates.io returned an error for {crate_name}"))?;
-
-    let payload: CratesIoResponse = response
-        .json()
+        .call()
+        .with_context(|| format!("failed to query crates.io for {crate_name}; check your network connection or use --source local|git"))?
+        .body_mut()
+        .read_json()
         .with_context(|| format!("failed to decode crates.io response for {crate_name}"))?;
+    select_stable_version(&payload, crate_name, release)
+}
 
-    if payload.krate.max_stable_version.is_empty() {
-        bail!("crates.io did not return a stable version for {crate_name}");
-    }
-
-    Ok(payload.krate.max_stable_version)
+fn select_stable_version(
+    payload: &CratesIoResponse,
+    crate_name: &str,
+    release: &Version,
+) -> Result<String> {
+    payload.versions.iter()
+        .filter(|version| !version.yanked)
+        .filter_map(|version| Version::parse(&version.num).ok())
+        .filter(|version| version.pre.is_empty() && version.major == release.major && version.minor == release.minor)
+        .max()
+        .map(|version| version.to_string())
+        .ok_or_else(|| anyhow!("no stable {crate_name} version is published for Copper {}.{}; use --source local|git", release.major, release.minor))
 }
 
 #[derive(Debug, Deserialize)]
 struct CratesIoResponse {
-    #[serde(rename = "crate")]
-    krate: CratesIoCrate,
+    versions: Vec<CratesIoVersion>,
 }
 
 #[derive(Debug, Deserialize)]
-struct CratesIoCrate {
-    max_stable_version: String,
+struct CratesIoVersion {
+    num: String,
+    yanked: bool,
 }
 
 fn format_git_ref_snippet(branch: Option<&str>, tag: Option<&str>, rev: Option<&str>) -> String {
@@ -423,41 +413,6 @@ fn format_git_ref_snippet(branch: Option<&str>, tag: Option<&str>, rev: Option<&
         return format!(", rev = \"{rev}\"");
     }
     String::new()
-}
-
-fn materialize_bundled_templates() -> Result<TempDir> {
-    let tempdir =
-        tempfile::tempdir().context("failed to create a temporary directory for templates")?;
-    write_dir(&BUNDLED_TEMPLATES, tempdir.path())?;
-    Ok(tempdir)
-}
-
-fn write_dir(dir: &Dir<'_>, destination: &Path) -> Result<()> {
-    fs::create_dir_all(destination)
-        .with_context(|| format!("failed to create {}", destination.display()))?;
-
-    for entry in dir.entries() {
-        match entry {
-            DirEntry::Dir(child) => {
-                let name = child
-                    .path()
-                    .file_name()
-                    .ok_or_else(|| anyhow!("invalid embedded directory path"))?;
-                write_dir(child, &destination.join(name))?;
-            }
-            DirEntry::File(file) => {
-                let name = file
-                    .path()
-                    .file_name()
-                    .ok_or_else(|| anyhow!("invalid embedded file path"))?;
-                let target = destination.join(name);
-                fs::write(&target, file.contents())
-                    .with_context(|| format!("failed to write {}", target.display()))?;
-            }
-        }
-    }
-
-    Ok(())
 }
 
 fn relative_or_absolute_toml_path(target: &Path, from: &Path) -> Result<String> {
@@ -507,6 +462,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     #[test]
     fn strips_cargo_subcommand_marker() {
@@ -538,16 +494,42 @@ mod tests {
     }
 
     #[test]
-    fn materializes_bundled_templates_with_hidden_files() {
-        let templates = materialize_bundled_templates().expect("templates should materialize");
-        assert!(templates.path().join(".cargo/config.toml").is_file());
-        assert!(templates.path().join("cu_project/.gitignore").is_file());
-        assert!(
-            templates
-                .path()
-                .join("cu_full/apps/cu_example_app/logs/.keep")
-                .is_file()
+    fn selects_stable_versions_in_the_tools_release_line() {
+        let payload = CratesIoResponse {
+            versions: vec![
+                CratesIoVersion {
+                    num: "2.0.0".to_owned(),
+                    yanked: false,
+                },
+                CratesIoVersion {
+                    num: "1.3.0".to_owned(),
+                    yanked: false,
+                },
+                CratesIoVersion {
+                    num: "1.2.5".to_owned(),
+                    yanked: true,
+                },
+                CratesIoVersion {
+                    num: "1.2.4-dev".to_owned(),
+                    yanked: false,
+                },
+                CratesIoVersion {
+                    num: "1.2.1".to_owned(),
+                    yanked: false,
+                },
+                CratesIoVersion {
+                    num: "1.2.3".to_owned(),
+                    yanked: false,
+                },
+            ],
+        };
+        let release = Version::parse("1.2.4").expect("version");
+        assert_eq!(
+            select_stable_version(&payload, "cu29", &release).expect("stable version"),
+            "1.2.3"
         );
+        let release = Version::parse("1.1.4").expect("version");
+        assert!(select_stable_version(&payload, "cu29", &release).is_err());
     }
 
     #[test]
@@ -574,6 +556,8 @@ mod tests {
             Some(CopperVersions {
                 cu29: "9.9.9".to_owned(),
                 cu29_export: "9.9.8".to_owned(),
+                cu29_build: "9.9.1".to_owned(),
+                cu_memmon: "9.9.2".to_owned(),
             }),
         )
         .expect("generation should succeed");
@@ -583,20 +567,59 @@ mod tests {
         let viewer = fs::read_to_string(project.join("src/view.rs")).expect("viewer helper");
 
         assert!(manifest.contains("edition = \"2024\""));
-        assert!(manifest.contains("version = \"9.9.9\""));
-        assert!(manifest.contains("version = \"9.9.8\""));
+        assert!(manifest.contains("version = \"~9.9.9\""));
+        assert!(manifest.contains("version = \"~9.9.8\""));
         assert!(manifest.contains("cu29-export"));
+        assert!(manifest.contains("cu29-build = {  version = \"~9.9.1\""));
+        assert!(manifest.contains("cu-memmon = {  version = \"~9.9.2\""));
+        assert!(project.join(".gitignore").is_file());
+        assert!(!project.join("init.rhai").exists());
         assert!(manifest.contains("[profile.debug-optimized]"));
-        assert!(!manifest.contains("\n[workspace]\n"));
+        assert!(manifest.contains("[workspace]"));
         assert!(justfile.contains("--profile debug-optimized"));
         assert!(justfile.contains("graph config="));
         assert!(justfile.contains("sched-log config="));
         assert!(justfile.contains("pgs-optimize candidates="));
         assert!(viewer.contains("cu29-graph-view"));
         assert!(viewer.contains("cu29-schedule-view"));
-        assert!(viewer.contains("\"9.9.9\""));
+        assert!(viewer.contains("\"~9.9.9\""));
         assert!(project.join("schedule.ron").is_file());
         assert!(project.join("src/pgs_candidate.rs").is_file());
+    }
+
+    #[test]
+    fn generates_workspace_with_independent_registry_versions() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let project = tempdir.path().join("hello-workspace");
+        let cli = Cli {
+            path: project.clone(),
+            template: TemplateKind::Workspace,
+            source: SourceKind::CratesIo,
+            name: None,
+            copper_root: None,
+            git_url: DEFAULT_GIT_URL.to_owned(),
+            git_branch: None,
+            git_tag: None,
+            git_rev: None,
+            no_vcs: true,
+            verbose: false,
+            target: Some(TargetKind::Host),
+        };
+        run_with_versions(
+            cli,
+            Some(CopperVersions {
+                cu29: "1.2.3".to_owned(),
+                cu29_export: "1.2.1".to_owned(),
+                cu29_build: "1.2.1".to_owned(),
+                cu_memmon: "1.2.1".to_owned(),
+            }),
+        )
+        .expect("generation");
+        let manifest = fs::read_to_string(project.join("Cargo.toml")).expect("manifest");
+        assert!(manifest.contains("cu29 = {  version = \"~1.2.3\""));
+        assert!(manifest.contains("cu29-build = {  version = \"~1.2.1\""));
+        assert!(manifest.contains("cu29-export = {  version = \"~1.2.1\""));
+        assert!(project.join("apps/cu_example_app/logs/.keep").is_file());
     }
 
     #[test]
@@ -623,6 +646,8 @@ mod tests {
             Some(CopperVersions {
                 cu29: "0.0.0".to_owned(),
                 cu29_export: "0.0.0".to_owned(),
+                cu29_build: "9.9.1".to_owned(),
+                cu_memmon: "9.9.2".to_owned(),
             }),
         )
         .expect("generation should succeed");
@@ -650,6 +675,60 @@ mod tests {
     }
 
     #[test]
+    fn preserves_underscore_directory_names_and_existing_files() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let project = tempdir.path().join("hello_copper");
+        let cli = Cli {
+            path: project.clone(),
+            template: TemplateKind::Project,
+            source: SourceKind::Local,
+            name: None,
+            copper_root: Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")),
+            git_url: DEFAULT_GIT_URL.to_owned(),
+            git_branch: None,
+            git_tag: None,
+            git_rev: None,
+            no_vcs: true,
+            verbose: false,
+            target: Some(TargetKind::Host),
+        };
+
+        run_with_versions(
+            cli,
+            Some(CopperVersions {
+                cu29: "1.2.3".to_owned(),
+                cu29_export: "1.2.4".to_owned(),
+                cu29_build: "9.9.1".to_owned(),
+                cu_memmon: "9.9.2".to_owned(),
+            }),
+        )
+        .expect("generation should succeed");
+
+        assert!(project.join("Cargo.toml").exists());
+        fs::write(project.join("user-file"), "keep").expect("user file");
+        let cli = Cli::parse_from([
+            "cargo-cunew",
+            project.to_str().expect("path"),
+            "--source",
+            "local",
+            "--copper-root",
+            env!("CARGO_MANIFEST_DIR"),
+        ]);
+        // Validate the existing destination before any files are replaced.
+        let options = ResolvedOptions {
+            project_name: "hello_copper".to_owned(),
+            destination_dir: tempdir.path().to_path_buf(),
+            initialize_git: false,
+            defines: Vec::new(),
+        };
+        assert!(templates::generate(&cli, &options, TargetKind::Host).is_err());
+        assert_eq!(
+            fs::read_to_string(project.join("user-file")).expect("preserved file"),
+            "keep"
+        );
+    }
+
+    #[test]
     fn generates_project_template_for_git_source() {
         let tempdir = tempfile::tempdir().expect("tempdir");
         let project = tempdir.path().join("hello-git");
@@ -673,6 +752,8 @@ mod tests {
             Some(CopperVersions {
                 cu29: "1.2.3".to_owned(),
                 cu29_export: "1.2.4".to_owned(),
+                cu29_build: "9.9.1".to_owned(),
+                cu_memmon: "9.9.2".to_owned(),
             }),
         )
         .expect("generation should succeed");

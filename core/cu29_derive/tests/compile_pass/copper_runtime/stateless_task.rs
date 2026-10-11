@@ -23,8 +23,6 @@ impl CuSrcTask for StatelessSource {
 #[derive(Reflect)]
 struct StatelessTransform;
 
-impl Freezable for StatelessTransform {}
-
 impl CuStatelessTask for StatelessTransform {
     type Resources<'r> = ();
     type Input<'m> = input_msg!(u32);
@@ -54,7 +52,7 @@ impl CuStatelessTask for StatelessTransform {
 }
 
 #[copper_runtime(
-    config = "config/stateless_task_valid.ron",
+    config = "tests/config/stateless_task_valid.ron",
     sim_mode = true,
     ignore_resources = true
 )]

@@ -30,3 +30,6 @@ __pycache__/
 /templates/test_project
 /templates/test_workspace
 copper-crash-*.txt
+
+# Isolated codec compile-test harness.
+/core/cu29_value/tests/dependencies/target/

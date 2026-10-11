@@ -32,6 +32,7 @@ path = "src/pgs.rs"
 
 [features]
 default = []
+self-describing-logs = ["cu29/self-describing-logs"]
 logreader = ["dep:cu29-export"]
 sim-debug = ["logreader", "cu29/reflect", "cu29/remote-debug"]
 {% if pgs_enabled %}
@@ -46,7 +47,6 @@ pgs-candidate = []
 [dependencies]
 cu29 = { workspace = true }
 cu29-export = { workspace = true, optional = true }
-bincode = { workspace = true }
 serde = { workspace = true }
 clap = { workspace = true }
 # cu-memmon = { workspace = true, optional = true }

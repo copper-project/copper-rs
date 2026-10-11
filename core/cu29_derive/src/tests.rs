@@ -34,53 +34,57 @@ fn disabled_keyframe_capture_emits_no_freeze_calls() {
     );
 }
 
-// See tests/compile_file directory for more information
+// Compile fixtures assert diagnostic codes or short messages at the failing line.
 #[test]
 fn test_compile_fail() {
-    use rustc_version::{Channel, version_meta};
-    use std::{env, fs, path::Path};
+    use ui_test::custom_flags::edition::Edition;
+    use ui_test::custom_flags::rustfix::RustfixMode;
+    use ui_test::dependencies::DependencyBuilder;
+    use ui_test::{Config, default_file_filter, default_per_file_config, run_tests_generic};
 
-    let log_index_dir = env::temp_dir()
-        .join("cu29_derive_trybuild_log_index")
-        .join("a")
-        .join("b")
-        .join("c");
-    fs::create_dir_all(&log_index_dir).unwrap();
-    unsafe {
-        env::set_var("LOG_INDEX_DIR", &log_index_dir);
-    }
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let target_dir = std::env::var_os("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| root.join("../../target"));
+    let log_index_dir = target_dir.join("ui/derive/log_index/a/b/c");
+    fs::create_dir_all(&log_index_dir).expect("create compile-test log index directory");
 
-    let dir = Path::new("tests/compile_fail");
-    for entry in fs::read_dir(dir).unwrap() {
-        let entry = entry.unwrap();
-        if !entry.file_type().unwrap().is_dir() {
-            continue;
-        }
-        for file in fs::read_dir(entry.path()).unwrap() {
-            let file = file.unwrap();
-            let p = file.path();
-            if p.extension().and_then(|x| x.to_str()) != Some("rs") {
-                continue;
-            }
+    let mut dependencies = DependencyBuilder {
+        crate_manifest_path: root.join("tests/dependencies/Cargo.toml"),
+        // Lockfiles are generated locally and are not committed in this workspace.
+        bless_lockfile: true,
+        ..DependencyBuilder::default()
+    };
+    // Share Cargo's normal artifact cache between the fail and pass suites.
+    dependencies.program.out_dir_flag = None;
+    dependencies.program.envs.push((
+        "LOG_INDEX_DIR".into(),
+        Some(log_index_dir.clone().into_os_string()),
+    ));
 
-            let base = p.with_extension("stderr"); // the file trybuild reads
-            let src = match version_meta().unwrap().channel {
-                Channel::Beta => Path::new(&format!("{}.beta", base.display())).to_path_buf(),
-                _ => Path::new(&format!("{}.stable", base.display())).to_path_buf(),
-            };
+    let mut config = Config::rustc(root.join("tests/compile_fail"));
+    config.out_dir = target_dir.join("ui/derive");
+    config.output_conflict_handling = ui_test::ignore_output_conflict;
+    config
+        .program
+        .envs
+        .push(("LOG_INDEX_DIR".into(), Some(log_index_dir.into_os_string())));
+    let defaults = config.comment_defaults.base();
+    defaults.custom.remove("edition");
+    defaults.custom.remove("rustfix");
+    defaults.add_custom("edition", Edition("2024".into()));
+    defaults.add_custom("rustfix", RustfixMode::Disabled);
+    defaults.add_custom("dependencies", dependencies);
 
-            if src.exists() {
-                fs::copy(src, &base).unwrap();
-            }
-        }
-    }
-
-    // One TestCases keeps fail+pass in the same cargo profile so workspace
-    // deps compile once; the umbrella collapses pass tests into one bin.
-    let umbrella = build_compile_pass_umbrella();
-    let t = trybuild::TestCases::new();
-    t.compile_fail("tests/compile_fail/*/*.rs");
-    t.pass(&umbrella);
+    let mut pass = config.clone();
+    pass.root_dir = build_compile_pass_umbrella();
+    run_tests_generic(
+        vec![config, pass],
+        default_file_filter,
+        default_per_file_config,
+        ui_test::status_emitter::Text::quiet(),
+    )
+    .expect("compile tests failed");
 }
 
 fn build_compile_pass_umbrella() -> std::path::PathBuf {
@@ -105,7 +109,8 @@ fn build_compile_pass_umbrella() -> std::path::PathBuf {
     }
     entries.sort();
 
-    let mut src = String::from("#![allow(dead_code, unused_imports, non_snake_case)]\n");
+    let mut src =
+        String::from("//@check-pass\n#![allow(dead_code, unused_imports, non_snake_case)]\n");
     for p in &entries {
         let abs = std::fs::canonicalize(p)
             .unwrap_or_else(|e| panic!("canonicalize {}: {e}", p.display()));

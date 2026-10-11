@@ -7,11 +7,7 @@ use crate::sync_compat::{Mutex, OnceLock, lock as lock_mutex, once_get_or_init};
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::{String, ToString};
-#[cfg(feature = "std")]
-use bincode::config::standard;
 use bincode::de::{Decode, Decoder};
-#[cfg(feature = "std")]
-use bincode::decode_from_std_read;
 use bincode::enc::{Encode, Encoder};
 use bincode::error::{DecodeError, EncodeError};
 use core::any::TypeId;
@@ -21,14 +17,10 @@ use hashbrown::HashMap;
 use portable_atomic::{AtomicU64, Ordering};
 use serde::de::DeserializeOwned;
 #[cfg(feature = "std")]
-use std::io::Read;
-#[cfg(feature = "std")]
 use std::path::Path;
 
 #[cfg(feature = "std")]
-use crate::curuntime::{RuntimeLifecycleEvent, RuntimeLifecycleRecord};
-#[cfg(feature = "std")]
-use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader};
+use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder};
 
 pub trait CuLogCodec<P: CuMsgPayload>: 'static {
     type Config: DeserializeOwned + Default;
@@ -367,21 +359,6 @@ where
 }
 
 #[cfg(feature = "std")]
-fn read_next_entry<T: Decode<()>>(src: &mut impl Read) -> CuResult<Option<T>> {
-    match decode_from_std_read::<T, _, _>(src, standard()) {
-        Ok(entry) => Ok(Some(entry)),
-        Err(DecodeError::UnexpectedEnd { .. }) => Ok(None),
-        Err(DecodeError::Io { inner, .. }) if inner.kind() == std::io::ErrorKind::UnexpectedEof => {
-            Ok(None)
-        }
-        Err(err) => Err(CuError::new_with_cause(
-            "Failed to decode runtime lifecycle entry while loading effective log config",
-            err,
-        )),
-    }
-}
-
-#[cfg(feature = "std")]
 pub fn read_effective_config_ron_from_log(log_base: &Path) -> CuResult<Option<String>> {
     let logger = UnifiedLoggerBuilder::new()
         .file_base_name(log_base)
@@ -401,19 +378,9 @@ pub fn read_effective_config_ron_from_log(log_base: &Path) -> CuResult<Option<St
         ));
     };
 
-    let mut reader =
-        UnifiedLoggerIOReader::new(read_logger, cu29_traits::UnifiedLogType::RuntimeLifecycle);
-    while let Some(record) = read_next_entry::<RuntimeLifecycleRecord>(&mut reader)? {
-        if let RuntimeLifecycleEvent::Instantiated {
-            effective_config_ron,
-            ..
-        } = record.event
-        {
-            return Ok(Some(effective_config_ron));
-        }
-    }
-
-    Ok(None)
+    Ok(read_logger
+        .application_metadata()?
+        .map(|metadata| metadata.effective_config_ron))
 }
 
 #[cfg(feature = "std")]

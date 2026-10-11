@@ -19,6 +19,17 @@ pub mod logstats;
 pub mod pgs;
 mod runs;
 
+#[cfg(feature = "self-describing-logs")]
+pub mod catalog;
+#[cfg(feature = "self-describing-logs")]
+mod catalog_cli;
+#[cfg(all(feature = "self-describing-logs", feature = "python"))]
+mod catalog_python;
+#[cfg(all(test, feature = "self-describing-logs"))]
+mod catalog_tests;
+#[cfg(feature = "self-describing-logs")]
+mod value_export;
+
 #[cfg(feature = "mcap")]
 pub mod mcap_export;
 
@@ -101,6 +112,7 @@ pub fn runtime_lifecycle_iterator_unified_py(
 pub enum ExportFormat {
     Json,
     Csv,
+    Jsonl,
 }
 
 impl Display for ExportFormat {
@@ -108,8 +120,26 @@ impl Display for ExportFormat {
         match self {
             ExportFormat::Json => write!(f, "json"),
             ExportFormat::Csv => write!(f, "csv"),
+            ExportFormat::Jsonl => write!(f, "jsonl"),
         }
     }
+}
+
+/// Source of the CopperList payload decoder (experimental catalog support).
+#[cfg(feature = "self-describing-logs")]
+#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum CopperListDecoder {
+    Typed,
+    Catalog,
+}
+
+/// Complete catalog dump or human inspection format (experimental).
+#[cfg(feature = "self-describing-logs")]
+#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum CatalogFormat {
+    Human,
+    Ron,
+    Json,
 }
 
 /// This is a generator for a main function to build a log extractor.
@@ -124,6 +154,10 @@ pub struct LogReaderCli {
     #[arg(long, global = true)]
     pub run: Option<usize>,
 
+    /// Colorize human output on terminals, always, or never.
+    #[arg(long, global = true, value_enum, default_value_t = clap::ColorChoice::Auto)]
+    pub color: clap::ColorChoice,
+
     #[command(subcommand)]
     pub command: Command,
 }
@@ -132,12 +166,22 @@ pub struct LogReaderCli {
 pub enum Command {
     /// List recorded runs announced by Instantiated lifecycle records.
     ListRuns,
+    /// Inspect the embedded payload catalog.
+    #[cfg(feature = "self-describing-logs")]
+    Catalog {
+        #[arg(short, long, value_enum, default_value = "human")]
+        export_format: CatalogFormat,
+    },
     /// Extract logs
     ExtractTextLog { log_index: PathBuf },
     /// Extract copperlists
     ExtractCopperlists {
         #[arg(short, long, default_value_t = ExportFormat::Json)]
         export_format: ExportFormat,
+        /// Select the compiled application decoder or embedded catalog.
+        #[cfg(feature = "self-describing-logs")]
+        #[arg(long, value_enum, default_value = "typed")]
+        decoder: CopperListDecoder,
     },
     /// Check the log and dump info about it.
     Fsck {
@@ -146,6 +190,9 @@ pub enum Command {
         /// Decode and print RuntimeLifecycle events.
         #[arg(long)]
         dump_runtime_lifecycle: bool,
+        /// Decode every recorded CopperList using the embedded catalog.
+        #[arg(long)]
+        deep: bool,
     },
     /// Export log statistics to JSON for offline DAG rendering.
     LogStats {
@@ -202,6 +249,33 @@ pub enum Command {
         #[arg(short = 'n', long, default_value_t = 0)]
         sample_messages: usize,
     },
+}
+
+/// Standalone catalog CLI entrypoint used by cu29-logextract.
+#[cfg(feature = "self-describing-logs")]
+#[doc(hidden)]
+pub fn run_catalog_cli() -> CuResult<()> {
+    catalog_cli::run_cli()
+}
+
+fn print_runs(runs: &[runs::RecordedRun]) {
+    for run in runs {
+        println!(
+            "Run {}: mission={} app={} instance_id={} started={} shutdown={}",
+            run.index,
+            run.missions.join(","),
+            run.stack
+                .as_ref()
+                .map_or("unknown", |stack| stack.app_name.as_str()),
+            run.stack.as_ref().map_or_else(
+                || "unknown".to_string(),
+                |stack| stack.instance_id.to_string()
+            ),
+            run.started_at
+                .map_or_else(|| "unknown".to_string(), |time| time.to_string()),
+            run.shutdown_completed,
+        );
+    }
 }
 
 fn write_json_pretty<T: Serialize + ?Sized>(value: &T) -> CuResult<()> {
@@ -278,27 +352,23 @@ where
 
     let runs = runs::discover(&unifiedlog_base)?;
     if matches!(args.command, Command::ListRuns) {
-        for run in &runs {
-            println!(
-                "Run {}: mission={} app={} instance_id={} started={} shutdown={}",
-                run.index,
-                run.missions.join(","),
-                run.stack
-                    .as_ref()
-                    .map_or("unknown", |stack| stack.app_name.as_str()),
-                run.stack.as_ref().map_or_else(
-                    || "unknown".to_string(),
-                    |stack| stack.instance_id.to_string()
-                ),
-                run.started_at
-                    .map_or_else(|| "unknown".to_string(), |time| time.to_string()),
-                run.shutdown_completed,
-            );
-        }
+        print_runs(&runs);
         return Ok(());
     }
     let run = runs::select(&runs, args.run)?;
-    if let Some(config) = &run.config {
+    #[cfg(feature = "self-describing-logs")]
+    let needs_typed_config = !matches!(
+        args.command,
+        Command::Catalog { .. }
+            | Command::ExtractCopperlists {
+                decoder: CopperListDecoder::Catalog,
+                ..
+            }
+            | Command::Fsck { deep: true, .. }
+    );
+    #[cfg(not(feature = "self-describing-logs"))]
+    let needs_typed_config = true;
+    if needs_typed_config && let Some(config) = &run.config {
         cu29::logcodec::set_effective_config_ron::<P>(config);
     }
     let mut dl = run.reader(&unifiedlog_base)?;
@@ -309,8 +379,31 @@ where
             let reader = dl.stream(UnifiedLogType::StructuredLogLine);
             textlog_dump(reader, &log_index)?;
         }
-        Command::ExtractCopperlists { export_format } => {
-            println!("Extracting copperlists with format: {export_format}");
+        #[cfg(feature = "self-describing-logs")]
+        Command::Catalog { export_format } => {
+            catalog_cli::dump_catalog(
+                run,
+                &unifiedlog_base,
+                export_format,
+                args.color,
+                &mut std::io::stdout().lock(),
+            )?;
+        }
+        Command::ExtractCopperlists {
+            export_format,
+            #[cfg(feature = "self-describing-logs")]
+            decoder,
+        } => {
+            #[cfg(feature = "self-describing-logs")]
+            if decoder == CopperListDecoder::Catalog {
+                return catalog_cli::extract(
+                    &unifiedlog_base,
+                    Some(run.index),
+                    export_format,
+                    &mut std::io::stdout().lock(),
+                );
+            }
+            eprintln!("Extracting copperlists with format: {export_format}");
             let mut reader = dl.stream(UnifiedLogType::CopperList);
             let iter = copperlists_reader::<P>(&mut reader);
 
@@ -318,6 +411,12 @@ where
                 ExportFormat::Json => {
                     for entry in iter {
                         write_json_pretty(&entry)?;
+                    }
+                }
+                ExportFormat::Jsonl => {
+                    for entry in iter {
+                        write_json(&entry)?;
+                        println!();
                     }
                 }
                 ExportFormat::Csv => {
@@ -355,7 +454,19 @@ where
         Command::Fsck {
             verbose,
             dump_runtime_lifecycle,
+            deep,
         } => {
+            if deep {
+                #[cfg(feature = "self-describing-logs")]
+                return catalog_cli::deep_check(
+                    run,
+                    &unifiedlog_base,
+                    verbose,
+                    dump_runtime_lifecycle,
+                );
+                #[cfg(not(feature = "self-describing-logs"))]
+                return Err("Deep validation requires the self-describing-logs feature".into());
+            }
             check::<P>(&mut dl, verbose, dump_runtime_lifecycle)?;
         }
         Command::LogStats {
@@ -793,14 +904,24 @@ pub fn runtime_lifecycle_reader(
 
 /// Returns the first mission announced by the runtime lifecycle section, if any.
 pub fn unified_log_mission(unifiedlog_base: &Path) -> CuResult<Option<String>> {
-    let dl = build_read_logger(unifiedlog_base)?;
-    let reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::RuntimeLifecycle);
-    Ok(
-        runtime_lifecycle_reader(reader).find_map(|entry| match entry.event {
-            RuntimeLifecycleEvent::MissionStarted { mission } => Some(mission),
-            _ => None,
-        }),
-    )
+    let mut dl = build_read_logger(unifiedlog_base)?;
+    let Some(metadata) = dl.application_metadata()? else {
+        return Ok(None);
+    };
+    loop {
+        let header = dl.raw_skip_section()?;
+        if header.entry_type == UnifiedLogType::LastEntry {
+            return Ok(None);
+        }
+        if header.context.run_id != 0 {
+            return metadata
+                .missions
+                .get(header.context.mission_index as usize)
+                .cloned()
+                .map(Some)
+                .ok_or(CuError::from("Invalid mission index"));
+        }
+    }
 }
 
 /// Ensures the unified log was recorded for the expected mission.
@@ -1145,6 +1266,8 @@ Call register_copperlist_python_type::<P>() from Rust before using this function
     /// This needs to match the name of the generated '.so'
     #[pymodule(name = "libcu29_export")]
     fn cu29_export(m: &Bound<'_, PyModule>) -> PyResult<()> {
+        #[cfg(feature = "self-describing-logs")]
+        crate::catalog_python::add_functions(m)?;
         m.add_class::<PyCuLogEntry>()?;
         m.add_class::<PyLogIterator>()?;
         m.add_class::<PyCopperListIterator>()?;
@@ -1212,33 +1335,21 @@ Call register_copperlist_python_type::<P>() from Rust before using this function
     ) -> PyResult<Py<PyAny>> {
         let root = PyDict::new(py);
         match event {
-            RuntimeLifecycleEvent::Instantiated {
-                config_source,
-                effective_config_ron,
-                stack,
-            } => {
+            RuntimeLifecycleEvent::Instantiated { config_source } => {
                 root.set_item("kind", "instantiated")?;
                 root.set_item("config_source", runtime_config_source_to_py(config_source))?;
-                root.set_item("effective_config_ron", effective_config_ron)?;
-
-                let stack_py = PyDict::new(py);
-                stack_py.set_item("app_name", &stack.app_name)?;
-                stack_py.set_item("app_version", &stack.app_version)?;
-                stack_py.set_item("git_commit", &stack.git_commit)?;
-                stack_py.set_item("git_dirty", stack.git_dirty)?;
-                stack_py.set_item("subsystem_id", &stack.subsystem_id)?;
-                stack_py.set_item("subsystem_code", stack.subsystem_code)?;
-                stack_py.set_item("instance_id", stack.instance_id)?;
-                root.set_item("stack", dict_to_namespace(stack_py, py)?)?;
             }
-            RuntimeLifecycleEvent::MissionStarted { mission } => {
+            RuntimeLifecycleEvent::MissionStarted => {
                 root.set_item("kind", "mission_started")?;
-                root.set_item("mission", mission)?;
             }
-            RuntimeLifecycleEvent::MissionStopped { mission, reason } => {
+            RuntimeLifecycleEvent::MissionStopped { reason } => {
                 root.set_item("kind", "mission_stopped")?;
-                root.set_item("mission", mission)?;
-                root.set_item("reason", reason)?;
+                root.set_item("reason", format!("{reason:?}"))?;
+            }
+            RuntimeLifecycleEvent::LifecycleFailed { operation, error } => {
+                root.set_item("kind", "lifecycle_failed")?;
+                root.set_item("operation", format!("{operation:?}"))?;
+                root.set_item("error", error)?;
             }
             RuntimeLifecycleEvent::Panic {
                 message,
@@ -1547,7 +1658,7 @@ Call register_copperlist_python_type::<P>() from Rust before using this function
         let fallback = format!("{value:?}");
         Ok(fallback.into_pyobject(py)?.into())
     }
-    fn value_to_py(value: &cu29::prelude::Value, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(super) fn value_to_py(value: &cu29::prelude::Value, py: Python<'_>) -> PyResult<Py<PyAny>> {
         match value {
             Value::String(s) => Ok(s.into_pyobject(py)?.into()),
             Value::U64(u) => Ok(u.into_pyobject(py)?.into()),
@@ -1783,29 +1894,17 @@ mod tests {
     }
 
     #[test]
-    fn runtime_lifecycle_reader_extracts_started_mission() {
+    fn runtime_lifecycle_reader_retains_timestamps_and_events() {
         let records = vec![
             RuntimeLifecycleRecord {
                 timestamp: CuTime::default(),
                 event: RuntimeLifecycleEvent::Instantiated {
                     config_source: RuntimeLifecycleConfigSource::BundledDefault,
-                    effective_config_ron: "(missions: [])".to_string(),
-                    stack: RuntimeLifecycleStackInfo {
-                        app_name: "demo".to_string(),
-                        app_version: "0.1.0".to_string(),
-                        git_commit: None,
-                        git_dirty: None,
-                        subsystem_id: Some("ping".to_string()),
-                        subsystem_code: 7,
-                        instance_id: 42,
-                    },
                 },
             },
             RuntimeLifecycleRecord {
                 timestamp: CuTime::from_nanos(42),
-                event: RuntimeLifecycleEvent::MissionStarted {
-                    mission: "gnss".to_string(),
-                },
+                event: RuntimeLifecycleEvent::MissionStarted,
             },
         ];
         let mut bytes = Vec::new();
@@ -1813,12 +1912,10 @@ mod tests {
             bytes.extend(bincode::encode_to_vec(record, standard()).unwrap());
         }
 
-        let mission =
-            runtime_lifecycle_reader(Cursor::new(bytes)).find_map(|entry| match entry.event {
-                RuntimeLifecycleEvent::MissionStarted { mission } => Some(mission),
-                _ => None,
-            });
-        assert_eq!(mission.as_deref(), Some("gnss"));
+        assert_eq!(
+            runtime_lifecycle_reader(Cursor::new(bytes)).collect::<Vec<_>>(),
+            records
+        );
     }
 
     #[test]

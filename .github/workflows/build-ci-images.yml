@@ -2,7 +2,7 @@ name: Build CI Images
 
 on:
   schedule:
-    - cron: "17 3 * * *"
+    - cron: "17 3 * * 1"
   push:
     branches: ["master"]
     paths:
@@ -21,9 +21,13 @@ permissions:
 jobs:
   linux-ci-image:
     name: Linux CI Image
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Start resource measurements
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: start
       - id: image_refs
         shell: bash
         run: |
@@ -57,12 +61,21 @@ jobs:
           tags: ${{ steps.image_refs.outputs.tags }}
           cache-from: type=gha,scope=linux-ci-image-ubuntu26
           cache-to: type=gha,mode=max,scope=linux-ci-image-ubuntu26
+      - name: Report resource measurements
+        if: always()
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: finish
 
   linux-cuda-ci-image:
     name: Linux CUDA CI Image
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Start resource measurements
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: start
       - id: image_refs
         shell: bash
         run: |
@@ -96,3 +109,8 @@ jobs:
           tags: ${{ steps.image_refs.outputs.tags }}
           cache-from: type=gha,scope=linux-cuda-ci-image-ubuntu24
           cache-to: type=gha,mode=max,scope=linux-cuda-ci-image-ubuntu24
+      - name: Report resource measurements
+        if: always()
+        uses: ./.github/actions/ci-resources
+        with:
+          phase: finish

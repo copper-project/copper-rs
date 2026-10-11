@@ -3,6 +3,8 @@
 extern crate alloc;
 extern crate core;
 
+#[doc(hidden)]
+pub mod byte_log;
 #[cfg(feature = "std")]
 pub mod memmap;
 pub mod noop;
@@ -50,67 +52,74 @@ pub const SECTION_MAGIC: [u8; 2] = [0xFA, 0x57]; // FAST
 /// to CopperLists, payload types, keyframes, or their serialization must not bump
 /// this value. Decode content with the logreader built for the exact application
 /// version that produced it; this header cannot establish content compatibility.
-/// Version 2 adds rollover support: the main header now carries the absolute
-/// head pointer (first retained section). Older readers reject this version and
-/// this reader rejects older versions.
+/// Unreleased version 2 uses byte links, static metadata and construction contexts.
 pub const UNIFIED_LOG_FORMAT_VERSION: u8 = 2;
 
 pub const SECTION_HEADER_COMPACT_SIZE: u16 = 512; // Usual minimum size for a disk sector.
 
-/// The main file header of the datalogger.
-#[derive(Encode, Decode, Debug)]
+/// Header of the byte-addressed log. All offsets are relative to the log origin.
+#[derive(Encode, Decode, Debug, Clone)]
 pub struct MainHeader {
-    pub magic: [u8; 4], // Magic number to identify the file.
-    /// Encapsulation version only; see [`UNIFIED_LOG_FORMAT_VERSION`].
-    /// Never versions encoded section content or determines decoder compatibility.
-    /// Content requires the producing application's matching logreader.
+    pub magic: [u8; 4],
     pub format_version: u8,
-    pub first_section_offset: u16, // This is to align with a page at write time.
     pub page_size: u16,
-    /// Absolute byte offset of the first retained section over the whole log.
-    /// For the slab-based (std) backend this is `head_slab_index * slab_size +
-    /// offset_within_slab`, where `slab_size` and the ring extent are derived from
-    /// the slab files present on disk (the ring is not persisted). For
-    /// block-device (no_std) backends it is the absolute byte offset over the
-    /// block device. Always a section boundary, never the middle of a section.
-    pub head_offset: u64,
+    pub metadata_offset: u64,
+    pub sections_begin: u64,
+    pub sections_end: u64,
+    pub head_section: u64,
+    pub tail_section: u64,
+    pub clean_close: bool,
 }
 
 impl Display for MainHeader {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        writeln!(
+        write!(
             f,
-            "  Magic -> {:2x}{:2x}{:2x}{:2x}",
-            self.magic[0], self.magic[1], self.magic[2], self.magic[3]
-        )?;
-        writeln!(f, "  format_version -> {}", self.format_version)?;
-        writeln!(f, "  first_section_offset -> {}", self.first_section_offset)?;
-        writeln!(f, "  page_size -> {}", self.page_size)?;
-        writeln!(f, "  head_offset -> {}", self.head_offset)
+            "  format_version -> {}\n  alignment -> {}\n  metadata -> {}\n  data -> {}..{}\n  head -> {}\n  tail -> {}\n  clean_close -> {}",
+            self.format_version,
+            self.page_size,
+            self.metadata_offset,
+            self.sections_begin,
+            self.sections_end,
+            self.head_section,
+            self.tail_section,
+            self.clean_close
+        )
     }
 }
 
-/// Each concurrent sublogger is tracked through a section header.
-/// They form a linked list of sections.
-/// The entry type is used to identify the type of data in the section.
-#[derive(Encode, Decode, Debug)]
+/// Construction identity shared by every section of an application instance.
+#[derive(Encode, Decode, Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SectionContext {
+    pub run_id: u64,
+    pub instance_id: u32,
+    pub mission_index: u32,
+}
+
+/// One linked section. The allocation includes its 512-byte header reservation.
+#[derive(Encode, Decode, Debug, Clone)]
 pub struct SectionHeader {
-    pub magic: [u8; 2],  // Magic number to identify the section.
-    pub block_size: u16, // IMPORTANT: we assume this header fits in this block size.
+    pub magic: [u8; 2],
+    pub block_size: u16,
     pub entry_type: UnifiedLogType,
-    pub offset_to_next_section: u32, // offset from the first byte of this header to the first byte of the next header (MAGIC to MAGIC).
-    pub used: u32,                   // how much of the section is filled.
-    pub is_open: bool,               // true while being written, false once closed.
+    pub allocated: u64,
+    pub next_section: u64,
+    pub used: u32,
+    pub is_open: bool,
+    pub context: SectionContext,
 }
 
 impl Display for SectionHeader {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        writeln!(f, "    Magic -> {:2x}{:2x}", self.magic[0], self.magic[1])?;
-        writeln!(f, "    type -> {:?}", self.entry_type)?;
         write!(
             f,
-            "    use  -> {} / {} (open: {})",
-            self.used, self.offset_to_next_section, self.is_open
+            "    type -> {:?}\n    use -> {} / {} (open: {})\n    next -> {}\n    context -> {:?}",
+            self.entry_type,
+            self.used,
+            self.allocated,
+            self.is_open,
+            self.next_section,
+            self.context
         )
     }
 }
@@ -119,13 +128,39 @@ impl Default for SectionHeader {
     fn default() -> Self {
         Self {
             magic: SECTION_MAGIC,
-            block_size: 512,
+            block_size: SECTION_HEADER_COMPACT_SIZE,
             entry_type: UnifiedLogType::Empty,
-            offset_to_next_section: 0,
+            allocated: 0,
+            next_section: 0,
             used: 0,
             is_open: true,
+            context: SectionContext::default(),
         }
     }
+}
+
+/// Static application identity and configuration, retained outside the data ring.
+#[derive(Encode, Decode, Debug, Clone, PartialEq, Eq)]
+pub struct ApplicationMetadata {
+    pub app_type: alloc::string::String,
+    pub app_name: alloc::string::String,
+    pub app_version: alloc::string::String,
+    pub git_commit: Option<alloc::string::String>,
+    pub git_dirty: Option<bool>,
+    pub subsystem_id: Option<alloc::string::String>,
+    pub subsystem_code: u16,
+    pub effective_config_ron: alloc::string::String,
+    pub missions: Vec<alloc::string::String>,
+    pub catalog_offset: u64,
+}
+
+/// Behavior when a section needs additional storage.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum CapacityPolicy {
+    #[default]
+    Grow,
+    OverwriteOldest,
+    StopWhenFull,
 }
 
 pub enum AllocatedSection<S: SectionStorage> {
@@ -141,6 +176,10 @@ pub trait SectionStorage: Send + Sync {
     fn post_update_header<E: Encode>(&mut self, header: &E) -> Result<usize, EncodeError>;
     /// Appends the entry to the user data storage.
     fn append<E: Encode>(&mut self, entry: &E) -> Result<usize, EncodeError>;
+    /// Whether this handle was sealed by section reclamation.
+    fn is_sealed(&self) -> bool {
+        false
+    }
     /// Flushes the section to the underlying storage
     fn flush(&mut self) -> CuResult<usize>;
 }
@@ -183,7 +222,9 @@ impl<S: SectionStorage> SectionHandle<S> {
 /// Basic statistics for the unified logger.
 /// Note: the total_allocated_space might grow for the std implementation
 pub struct UnifiedLogStatus {
+    /// Bytes reserved for headers, static metadata and retained data sections.
     pub total_used_space: usize,
+    /// Total logical backing capacity, including free space.
     pub total_allocated_space: usize,
 }
 
@@ -211,6 +252,46 @@ pub trait UnifiedLogWrite<S: SectionStorage>: Send + Sync {
     /// Flush the given section to the underlying storage.
     fn flush_section(&mut self, section: &mut SectionHandle<S>);
 
+    /// Flush a section, reporting storage failures.
+    fn try_flush_section(&mut self, section: &mut SectionHandle<S>) -> CuResult<()> {
+        self.flush_section(section);
+        Ok(())
+    }
+
+    /// Seal or compare static metadata before initializing runtime streams.
+    #[doc(hidden)]
+    fn seal_metadata<C: Encode>(
+        &mut self,
+        _metadata: &ApplicationMetadata,
+        _catalog: Option<&C>,
+    ) -> CuResult<()> {
+        Err(CuError::from(
+            "Logger does not support application metadata",
+        ))
+    }
+    /// Reserve a construction identity after static metadata has been compared.
+    #[doc(hidden)]
+    fn construction_context(
+        &mut self,
+        instance_id: u32,
+        mission_index: u32,
+    ) -> CuResult<SectionContext> {
+        Ok(SectionContext {
+            run_id: 0,
+            instance_id,
+            mission_index,
+        })
+    }
+    /// Allocate a section belonging to one construction.
+    #[doc(hidden)]
+    fn add_section_with_context(
+        &mut self,
+        kind: UnifiedLogType,
+        size: usize,
+        _context: SectionContext,
+    ) -> CuResult<SectionHandle<S>> {
+        self.add_section(kind, size)
+    }
     /// Returns the current status of the unified logger.
     fn status(&self) -> UnifiedLogStatus;
 }
@@ -236,6 +317,17 @@ pub fn stream_write<E: Encode, S: SectionStorage>(
     LogStream::new(entry_type, logger, minimum_allocation_amount)
 }
 
+/// Create a stream whose sections retain their construction identity across rollover.
+#[doc(hidden)]
+pub fn stream_write_context<E: Encode, S: SectionStorage>(
+    logger: Arc<Mutex<impl UnifiedLogWrite<S>>>,
+    entry_type: UnifiedLogType,
+    size: usize,
+    context: SectionContext,
+) -> CuResult<impl WriteStream<E>> {
+    LogStream::with_context(entry_type, logger, size, context)
+}
+
 /// A wrapper around the unifiedlogger that implements the Write trait.
 pub struct LogStream<S: SectionStorage, L: UnifiedLogWrite<S>> {
     entry_type: UnifiedLogType,
@@ -244,6 +336,7 @@ pub struct LogStream<S: SectionStorage, L: UnifiedLogWrite<S>> {
     current_position: usize,
     minimum_allocation_amount: usize,
     last_log_bytes: usize,
+    context: SectionContext,
 }
 
 impl<S: SectionStorage, L: UnifiedLogWrite<S>> LogStream<S, L> {
@@ -253,6 +346,21 @@ impl<S: SectionStorage, L: UnifiedLogWrite<S>> LogStream<S, L> {
         parent_logger: Arc<Mutex<L>>,
         minimum_allocation_amount: usize,
     ) -> CuResult<Self> {
+        Self::with_context(
+            entry_type,
+            parent_logger,
+            minimum_allocation_amount,
+            SectionContext::default(),
+        )
+    }
+
+    #[doc(hidden)]
+    pub fn with_context(
+        entry_type: UnifiedLogType,
+        parent_logger: Arc<Mutex<L>>,
+        minimum_allocation_amount: usize,
+        context: SectionContext,
+    ) -> CuResult<Self> {
         #[cfg(feature = "std")]
         let section = parent_logger
             .lock()
@@ -260,12 +368,14 @@ impl<S: SectionStorage, L: UnifiedLogWrite<S>> LogStream<S, L> {
                 CuError::from("Could not lock a section at LogStream creation")
                     .add_cause(e.to_string().as_str())
             })?
-            .add_section(entry_type, minimum_allocation_amount)?;
+            .add_section_with_context(entry_type, minimum_allocation_amount, context)?;
 
         #[cfg(not(feature = "std"))]
-        let section = parent_logger
-            .lock()
-            .add_section(entry_type, minimum_allocation_amount)?;
+        let section = parent_logger.lock().add_section_with_context(
+            entry_type,
+            minimum_allocation_amount,
+            context,
+        )?;
 
         Ok(Self {
             entry_type,
@@ -274,6 +384,7 @@ impl<S: SectionStorage, L: UnifiedLogWrite<S>> LogStream<S, L> {
             current_position: 0,
             minimum_allocation_amount,
             last_log_bytes: 0,
+            context,
         })
     }
 }
@@ -290,19 +401,28 @@ impl<S: SectionStorage, L: UnifiedLogWrite<S>> Debug for LogStream<S, L> {
 
 impl<E: Encode, S: SectionStorage, L: UnifiedLogWrite<S>> WriteStream<E> for LogStream<S, L> {
     fn log(&mut self, obj: &E) -> CuResult<()> {
-        //let dst = self.current_section.get_user_buffer();
-        // let result = encode_into_slice(obj, dst, standard());
-        let result = self.current_section.append(obj);
+        let sealed = self.current_section.storage.is_sealed();
+        let result = if sealed {
+            Err(EncodeError::UnexpectedEnd)
+        } else {
+            self.current_section.append(obj)
+        };
         match result {
             Ok(nb_bytes) => {
                 self.current_position += nb_bytes;
                 self.current_section.header.used += nb_bytes as u32;
                 self.last_log_bytes = nb_bytes;
-                // Track encoded bytes so monitoring can compute actual bytes written.
+                // Lifecycle sections are promptly closed, so sparse events cannot pin the ring.
+                if self.entry_type == UnifiedLogType::RuntimeLifecycle {
+                    self.current_section.storage.flush()?;
+                }
                 Ok(())
             }
             Err(e) => match e {
                 EncodeError::UnexpectedEnd => {
+                    if !sealed && self.current_section.header.used == 0 {
+                        return Err(CuError::from("Entry exceeds an empty section"));
+                    }
                     #[cfg(feature = "std")]
                     let logger_guard = self.parent_logger.lock();
 
@@ -319,9 +439,12 @@ impl<E: Encode, S: SectionStorage, L: UnifiedLogWrite<S>> WriteStream<E> for Log
                             ), // It will retry but at least not completely crash.
                         };
 
-                    logger_guard.flush_section(&mut self.current_section);
-                    self.current_section = logger_guard
-                        .add_section(self.entry_type, self.minimum_allocation_amount)?;
+                    logger_guard.try_flush_section(&mut self.current_section)?;
+                    self.current_section = logger_guard.add_section_with_context(
+                        self.entry_type,
+                        self.minimum_allocation_amount,
+                        self.context,
+                    )?;
 
                     let result = self
                         .current_section
@@ -336,6 +459,9 @@ impl<E: Encode, S: SectionStorage, L: UnifiedLogWrite<S>> WriteStream<E> for Log
                     self.current_position += result;
                     self.current_section.header.used += result as u32;
                     self.last_log_bytes = result;
+                    if self.entry_type == UnifiedLogType::RuntimeLifecycle {
+                        self.current_section.storage.flush()?;
+                    }
                     Ok(())
                 }
                 _ => {
@@ -346,6 +472,17 @@ impl<E: Encode, S: SectionStorage, L: UnifiedLogWrite<S>> WriteStream<E> for Log
                 }
             },
         }
+    }
+
+    fn flush(&mut self) -> CuResult<()> {
+        #[cfg(feature = "std")]
+        let mut logger = self
+            .parent_logger
+            .lock()
+            .map_err(|_| CuError::from("Logger mutex poisoned"))?;
+        #[cfg(not(feature = "std"))]
+        let mut logger = self.parent_logger.lock();
+        logger.try_flush_section(&mut self.current_section)
     }
 
     fn last_log_bytes(&self) -> Option<usize> {
