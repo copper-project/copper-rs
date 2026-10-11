@@ -21,8 +21,13 @@ feature enables clock discipline and its quality display. A synchronized clock
 selects CLOCK initially. The UI samples quality on each draw, including holdover
 and expiration, without adding per-CopperList telemetry callbacks.
 
-**Error bound** includes the configured reference uncertainty, phase offset, and
-an allowance for drift since the latest sample. It is not a measured offset.
+**Robot vs reference** shows the estimated phase difference and whether RobotClock
+is ahead or behind. **Uncertainty bound** shows a conservative total, followed by
+its reference/capture, sample-aging, and clock-mismatch contributions. These
+include configured allowances; the total is not measured clock error.
+**Allowed uncertainty** is the configured maximum, not a precision target:
+exceeding it expires a locked or holdover clock. Sample-age limits can also expire
+synchronization, even when uncertainty remains below this maximum.
 The reference identity and domain are generic; their time scale depends on the
 reference provider.
 

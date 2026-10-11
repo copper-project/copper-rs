@@ -28,7 +28,7 @@ fn clock_panel_reads_the_live_shared_clock_and_shows_expiration() {
     sync.observe(ClockObservation {
         raw_local: CuInstant::from_nanos(0),
         parent_ns: epoch,
-        uncertainty: CuDuration::from_nanos(1000),
+        uncertainty: CuDuration::from_millis(1),
         domain,
     })
     .unwrap();
@@ -36,8 +36,8 @@ fn clock_panel_reads_the_live_shared_clock_and_shows_expiration() {
     raw.set_value(1_000_000_000);
     sync.observe(ClockObservation {
         raw_local: CuInstant::from_nanos(1_000_000_000),
-        parent_ns: epoch + 1_000_000_000,
-        uncertainty: CuDuration::from_nanos(1000),
+        parent_ns: epoch + 1_000_000_000 + 50_000,
+        uncertainty: CuDuration::from_millis(1),
         domain,
     })
     .unwrap();
@@ -48,17 +48,62 @@ fn clock_panel_reads_the_live_shared_clock_and_shows_expiration() {
     let initial = stream_text(&mut ui, 100, 22);
     assert!(initial.contains("LOCKED"));
     assert!(initial.contains("External reference"));
-    assert!(initial.contains("Error bound"));
+    assert!(initial.contains("Robot vs reference"));
+    assert!(initial.contains("50.000 µs behind (estimate)"));
+    assert!(initial.contains("Uncertainty bound"));
+    assert!(initial.contains("1.050 ms (conservative total)"));
+    assert!(initial.contains("not measured error"));
+    assert!(initial.contains("Reference + capture"));
+    assert!(initial.contains("1.000 ms (reported/configured bound)"));
+    assert!(initial.contains("Allowed uncertainty"));
+    assert!(initial.contains("20.000 ms (configured maximum)"));
+    assert!(initial.contains("Above limit: LOCKED/HOLDOVER expires"));
     assert!(initial.contains(&(epoch + 1_000_000_000).to_string()));
     assert!(initial.contains("64:65:6d:6f:2d:70:74:70"));
-    raw.set_value(1_010_000_000);
+    raw.set_value(1_500_000_000);
     sync.reference_lost();
     sync.update().unwrap();
-    assert!(stream_text(&mut ui, 100, 22).contains("HOLDOVER"));
+    let holdover = stream_text(&mut ui, 80, 22);
+    assert!(holdover.contains("HOLDOVER"));
+    assert!(holdover.contains("25.000 µs behind (estimate)"));
+    assert!(holdover.contains("50.000 µs (100 ppm allowance)"));
+    assert!(holdover.contains("1.075 ms (conservative total)"));
+    assert!(holdover.contains("Above limit: LOCKED/HOLDOVER expires"));
     raw.set_value(7_000_000_000);
     let expired = stream_text(&mut ui, 100, 22);
     assert!(expired.contains("EXPIRED"));
     assert!(!expired.contains(&(epoch + 1_000_000_000).to_string()));
+}
+
+#[cfg(feature = "clock-sync")]
+#[test]
+fn clock_panel_does_not_present_unknown_uncertainty_as_a_measurement() {
+    use cu29::clock::sync::{ClockDomain, ClockSync, SyncConfig};
+    use cu29::clock::{CuDuration, RobotClock};
+
+    let (clock, _) = RobotClock::mock();
+    let mut sync = ClockSync::new(
+        &clock,
+        ClockDomain {
+            id: 0,
+            identity: [0; 8],
+            session: 0,
+        },
+        SyncConfig::new(CuDuration::from_millis(20)),
+    )
+    .unwrap();
+    sync.update().unwrap();
+    let mut ui = MonitorUi::new(
+        test_monitor_model().with_clock(clock),
+        MonitorUiOptions::default(),
+    );
+    let text = stream_text(&mut ui, 80, 22);
+    assert!(text.contains("ACQUIRING"));
+    assert!(text.contains("Unavailable"));
+    assert!(text.contains("No usable reference sample"));
+    assert!(!text.contains("aligned"));
+    assert!(!text.contains("Reference + capture"));
+    assert!(!text.contains("184467"));
 }
 
 #[test]
@@ -72,7 +117,8 @@ fn clock_panel_shows_the_live_local_mock_origin_without_sync_features() {
     assert!(text.contains("LOCAL"));
     assert!(text.contains("Mock counter"));
     assert!(!text.contains("Reference identity"));
-    assert!(!text.contains("Error bound"));
+    assert!(!text.contains("Uncertainty bound"));
+    assert!(!text.contains("Allowed uncertainty"));
     raw.set_value(123_456);
     assert!(stream_text(&mut ui, 80, 20).contains("123456"));
 }

@@ -56,9 +56,13 @@ from Copper structured logging (`debug!`, `info!`, `warn!`, `error!`) and captur
 CLOCK always shows the application's shared `RobotClock`, its live time, and its
 origin. Ordinary clocks show LOCAL with a local monotonic or mock counter. The
 optional `clock-sync` feature enables clock discipline; synchronized clocks open
-CLOCK initially and add state, error bound and budget, phase offset, drift, sample
-age, reference identity, and domain. The error bound is conservative uncertainty,
-not a measured offset. Clock sampling and formatting happen on the UI thread;
+CLOCK initially. **Robot vs reference** shows the estimated difference with an
+ahead/behind direction. **Uncertainty bound** separately shows the conservative
+total and its reference/capture, sample-aging, and clock-mismatch contributions.
+It includes configured allowances rather than measuring total clock error.
+**Allowed uncertainty** is the configured maximum; exceeding it expires a locked
+or holdover clock. The panel also shows estimated drift, sample age, reference
+identity, and domain. Clock sampling and formatting happen on the UI thread;
 no per-iteration clock telemetry is added to the task graph.
 
 Try the [standalone PTP demo](../../../examples/cu_clock_sync/README.md).
