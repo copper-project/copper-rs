@@ -100,7 +100,7 @@ ordinary builder and lifecycle; stamp ToV with `ctx.now()`. `runtime.clock.paren
 is resolved to an owned, typed `ClockReferenceBundle::Reference` resource at code
 generation. The provider constructs the base clock through `create_clock()` unless
 `with_clock(clock)` supplies one. Selecting a parent disciplines that clock too.
-Pipeline is rejected in v0; use the default Serial planner.
+Clock synchronization requires the default Serial planner; Pipeline is rejected.
 
 | Setting | Default |
 | --- | --- |
@@ -125,7 +125,7 @@ the reference in `process()`.
 
 ## Reference adapters and manual control
 
-`cu-ptp` consumes an already synchronized reference; v0 does not implement a PTP
+`cu-ptp` consumes an already synchronized reference; it does not implement a PTP
 servo or steer the PHC:
 
 - `LinuxPtpBundle` / `LinuxPhc` read a PHC and ptp4l management health, verify the
@@ -156,7 +156,7 @@ This stack adds no automatic PTP configuration or validation to sensor drivers.
 
 ## Transport independence
 
-v0 consumes an externally synchronized PTP reference independently of Zenoh.
+Clock synchronization consumes an externally synchronized PTP reference independently of Zenoh.
 The existing bridge carries `Tov::Time` and both `Tov::Range` endpoints unchanged,
 without rebasing, clock-domain validation or new clock metadata. The application
 is responsible for ensuring peers share a usable epoch before comparing their
@@ -213,14 +213,14 @@ against v1.3 with `clock-sync` to consume it. Existing recordings gain no clock
 corrections retroactively; their timestamps keep their recorded epoch. This is
 not a guarantee of compatibility for unrelated log-format changes in v1.3.
 
-v0 adds no Zenoh feature or attachment-format change. Existing bridge code needs
+Clock synchronization adds no Zenoh feature or attachment-format change. Existing bridge code needs
 no migration for this stack; shared timestamp comparability depends on the
 external synchronization setup.
 
 ## Future work
 
-v1 would add Statime PTP transport over the existing Zenoh session and explicitly
-selected software or hardware reference backends. It requires transport timestamp
+Future work could add Statime PTP transport over the existing Zenoh session and explicitly
+selected software or hardware reference backends. This requires transport timestamp
 capture, delay/asymmetry bounds and downstream quality propagation. The stack adds
 no Statime integration, `ptp`/`ptp-sync` feature, PHC steering, direct serial
 transport, bare-metal Zenoh frontend or RTC/GNSS reference adapter.

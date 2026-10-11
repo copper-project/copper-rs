@@ -77,7 +77,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         .unwrap_or(DEFAULT_COPPERLIST_COUNT);
     let pipeline_selected = copper_config.planner_kind() == PlannerKind::Pipeline;
     if pipeline_selected && copper_config.runtime.as_ref().and_then(|r| r.clock_sync_config()).is_some() {
-        return return_error("Clock synchronization v0 requires the Serial planner".to_string());
+        return return_error("Clock synchronization requires the Serial planner".to_string());
     }
     if pipeline_selected && !(std && parallel_rt_enabled) {
         return return_error(
@@ -4552,7 +4552,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         None => #mission_mod::clock_reference_instanciator(&config, &mut resources)?,
                     };
                     if selected.is_some() && config.planner_kind() == ::cu29::config::PlannerKind::Pipeline {
-                        return Err(CuError::from("Clock synchronization v0 requires the Serial planner"));
+                        return Err(CuError::from("Clock synchronization requires the Serial planner"));
                     }
                     let clock = match self.clock {
                         Some(clock) => clock,
