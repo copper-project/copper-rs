@@ -64,7 +64,7 @@ impl MonitorUi {
         if let Some(status) = clock.sync_status() {
             let (label, color) = match status.state {
                 SyncState::Acquiring => ("ACQUIRING", palette::YELLOW),
-                SyncState::Locked => ("LOCKED (within allowed uncertainty)", palette::GREEN),
+                SyncState::Locked => ("LOCKED", palette::GREEN),
                 SyncState::Holdover => ("HOLDOVER (reference unavailable)", palette::YELLOW),
                 SyncState::Expired => ("EXPIRED (reacquire reference)", palette::LIGHT_RED),
             };
@@ -80,11 +80,6 @@ impl MonitorUi {
             rows.push(row("Origin", "External reference".into()));
             if status.estimated_error != CuDuration::MAX {
                 let phase = status.phase_offset_ns.unsigned_abs();
-                let direction = match status.phase_offset_ns.cmp(&0) {
-                    std::cmp::Ordering::Greater => "behind",
-                    std::cmp::Ordering::Less => "ahead",
-                    std::cmp::Ordering::Equal => "aligned",
-                };
                 // Undo the combined bound using the same integer rounding as
                 // ClockSnapshot::status. All calculations stay on the UI thread.
                 let aging = (u128::from(status.sample_age.as_nanos())
@@ -98,7 +93,7 @@ impl MonitorUi {
                     .saturating_sub(aging);
                 rows.push(row(
                     "Robot vs reference",
-                    format!("{:.3} µs {direction} (estimate)", phase as f64 / 1000.0),
+                    format!("{:+.3} µs", -(status.phase_offset_ns as f64) / 1000.0),
                 ));
                 uncertainty_rows.extend([
                     row(
@@ -176,12 +171,6 @@ impl MonitorUi {
                 .into(),
             ));
         }
-        rows.push(row(
-            "Last CopperList",
-            self.model()
-                .last_seen_copperlist_id()
-                .map_or_else(|| "Waiting for first iteration".into(), |id| id.to_string()),
-        ));
         rows.push(row("Task timestamps", "ctx.now() shares this clock".into()));
         let table = |rows, value_label| {
             Table::new(rows, [Constraint::Length(22), Constraint::Min(0)])
@@ -194,24 +183,13 @@ impl MonitorUi {
         };
         scroll.render_widget(table(rows, "Live value").block(clock_block), panels[0]);
         if !uncertainty_rows.is_empty() {
-            let sections = Layout::vertical([
-                Constraint::Length(3),
-                Constraint::Length(9),
-                Constraint::Min(0),
-            ])
-            .split(uncertainty_area);
-            scroll.render_widget(
-                Paragraph::new(
-                    "Conservative total includes configured allowances.\nNot measured clock error.",
-                )
-                .wrap(Wrap { trim: false }),
-                sections[0],
-            );
-            scroll.render_widget(table(uncertainty_rows, "Bound / limit"), sections[1]);
+            let sections = Layout::vertical([Constraint::Length(9), Constraint::Min(0)])
+                .split(uncertainty_area);
+            scroll.render_widget(table(uncertainty_rows, "Bound / limit"), sections[0]);
             scroll.render_widget(
                 Paragraph::new("Allowed uncertainty is a configured maximum.\nAbove limit: LOCKED/HOLDOVER expires.\nSample-age limits also apply.")
                     .wrap(Wrap { trim: false }),
-                sections[2],
+                sections[1],
             );
         } else {
             scroll.render_widget(

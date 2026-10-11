@@ -58,8 +58,8 @@ origin. Ordinary clocks show LOCAL with a local monotonic or mock counter. The
 optional `clock-sync` feature enables clock discipline; synchronized clocks open
 CLOCK initially. It has two bordered panes side by side: **Clock / reference**
 for live time and alignment, and **Timestamp uncertainty** for bounds and limits.
-Use arrow keys to scroll on narrow terminals. **Robot vs reference** shows the estimated difference with an
-ahead/behind direction. **Uncertainty bound** separately shows the conservative
+Use arrow keys to scroll on narrow terminals. **Robot vs reference** shows the signed
+difference: positive is ahead, negative is behind. **Uncertainty bound** shows the conservative
 total and its reference/capture, sample-aging, and clock-mismatch contributions.
 It includes configured allowances rather than measuring total clock error.
 **Allowed uncertainty** is the configured maximum; exceeding it expires a locked

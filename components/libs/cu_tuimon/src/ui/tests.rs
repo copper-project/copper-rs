@@ -49,10 +49,9 @@ fn clock_panel_reads_the_live_shared_clock_and_shows_expiration() {
     assert!(initial.contains("LOCKED"));
     assert!(initial.contains("External reference"));
     assert!(initial.contains("Robot vs reference"));
-    assert!(initial.contains("50.000 µs behind (estimate)"));
+    assert!(initial.contains("-50.000 µs"));
     assert!(initial.contains("Uncertainty bound"));
     assert!(initial.contains("1.050 ms (conservative total)"));
-    assert!(initial.contains("Not measured clock error"));
     assert!(initial.contains("Reference + capture"));
     assert!(initial.contains("1.000 ms (reported/configured bound)"));
     assert!(initial.contains("Allowed uncertainty"));
@@ -65,7 +64,7 @@ fn clock_panel_reads_the_live_shared_clock_and_shows_expiration() {
     sync.update().unwrap();
     let holdover = stream_text(&mut ui, 80, 22);
     assert!(holdover.contains("HOLDOVER"));
-    assert!(holdover.contains("25.000 µs behind (estimate)"));
+    assert!(holdover.contains("-25.000 µs"));
     ui.scroll(ScrollDirection::Right, 100);
     let uncertainty = stream_text(&mut ui, 80, 22);
     assert!(uncertainty.contains("Timestamp uncertainty"));
