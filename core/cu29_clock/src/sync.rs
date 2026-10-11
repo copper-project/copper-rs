@@ -1,4 +1,4 @@
-//! Experimental, transport-independent reference discipline with fixed storage.
+//! Transport-independent reference discipline with fixed storage.
 //!
 //! One controller owns a clock's curve. Reference I/O belongs to the caller;
 //! readers only evaluate a published integer affine mapping.
