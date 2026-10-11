@@ -1,448 +1,241 @@
-# Clock synchronization: minimal API proposal
+# Copper Clock synchronization and guarantees
 
-Status: v0 implementation. The reference discipline, runtime resource wiring,
-Linux PHC/software adapters, board hooks, replay corrections and Zenoh epoch
-metadata are experimental. See [the runnable example](../examples/cu_clock_sync/README.md).
-The runtime currently requires the Serial planner; Pipeline is rejected until
-corrections can be coordinated across in-flight CopperLists. Sections marked v1
-remain proposals.
+## Two timelines
 
-**Contract:** configuring synchronization makes `RobotClock::now()` and
-`ctx.now()` return the shared reference time in nanoseconds. With PTP, this is
-PTP/TAI time in a common epoch across robots and sensors. Startup acquires sync
-before consumers run; ongoing corrections preserve monotonicity. Existing code
-that stamps messages with `ctx.now()` gets synchronized timestamps.
-
-## Delivery stages
-
-| Version | Deliverable |
+| API | Timeline and guarantee |
 | --- | --- |
-| v0 (agreed) | Discipline RobotClock's `now()` against an already synchronized PTP reference: Linux PHC and board adapters, acquisition, continuous maintenance and health. |
-| v1 (proposal) | Add a Statime transport adapter over the existing Zenoh session. Discipline a software PTP clock on either platform, or an explicitly selected Linux/MCU hardware clock. |
-| Later adapters | RTC and GNSS/PPS observations through the same core API. |
+| `clock.raw_now() -> CuInstant` | Undisciplined local counter, converted to nanoseconds using this clock's own origin and calibration. Use for captures, physical elapsed time, acquisition deadlines and sample age. Synchronization never changes it. |
+| `clock.now()`, `clock.recent()`, `ctx.now() -> CuTime` | Execution time. An unconfigured clock starts at zero, or the initial time requested by `from_ref_time*`. A synchronized clock follows its reference epoch; PTP adapters normalize to TAI. |
+| `CuDuration` | An interval on either timeline. Execution intervals can reflect slew; raw intervals do not. |
 
-## Default simple path: configure a resource
+Clones share the raw origin/calibration and execution mapping. Independently
+constructed clocks have separate raw timelines: compare `CuInstant`s only within
+one clock and its clones. Rust rejects mixed raw/execution arithmetic, comparisons
+and implicit conversions, but does not distinguish two clocks' raw instants.
+Raw busy-wait deadlines and `ClockObservation.raw_local` require `CuInstant`;
+message ToV requires `CuTime`. `ClockSnapshot::at(raw)` explicitly maps an instant
+through a recorded execution curve.
 
-On Linux and bare metal, select one parent resource and an acceptable error.
-The generated runtime creates and disciplines one RobotClock. After acquisition,
-its ordinary `now()` uses the parent's epoch and tracks its offset and drift.
+## Synchronized clock contract
 
-**Linux:**
+- **Shared epoch:** ordinary execution timestamps use the selected reference's
+  epoch. Comparable peers must have the same `ClockDomain` (`id`, root `identity`,
+  `session`) and time scale. The domain fields identify the reference; providers
+  are responsible for supplying consistent epoch/time-scale semantics.
+- **Startup:** managed acquisition reaches `Locked` before consumer `start`
+  hooks. Lock requires at least two accepted observations and estimated error
+  within `max_error`. Construction alone does not acquire synchronization.
+- **Monotonicity:** first acquisition may align the epoch by a phase step.
+  Thereafter live corrections and resync preserve continuity and correct phase
+  by bounded slew, with positive total rate. `now()` and `recent()` share a
+  monotonic floor across clones: readings do not decrease, but may repeat.
+  Earlier stamped timestamps are never rewritten. Mock controls and offline
+  replay can deliberately move time backwards.
+- **Accuracy:** quality includes upstream/capture uncertainty, drift since the
+  last sample, and remaining phase error. `Locked` and usable `Holdover` fit
+  `max_error`. For the same physical event, two peers' timestamp difference is
+  bounded by their combined errors, provided the reference and oscillator bounds
+  are valid. Nanosecond representation does not imply nanosecond accuracy.
+- **Loss and expiry:** an unavailable reference enters holdover on the last
+  curve. Exceeding the error budget or maximum sample age expires synchronization.
+  The managed runtime rejects the next iteration before consumer hooks; it does
+  not interrupt an iteration already running. `now()` remains infallible and
+  monotonic after expiry, but has no usable synchronization guarantee and never
+  falls back to a local epoch.
+
+`clock.sync_status()` returns domain, state, age, estimated error, budget, signed
+phase offset and drift; it returns `None` before discipline is published.
+The method and its `SyncStatus` return type are available in both feature modes.
+Without `clock-sync`, it returns `None` without reading the counter or adding
+mapping storage. Tasks can inspect quality with identical code before and after
+enabling synchronization. Live discipline and reference maintenance remain gated.
+Quality ages against raw time even without a new observation. Wrong domains,
+stale/future/duplicate/reordered samples and inconsistent measurements are
+rejected. Detected reference discontinuity or a changed domain/session fails
+managed execution; restart reacquires. Resync on an already aligned clock slews
+rather than steps, so a large offset can prevent acquisition within the timeout.
+
+The published curve uses integer arithmetic:
+
+```text
+execution = time_anchor + (raw - raw_anchor) * (1 + rate_ppb / 1_000_000_000)
+estimated_error = sample_uncertainty
+                + ceil(sample_age_ns * drift_bound_ppb / 1_000_000_000)
+                + abs(remaining_phase_error_ns)
+```
+
+The controller keeps eight observations. One controller owns each clock; clones
+share coherent mapping and quality. Publication can return `ReadersActive` and
+be deferred. Reads do fixed-point conversion and atomic shared-state access,
+without allocation, reference I/O or a blocking lock.
+
+## Default path: configure one reference resource
+
+Enable `cu29/clock-sync` and, for Linux adapters, `cu-ptp/linux-phc`. Add this to
+an application's graph configuration:
 
 ```ron
-(
-    resources: [
-        (
-            id: "ptp",
-            provider: "cu_ptp::LinuxPtpBundle",
-            config: { "device": "/dev/ptp0", "management": "/var/run/ptp4lro",
-                      "reference_error_ns": 10_000 },
-        ),
-    ],
-    runtime: (
-        clock: (parent: "ptp.reference", max_error_ns: 100_000, sample_interval_ns: 100_000_000),
+resources: [
+    (
+        id: "ptp",
+        provider: "cu_ptp::LinuxPtpBundle",
+        config: {
+            "device": "/dev/ptp0",
+            "management": "/var/run/ptp4lro",
+            "reference_error_ns": 10_000,
+        },
     ),
-    // Existing tasks, bridges and connections follow.
-)
-```
-
-**MCU/bare metal:** the same clock configuration selects a board resource.
-
-```ron
-(
-    resources: [
-        (id: "ptp", provider: "crate::board::PtpBundle"),
-    ],
-    runtime: (
-        clock: (parent: "ptp.reference", max_error_ns: 100_000, sample_interval_ns: 100_000_000),
+],
+runtime: (
+    clock: (
+        parent: "ptp.reference",
+        max_error_ns: 100_000,
+        sample_interval_ns: 100_000_000,
     ),
-    // Existing tasks, bridges and connections follow.
-)
+),
 ```
 
-Both bundles export `reference` with the same typed reference/controller
-contract, plus local-counter setup for the generated builder. Linux selects the
-hosted counter; the board bundle supplies raw-counter initialization and its
-known frequency. Resources supply these inputs; the runtime constructs the
-execution clock. Normal board/HAL initialization stays in the BSP.
+The numeric bounds are examples to validate on the actual hardware. Use the
+ordinary builder and lifecycle; stamp ToV with `ctx.now()`. `runtime.clock.parent`
+is resolved to an owned, typed `ClockReferenceBundle::Reference` resource at code
+generation. The provider constructs the base clock through `create_clock()` unless
+`with_clock(clock)` supplies one. Selecting a parent disciplines that clock too.
+Pipeline is rejected in v0; use the default Serial planner.
 
-Application code uses its usual builder and lifecycle on either platform:
-
-```rust,ignore
-App::builder().build()?.run_until_shutdown()?;
-```
-
-These RON fields and bundle contracts are implemented in v0. Resolve the parent and
-local-counter setup at code generation; one parent per runtime. In v1 a Zenoh
-reference provider attaches to the named existing bridge session during startup
-and disciplines an overlay by default. Resolve that typed session handle at
-code generation too. PHC discipline is an explicit provider/backend choice.
-
-Defaults: acquisition timeout 10 seconds, reference sampling 1 Hz, maximum sample
-age 5 seconds, relative drift bound 100 ppm. `max_error_ns` is required. The age
-limit is a ceiling: the error budget can expire sooner. Override cadence/bounds
-for the actual board/link; servo gains stay internal.
-
-### Access from tasks and drivers
-
-```rust,ignore
-let timestamp = ctx.now();             // synchronized, monotonic PTP/TAI time
-output.tov = Tov::Time(timestamp);      // existing timestamping code
-let quality = ctx.clock.sync_status(); // domain, state and estimated error
-```
-
-`now()`, `recent()`, clock clones and runtime message/process/log timestamps use
-the same disciplined timeline. Robots following the same reference share an
-epoch; their readings agree within their combined error budgets. `sync_status()`
-returns `None` for an unsynchronized clock. Replay restores recorded clock
-discipline and never starts live parent I/O.
-
-### Features
-
-Keep observation/discipline arithmetic in `cu29-clock` without platform dependencies.
-Add one opt-in `cu29/clock-sync` feature for runtime integration, enabling the
-corresponding `cu29-clock/clock-sync` feature for clock storage and discipline.
-Standalone/manual users enable the clock crate's feature directly. Put PHC/Statime
-dependencies in a `cu-ptp` component:
-`linux-phc` for the Linux adapter, `ptp` for protocol/overlay support on either
-platform. Zenoh v0 epoch attachments use the bridge feature `clock-sync`. The proposed
-v1 protocol transport would have its own opt-in feature. Features enable capabilities; RON selects behavior.
-Unconfigured applications retain their local epoch and behavior.
-
-### RobotClock storage and read mapping
-
-Select the clock representation at compile time:
-
-- Each clock owns its hardware-counter calibration. `raw_now()` is available
-  with or without synchronization and clones retain the same counter origin.
-- With `cu29-clock/clock-sync` disabled, `now()`/`recent()` subtract the clock's
-  raw anchor and add its requested initial time.
-- With the feature enabled, use shared mapping state containing
-  `raw_anchor`, `time_anchor` and fixed-point `rate`. Both `now()` and `recent()`
-  evaluate this mapping, whether or not a synchronization parent is configured.
-  Clock clones share the published mapping and synchronization status.
-
-The mapping is:
-
-```text
-now = time_anchor + rate * (raw - raw_anchor)
-```
-
-Here `raw` is undisciplined local counter time expressed in nanoseconds. Initialize
-an unconfigured clock with `raw_anchor` at construction, `time_anchor = 0` and
-`rate = 1`, preserving the local epoch. The `from_ref_time` constructors instead
-set `time_anchor` to their requested initial time. Mocks initialize both anchors
-to zero and the rate to one, preserving their existing control semantics.
-
-Acquisition establishes the parent's epoch through these same anchors; subsequent
-updates preserve continuity and adjust the rate as specified below. The mapping
-owns the output epoch: feature-enabled builds have no separate output-offset member
-or additional output-offset subtraction. Feature availability alone does not
-select a parent or change the clock to a shared epoch.
-
-`raw_now()` returns `CuInstant` on the undisciplined counter timeline. `now()`
-and `recent()` return `CuTime` on the execution timeline. Raw instants and
-execution timestamps are distinct types; raw deadlines and observations accept
-`CuInstant`, and intervals on either timeline use `CuDuration`. A recorded
-`ClockSnapshot::at(instant)` explicitly maps a raw instant to execution `CuTime`. Reference captures, acquisition timeouts and sample aging
-use the raw timeline; discipline updates never alter it. Replay restores the recorded mapping
-and synchronization status into the same shared state.
-
-## One parent per clock
-
-Each synchronized robot has one configured parent; parents can serve several
-children. Wiring is explicit and acyclic. Changing parent requires reacquisition.
-
-```text
-                  PTP grandmaster
-                   /           \
-          host / MCU PTP clock  PTP lidar
-                   |
-          disciplined RobotClock.now()
-```
-
-`ClockSync` estimates parent time from an undisciplined local counter, then
-controls the offset/rate used by `RobotClock::now()`. Sample that raw counter
-when measuring drift, so clock correction never feeds back into the estimator.
-PTP sensor and bridge timestamps in the same domain already use the same epoch.
-
-## What the default path runs underneath
-
-The Linux and board providers adapt their hardware to the same maintenance
-contract. This is the low-level API below, driven by the generated runtime:
-
-| Default path | Low-level operation |
+| Setting | Default |
 | --- | --- |
-| Build from the parent resource | Resolve typed local-counter setup; construct one RobotClock with the hosted counter or `new_with_frequency(hz)`. Its clones share discipline state. |
-| Apply configuration | Set `SyncConfig` error, age, drift and slew bounds; cadence and acquisition timeout belong to runtime maintenance. |
-| Start | Start required transport/reference controller. Obtain the parent domain and call `ClockSync::new(&clock, domain, config)`. Feed paired raw/reference samples through `observe` and `update` until `Locked`; then start consumers. |
-| Maintain | Poll/sample, call `observe`, then `update` to publish continuous offset/rate corrections. Check `status()` before running consumers. |
-| Read | `ctx.now()` reads the raw counter and evaluates the current disciplined clock curve. Ordinary ToV stamping uses that result. |
-| Lose/reset reference | Continue monotonic holdover within the error/age limits. Expiry or a detected parent step/session change stops consumers with a runtime error. Restart calls `resync(parent.domain())` and reacquires without jumping an existing clock. |
-| Stop | Call the controller's `stop` before releasing its transport. |
+| `max_error_ns` | Required, positive |
+| `acquisition_timeout_ns` | 10 seconds |
+| `sample_interval_ns` | 1 second |
+| `max_age_ns` | 5 seconds |
+| `drift_bound_ppb` | 100,000 (100 ppm) |
+| `max_slew_ppb` | 500,000 (500 ppm additional phase correction) |
 
-Linux maintenance uses a worker; bare-metal maintenance uses bounded foreground
-polling between iterations. Both run outside `process`. Startup also polls while
-acquiring, before the first iteration. Replay restores recorded clock discipline
-state and skips live reference maintenance. Acquisition timeouts and sample age
-use raw time, independent of clock correction. Acquisition timeout is an error.
+The error budget can expire before the age ceiling. At the default 100 ppm,
+100 microseconds is consumed in one second even before capture and phase error;
+choose cadence and bounds together. Features enable capabilities; configuration
+selects behavior. Enabling the feature alone keeps the local epoch. Declaring
+`runtime.clock` without the feature is an error.
 
-## Monotonic discipline
+Startup polls while acquiring. With `std`, ongoing reference I/O runs on a worker
+and feeds a fixed-capacity mailbox; the runtime publishes corrections and checks
+health before iterations. On bare metal, bounded foreground polling runs between
+iterations. Shutdown joins maintenance and stops the provider. Tasks never poll
+the reference in `process()`.
 
-On first acquisition, establish the shared epoch before publishing synchronized
-time to consumers. During operation, preserve the current clock value when
-changing its rate; correct phase error by bounded slew. Rate stays positive.
-Default maximum additional phase-correction slew is 500 ppm, configurable as
-`max_slew_ppb: 500_000`. Initial alignment is the only permitted phase step.
+## Reference adapters and manual control
 
-Reported error includes reference/capture uncertainty, drift extrapolation and
-remaining phase error between the published `now()` curve and the parent.
-`Locked` requires that total to fit `max_error`. Previously stamped times remain
-unchanged. A resync on an existing clock preserves continuity; if it cannot
-reacquire within the budget/timeout, starting consumers fails.
+`cu-ptp` consumes an already synchronized reference; v0 does not implement a PTP
+servo or steer the PHC:
 
-During reference loss, `now()` continues the last disciplined curve. Exceeding
-the budget marks synchronization expired and stops the managed runtime;
-`now()` remains infallible and monotonic. There is no fallback to a local epoch.
+- `LinuxPtpBundle` / `LinuxPhc` read a PHC and ptp4l management health, verify the
+  selected port's PHC, and combine operator-supplied `reference_error_ns`, reported
+  offset and bracketed-capture uncertainty. Unusable/stale upstream quality stops
+  fresh samples. UTC conversion requires a valid UTC-to-TAI offset.
+- `LinuxSystemPtpBundle` reads the system clock for software-timestamped local
+  experiments. The external PTP/system-clock setup supplies synchronization.
+- `BoardPtp<HZ>` wraps BSP `start/poll/domain/read/stop` hooks and a known positive
+  architecture-counter frequency. The application supplies its resource bundle;
+  the BSP initializes the counter, extends rollovers and bounds service work.
+  Cortex-M retains the counter backend's single-reader contract.
 
-## Escape hatches
+For a custom managed reference, implement `ClockReference` and export it from a
+`ClockReferenceBundle`, or use
+`App::builder().with_clock_reference(provider, maintenance_config)`.
+An injected reference conflicts with a configured RON parent.
 
-### Custom reference, runtime-managed
+Standalone users enable `cu29-clock/clock-sync` and own `ClockSync` directly:
+`new(&clock, domain, config)`, `observe(sample)`, `reference_lost()`, `update()`,
+`status()` and `resync(domain)`. Fallible core methods return `Result<_, SyncError>`;
+providers use `CuResult`. The caller owns acquisition, cadence, health checks and
+shutdown. Core discipline supports `no_std` and uses fixed observation storage.
 
-Implement a concrete typed `ClockReference` provider for RTC, GNSS/PPS or an
-exotic nanosecond counter. It supplies local-counter setup and reference
-start/poll/stop, domain and paired `ClockObservation`s through the same provider
-contract. Configure it as a resource, or inject it programmatically:
+A sensor following the same PTP root can supply comparable device timestamps,
+but its driver must verify device quality/domain and normalize the time scale.
+This stack adds no automatic PTP configuration or validation to sensor drivers.
 
-```rust,ignore
-App::builder()
-    .with_clock_reference(provider, maintenance_config)
-    .build()?
-    .run_until_shutdown()?;
-```
+## Zenoh timestamp guarantees
 
-Maintenance, health checks and consumer access remain runtime-managed. Choose
-either an injected provider or a RON parent; conflicting selections are errors.
-Existing `with_clock(clock)` optionally overrides the provider's local-counter
-setup with an application-supplied base clock. It injects execution time;
-`with_clock_reference` selects the synchronization parent. With a parent
-selected, the injected clock's `now()` is disciplined too.
+The bridge's opt-in `clock-sync` feature appends versioned domain/session,
+send-time, error and drift metadata after the existing provenance prefix.
+Unconfigured peers retain the previous attachment encoding.
 
-`clock.raw_now()` exposes the undisciplined local counter for capture, controller
-bookkeeping and physical timing. It is a low-level escape hatch, not the clock
-used to stamp synchronized messages.
+A receiver with synchronization support preserves `Tov::Time` and both
+`Tov::Range` endpoints when domains match, receiver quality is usable, and sender
+error + receiver error + sender drift during transport fits the receiver budget.
+It also rejects reversed ranges and timestamps beyond receiver time plus the
+combined error. Failed timing validation clears ToV while retaining payload and
+origin, and emits a structured debug log. A receiver without synchronization
+support clears ToV when it sees the shared-time extension. Malformed/truncated
+attachments fail decoding and return a receive error.
 
-### Fully manual synchronization
+These checks validate clock metadata and timestamp plausibility; they do not
+bound the age or error of a sensor measurement that predates transmission.
+Zenoh transports timestamps in v0; it does not synchronize the clocks.
 
-For standalone use or custom lifecycle/control, construct `RobotClock`, the
-parent adapter and `ClockSync` yourself. Own polling, acquisition, health checks,
-resynchronization and shutdown. The following examples demonstrate this path.
+## Replay
 
-### Core API (`cu29-clock`, also `no_std`)
+Managed execution records the initial mapping and subsequent corrections/quality
+as `ClockSyncRecord`s in `RuntimeLifecycle`, associated with the first CopperList
+using each curve. Recorded replay, debugger and distributed replay restore them
+without starting live reference I/O. Replay explicitly restores recorded time;
+live monotonicity does not constrain seeking through a recording.
 
-```rust,ignore
-struct ClockObservation {
-    raw_local: CuInstant,      // undisciplined local time at the measured event
-    parent_ns: u64,            // parent time at that SAME event
-    uncertainty: CuDuration,   // reference error + capture/read/transport error
-    domain: ClockDomain,       // identifies epoch, time scale and clock session
-}
+## v1.2 → v1.3 compatibility and migration
 
-struct SyncConfig {
-    max_error: CuDuration,     // application's acceptable timestamp error
-    max_age: CuDuration,       // maximum age of the last accepted observation
-    drift_bound_ppb: u32,      // relative oscillator error bound during holdover
-    max_slew_ppb: u32,         // bound on additional phase-correction slew
-}
+This section covers clock-related changes in this stack. Apps using only
+`ctx.now()`, `RobotClock::now()` / `recent()`, `CuTime`, `CuDuration`, existing
+constructors, mock controls and `with_clock` need no source changes for these
+APIs. Synchronization is opt-in; unconfigured apps retain local execution time.
+The following low-level changes apply even without `clock-sync`:
 
-impl ClockSync {
-    fn new(clock: &RobotClock, parent: ClockDomain, config: SyncConfig)
-        -> Result<Self, SyncError>; // attach to this clock's shared discipline state
-    fn observe(&mut self, sample: ClockObservation) -> Result<(), SyncError>;
-    fn update(&mut self) -> Result<SyncStatus, SyncError>; // acquire/slew the actual now()
-    fn resync(&mut self, parent: ClockDomain) -> Result<(), SyncError>;
-    fn status(&self) -> SyncStatus;              // ages against raw time
-}
-```
-
-One controller owns discipline for a clock; clones share its published state.
-`SyncStatus` reports state (`Acquiring | Locked | Holdover | Expired`), domain,
-sample age, total estimated error, signed phase offset in ns and drift in ppb.
-Use a bounded observation window. Reject wrong domains, stale/out-of-order
-samples and inconsistent measurements. Parent discontinuity invalidates lock.
-
-The clock evaluates `time_anchor + rate * (raw - raw_anchor)` using integer
-nanoseconds, fixed-point rate and signed wide intermediates. Online curve
-updates preserve continuity; estimator changes never directly step `now()`.
-Holdover uncertainty grows by `elapsed_ns * drift_bound_ppb / 1_000_000_000`.
-Reject arithmetic overflow and out-of-range reference timestamps.
-
-### Manual setup: Linux or bare metal
-
-Linux:
-
-```rust,ignore
-let clock = RobotClock::new();
-// PHC reads plus upstream health/time properties from ptp4l.
-let mut parent = LinuxPhc::open("/dev/ptp0", "/var/run/ptp4lro", 10_000)?;
-```
-
-Bare metal:
-
-```rust,ignore
-// New constructor: existing architecture counter, known ticks/second, no sleep.
-let clock = RobotClock::new_with_frequency(board::RAW_COUNTER_HZ)?;
-let mut parent = board::ptp_reference()?; // hardware clock or software PTP clock
-```
-
-Then the same controller on either platform:
-
-```rust,ignore
-parent.start()?;
-let mut sync = ClockSync::new(&clock, parent.domain(), SyncConfig {
-    max_error: CuDuration::from_micros(100),
-    max_age: CuDuration::from_secs(5),
-    drift_bound_ppb: 100_000,
-    max_slew_ppb: 500_000,
-})?;
-
-// Own cadence/timeout: repeat until Locked before exposing clock to consumers.
-if let Some(sample) = parent.poll(&clock)? {
-    if sample.domain != sync.status().domain { sync.resync(sample.domain)?; }
-    sync.observe(sample)?; // capture uses raw_now(), not now()
-} else {
-    sync.reference_lost();
-}
-let health = sync.update()?;          // actually disciplines clock.now()
-
-// Once Locked, ordinary clock reads and stamps use the shared epoch.
-let timestamp = clock.now();
-// Keep poll/observe/update running outside process(); check health.
-
-sync.resync(parent.domain())?; // reacquire while preserving existing continuity
-// Repeat acquisition with consumers stopped; parent.stop() at shutdown.
-```
-
-[`ptp4l`](https://www.linuxptp.org/documentation/ptp4l/) runs the protocol and
-disciplines the PHC; the [kernel PHC API](https://docs.kernel.org/driver-api/ptp.html)
-exposes clock reads/adjustments. Copper's v0 adapter reads it and cross-timestamps
-against `raw_now()`, using bracketed reads when precise correlation is unavailable.
-It includes upstream error plus capture error and stops supplying fresh samples
-when upstream lock/quality is unusable. Copper disciplines its RobotClock in
-software. Normalize reference time to PTP/TAI; UTC requires known leap offsets.
-
-`board::ptp_reference` is a BSP integration point: use an existing PTP service or
-Statime with native Ethernet. It can expose an adjustable hardware timer or a
-software PTP clock backed by a monotonic counter. Statime's embedded support and
-STM32 example are described in its [crate documentation](https://docs.rs/statime/latest/statime/).
-A BSP `crate::board::PtpBundle` supplies this counter setup and wraps
-`board::ptp_reference` for runtime maintenance.
-The BSP handles timer rollover/correlation. ISR captures/enqueues; foreground
-runs the service. Keep the current Cortex-M DWT backend's single-reader contract.
-Core estimation/discipline uses fixed storage and needs no OS/thread.
-
-## Where PTP, sources and Zenoh fit
-
-| Piece | Responsibility / placement |
+| Incompatibility | Required change in application code |
 | --- | --- |
-| `ClockSync`, `RobotClock` | Transport-independent estimation and monotonic discipline of `now()` in `cu29-clock`. |
-| PTP reference adapter | Own clock/health handles through a resource bundle; produce `ClockObservation`. |
-| Clock reference bundle | Supply raw-counter setup and parent/controller handles; generated runtime constructs and maintains the synchronized RobotClock used by all consumers. |
-| PTP service | v0 Linux: externally configured `ptp4l`. Bare metal: board service or Statime. v1: Statime plus a Copper Zenoh transport adapter. |
-| Lidar source | Configure supported PTP mode; normalize device timestamps to the shared domain, check quality/range and stamp ToV in the same epoch as `ctx.now()`. Keep the ordinary `CuSrcTask` lifecycle. |
-| Zenoh bridge | v0: carry ordinary synchronized ToV plus domain/quality metadata. v1: dedicated PTP event/general routes on its existing session, timestamped before graph queues. |
+| `CuInstant::now()` and the `Instant` alias are removed. | Replace `Instant` with `CuInstant` and obtain readings from `clock.raw_now()` or `ctx.clock.raw_now()`. Pass or store a clone of the application's clock wherever a standalone instant was previously read. |
+| Free functions `busy_wait_for` and `busy_wait_until` are removed. | Call `clock.busy_wait_for(duration)` or `clock.busy_wait_until(deadline)`. Build the deadline from that same clock's `raw_now()` plus a `CuDuration`. |
+| Counter origin and calibration are instance-owned, rather than global. | Share clock clones for raw measurements and deadlines. Do not construct a second clock to read or wait on the first clock's raw timeline, or assume constructing a clock recalibrates existing clocks. |
 
-In v0, Copper and a lidar follow the same PTP reference as siblings. Device PTP
-mode and profile are configured through the device driver. Native PTP uses its
-standard transport; ordinary sensor drivers keep their existing task lifecycle.
+For example, migrate a v1.2 raw deadline:
 
-Parent I/O/estimation runs in runtime-managed Linux maintenance or bare-metal
-foreground, outside `process`. Preallocate discipline state; publish coherent
-clock-curve updates at iteration boundaries. Synchronized `now()` adds fixed-point
-conversion and shared-state reads, with no parent I/O, allocation or blocking
-lock. Feature-disabled builds retain the current read path. Record initial epoch,
-curve updates and quality outside `process` for deterministic replay.
+```rust,ignore
+// v1.2
+let deadline = Instant::now() + delay;
+busy_wait_until(deadline);
 
-Start reference sampling at 1 Hz. Adjust to the error budget: 20 ppm
-consumes 100 us in five seconds before reference/transport error.
-
-## v1 proposal: PTP transport over Zenoh + local disciplined clock
-
-```text
-parent PTP time -- Zenoh/radio/serial --> follower PTP clock
-                                          /          \
-                                RobotClock.now()   local native PTP
-                                                     to lidar (optional)
+// v1.3: clock is the application's RobotClock, or a clone of it.
+let deadline = clock.raw_now() + delay;
+clock.busy_wait_until(deadline);
 ```
 
-Use Statime's PTP messages, state machine and servo with a Copper transport
-adapter: encapsulate event/general packets over statically configured parent and
-child routes. Correlate sequence IDs and capture software Tx/Rx timestamps at
-publication/callback boundaries. Preserve root time properties and accumulate
-upstream uncertainty. This is a custom PTP transport between Copper peers;
-standard PTP devices join through a native Ethernet port/service.
+Keep message timestamps on `CuTime`, obtained from `ctx.now()`. A raw reading is
+not a message timestamp; copying its nanoseconds into `CuTime` does not convert
+epochs. When enabling synchronization, replace physical pacing or timeout logic
+based on execution time with `raw_now()` / `CuInstant`; execution time now uses
+the shared epoch and its intervals can include slew. Remove assumptions that
+`ctx.now()` means time since startup. Tests comparing execution time against
+`RobotClockMock::now()` should instead read the associated `RobotClock::now()`;
+the mock accessor retains its legacy counter view. Use `mock.raw_now()` for raw
+comparisons.
 
-Clock backend selection is explicit:
+`CuTime` encoding and existing lifecycle event discriminants are preserved by
+this stack. New synchronized recordings contain an experimental `ClockSync`
+lifecycle event that v1.2 readers cannot decode: rebuild logreaders/replay tools
+against v1.3 with `clock-sync` to consume it. Existing recordings gain no clock
+corrections retroactively; their timestamps keep their recorded epoch. This is
+not a guarantee of compatibility for unrelated log-format changes in v1.3.
 
-| Backend | Discipline target |
-| --- | --- |
-| Software (Linux and bare metal) | `statime::OverlayClock` over a read-only raw-counter adapter. Statime disciplines this PTP reference; the v0 controller disciplines RobotClock's `now()` from it. |
-| Linux PHC | Open `/dev/ptpN` with `clock-steering`; servo adjusts its phase/frequency. One controller owns discipline. |
-| MCU hardware timer | BSP implements `statime::Clock` for an adjustable timer. |
+Zenoh peers without synchronization keep the existing attachment encoding.
+The new extension preserves the provenance prefix, so older receivers can decode
+that prefix but do not validate shared-clock quality or domains. Upgrade both
+ends and enable the bridge's `clock-sync` feature before relying on shared ToV.
+A v1.3 receiver without that feature clears shared ToV; a synchronized receiver
+also clears ToV from a legacy sender lacking clock metadata. Handle `Tov::None`
+when mixing versions or synchronization settings.
 
-The software backend needs no kernel clock device or PTP-capable Ethernet MAC.
-Each backend supplies the reference for the same RobotClock discipline API:
-ordinary `ctx.now()` follows the Zenoh parent's time. The raw-counter adapter
-must read `raw_now()`, keeping the two controllers independent. Physical
-downstream PTP service requires a native transport and suitable timestamping.
-Apply the initial-alignment/bounded-slew policy to Copper-controlled PTP
-backends too; resync preserves an existing clock's continuity. Large errors
-invalidate lock and require reacquisition. Enforce this around Statime's clock
-interface, since an overlay permits steps. If Copper controls a PHC, configure
-local PTP serving without a competing servo and propagate upstream loss/degraded
-quality to downstream clocks.
+## Future work
 
-Reuse candidates:
-
-- [Statime `OverlayClock`](https://docs.rs/statime/latest/statime/struct.OverlayClock.html): software phase/frequency adjustment over a read-only clock.
-- [Statime filters](https://docs.rs/statime/latest/statime/filters/index.html): measurement filtering/clock servo; retain integer/fixed-point timestamp conversion at the Copper boundary.
-- [`clock-steering::UnixClock`](https://docs.rs/clock-steering/latest/clock_steering/unix/struct.UnixClock.html): Linux PHC reads, phase steps and frequency control. Account for its frequency units when adapting to Statime.
-
-These provide reusable clock/protocol pieces; the Copper Zenoh adapter is new
-integration work. Validate attainable error on the actual radio/serial path:
-queueing, retransmissions and delay asymmetry limit software timestamp accuracy.
-Zenoh supports [serial links](https://spec.zenoh.io/spec/1.0.0/transport/links.html);
-this checkout's bridge currently enables TCP/UDP/Unix sockets. Direct serial
-transport and a bare-metal Zenoh frontend require separate transport integration.
-
-## Compatibility and first implementation
-
-- Existing constructors, `now()`, mocks, `with_clock` and `CuSrcTask` remain
-  source-compatible. Unconfigured clocks retain their local epoch/behavior;
-  opting into sync makes `now()` use the shared reference epoch. Mark new APIs
-  experimental.
-- Add typed `runtime.clock` configuration and generated lifecycle integration;
-  both platforms use the resource-configured path. Build resources and resolve
-  their local-counter setup before constructing the execution clock and
-  consumers. Manual polling and clock injection are optional escape hatches.
-- Base-counter initialization/calibration must not disturb existing clocks.
-  `new_with_frequency` takes a positive raw-counter frequency on bare metal.
-- v0 implements actual `now()` discipline, read-only Linux PTP reference adapter,
-  known-frequency constructor, runtime maintenance and Linux/board reference
-  bundles with examples of the default path. Clock discipline over Zenoh belongs
-  to v1. RTC/GNSS remain later reference adapters through the custom-provider
-  contract.
-- Version synced Zenoh attachments for ToV domain/session and uncertainty.
-  ToV already uses shared time: preserve both range endpoints on send/receive,
-  validate domain/session and account for sender uncertainty when comparing to
-  receiver time. A foreign domain or unusable individual timestamp yields
-  `Tov::None`, preserving origin and logging the reason. Clock expiry follows the
-  runtime error policy above. Synced peers upgrade together; retain attachment
-  version 1 operation for unsynchronized clocks.
-- Verify two robots with different boot times/raw-counter rates get comparable
-  `now()` values, stay monotonic through positive/negative correction and resync,
-  and keep `recent()`/clones on the same timeline. Also verify total error includes
-  pending slew, upstream loss despite fresh PHC reads, expiry, parent reset, timer
-  rollover, unchanged shared-domain ToV ranges and deterministic replay on host
-  and `no_std`. v1 adds software-overlay continuity, exclusive PHC control and
-  transport loss/reordering/asymmetry checks.
+v1 would add Statime PTP transport over the existing Zenoh session and explicitly
+selected software or hardware reference backends. It requires transport timestamp
+capture, delay/asymmetry bounds and downstream quality propagation. The stack adds
+no Statime integration, `ptp`/`ptp-sync` feature, PHC steering, direct serial
+transport, bare-metal Zenoh frontend or RTC/GNSS reference adapter.

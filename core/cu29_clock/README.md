@@ -21,6 +21,12 @@ See the main crate cu29 for more information about the overall Copper project.
 
 ## Examples
 
+`clock.sync_status()` is available with or without the `clock-sync` feature and
+returns `Option<sync::SyncStatus>`. It returns `None` without the feature or before
+discipline is published. Reusable tasks can inspect quality without enabling
+synchronization; enable the feature to attach a live controller. Feature-disabled
+status reads require no counter read or synchronization storage.
+
 ### Basic Clock Usage
 
 ```rust
