@@ -154,24 +154,13 @@ A sensor following the same PTP root can supply comparable device timestamps,
 but its driver must verify device quality/domain and normalize the time scale.
 This stack adds no automatic PTP configuration or validation to sensor drivers.
 
-## Zenoh timestamp guarantees
+## Transport independence
 
-The bridge's opt-in `clock-sync` feature appends versioned domain/session,
-send-time, error and drift metadata after the existing provenance prefix.
-Unconfigured peers retain the previous attachment encoding.
-
-A receiver with synchronization support preserves `Tov::Time` and both
-`Tov::Range` endpoints when domains match, receiver quality is usable, and sender
-error + receiver error + sender drift during transport fits the receiver budget.
-It also rejects reversed ranges and timestamps beyond receiver time plus the
-combined error. Failed timing validation clears ToV while retaining payload and
-origin, and emits a structured debug log. A receiver without synchronization
-support clears ToV when it sees the shared-time extension. Malformed/truncated
-attachments fail decoding and return a receive error.
-
-These checks validate clock metadata and timestamp plausibility; they do not
-bound the age or error of a sensor measurement that predates transmission.
-Zenoh transports timestamps in v0; it does not synchronize the clocks.
+v0 consumes an externally synchronized PTP reference independently of Zenoh.
+The existing bridge carries `Tov::Time` and both `Tov::Range` endpoints unchanged,
+without rebasing, clock-domain validation or new clock metadata. The application
+is responsible for ensuring peers share a usable epoch before comparing their
+timestamps. Clock synchronization requires no Zenoh bridge or session.
 
 ## Replay
 
@@ -224,13 +213,9 @@ against v1.3 with `clock-sync` to consume it. Existing recordings gain no clock
 corrections retroactively; their timestamps keep their recorded epoch. This is
 not a guarantee of compatibility for unrelated log-format changes in v1.3.
 
-Zenoh peers without synchronization keep the existing attachment encoding.
-The new extension preserves the provenance prefix, so older receivers can decode
-that prefix but do not validate shared-clock quality or domains. Upgrade both
-ends and enable the bridge's `clock-sync` feature before relying on shared ToV.
-A v1.3 receiver without that feature clears shared ToV; a synchronized receiver
-also clears ToV from a legacy sender lacking clock metadata. Handle `Tov::None`
-when mixing versions or synchronization settings.
+v0 adds no Zenoh feature or attachment-format change. Existing bridge code needs
+no migration for this stack; shared timestamp comparability depends on the
+external synchronization setup.
 
 ## Future work
 
