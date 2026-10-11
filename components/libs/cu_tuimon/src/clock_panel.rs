@@ -66,7 +66,7 @@ impl MonitorUi {
                 SyncState::Acquiring => ("ACQUIRING", palette::YELLOW),
                 SyncState::Locked => ("LOCKED (within allowed uncertainty)", palette::GREEN),
                 SyncState::Holdover => ("HOLDOVER (reference unavailable)", palette::YELLOW),
-                SyncState::Expired => ("EXPIRED (limits exceeded; reacquire)", palette::LIGHT_RED),
+                SyncState::Expired => ("EXPIRED (reacquire reference)", palette::LIGHT_RED),
             };
             rows.insert(
                 0,
