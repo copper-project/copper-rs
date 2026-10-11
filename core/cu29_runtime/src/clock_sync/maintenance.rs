@@ -157,10 +157,17 @@ impl ClockMaintenance {
             .domain();
         self.sync.resync(domain).map_err(sync_error)?;
         self.next_sample = start;
+        let mut last_reference_error = None;
         loop {
             let raw = self.clock.raw_now();
             if raw - start >= CuDuration::from(self.config.acquisition_timeout) {
-                return Err(CuError::from("Clock synchronization acquisition timed out"));
+                return Err(match last_reference_error {
+                    Some(error) => CuError::new_with_cause(
+                        "Clock synchronization acquisition timed out",
+                        error,
+                    ),
+                    None => CuError::from("Clock synchronization acquisition timed out"),
+                });
             }
             if raw >= self.next_sample {
                 let capture = self
@@ -168,6 +175,16 @@ impl ClockMaintenance {
                     .as_mut()
                     .ok_or(CuError::from("Clock reference missing"))?
                     .poll(&self.clock);
+                let capture = match capture {
+                    Err(error) => {
+                        last_reference_error = Some(error);
+                        Ok(None)
+                    }
+                    sample => {
+                        last_reference_error = None;
+                        sample
+                    }
+                };
                 // The first poll may discover a usable parent identity.
                 if let Ok(Some(sample)) = capture.as_ref()
                     && sample.domain != self.sync.status().domain
@@ -373,6 +390,7 @@ mod tests {
 
     struct MissingReference {
         stops: Arc<AtomicUsize>,
+        error: Option<&'static str>,
     }
     impl ClockReference for MissingReference {
         fn create_clock(&self) -> CuResult<RobotClock> {
@@ -389,7 +407,10 @@ mod tests {
             Ok(())
         }
         fn poll(&mut self, _: &RobotClock) -> CuResult<Option<ClockObservation>> {
-            Ok(None)
+            match self.error {
+                Some(error) => Err(error.into()),
+                None => Ok(None),
+            }
         }
         fn stop(&mut self) -> CuResult<()> {
             self.stops.fetch_add(1, Ordering::SeqCst);
@@ -401,6 +422,7 @@ mod tests {
         let stops = Arc::new(AtomicUsize::new(0));
         let reference = MissingReference {
             stops: stops.clone(),
+            error: None,
         };
         let config = MaintenanceConfig {
             acquisition_timeout: Duration::from_millis(4),
@@ -418,6 +440,26 @@ mod tests {
         );
         maintenance.stop().unwrap();
         drop(maintenance);
+        assert_eq!(stops.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn acquisition_timeout_preserves_reference_query_failure() {
+        let stops = Arc::new(AtomicUsize::new(0));
+        let reference = MissingReference {
+            stops: stops.clone(),
+            error: Some("ptp4l rejected management query"),
+        };
+        let config = MaintenanceConfig {
+            acquisition_timeout: Duration::from_millis(4),
+            sample_interval: Duration::from_millis(1),
+            sync: SyncConfig::new(cu29_clock::CuDuration(100_000)),
+        };
+        let mut maintenance =
+            ClockMaintenance::new(Box::new(reference), RobotClock::new(), config).unwrap();
+        let error = maintenance.start().unwrap_err().to_string();
+        assert!(error.contains("timed out"));
+        assert!(error.contains("ptp4l rejected management query"));
         assert_eq!(stops.load(Ordering::SeqCst), 1);
     }
 }
