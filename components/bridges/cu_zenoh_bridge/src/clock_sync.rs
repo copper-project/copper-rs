@@ -128,15 +128,73 @@ pub(super) fn validate_tov(tov: &mut Tov, attachment: &Attachment, ctx: &CuConte
     }
 }
 
-#[cfg(all(test, feature = "clock-sync"))]
+#[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "clock-sync")]
     use cu29::clock::sync::{ClockObservation, ClockSync, SyncConfig};
     const DOMAIN: ClockDomain = ClockDomain {
         id: 0,
         identity: *b"testroot",
         session: 1,
     };
+    #[test]
+    fn unconfigured_clock_retains_legacy_attachment_and_tov() {
+        let (clock, _) = RobotClock::mock();
+        let ctx = CuContext::from_clock(clock);
+        assert_eq!(ctx.clock.sync_status(), None);
+        let prefix = CopperBridgeAttachment {
+            subsystem_code: 2,
+            instance_id: 7,
+            cl_id: 9,
+        };
+        let bytes = encode(prefix, &ctx).unwrap();
+        assert_eq!(
+            bytes,
+            bincode::encode_to_vec(prefix, bincode::config::standard()).unwrap()
+        );
+        let attachment = decode(&bytes).unwrap();
+        assert_eq!(attachment.origin.as_ref().unwrap().cl_id, 9);
+        assert!(attachment.reference.is_none());
+        let mut tov = Tov::Time(ctx.now());
+        let original = tov;
+        validate_tov(&mut tov, &attachment, &ctx);
+        assert_eq!(tov, original);
+    }
+
+    #[test]
+    fn unconfigured_receiver_rejects_shared_tov_and_preserves_origin() {
+        let (clock, _) = RobotClock::mock();
+        let ctx = CuContext::from_clock(clock);
+        assert_eq!(ctx.clock.sync_status(), None);
+        let prefix = CopperBridgeAttachment {
+            subsystem_code: 2,
+            instance_id: 7,
+            cl_id: 9,
+        };
+        let bytes = bincode::encode_to_vec(
+            (
+                prefix,
+                Reference {
+                    version: VERSION,
+                    domain: DOMAIN,
+                    sent_at: CuTime(1_000_000),
+                    error: CuDuration(100),
+                    drift_bound_ppb: 100_000,
+                },
+            ),
+            bincode::config::standard(),
+        )
+        .unwrap();
+        let attachment = decode(&bytes).unwrap();
+        let mut tov = Tov::Time(CuTime(1_000_000));
+        validate_tov(&mut tov, &attachment, &ctx);
+        assert_eq!(tov, Tov::None);
+        assert_eq!(attachment.origin.as_ref().unwrap().cl_id, 9);
+        assert!(decode(&bytes[..bytes.len() - 1]).is_err());
+    }
+
+    #[cfg(feature = "clock-sync")]
     fn locked(domain: ClockDomain) -> (CuContext, RobotClockMock, ClockSync) {
         let (clock, mock) = RobotClock::mock();
         let mut sync =
@@ -155,6 +213,7 @@ mod tests {
         (CuContext::from_clock(clock), mock, sync)
     }
     #[test]
+    #[cfg(feature = "clock-sync")]
     fn range_and_origin_survive_a_matching_epoch_but_not_foreign_or_expired_time() {
         let (ctx, mock, _sync) = locked(DOMAIN);
         let prefix = CopperBridgeAttachment {
