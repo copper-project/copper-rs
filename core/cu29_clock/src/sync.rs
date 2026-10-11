@@ -509,14 +509,24 @@ impl ClockSync {
         status
     }
 
-    /// Clears reference history while preserving the already published timeline.
+    /// Restarts reference acquisition while preserving the execution curve.
+    ///
+    /// A deferred publication leaves the controller and its history unchanged.
     pub fn resync(&mut self, domain: ClockDomain) -> Result<(), SyncError> {
+        let mut curve = self.clock.mapping.read();
+        curve.quality = Some(Quality {
+            domain,
+            config: self.config,
+            state: SyncState::Acquiring,
+            sample: None,
+            drift_ppb: 0,
+        });
+        self.clock.mapping.publish(curve)?;
         self.domain = domain;
         self.len = 0;
         self.observations = [None; WINDOW];
         self.invalid = false;
         self.unavailable = false;
-        self.update()?;
         Ok(())
     }
 
@@ -763,9 +773,184 @@ mod tests {
         }
         sync.resync(DOMAIN).unwrap();
         assert_eq!(clock.now(), previous);
+        assert_eq!(sync.status().state, SyncState::Acquiring);
+        assert_eq!(sync.status().estimated_error, CuDuration::MAX);
         observe(&mut sync, mock.value(), EPOCH + mock.value() + 20_000, 100).unwrap();
-        sync.update().unwrap();
+        assert_eq!(sync.update().unwrap().state, SyncState::Acquiring);
         assert_eq!(clock.now(), previous);
+    }
+
+    #[test]
+    fn test_resync_after_age_or_error_expiry_reacquires_without_step() {
+        for (config, elapsed) in [
+            (
+                SyncConfig::new(CuDuration(200_000)),
+                CuDuration::from_secs(2),
+            ),
+            (
+                SyncConfig::new(CuDuration::from_millis(10)),
+                CuDuration::from_secs(6),
+            ),
+        ] {
+            for publish_expiry in [false, true] {
+                let (clock, mock, mut sync) = locked_with_config(config);
+                sync.reference_lost();
+                sync.update().unwrap();
+                mock.increment(elapsed);
+                assert_eq!(clock.sync_status().unwrap().state, SyncState::Expired);
+                if publish_expiry {
+                    assert_eq!(sync.update().unwrap().state, SyncState::Expired);
+                }
+                let curve = sync.snapshot();
+                let before = clock.now();
+
+                sync.resync(DOMAIN).unwrap();
+                let restarted = sync.snapshot();
+                assert_eq!(restarted.raw_anchor, curve.raw_anchor);
+                assert_eq!(restarted.time_anchor, curve.time_anchor);
+                assert_eq!(restarted.rate_ppb, curve.rate_ppb);
+                assert_eq!(clock.now(), before);
+                assert_eq!(clock.sync_status().unwrap().state, SyncState::Acquiring);
+
+                observe(&mut sync, mock.value(), EPOCH + mock.value(), 100).unwrap();
+                assert_eq!(sync.update().unwrap().state, SyncState::Acquiring);
+                assert_eq!(clock.now(), before);
+                mock.increment(CuDuration::from_secs(1));
+                observe(&mut sync, mock.value(), EPOCH + mock.value(), 100).unwrap();
+                assert_eq!(sync.update().unwrap().state, SyncState::Locked);
+                assert_eq!(clock.now().0, before.0 + 1_000_000_000);
+            }
+        }
+    }
+
+    #[test]
+    fn test_resync_after_discontinuity_reacquires_new_domain() {
+        let (clock, mock, mut sync) = locked();
+        mock.increment(CuDuration::from_secs(1));
+        assert_eq!(
+            observe(
+                &mut sync,
+                mock.value(),
+                EPOCH + mock.value() + 10_000_000,
+                100
+            ),
+            Err(SyncError::Discontinuity)
+        );
+        assert_eq!(sync.update().unwrap().state, SyncState::Expired);
+        let before = clock.now();
+        let domain = ClockDomain {
+            session: DOMAIN.session + 1,
+            ..DOMAIN
+        };
+        sync.resync(domain).unwrap();
+        assert_eq!(clock.now(), before);
+        assert_eq!(clock.sync_status().unwrap().domain, domain);
+        assert_eq!(sync.status().state, SyncState::Acquiring);
+        assert_eq!(
+            observe(&mut sync, mock.value(), EPOCH + mock.value(), 100),
+            Err(SyncError::WrongDomain)
+        );
+
+        for expected in [SyncState::Acquiring, SyncState::Locked] {
+            sync.observe(ClockObservation {
+                raw_local: mock.raw_now(),
+                parent_ns: EPOCH + mock.value(),
+                uncertainty: CuDuration(100),
+                domain,
+            })
+            .unwrap();
+            assert_eq!(sync.update().unwrap().state, expected);
+            assert_eq!(clock.now().0, EPOCH + mock.value());
+            mock.increment(CuDuration::from_secs(1));
+        }
+    }
+
+    #[test]
+    fn test_resync_slews_large_positive_and_negative_offsets_into_lock() {
+        for offset in [-250_000_000_i64, 250_000_000] {
+            let (clock, mock, mut sync) = locked();
+            sync.reference_lost();
+            sync.update().unwrap();
+            mock.increment(CuDuration::from_secs(60));
+            assert_eq!(sync.update().unwrap().state, SyncState::Expired);
+            let before = clock.now();
+            let parent_at = |raw: u64| {
+                checked_time(i128::from(EPOCH) + i128::from(raw) + i128::from(offset)).unwrap()
+            };
+
+            sync.resync(DOMAIN).unwrap();
+            observe(&mut sync, mock.value(), parent_at(mock.value()), 100).unwrap();
+            let status = sync.update().unwrap();
+            assert_eq!(status.state, SyncState::Acquiring);
+            assert_eq!(status.phase_offset_ns, offset);
+            assert_eq!(clock.now(), before);
+
+            let mut previous = before;
+            for second in 1..=500_i64 {
+                mock.increment(CuDuration::from_secs(1));
+                let current = clock.now();
+                let elapsed = if offset > 0 {
+                    1_000_500_000
+                } else {
+                    999_500_000
+                };
+                assert_eq!((current - previous).as_nanos(), elapsed);
+                observe(&mut sync, mock.value(), parent_at(mock.value()), 100).unwrap();
+                let status = sync.update().unwrap();
+                assert_eq!(clock.now(), current);
+                assert_eq!(
+                    status.phase_offset_ns,
+                    offset - offset.signum() * second * 500_000
+                );
+                assert_eq!(
+                    status.state,
+                    if second == 500 {
+                        SyncState::Locked
+                    } else {
+                        SyncState::Acquiring
+                    }
+                );
+                previous = current;
+            }
+            assert_eq!(clock.now().0, parent_at(mock.value()));
+            assert!(sync.status().estimated_error <= sync.status().max_error);
+        }
+    }
+
+    #[test]
+    fn test_resync_defers_without_clearing_expired_controller() {
+        let (clock, mock, mut sync) = locked();
+        sync.reference_lost();
+        sync.update().unwrap();
+        mock.increment(CuDuration::from_secs(2));
+        assert_eq!(sync.update().unwrap().state, SyncState::Expired);
+        let curve = sync.snapshot();
+        let observations = sync.observations;
+        let last = clock.mapping.last.load(Ordering::SeqCst);
+        let domain = ClockDomain {
+            session: 2,
+            ..DOMAIN
+        };
+
+        clock.mapping.readers.fetch_add(1, Ordering::SeqCst);
+        let result = sync.resync(domain);
+        clock.mapping.readers.fetch_sub(1, Ordering::SeqCst);
+        assert_eq!(result, Err(SyncError::ReadersActive));
+        assert_eq!(sync.snapshot(), curve);
+        assert_eq!(clock.mapping.last.load(Ordering::SeqCst), last);
+        assert_eq!(sync.domain, DOMAIN);
+        assert_eq!(sync.observations, observations);
+        assert_eq!(sync.len, 2);
+        assert!(sync.invalid);
+        assert!(sync.unavailable);
+
+        sync.resync(domain).unwrap();
+        assert_eq!(sync.status().state, SyncState::Acquiring);
+        assert_eq!(sync.status().domain, domain);
+        assert_eq!(clock.mapping.last.load(Ordering::SeqCst), last);
+        assert_eq!(sync.len, 0);
+        assert!(!sync.invalid);
+        assert!(!sync.unavailable);
     }
 
     #[test]
