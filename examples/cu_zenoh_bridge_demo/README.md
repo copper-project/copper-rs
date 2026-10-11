@@ -53,6 +53,45 @@ Each ping is plain JSON matching `Ping { seq, note }`, and each reply prints as 
 `Pong { seq, reply }`. The Copper metadata travels in the Zenoh attachment, which the script
 ignores.
 
+### Preserve a third-party measurement timestamp
+
+Without an attachment, Copper stamps local arrival time. A third-party publisher can attach its
+measurement time using the same standard-bincode metadata layout. It must already share a usable
+execution epoch and time scale with the Copper receiver (v0 PTP adapters normalize to TAI), and
+have assigned `subsystem_code` and `instance_id` values plus a meaningful source cycle identifier.
+Do not use process uptime or unconverted `time.time_ns()` (UTC) as a synchronized ToV.
+
+```python
+def bincode_uint(value: int, bits: int) -> bytes:
+    if not 0 <= value < (1 << bits):
+        raise ValueError("integer outside field range")
+    if value < 251:
+        return bytes([value])
+    for marker, width in [(251, 2), (252, 4), (253, 8)]:
+        if value < (1 << (8 * width)):
+            return bytes([marker]) + value.to_bytes(width, "little")
+    raise ValueError("integer outside u64 range")
+
+
+def measurement_attachment(subsystem: int, instance: int, cycle: int, tov_ns: int) -> bytes:
+    return (
+        bincode_uint(subsystem, 16)
+        + bincode_uint(instance, 32)
+        + bincode_uint(cycle, 64)
+        + b"\x01"  # Tov::Time enum discriminant
+        + bincode_uint(tov_ns, 64)
+        + b"\x01"  # payload present (including a zero-byte bincode unit payload)
+    )
+
+
+# In the session loop, with measurement_tai_ns from your synchronized acquisition clock:
+# session.put("demo/ping/json", json.dumps({"seq": seq, "note": "ptp"}),
+#             attachment=measurement_attachment(subsystem, instance, seq, measurement_tai_ns))
+```
+
+`Tov::Range` uses discriminant `2` followed by start and end nanoseconds; `Tov::None` uses `0`
+with no time fields. The metadata has no layout version byte. Peers must agree on this layout.
+
 Both sides use Zenoh's default multicast discovery. On networks where multicast is blocked, run a
 `zenohd` router and point every process at it, e.g. with
 `{ mode: "client", connect: { endpoints: ["tcp/[::1]:7447"] } }` as `zenoh_config_json` in both demo

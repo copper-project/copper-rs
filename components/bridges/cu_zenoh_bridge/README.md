@@ -69,7 +69,7 @@ empty body and an attachment carrying `tov`, provenance, and a flag marking the 
 Each sample carries:
 - **Body**: the payload alone, encoded with the channel's `wire_format`. With `json`, a `Ping { seq, note }`
   payload is sent as `{"seq":7,"note":"hi"}`.
-- **Attachment**: Copper metadata, bincode-encoded: a layout version byte, the sender's
+- **Attachment**: Copper metadata, bincode-encoded: the sender's
   `{subsystem_code, instance_id, cl_id}` provenance, the message `tov`, and whether a payload is present.
 
 On receive, a sample with an attachment gets the sender's `tov` and provenance restored. A sample
@@ -77,8 +77,41 @@ without an attachment is treated as coming from a non-Copper publisher: its body
 payload, `tov` is set to the receive time, and no provenance is recorded. `process_time` is always
 stamped locally by the runtime around `receive`.
 
-All Copper peers on a Zenoh network must run the same Copper version. An attachment with a
-different layout version is rejected with an error naming both versions.
+All Copper peers on a Zenoh network must run the same Copper version. There is no per-message
+layout version or negotiation. This wire layout breaks compatibility with the previous full
+`CuMsg` body; upgrade every peer together. Recorded log layouts are unchanged by this bridge change.
+
+The attachment fields, in order, are `subsystem_code: u16`, `instance_id: u32`, `cl_id: u64`,
+`tov: Tov`, `has_payload: bool`, encoded with standard bincode (little endian, variable integers).
+`Tov` has discriminants `None = 0`, `Time = 1` followed by nanoseconds as `u64`, and `Range = 2`
+followed by start and end nanoseconds as `u64`. The presence flag is necessary: bincode encodes
+`()` as zero bytes, just like an absent payload's body. A payload-less attachment must have an
+empty body. Attachments and bincode payloads must be consumed completely.
+
+### Clock contract
+
+ToV is measurement validity time, not transport arrival time. The bridge preserves `Tov::None`,
+`Tov::Time` and both `Tov::Range` endpoints without rebasing. Comparing remote ToV requires peers
+to share a usable execution epoch, clock domain/root/session and time scale. With v0 clock sync,
+external PTP references establish that contract independently of Zenoh; enabling `clock-sync`
+alone does not establish it. Locked or usable holdover quality and valid reference/error bounds
+are required. The bridge does not validate remote clock domains or carry clock quality.
+
+Moving ToV into the attachment needs no Zenoh clock-sync transport and no feature gate: it
+preserves the previous full-message semantics. Unconfigured clocks start at independent local
+epochs, so their remote timestamps cannot be compared directly. Bare third-party messages use
+local receive time as a best-effort fallback, which includes acquisition and transport delay.
+A synchronized third-party publisher may supply the documented attachment to preserve its own
+measurement time; it must use the same epoch/time scale and meaningful sender provenance.
+
+### Execution cost
+
+This bridge currently serializes, allocates and calls Zenoh directly in `send`/`receive`, which
+run in the graph's execution path. Payload-only bodies do not make it suitable for a hard
+real-time loop. Moving codecs and transport to workers requires typed, bounded ownership transfer
+for payloads; arbitrary `CuMsgPayload` values can allocate on clone or decode. This remains a
+separate bridge execution change; moving work into `preprocess`/`postprocess` alone would still
+run it on the runtime thread.
 
 ### Talking to non-Copper processes
 
