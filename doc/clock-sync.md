@@ -45,6 +45,10 @@ through a recorded execution curve.
 
 `clock.sync_status()` returns domain, state, age, estimated error, budget, signed
 phase offset and drift; it returns `None` before discipline is published.
+The method and its `SyncStatus` return type are available in both feature modes.
+Without `clock-sync`, it returns `None` without reading the counter or adding
+mapping storage. Tasks can inspect quality with identical code before and after
+enabling synchronization. Live discipline and reference maintenance remain gated.
 Quality ages against raw time even without a new observation. Wrong domains,
 stale/future/duplicate/reordered samples and inconsistent measurements are
 rejected. Detected reference discontinuity or a changed domain/session fails
