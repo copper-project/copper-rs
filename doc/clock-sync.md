@@ -207,7 +207,7 @@ the mock accessor retains its legacy counter view. Use `mock.raw_now()` for raw
 comparisons.
 
 `CuTime` encoding and existing lifecycle event discriminants are preserved by
-this stack. New synchronized recordings contain an experimental `ClockSync`
+this stack. New synchronized recordings contain a `ClockSync`
 lifecycle event that v1.2 readers cannot decode: rebuild logreaders/replay tools
 against v1.3 with `clock-sync` to consume it. Existing recordings gain no clock
 corrections retroactively; their timestamps keep their recorded epoch. This is

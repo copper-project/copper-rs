@@ -959,7 +959,7 @@ impl RobotClock {
 
     /// Creates a clock from a known positive architecture-counter frequency.
     ///
-    /// Experimental. The BSP initializes its counter before calling this method.
+    /// The BSP initializes its counter before calling this method.
     /// Calibration is local to this clock and does not change existing clocks.
     /// Cortex-M callers must retain the backend's single-reader contract and read
     /// often enough to extend the hardware counter before it wraps.
@@ -1064,7 +1064,7 @@ impl RobotClock {
         }
     }
 
-    /// Experimental: current domain, uncertainty and synchronization health.
+    /// Current domain, uncertainty and synchronization health.
     ///
     /// Available with or without `clock-sync`. Returns `None` when synchronization
     /// is disabled or no discipline has been published. Without the feature this

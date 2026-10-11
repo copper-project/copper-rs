@@ -4531,7 +4531,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let builder_clock_reference_none = clock_sync_enabled.then(|| quote! { clock_reference: None, });
         let builder_clock_reference_copy = clock_sync_enabled.then(|| quote! { clock_reference: self.clock_reference, });
         let builder_with_clock_reference = clock_sync_enabled.then(|| quote! {
-            /// Experimental: selects an explicit parent and required timing/error bounds.
+            /// Selects an explicit parent and required timing/error bounds.
             pub fn with_clock_reference<P: ::cu29::clock_sync::ClockReference>(mut self, reference: P, config: ::cu29::clock_sync::MaintenanceConfig) -> Self {
                 self.clock_reference = Some((Box::new(reference), config)); self
             }

@@ -1999,7 +1999,7 @@ pub struct LoggingCodecSpec {
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
 #[serde(try_from = "RuntimeConfigInput")]
 pub struct RuntimeConfig {
-    /// Experimental reference-clock configuration; requires `clock-sync`.
+    /// Reference-clock configuration; requires `clock-sync`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg(feature = "clock-sync")]
     pub clock: Option<ClockSyncConfig>,
@@ -2058,7 +2058,7 @@ impl TryFrom<RuntimeConfigInput> for RuntimeConfig {
     }
 }
 
-/// Experimental reference-clock wiring and acquisition/error bounds.
+/// Reference-clock wiring and acquisition/error bounds.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct ClockSyncConfig {
@@ -4067,7 +4067,7 @@ impl LoggingConfig {
 }
 
 impl RuntimeConfig {
-    /// Experimental reference configuration when clock discipline is enabled.
+    /// Reference configuration when clock discipline is enabled.
     pub fn clock_sync_config(&self) -> Option<&ClockSyncConfig> {
         #[cfg(feature = "clock-sync")]
         {

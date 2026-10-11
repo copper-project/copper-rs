@@ -1,4 +1,4 @@
-//! Experimental lifecycle integration for a single typed reference clock.
+//! Lifecycle integration for a single typed reference clock.
 //!
 //! Linux reference I/O runs on a worker. Embedded references are polled between
 //! iterations and must bound their own work. Consumers start only after lock.
@@ -13,7 +13,7 @@ use cu29_clock::sync::{
 use cu29_clock::{CuDuration, CuInstant, RobotClock};
 use cu29_traits::{CuError, CuResult};
 
-/// Experimental reference provider implemented by Linux adapters and BSPs.
+/// Reference provider implemented by Linux adapters and BSPs.
 pub trait ClockReference: Send + Sync + 'static {
     /// Constructs the execution counter when no explicit clock was injected.
     fn create_clock(&self) -> CuResult<RobotClock>;
@@ -27,7 +27,7 @@ pub trait ClockReference: Send + Sync + 'static {
     fn stop(&mut self) -> CuResult<()>;
 }
 
-/// Experimental resource contract: a statically resolved owned reference slot.
+/// Resource contract: a statically resolved owned reference slot.
 pub trait ClockReferenceBundle: ResourceBundleDecl {
     /// Concrete type registered at the configured reference slot.
     type Reference: ClockReference;
@@ -37,7 +37,7 @@ fn sync_error(error: SyncError) -> CuError {
     CuError::new_with_cause("Clock synchronization failed", error)
 }
 
-/// Experimental maintenance timing, measured against the undisciplined counter.
+/// Maintenance timing, measured against the undisciplined counter.
 #[derive(Clone, Copy, Debug)]
 pub struct MaintenanceConfig {
     /// Raw-time acquisition deadline.

@@ -1,9 +1,9 @@
-//! Experimental clock-reference lifecycle and portable correction records.
+//! Clock-reference lifecycle and portable correction records.
 
 use bincode::{Decode, Encode};
 use cu29_clock::sync::ClockSnapshot;
 
-/// Experimental recorded correction applied before the named CopperList.
+/// Recorded correction applied before the named CopperList.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode)]
 pub struct ClockSyncRecord {
     /// First CopperList using this published curve.
