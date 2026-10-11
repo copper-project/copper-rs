@@ -6,6 +6,7 @@ use cu29::cubridge::{
 use cu29::prelude::*;
 use serde::{Deserialize, Serialize};
 use zenoh::bytes::Encoding;
+use zenoh::bytes::ZBytes;
 use zenoh::key_expr::KeyExpr;
 use zenoh::{Config, Error as ZenohError};
 
@@ -464,15 +465,11 @@ where
         }
         .map_err(|e| CuError::from(format!("ZenohBridge: receive failed: {e}")))?;
         if let Some(sample) = sample {
-            let attachment = sample
-                .attachment()
-                .map(|attachment| decode_attachment(attachment.to_bytes().as_ref()))
-                .transpose()?;
-            let payload = sample.payload().to_bytes();
+            let attachment = sample.attachment().map(decode_attachment).transpose()?;
             apply_sample(
                 msg,
                 rx_channel.wire_format,
-                payload.as_ref(),
+                sample.payload(),
                 attachment,
                 ctx.now(),
             )?;
@@ -524,27 +521,44 @@ fn encode_payload<Payload: CuMsgPayload>(
             .map_err(|e| CuError::new_with_cause("ZenohBridge: cbor encode failed", e)),
     }
 }
-/// Decodes the payload according to the specified wire format.
+/// Decode contiguous buffers directly and fragmented buffers through Zenoh's borrowed reader.
+/// Never flatten a bincode sample into a temporary allocation.
+fn decode_bincode<Decoded: bincode::Decode<()>>(
+    bytes: &ZBytes,
+    decode_error: &'static str,
+    trailing_error: &'static str,
+) -> CuResult<Decoded> {
+    let first = bytes.slices().next().unwrap_or_default();
+    let (decoded, remaining) = if first.len() == bytes.len() {
+        let (decoded, consumed) = bincode::decode_from_slice(first, bincode::config::standard())
+            .map_err(|e| CuError::new_with_cause(decode_error, e))?;
+        (decoded, first.len() - consumed)
+    } else {
+        let mut reader = bytes.reader();
+        let decoded = bincode::decode_from_std_read(&mut reader, bincode::config::standard())
+            .map_err(|e| CuError::new_with_cause(decode_error, e))?;
+        (decoded, reader.remaining())
+    };
+    if remaining != 0 {
+        return Err(CuError::from(trailing_error));
+    }
+    Ok(decoded)
+}
+
+/// Decodes the payload according to the specified wire format. Owned payload fields may allocate.
 fn decode_payload<Payload: CuMsgPayload>(
     wire_format: WireFormat,
-    bytes: &[u8],
+    bytes: &ZBytes,
 ) -> CuResult<Payload> {
     match wire_format {
-        WireFormat::Bincode => {
-            let (decoded, consumed): (Payload, usize) =
-                bincode::decode_from_slice(bytes, bincode::config::standard()).map_err(|e| {
-                    CuError::new_with_cause("ZenohBridge: bincode decode failed", e)
-                })?;
-            if consumed != bytes.len() {
-                return Err(CuError::from(
-                    "ZenohBridge: trailing bytes in bincode payload",
-                ));
-            }
-            Ok(decoded)
-        }
-        WireFormat::Json => serde_json::from_slice(bytes)
+        WireFormat::Bincode => decode_bincode(
+            bytes,
+            "ZenohBridge: bincode decode failed",
+            "ZenohBridge: trailing bytes in bincode payload",
+        ),
+        WireFormat::Json => serde_json::from_slice(bytes.to_bytes().as_ref())
             .map_err(|e| CuError::new_with_cause("ZenohBridge: json decode failed", e)),
-        WireFormat::Cbor => minicbor_serde::from_slice(bytes)
+        WireFormat::Cbor => minicbor_serde::from_slice(bytes.to_bytes().as_ref())
             .map_err(|e| CuError::new_with_cause("ZenohBridge: cbor decode failed", e)),
     }
 }
@@ -567,15 +581,13 @@ fn encode_attachment<Payload: CuMsgPayload>(
     .map_err(|e| CuError::new_with_cause("ZenohBridge: attachment encode failed", e))
 }
 
-/// Decodes the attachment from the given byte slice.
-fn decode_attachment(bytes: &[u8]) -> CuResult<CopperBridgeAttachment> {
-    let (decoded, consumed): (CopperBridgeAttachment, usize) =
-        bincode::decode_from_slice(bytes, bincode::config::standard())
-            .map_err(|e| CuError::new_with_cause("ZenohBridge: attachment decode failed", e))?;
-    if consumed != bytes.len() {
-        return Err(CuError::from("ZenohBridge: trailing bytes in attachment"));
-    }
-    Ok(decoded)
+/// Decodes metadata directly from the sample's buffers, without allocation or flattening.
+fn decode_attachment(bytes: &ZBytes) -> CuResult<CopperBridgeAttachment> {
+    decode_bincode(
+        bytes,
+        "ZenohBridge: attachment decode failed",
+        "ZenohBridge: trailing bytes in attachment",
+    )
 }
 
 /// Fills `msg` from a received sample body and its decoded attachment. `process_time` is left
@@ -583,7 +595,7 @@ fn decode_attachment(bytes: &[u8]) -> CuResult<CopperBridgeAttachment> {
 fn apply_sample<Payload: CuMsgPayload>(
     msg: &mut CuMsg<Payload>,
     wire_format: WireFormat,
-    body: &[u8],
+    body: &ZBytes,
     attachment: Option<CopperBridgeAttachment>,
     now: CuTime,
 ) -> CuResult<()> {
@@ -624,6 +636,95 @@ fn cu_error_map(msg: &str) -> impl FnOnce(ZenohError) -> CuError + '_ {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Existing slice fixtures become owned Zenoh buffers outside the measured receive path.
+    fn decode_payload<Payload: CuMsgPayload>(
+        format: WireFormat,
+        bytes: &[u8],
+    ) -> CuResult<Payload> {
+        super::decode_payload(format, &ZBytes::from(bytes))
+    }
+
+    fn decode_attachment(bytes: &[u8]) -> CuResult<CopperBridgeAttachment> {
+        super::decode_attachment(&ZBytes::from(bytes))
+    }
+
+    fn apply_sample<Payload: CuMsgPayload>(
+        msg: &mut CuMsg<Payload>,
+        format: WireFormat,
+        body: &[u8],
+        attachment: Option<CopperBridgeAttachment>,
+        now: CuTime,
+    ) -> CuResult<()> {
+        super::apply_sample(msg, format, &ZBytes::from(body), attachment, now)
+    }
+
+    fn fragmented(bytes: &[u8], split: usize) -> ZBytes {
+        let mut writer = ZBytes::writer();
+        writer.append(ZBytes::from(&bytes[..split]));
+        writer.append(ZBytes::from(&bytes[split..]));
+        writer.finish()
+    }
+
+    #[test]
+    fn test_fragmented_bincode_receive_avoids_temporary_allocations() {
+        let payload = u64::MAX;
+        let body = bincode::encode_to_vec(payload, bincode::config::standard()).unwrap();
+        let attachment = copper_attachment(true);
+        let metadata = bincode::encode_to_vec(attachment, bincode::config::standard()).unwrap();
+        let mut msg = CuMsg::<u64>::default();
+
+        // With cu29/memory_monitoring, prove the installed counter sees an actual allocation.
+        if cu29::monitoring::global_allocated_bytes().is_some() {
+            let probe = cu29::monitoring::ScopedAllocCounter::new();
+            let allocation = std::hint::black_box(Box::new(payload));
+            assert!(probe.allocated() > 0);
+            drop(allocation);
+        }
+
+        for split in 1..body.len() {
+            let body = fragmented(&body, split);
+            for meta_split in 1..metadata.len() {
+                let metadata = fragmented(&metadata, meta_split);
+                let allocations = cu29::monitoring::ScopedAllocCounter::new();
+                let decoded = super::decode_attachment(&metadata).unwrap();
+                super::apply_sample(
+                    &mut msg,
+                    WireFormat::Bincode,
+                    &body,
+                    Some(decoded),
+                    CuTime::MIN,
+                )
+                .unwrap();
+                assert_eq!(allocations.allocated(), 0);
+                assert_eq!(msg.payload(), Some(&payload));
+                assert_eq!(msg.tov, attachment.tov);
+            }
+        }
+    }
+
+    #[test]
+    fn test_fragmented_buffers_preserve_decode_errors() {
+        let mut bytes =
+            bincode::encode_to_vec(copper_attachment(true), bincode::config::standard()).unwrap();
+        bytes.push(0);
+        for split in 1..bytes.len() {
+            assert!(super::decode_attachment(&fragmented(&bytes, split)).is_err());
+        }
+        bytes.pop();
+        bytes.pop();
+        for split in 1..bytes.len() {
+            assert!(super::decode_attachment(&fragmented(&bytes, split)).is_err());
+        }
+        let mut body = encode_payload(WireFormat::Bincode, &u64::MAX).unwrap();
+        body.push(0);
+        for split in 1..body.len() {
+            assert!(
+                super::decode_payload::<u64>(WireFormat::Bincode, &fragmented(&body, split))
+                    .is_err()
+            );
+        }
+    }
 
     fn config_with(pairs: &[(&str, &str)]) -> ComponentConfig {
         let mut cfg = ComponentConfig::default();

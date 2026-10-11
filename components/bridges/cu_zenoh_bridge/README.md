@@ -108,10 +108,16 @@ measurement time; it must use the same epoch/time scale and meaningful sender pr
 
 This bridge currently serializes, allocates and calls Zenoh directly in `send`/`receive`, which
 run in the graph's execution path. Payload-only bodies do not make it suitable for a hard
-real-time loop. Moving codecs and transport to workers requires typed, bounded ownership transfer
-for payloads; arbitrary `CuMsgPayload` values can allocate on clone or decode. This remains a
-separate bridge execution change; moving work into `preprocess`/`postprocess` alone would still
-run it on the runtime thread.
+real-time loop. Bincode payloads and metadata are decoded directly from Zenoh's existing buffers, including
+fragmented samples, without allocating or copying a temporary contiguous message. Fixed-size
+bincode payloads and metadata decode without heap allocation. JSON/CBOR currently flatten
+fragmented samples, and owned fields such as `String`/`Vec` can allocate during decoding.
+
+Transmit encodes from the borrowed CopperList payload and transfers the resulting `Vec` to
+Zenoh. Payloads are not cloned into a worker queue. Further work should encode directly into
+preallocated transport buffers and hand off buffer handles; buffers may be reused only after
+Zenoh releases them. Bounded payload representations are needed for allocation-free decoding.
+Moving work into `preprocess`/`postprocess` alone would still run it on the runtime thread.
 
 ### Talking to non-Copper processes
 
