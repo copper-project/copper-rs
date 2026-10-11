@@ -262,6 +262,10 @@ impl CuMonitor for CuConsoleMon {
     }
 
     fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
+        #[cfg(feature = "clock-sync")]
+        {
+            self.model = self.model.clone().with_clock(_ctx.clock.clone());
+        }
         #[cfg(feature = "debug_pane")]
         {
             self.log_capture = Some(Mutex::new(if should_start_ui() {

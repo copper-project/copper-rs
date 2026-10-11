@@ -21,6 +21,7 @@ environments = ["host"]
 default = ["dag", "hop"]
 dag = []
 hop = []
+clock-sync = ["cu29/clock-sync"]
 log_pane = ["dep:cu29-log", "dep:cu29-log-runtime"]
 stderr_capture = ["log_pane", "dep:gag"]
 sysinfo_pane = [

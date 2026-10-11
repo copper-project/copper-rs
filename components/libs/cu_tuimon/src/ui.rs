@@ -43,6 +43,8 @@ pub enum MonitorScreen {
     MemoryPools,
     #[cfg(feature = "log_pane")]
     Logs,
+    #[cfg(feature = "clock-sync")]
+    Clock,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -181,6 +183,11 @@ const TAB_DEFS: &[TabDef] = &[
         screen: MonitorScreen::Logs,
         label: "LOG",
     },
+    #[cfg(feature = "clock-sync")]
+    TabDef {
+        screen: MonitorScreen::Clock,
+        label: "CLOCK",
+    },
 ];
 
 pub struct MonitorUi {
@@ -217,12 +224,23 @@ impl MonitorUi {
                 .map(|_| crate::stream_panel::StreamRates::default())
                 .collect()
         });
+        let active_screen = default_screen();
+        #[cfg(feature = "clock-sync")]
+        let active_screen = if model
+            .clock
+            .as_ref()
+            .is_some_and(|clock| clock.sync_status().is_some())
+        {
+            MonitorScreen::Clock
+        } else {
+            active_screen
+        };
         Self {
             #[cfg(feature = "hop")]
             hop: crate::hop::HopView::new(model.clone()),
             model,
             runtime_node_col_width,
-            active_screen: default_screen(),
+            active_screen,
             show_quit_hint: options.show_quit_hint,
             tab_hitboxes: Vec::new(),
             help_hitboxes: Vec::new(),
@@ -479,6 +497,8 @@ impl MonitorUi {
 
             #[cfg(feature = "log_pane")]
             MonitorScreen::Logs => self.draw_logs(f, area),
+            #[cfg(feature = "clock-sync")]
+            MonitorScreen::Clock => self.draw_clock(f, area),
         }
     }
 

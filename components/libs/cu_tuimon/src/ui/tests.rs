@@ -10,6 +10,68 @@ use cu29::monitoring::{
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 
+#[cfg(feature = "clock-sync")]
+#[test]
+fn clock_panel_reads_the_live_shared_clock_and_shows_expiration() {
+    use cu29::clock::sync::{ClockDomain, ClockObservation, ClockSync, SyncConfig};
+    use cu29::clock::{CuDuration, CuInstant, RobotClock};
+
+    let (clock, raw) = RobotClock::mock();
+    let domain = ClockDomain {
+        id: 7,
+        identity: *b"demo-ptp",
+        session: 1,
+    };
+    let mut sync =
+        ClockSync::new(&clock, domain, SyncConfig::new(CuDuration::from_millis(20))).unwrap();
+    let epoch = 1_800_000_000_000_000_000;
+    sync.observe(ClockObservation {
+        raw_local: CuInstant::from_nanos(0),
+        parent_ns: epoch,
+        uncertainty: CuDuration::from_nanos(1000),
+        domain,
+    })
+    .unwrap();
+    sync.update().unwrap();
+    raw.set_value(1_000_000_000);
+    sync.observe(ClockObservation {
+        raw_local: CuInstant::from_nanos(1_000_000_000),
+        parent_ns: epoch + 1_000_000_000,
+        uncertainty: CuDuration::from_nanos(1000),
+        domain,
+    })
+    .unwrap();
+    sync.update().unwrap();
+    let model = test_monitor_model().with_clock(clock);
+    let mut ui = MonitorUi::new(model, MonitorUiOptions::default());
+    assert_eq!(ui.active_screen(), MonitorScreen::Clock);
+    let initial = stream_text(&mut ui, 100, 22);
+    assert!(initial.contains("LOCKED"));
+    assert!(initial.contains(&(epoch + 1_000_000_000).to_string()));
+    assert!(initial.contains("64:65:6d:6f:2d:70:74:70"));
+    raw.set_value(1_010_000_000);
+    sync.reference_lost();
+    sync.update().unwrap();
+    assert!(stream_text(&mut ui, 100, 22).contains("HOLDOVER"));
+    raw.set_value(7_000_000_000);
+    let expired = stream_text(&mut ui, 100, 22);
+    assert!(expired.contains("EXPIRED"));
+    assert!(!expired.contains(&(epoch + 1_000_000_000).to_string()));
+}
+
+#[cfg(feature = "clock-sync")]
+#[test]
+fn clock_panel_does_not_claim_a_reference_when_clock_is_unsynchronized() {
+    let (clock, _) = cu29::clock::RobotClock::mock();
+    let model = test_monitor_model().with_clock(clock);
+    let mut ui = MonitorUi::new(model, MonitorUiOptions::default());
+    assert_eq!(ui.active_screen(), default_screen());
+    ui.set_active_screen(MonitorScreen::Clock);
+    let text = stream_text(&mut ui, 80, 20);
+    assert!(text.contains("UNSYNCHRONIZED"));
+    assert!(!text.contains("Grandmaster"));
+}
+
 #[derive(Debug)]
 struct StreamFixture(cu29::monitoring::LogStreamStats);
 impl cu29::monitoring::LogStreamStatsSource for StreamFixture {

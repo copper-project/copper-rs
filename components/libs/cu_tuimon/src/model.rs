@@ -27,6 +27,8 @@ const DEFAULT_LOG_CAPACITY: usize = 1_024;
 pub struct MonitorModel {
     pub(crate) inner: Arc<MonitorModelInner>,
     pub(crate) streams: Option<Arc<[cu29::monitoring::LogStreamMonitor]>>,
+    #[cfg(feature = "clock-sync")]
+    pub(crate) clock: Option<cu29::clock::RobotClock>,
 }
 
 pub(crate) struct MonitorModelInner {
@@ -46,6 +48,13 @@ pub(crate) struct MonitorModelInner {
 }
 
 impl MonitorModel {
+    /// Experimental: attach the shared clock for sampling on the UI thread.
+    #[cfg(feature = "clock-sync")]
+    pub fn with_clock(mut self, clock: cu29::clock::RobotClock) -> Self {
+        self.clock = Some(clock);
+        self
+    }
+
     /// Attach immutable stream handles once, before cloning the model into a UI thread.
     pub fn with_runtime(mut self, runtime: &cu29::monitoring::CuMonitoringRuntime) -> Self {
         self.streams = runtime.log_streams();
@@ -85,6 +94,8 @@ impl MonitorModel {
 
         Self {
             streams: None,
+            #[cfg(feature = "clock-sync")]
+            clock: None,
             inner: Arc::new(MonitorModelInner {
                 components,
                 topology,
