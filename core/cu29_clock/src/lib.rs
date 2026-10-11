@@ -1065,9 +1065,28 @@ impl RobotClock {
     }
 
     /// Experimental: current domain, uncertainty and synchronization health.
-    #[cfg(feature = "clock-sync")]
+    ///
+    /// Available with or without `clock-sync`. Returns `None` when synchronization
+    /// is disabled or no discipline has been published. Without the feature this
+    /// does not read the counter or require synchronization storage.
+    ///
+    /// ```rust
+    /// use cu29_clock::{RobotClock, sync::SyncStatus};
+    ///
+    /// let (clock, _) = RobotClock::mock();
+    /// let quality: Option<SyncStatus> = clock.sync_status();
+    /// assert_eq!(quality, None);
+    /// ```
+    #[inline]
     pub fn sync_status(&self) -> Option<sync::SyncStatus> {
-        self.mapping.read().status(self.raw_now())
+        #[cfg(feature = "clock-sync")]
+        {
+            self.mapping.read().status(self.raw_now())
+        }
+        #[cfg(not(feature = "clock-sync"))]
+        {
+            None
+        }
     }
 }
 
@@ -1120,6 +1139,19 @@ mod tests {
     use super::*;
     #[cfg(feature = "std")]
     use approx::assert_relative_eq;
+
+    #[test]
+    fn test_unconfigured_sync_status_is_available_without_discipline() {
+        let (clock, mock) = RobotClock::mock();
+        let clone = clock.clone();
+        for value in [0, 1_000_000_000, 10_000_000_000] {
+            mock.set_value(value);
+            let quality: Option<sync::SyncStatus> = clock.sync_status();
+            assert_eq!(quality, None);
+            assert_eq!(clone.sync_status(), None);
+            assert_eq!(clock.now(), CuTime(value));
+        }
+    }
 
     #[test]
     fn test_raw_instant_arithmetic_and_mock_readings() {
