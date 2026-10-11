@@ -401,7 +401,10 @@ impl ClockSync {
 
     /// Publishes a continuous curve. Initial acquisition is the only epoch step.
     pub fn update(&mut self) -> Result<SyncStatus, SyncError> {
-        let raw = self.clock.raw_now();
+        self.update_at(self.clock.raw_now())
+    }
+
+    fn update_at(&mut self, raw: CuInstant) -> Result<SyncStatus, SyncError> {
         let mut curve = self.clock.mapping.read();
         if curve
             .status(raw)
@@ -449,10 +452,9 @@ impl ClockSync {
                 curve.time_anchor = parent;
                 curve.rate_ppb = drift;
             } else {
-                let current = curve
-                    .at(raw)?
-                    .as_nanos()
-                    .max(self.clock.mapping.last.load(Ordering::SeqCst));
+                // A reader may have advanced last beyond this captured instant.
+                // Keep the anchors paired; now() applies the monotonic floor.
+                let current = curve.at(raw)?.as_nanos();
                 let phase = i128::from(parent) - i128::from(current);
                 curve.raw_anchor = raw.as_nanos();
                 curve.time_anchor = current;
@@ -602,15 +604,73 @@ mod tests {
     }
 
     fn locked() -> (RobotClock, crate::RobotClockMock, ClockSync) {
+        locked_with_config(SyncConfig::new(CuDuration(200_000)))
+    }
+
+    fn locked_with_config(config: SyncConfig) -> (RobotClock, crate::RobotClockMock, ClockSync) {
         let (clock, mock) = RobotClock::mock();
-        let mut sync =
-            ClockSync::new(&clock, DOMAIN, SyncConfig::new(CuDuration(200_000))).unwrap();
+        let mut sync = ClockSync::new(&clock, DOMAIN, config).unwrap();
         observe(&mut sync, 0, EPOCH, 100).unwrap();
         sync.update().unwrap();
         mock.set_value(1_000_000_000);
         observe(&mut sync, mock.value(), EPOCH + mock.value(), 100).unwrap();
         assert_eq!(sync.update().unwrap().state, SyncState::Locked);
         (clock, mock, sync)
+    }
+
+    #[test]
+    fn test_updates_preserve_curve_when_readers_advance_after_raw_capture() {
+        for config in [
+            SyncConfig::new(CuDuration(200_000)),
+            SyncConfig {
+                drift_bound_ppb: 0,
+                max_slew_ppb: 0,
+                ..SyncConfig::new(CuDuration(200_000))
+            },
+        ] {
+            let (clock, mock, mut sync) = locked_with_config(config);
+            let captured_raw = clock.raw_now();
+            let captured_time = sync.snapshot().at(captured_raw).unwrap();
+
+            // A reader runs after update captures raw time, before it reanchors.
+            mock.increment(CuDuration::from_millis(10));
+            let before = clock.now();
+            assert_eq!(before.0, captured_time.0 + 10_000_000);
+
+            assert_eq!(
+                sync.update_at(captured_raw).unwrap().state,
+                SyncState::Locked
+            );
+            assert_eq!(sync.snapshot().at(captured_raw).unwrap(), captured_time);
+            assert_eq!(sync.snapshot().rate_ppb, 0);
+            assert_eq!(clock.now(), before);
+            assert_eq!(clock.recent(), before);
+            assert_eq!(sync.status().phase_offset_ns, 0);
+
+            mock.increment(CuDuration::from_millis(1));
+            assert_eq!(clock.now().0, before.0 + 1_000_000);
+        }
+    }
+
+    #[test]
+    fn test_updates_preserve_slewing_curve_when_readers_advance_after_raw_capture() {
+        let (clock, mock, mut sync) = locked();
+        mock.increment(CuDuration::from_secs(1));
+        observe(&mut sync, mock.value(), EPOCH + mock.value() + 20_000, 100).unwrap();
+        sync.update().unwrap();
+        let captured_raw = clock.raw_now();
+        let curve = sync.snapshot();
+        assert_eq!(curve.rate_ppb, 30_000);
+
+        mock.increment(CuDuration::from_millis(10));
+        let before = clock.now();
+        assert_eq!(
+            sync.update_at(captured_raw).unwrap().state,
+            SyncState::Locked
+        );
+        assert_eq!(sync.snapshot(), curve);
+        assert_eq!(clock.now(), before);
+        assert_eq!(clock.recent(), before);
     }
 
     #[cfg(feature = "std")]
