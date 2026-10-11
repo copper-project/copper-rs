@@ -6,7 +6,7 @@ use cu29::monitoring::{
     CuMonitoringMetadata, MonitorComponentMetadata, MonitorTopology,
 };
 use cu29::prelude::{CuCompactString, CuTime, pools_statistics};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 #[cfg(feature = "log_pane")]
 use crate::log_pane::StyledLine;
@@ -27,11 +27,10 @@ const DEFAULT_LOG_CAPACITY: usize = 1_024;
 pub struct MonitorModel {
     pub(crate) inner: Arc<MonitorModelInner>,
     pub(crate) streams: Option<Arc<[cu29::monitoring::LogStreamMonitor]>>,
-    #[cfg(feature = "clock-sync")]
-    pub(crate) clock: Option<cu29::clock::RobotClock>,
 }
 
 pub(crate) struct MonitorModelInner {
+    clock: OnceLock<cu29::clock::RobotClock>,
     pub(crate) components: &'static [MonitorComponentMetadata],
     pub(crate) topology: MonitorTopology,
     pub(crate) system_name: CompactString,
@@ -48,11 +47,15 @@ pub(crate) struct MonitorModelInner {
 }
 
 impl MonitorModel {
-    /// Experimental: attach the shared clock for sampling on the UI thread.
-    #[cfg(feature = "clock-sync")]
-    pub fn with_clock(mut self, clock: cu29::clock::RobotClock) -> Self {
-        self.clock = Some(clock);
+    /// Attach the clock once for UI sampling; existing model clones see it too.
+    /// Subsequent calls retain the first attached clock.
+    pub fn with_clock(self, clock: cu29::clock::RobotClock) -> Self {
+        self.inner.clock.get_or_init(|| clock);
         self
+    }
+
+    pub(crate) fn clock(&self) -> Option<&cu29::clock::RobotClock> {
+        self.inner.clock.get()
     }
 
     /// Attach immutable stream handles once, before cloning the model into a UI thread.
@@ -94,9 +97,8 @@ impl MonitorModel {
 
         Self {
             streams: None,
-            #[cfg(feature = "clock-sync")]
-            clock: None,
             inner: Arc::new(MonitorModelInner {
+                clock: OnceLock::new(),
                 components,
                 topology,
                 system_name: cached_system_name(),

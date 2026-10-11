@@ -20,8 +20,8 @@ impl MonitorUi {
         let block = Block::default()
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
-            .title(" RobotClock / PTP ");
-        let Some(clock) = &self.model().clock else {
+            .title(" RobotClock ");
+        let Some(clock) = self.model().clock() else {
             frame.render_widget(Paragraph::new("No clock attached").block(block), area);
             return;
         };
@@ -46,9 +46,9 @@ impl MonitorUi {
                 .map(|byte| format!("{byte:02x}"))
                 .join(":");
             rows.extend([
-                row("Reference time", "PTP / TAI".into()),
+                row("Origin", "External reference".into()),
                 row(
-                    "Estimated error",
+                    "Error bound",
                     format!(
                         "{:.3} ms",
                         status.estimated_error.as_nanos() as f64 / 1_000_000.0
@@ -70,7 +70,7 @@ impl MonitorUi {
                         status.sample_age.as_nanos() as f64 / 1_000_000.0
                     ),
                 ),
-                row("Grandmaster", identity),
+                row("Reference identity", identity),
                 row(
                     "Domain / session",
                     format!("{} / {}", status.domain.id, status.domain.session),
@@ -79,8 +79,17 @@ impl MonitorUi {
         } else {
             rows.insert(
                 0,
-                row("State", "UNSYNCHRONIZED".into()).style(Style::default().fg(palette::YELLOW)),
+                row("State", "LOCAL".into()).style(Style::default().fg(palette::GREEN)),
             );
+            rows.push(row(
+                "Origin",
+                if clock.is_mock() {
+                    "Mock counter"
+                } else {
+                    "Local monotonic counter"
+                }
+                .into(),
+            ));
         }
         rows.push(row(
             "Last CopperList",

@@ -1,4 +1,3 @@
-#[cfg(feature = "clock-sync")]
 mod clock_panel;
 #[cfg(feature = "hop")]
 mod hop;

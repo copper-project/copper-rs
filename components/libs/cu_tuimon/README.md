@@ -13,11 +13,18 @@ features; for example, use `default-features = false, features = ["hop"]` on a
 monitor dependency to select only the HOP view. The initial screen is DAG when
 enabled, otherwise HOP, otherwise Latency. Tab numbers follow the enabled tabs.
 
-The optional `clock-sync` feature adds a `CLOCK` tab. Attach a shared `RobotClock`
-with `MonitorModel::with_clock` before creating the UI; ConsoleMon does this in
-its start hook. A synchronized clock selects CLOCK initially. The UI samples
-current clock quality on each draw, including holdover and expiration, without
-adding per-CopperList telemetry callbacks.
+The `CLOCK` tab is always available. It shows live robot time and its origin:
+a local monotonic counter, a mock counter, or an external reference. ConsoleMon
+and BevyMon attach the shared clock in their start hooks; existing model clones
+see that clock through `MonitorModel::with_clock`. The optional `clock-sync`
+feature enables clock discipline and its quality display. A synchronized clock
+selects CLOCK initially. The UI samples quality on each draw, including holdover
+and expiration, without adding per-CopperList telemetry callbacks.
+
+**Error bound** includes the configured reference uncertainty, phase offset, and
+an allowance for drift since the latest sample. It is not a measured offset.
+The reference identity and domain are generic; their time scale depends on the
+reference provider.
 
 Select `HOP` in the monitor’s top bar (content area: at least 100 × 16).
 Node names use the same symbols as DAG throughout HOP: `◈` source, `⚙` task,

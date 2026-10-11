@@ -47,6 +47,8 @@ fn clock_panel_reads_the_live_shared_clock_and_shows_expiration() {
     assert_eq!(ui.active_screen(), MonitorScreen::Clock);
     let initial = stream_text(&mut ui, 100, 22);
     assert!(initial.contains("LOCKED"));
+    assert!(initial.contains("External reference"));
+    assert!(initial.contains("Error bound"));
     assert!(initial.contains(&(epoch + 1_000_000_000).to_string()));
     assert!(initial.contains("64:65:6d:6f:2d:70:74:70"));
     raw.set_value(1_010_000_000);
@@ -59,17 +61,39 @@ fn clock_panel_reads_the_live_shared_clock_and_shows_expiration() {
     assert!(!expired.contains(&(epoch + 1_000_000_000).to_string()));
 }
 
-#[cfg(feature = "clock-sync")]
 #[test]
-fn clock_panel_does_not_claim_a_reference_when_clock_is_unsynchronized() {
-    let (clock, _) = cu29::clock::RobotClock::mock();
+fn clock_panel_shows_the_live_local_mock_origin_without_sync_features() {
+    let (clock, raw) = cu29::clock::RobotClock::mock();
     let model = test_monitor_model().with_clock(clock);
     let mut ui = MonitorUi::new(model, MonitorUiOptions::default());
     assert_eq!(ui.active_screen(), default_screen());
     ui.set_active_screen(MonitorScreen::Clock);
     let text = stream_text(&mut ui, 80, 20);
-    assert!(text.contains("UNSYNCHRONIZED"));
-    assert!(!text.contains("Grandmaster"));
+    assert!(text.contains("LOCAL"));
+    assert!(text.contains("Mock counter"));
+    assert!(!text.contains("Reference identity"));
+    assert!(!text.contains("Error bound"));
+    raw.set_value(123_456);
+    assert!(stream_text(&mut ui, 80, 20).contains("123456"));
+}
+
+#[test]
+fn clock_attached_after_ui_creation_is_visible_in_existing_model_clones() {
+    let model = test_monitor_model();
+    let mut ui = MonitorUi::new(model.clone(), MonitorUiOptions::default());
+    let clock_tab = TAB_DEFS
+        .iter()
+        .position(|tab| tab.screen == MonitorScreen::Clock)
+        .unwrap();
+    ui.handle_event(MonitorUiEvent::Key(MonitorUiKey::Char(
+        char::from_digit(clock_tab as u32 + 1, 10).unwrap(),
+    )));
+    assert_eq!(ui.active_screen(), MonitorScreen::Clock);
+    assert!(stream_text(&mut ui, 80, 20).contains("No clock attached"));
+    let _model = model.with_clock(cu29::clock::RobotClock::new());
+    let text = stream_text(&mut ui, 80, 20);
+    assert!(text.contains("LOCAL"));
+    assert!(text.contains("Local monotonic counter"));
 }
 
 #[derive(Debug)]

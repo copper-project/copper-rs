@@ -43,7 +43,6 @@ pub enum MonitorScreen {
     MemoryPools,
     #[cfg(feature = "log_pane")]
     Logs,
-    #[cfg(feature = "clock-sync")]
     Clock,
 }
 
@@ -183,7 +182,6 @@ const TAB_DEFS: &[TabDef] = &[
         screen: MonitorScreen::Logs,
         label: "LOG",
     },
-    #[cfg(feature = "clock-sync")]
     TabDef {
         screen: MonitorScreen::Clock,
         label: "CLOCK",
@@ -225,10 +223,8 @@ impl MonitorUi {
                 .collect()
         });
         let active_screen = default_screen();
-        #[cfg(feature = "clock-sync")]
         let active_screen = if model
-            .clock
-            .as_ref()
+            .clock()
             .is_some_and(|clock| clock.sync_status().is_some())
         {
             MonitorScreen::Clock
@@ -497,7 +493,6 @@ impl MonitorUi {
 
             #[cfg(feature = "log_pane")]
             MonitorScreen::Logs => self.draw_logs(f, area),
-            #[cfg(feature = "clock-sync")]
             MonitorScreen::Clock => self.draw_clock(f, area),
         }
     }
