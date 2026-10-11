@@ -56,7 +56,9 @@ from Copper structured logging (`debug!`, `info!`, `warn!`, `error!`) and captur
 CLOCK always shows the application's shared `RobotClock`, its live time, and its
 origin. Ordinary clocks show LOCAL with a local monotonic or mock counter. The
 optional `clock-sync` feature enables clock discipline; synchronized clocks open
-CLOCK initially. **Robot vs reference** shows the estimated difference with an
+CLOCK initially. It has two bordered panes side by side: **Clock / reference**
+for live time and alignment, and **Timestamp uncertainty** for bounds and limits.
+Use arrow keys to scroll on narrow terminals. **Robot vs reference** shows the estimated difference with an
 ahead/behind direction. **Uncertainty bound** separately shows the conservative
 total and its reference/capture, sample-aging, and clock-mismatch contributions.
 It includes configured allowances rather than measuring total clock error.

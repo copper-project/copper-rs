@@ -201,6 +201,7 @@ pub struct MonitorUi {
     hop: crate::hop::HopView,
     latency_scroll_state: ScrollViewState,
     bandwidth_scroll_state: ScrollViewState,
+    pub(super) clock_scroll_state: ScrollViewState,
     stream_rates: Vec<crate::stream_panel::StreamRates>,
 
     #[cfg(feature = "sysinfo_pane")]
@@ -244,6 +245,7 @@ impl MonitorUi {
             nodes_scrollable_widget_state,
             latency_scroll_state: ScrollViewState::default(),
             bandwidth_scroll_state: ScrollViewState::default(),
+            clock_scroll_state: ScrollViewState::default(),
             stream_rates,
 
             #[cfg(feature = "sysinfo_pane")]
@@ -350,6 +352,17 @@ impl MonitorUi {
                         ScrollDirection::Down => self.bandwidth_scroll_state.scroll_down(),
                         ScrollDirection::Left => self.bandwidth_scroll_state.scroll_left(),
                         ScrollDirection::Right => self.bandwidth_scroll_state.scroll_right(),
+                    }
+                }
+            }
+
+            (MonitorScreen::Clock, direction) => {
+                for _ in 0..steps {
+                    match direction {
+                        ScrollDirection::Up => self.clock_scroll_state.scroll_up(),
+                        ScrollDirection::Down => self.clock_scroll_state.scroll_down(),
+                        ScrollDirection::Left => self.clock_scroll_state.scroll_left(),
+                        ScrollDirection::Right => self.clock_scroll_state.scroll_right(),
                     }
                 }
             }

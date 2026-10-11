@@ -21,6 +21,10 @@ feature enables clock discipline and its quality display. A synchronized clock
 selects CLOCK initially. The UI samples quality on each draw, including holdover
 and expiration, without adding per-CopperList telemetry callbacks.
 
+CLOCK uses two bordered panes side by side: **Clock / reference** for live time
+and alignment, and **Timestamp uncertainty** for the bounds and configured limit.
+Use arrow keys to scroll on narrow terminals, as on the bandwidth tab.
+
 **Robot vs reference** shows the estimated phase difference and whether RobotClock
 is ahead or behind. **Uncertainty bound** shows a conservative total, followed by
 its reference/capture, sample-aging, and clock-mismatch contributions. These
