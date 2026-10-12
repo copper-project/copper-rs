@@ -13,15 +13,15 @@ features; for example, use `default-features = false, features = ["hop"]` on a
 monitor dependency to select only the HOP view. The initial screen is DAG when
 enabled, otherwise HOP, otherwise Latency. Tab numbers follow the enabled tabs.
 
-The `CLOCK` tab is always available. It shows live robot time and its origin:
+The `CLK` tab is always available. It shows live robot time and its origin:
 a local monotonic counter, a mock counter, or an external reference. ConsoleMon
 and BevyMon attach the shared clock in their start hooks; existing model clones
 see that clock through `MonitorModel::with_clock`. The optional `clock-sync`
 feature enables clock discipline and its quality display. A synchronized clock
-selects CLOCK initially. The UI samples quality on each draw, including holdover
+selects CLK initially. The UI samples quality on each draw, including holdover
 and expiration, without adding per-CopperList telemetry callbacks.
 
-CLOCK uses two bordered panes side by side: **Clock / reference** for live time
+CLK uses two bordered panes side by side: **Clock / reference** for live time
 and alignment, and **Timestamp uncertainty** for the bounds and configured limit.
 Use arrow keys to scroll on narrow terminals, as on the bandwidth tab.
 

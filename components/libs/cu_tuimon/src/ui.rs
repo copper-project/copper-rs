@@ -184,7 +184,7 @@ const TAB_DEFS: &[TabDef] = &[
     },
     TabDef {
         screen: MonitorScreen::Clock,
-        label: "CLOCK",
+        label: "CLK",
     },
 ];
 

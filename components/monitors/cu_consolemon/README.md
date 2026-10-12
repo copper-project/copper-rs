@@ -40,7 +40,7 @@ The monitor offers these screens (some are feature-dependent):
 - **SysInfo**: A quick system information screen (CPU, Memory, Distrib ...)
 - **DAG**: A Directed Acyclic Graph of the tasks with their real time error status and short string info.
 - **HOP**: Explore a task and its neighbors with live status and timing.
-- **CLOCK**: Live robot time and origin, available for local and synchronized clocks.
+- **CLK**: Live robot time and origin, available for local and synchronized clocks.
 - **Latencies**: A list of the tasks with their real time latencies & assorted statistics (Jitter, Min, Max, Avg).
 - **Bandwidth**: CopperList serialization and IO statistics.
 - **Memory Pools**: A list of the memory pools with their real time usage and statistics (Pool ID, Used/Total, Buffer Size, Handles in Use, Handles/sec).
@@ -51,12 +51,12 @@ The monitor offers these screens (some are feature-dependent):
 Enabled by default. Disable with `default-features = false`. Displays real-time logs
 from Copper structured logging (`debug!`, `info!`, `warn!`, `error!`) and captured `stderr`.
 
-## CLOCK panel
+## CLK panel
 
-CLOCK always shows the application's shared `RobotClock`, its live time, and its
+CLK always shows the application's shared `RobotClock`, its live time, and its
 origin. Ordinary clocks show LOCAL with a local monotonic or mock counter. The
 optional `clock-sync` feature enables clock discipline; synchronized clocks open
-CLOCK initially. It has two bordered panes side by side: **Clock / reference**
+CLK initially. It has two bordered panes side by side: **Clock / reference**
 for live time and alignment, and **Timestamp uncertainty** for bounds and limits.
 Use arrow keys to scroll on narrow terminals. **Robot vs reference** shows the signed
 difference: positive is ahead, negative is behind. **Uncertainty bound** shows the conservative
