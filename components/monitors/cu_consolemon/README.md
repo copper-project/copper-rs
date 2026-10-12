@@ -35,10 +35,12 @@ And in you copperconfig.ron:
 
 ```
 
-The monitor has 5 core screens plus a shared log pane:
+The monitor offers these screens (some are feature-dependent):
 
 - **SysInfo**: A quick system information screen (CPU, Memory, Distrib ...)
 - **DAG**: A Directed Acyclic Graph of the tasks with their real time error status and short string info.
+- **HOP**: Explore a task and its neighbors with live status and timing.
+- **CLK**: Live robot time and origin, available for local and synchronized clocks.
 - **Latencies**: A list of the tasks with their real time latencies & assorted statistics (Jitter, Min, Max, Avg).
 - **Bandwidth**: CopperList serialization and IO statistics.
 - **Memory Pools**: A list of the memory pools with their real time usage and statistics (Pool ID, Used/Total, Buffer Size, Handles in Use, Handles/sec).
@@ -48,3 +50,46 @@ The monitor has 5 core screens plus a shared log pane:
 
 Enabled by default. Disable with `default-features = false`. Displays real-time logs
 from Copper structured logging (`debug!`, `info!`, `warn!`, `error!`) and captured `stderr`.
+
+## CLK panel
+
+CLK always shows the application's shared `RobotClock`, its live time, and its
+origin. Ordinary clocks show LOCAL with a local monotonic or mock counter. The
+optional `clock-sync` feature enables clock discipline; synchronized clocks open
+CLK initially. It has two bordered panes side by side: **Clock / reference**
+for live time and alignment, and **Timestamp uncertainty** for bounds and limits.
+Use arrow keys to scroll on narrow terminals.
+
+| Metric | Meaning |
+| --- | --- |
+| State | LOCAL uses a local counter; ACQUIRING awaits synchronization; LOCKED follows the reference; HOLDOVER continues without the reference; EXPIRED requires reacquisition. |
+| Robot time | Current shared `RobotClock` time in ns. Task timestamps from `ctx.now()` use this same clock. |
+| Uptime | For a local epoch, robot time displayed as elapsed days, hours, minutes and whole seconds. This uses the same RobotClock value, not host uptime. |
+| Source | Advertised upstream provenance, such as GNSS, atomic clock, local counter, or unknown. |
+| Epoch | Provider-selected timestamp epoch, such as GPS, TAI, UTC, or local elapsed time. |
+| TAI − UTC | Valid reference-advertised difference in seconds, when the epoch is TAI. |
+| Local time | TAI converted to the host local timezone as an ISO 8601 date to whole seconds, including the timezone offset. Unavailable when TAI − UTC is unknown. |
+| Offset from reference | Signed robot time minus reference time in µs: positive is ahead, negative is behind. |
+| Estimated drift | Estimated clock rate difference in ppm. |
+| Sample age | Elapsed time since the latest reference sample in ms. |
+| Reference identity | Reference provider's clock identifier. |
+| Domain / session | Reference domain and session identifiers; the provider determines the time scale. |
+| Uncertainty bound | Conservative total timestamp uncertainty in ms: reference uncertainty + aging uncertainty + offset magnitude. Includes configured allowances; it is not measured total clock error. |
+| Reference uncertainty | Reported or configured reference uncertainty plus capture uncertainty in ms. |
+| Aging uncertainty | Uncertainty accumulated since the latest sample in µs, using the drift bound. |
+| Offset magnitude | Absolute offset from the reference in µs. |
+| Drift bound | Rate uncertainty allowance in ppm used to calculate aging uncertainty. |
+| Uncertainty limit | Configured maximum uncertainty in ms. Exceeding it expires LOCKED or HOLDOVER; sample-age limits can also expire synchronization. This is not a precision target. |
+
+Unavailable indicates that no usable uncertainty estimate exists or that the clock
+has no external synchronization. Clock sampling and formatting happen on the UI
+thread; no per-iteration clock telemetry is added to the task graph.
+
+Try the [standalone PTP demo](../../../examples/cu_clock_sync/README.md).
+
+The CLK panel reads `RobotClock::origin()` alongside its numeric time. Source and
+epoch are independent: a GNSS source may provide GPS or TAI timestamps. The monitor
+preserves the numeric value and converts only TAI with a known reference UTC offset.
+It performs the calendar conversion only when drawing CLK; other tabs and runtime
+task execution do not perform it. Timezone rules apply at the displayed timestamp.
+GPS and application-defined epochs remain numeric and conversion belongs to user code.

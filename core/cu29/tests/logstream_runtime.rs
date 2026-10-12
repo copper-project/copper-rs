@@ -7,7 +7,7 @@ use cu29::logstream::{
     DensityThreshold, EncodingSymbolId, FecScheme, FecSymbolKind, Field, FiniteObjectDecoder,
     FiniteObjectLimits, FiniteObjectSenderConfig, Lane, LogStreamSenderConfig, ReceiverLimits,
     RecordKind, RecoverySenderConfig, RlcConfig, StreamIdentity, WirePacket, decode_copperlist,
-    decode_record, decode_recovery_point, encode_record,
+    decode_record, decode_recovery_point,
 };
 use cu29::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -262,8 +262,26 @@ fn sender_config(identity: StreamIdentity) -> CuResult<LogStreamSenderConfig> {
         first_repair_key: 1,
         repair_density: DensityThreshold::FULL,
     };
-    let manifest = encode_record(RecordKind::Manifest, 0, b"runtime-test-manifest")
-        .map_err(|error| CuError::from(error.to_string()))?;
+    let manifest = cu29::logstream::SessionManifest::new(
+        identity,
+        cu29::logstream::ReceiverRequirements {
+            feedback: None,
+            symbol_size: SYMBOL_SIZE as u16,
+            field: cu29::logstream::ResolvedRlcField::Gf256,
+            window_symbols: WINDOW_SYMBOLS as u16,
+            max_record_bytes: RECORD_BYTES as u64,
+        },
+        cu29::logstream::ApplicationSchema::from_output_specs(
+            default::CuStampedDataSet::get_output_specs(),
+        ),
+        SectionContext {
+            run_id: 0,
+            instance_id: identity.sender_id,
+            mission_index: 0,
+        },
+    )
+    .encode_record()
+    .map_err(|error| CuError::from(error.to_string()))?;
     Ok(LogStreamSenderConfig {
         feedback: None,
         pacing: cu29::logstream::PacingConfig {

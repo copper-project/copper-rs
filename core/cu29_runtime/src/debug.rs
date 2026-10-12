@@ -101,6 +101,8 @@ where
     sections: Vec<SectionIndexEntry>,
     total_entries: usize,
     keyframes: Vec<KeyFrame>,
+    #[cfg(feature = "clock-sync")]
+    clock_replay: crate::clock_sync::ClockReplay,
     started: bool,
     current_idx: Option<usize>,
     last_keyframe: Option<u64>,
@@ -217,7 +219,8 @@ where
             &mut progress,
         )?;
         let log_reader = build_read_logger(log_base)?;
-        Ok(Self::new(
+        #[allow(unused_mut)]
+        let mut session = Self::new(
             log_reader,
             app,
             robot_clock,
@@ -227,7 +230,14 @@ where
             keyframes,
             build_callback,
             time_of,
-        ))
+        );
+        #[cfg(feature = "clock-sync")]
+        {
+            session.clock_replay = crate::clock_sync::ClockReplay::new(
+                crate::clock_sync::load_clock_sync_records(log_base)?,
+            );
+        }
+        Ok(session)
     }
 
     /// Build a session directly from a log, with an explicit cache size.
@@ -271,7 +281,8 @@ where
             &mut progress,
         )?;
         let log_reader = build_read_logger(log_base)?;
-        Ok(Self::new_with_cache_cap(
+        #[allow(unused_mut)]
+        let mut session = Self::new_with_cache_cap(
             log_reader,
             app,
             robot_clock,
@@ -282,7 +293,14 @@ where
             build_callback,
             time_of,
             cache_cap,
-        ))
+        );
+        #[cfg(feature = "clock-sync")]
+        {
+            session.clock_replay = crate::clock_sync::ClockReplay::new(
+                crate::clock_sync::load_clock_sync_records(log_base)?,
+            );
+        }
+        Ok(session)
     }
 
     /// Create a new session from prebuilt indices.
@@ -333,6 +351,8 @@ where
             sections,
             total_entries,
             keyframes,
+            #[cfg(feature = "clock-sync")]
+            clock_replay: crate::clock_sync::ClockReplay::new(Vec::new()),
             started: false,
             current_idx: None,
             last_keyframe: None,
@@ -364,6 +384,14 @@ where
         if self.started {
             return Ok(());
         }
+        #[cfg(feature = "clock-sync")]
+        if self.total_entries > 0 {
+            let (entry, time) = self.copperlist_at(0)?;
+            if let Some(time) = time {
+                self.clock_replay
+                    .apply(&self.robot_clock, &self.clock_mock, entry.id, time)?;
+            }
+        }
         let mut noop = |_step: App::Step<'_>| SimOverride::ExecuteByRuntime;
         self.app.start_all_tasks(&mut noop)?;
         self.started = true;
@@ -376,6 +404,14 @@ where
 
     fn restore_keyframe(&mut self, kf: &KeyFrame) -> CuResult<()> {
         self.app.restore_keyframe(kf)?;
+        #[cfg(feature = "clock-sync")]
+        self.clock_replay.apply(
+            &self.robot_clock,
+            &self.clock_mock,
+            kf.culistid,
+            kf.timestamp,
+        )?;
+        #[cfg(not(feature = "clock-sync"))]
         self.clock_mock.set_value(kf.timestamp.as_nanos());
         self.last_keyframe = Some(kf.culistid);
         Ok(())
@@ -704,6 +740,10 @@ where
             };
             crate::continuity::validate_replay_continuity(expected, entry.id, restored)?;
             if let Some(ts) = ts {
+                #[cfg(feature = "clock-sync")]
+                self.clock_replay
+                    .apply(&self.robot_clock, &self.clock_mock, entry.id, ts)?;
+                #[cfg(not(feature = "clock-sync"))]
                 self.clock_mock.set_value(ts.as_nanos());
             }
             let mut cb = build_replay_callback(
