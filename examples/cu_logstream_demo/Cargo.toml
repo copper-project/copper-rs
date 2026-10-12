@@ -10,6 +10,11 @@ publish = false
 
 [features]
 default = []
+self-describing-logs = [
+  "demo",
+  "cu29/self-describing-logs",
+  "cu29-export/self-describing-logs",
+]
 verify-reconstruction = ["demo", "cu29/logstream-verify"]
 # Keep async runtime features out of ordinary workspace builds.
 demo = ["cu29/logstream", "cu29/reflect", "dep:cu-transform"]

@@ -34,6 +34,11 @@ fn config() -> LogStreamSenderConfig {
             outputs: vec![],
             reconstruction: vec![],
         },
+        cu29_unifiedlog::SectionContext {
+            run_id: 1,
+            instance_id: 1,
+            mission_index: 0,
+        },
     )
     .unwrap()
 }
