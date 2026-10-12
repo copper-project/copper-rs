@@ -29,7 +29,9 @@ use cu29_clock::CuDuration;
 #[allow(unused_imports)]
 use cu29_log::CuLogLevel;
 #[cfg(all(feature = "std", debug_assertions))]
-use cu29_log_runtime::{LiveLogListenerGuard, format_message_only, scoped_live_log_listener};
+use cu29_log_runtime::{
+    LiveLogListenerGuard, format_message_only, scoped_live_log_stdout_listener,
+};
 use cu29_traits::{
     CuError, CuResult, ObservedWriter, abort_observed_encode, begin_observed_encode,
     finish_observed_encode,
@@ -1796,7 +1798,7 @@ impl CuMonitor for NoMonitor {
     fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
         #[cfg(all(feature = "std", debug_assertions))]
         {
-            self.live_log_listener = Some(scoped_live_log_listener(
+            self.live_log_listener = Some(scoped_live_log_stdout_listener(
                 |entry, format_str, param_names| {
                     let params: Vec<String> = entry.params.iter().map(|v| v.to_string()).collect();
                     let named: Map<String, String> = param_names
