@@ -3,14 +3,14 @@
 //! One controller owns a clock's curve. Reference I/O belongs to the caller;
 //! readers only evaluate a published integer affine mapping.
 
-use crate::{CuDuration, CuInstant, CuTime};
+use crate::{ClockOrigin, CuDuration, CuInstant, CuTime};
 use bincode::{Decode, Encode};
 use core::fmt;
 use serde::{Deserialize, Serialize};
 
 const BILLION: i128 = 1_000_000_000;
 
-/// Reference epoch identity. PTP uses TAI and the grandmaster identity.
+/// Reference identity and session, independent of timestamp epoch.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
 pub struct ClockDomain {
     /// PTP domain number or application domain identifier.
@@ -26,8 +26,10 @@ pub struct ClockDomain {
 pub struct ClockObservation {
     /// Undisciplined local counter in nanoseconds.
     pub raw_local: CuInstant,
-    /// TAI/reference time at the capture event.
+    /// Provider reference time at the capture event, without epoch conversion.
     pub parent_ns: u64,
+    /// Source and epoch of the supplied reference time.
+    pub origin: ClockOrigin,
     /// Upstream and capture error combined.
     pub uncertainty: CuDuration,
     /// Epoch and session identity.
@@ -139,6 +141,7 @@ pub struct ClockSnapshot {
     time_anchor: u64,
     rate_ppb: i64,
     quality: Option<Quality>,
+    origin: ClockOrigin,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
@@ -166,6 +169,11 @@ fn ceil_drift(age: u64, ppb: u32) -> u64 {
 }
 
 impl ClockSnapshot {
+    /// Recorded provenance and epoch of the execution mapping.
+    pub fn origin(&self) -> ClockOrigin {
+        self.origin
+    }
+
     /// Evaluates the recorded execution curve at an undisciplined counter time.
     pub fn at(&self, raw: CuInstant) -> Result<CuTime, SyncError> {
         checked_time(
