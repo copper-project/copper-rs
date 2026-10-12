@@ -8,7 +8,9 @@ mod cfg_debug_assertions {
     pub use cu29::clock::CuTime;
     pub use cu29_log::{CuLogEntry, CuLogLevel};
     pub use cu29_log_runtime::format_message_only;
-    pub use cu29_log_runtime::register_live_log_listener;
+    pub use cu29_log_runtime::{
+        LiveLogListenerGuard, scoped_live_log_monitor_listener, scoped_live_log_stdout_listener,
+    };
     pub use ratatui::style::Color;
     pub use std::collections::HashMap;
 }
@@ -98,7 +100,7 @@ pub struct MonitorLogCapture {
     #[cfg_attr(not(feature = "stderr_capture"), allow(dead_code))]
     target: CaptureTarget,
     #[cfg(debug_assertions)]
-    registered_live_listener: bool,
+    _live_listener: LiveLogListenerGuard,
     #[cfg(feature = "stderr_capture")]
     stderr_redirect: Option<BufferRedirect>,
 }
@@ -115,17 +117,21 @@ impl MonitorLogCapture {
 
     fn new(target: CaptureTarget, _capture_stderr: bool) -> Self {
         #[cfg(debug_assertions)]
-        register_live_log_listener({
-            let target = target.clone();
-            move |entry, format_str, param_names| {
-                target.handle_structured_log(entry, format_str, param_names);
+        let live_listener = {
+            let listener_target = target.clone();
+            let callback = move |entry: &CuLogEntry, format_str: &str, param_names: &[&str]| {
+                listener_target.handle_structured_log(entry, format_str, param_names);
+            };
+            match &target {
+                CaptureTarget::Model(_) => scoped_live_log_monitor_listener(callback),
+                CaptureTarget::Stdout => scoped_live_log_stdout_listener(callback),
             }
-        });
+        };
 
         Self {
             target,
             #[cfg(debug_assertions)]
-            registered_live_listener: true,
+            _live_listener: live_listener,
             #[cfg(feature = "stderr_capture")]
             stderr_redirect: if _capture_stderr {
                 BufferRedirect::stderr().ok()
@@ -160,10 +166,6 @@ impl MonitorLogCapture {
 impl Drop for MonitorLogCapture {
     fn drop(&mut self) {
         self.poll();
-        #[cfg(debug_assertions)]
-        if self.registered_live_listener {
-            cu29_log_runtime::unregister_live_log_listener();
-        }
     }
 }
 
