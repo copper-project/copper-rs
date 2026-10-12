@@ -808,10 +808,11 @@ fn gen_culist_support(
         let mut slots = Vec::new();
         let mut error = None;
         for (index, (task_id, msg_type, payload_type)) in task_output_specs.iter().enumerate() {
-            let captured = cuconfig
-                .logging
-                .as_ref()
-                .is_none_or(|logging| logging.enable_task_logging)
+            let captured = (cfg!(feature = "logstream")
+                || cuconfig
+                    .logging
+                    .as_ref()
+                    .is_none_or(|logging| logging.enable_task_logging))
                 && cuconfig
                     .find_task_node(mission_label, task_id)
                     .is_none_or(|node| node.is_logging_enabled());

@@ -6,6 +6,7 @@ use crate::{
     CaptureArchive, CuStreamRx, SessionEvent, SessionRouter, SessionRouterLimits, StreamIdentity,
 };
 use cu29_traits::{CuError, CuResult};
+use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder};
 use std::marker::PhantomData;
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
@@ -65,6 +66,7 @@ pub struct CuTwinBuilder<A, R> {
     rx: R,
     feedback_tx: Option<Box<dyn crate::CuFeedbackTx>>,
     log_base: Option<PathBuf>,
+    log_rollover: Option<usize>,
     frame_capacity: NonZeroUsize,
     log_capacity: NonZeroUsize,
     replay_capacity: NonZeroUsize,
@@ -84,6 +86,14 @@ impl<A: LiveReplay, R: CuStreamRx + 'static> CuTwinBuilder<A, R> {
 
     pub fn with_log_path(mut self, path: impl AsRef<Path>) -> Self {
         self.log_base = Some(path.as_ref().to_path_buf());
+        self
+    }
+
+    /// Bound archive storage in bytes, overwriting the oldest data sections.
+    /// Static application metadata and the decode catalog remain available.
+    /// Capacity must exceed the configured section size and be a multiple of 512 bytes.
+    pub fn with_log_rollover(mut self, bytes: usize) -> Self {
+        self.log_rollover = Some(bytes);
         self
     }
 
@@ -192,6 +202,14 @@ impl<A: LiveReplay, R: CuStreamRx + 'static> CuTwinBuilder<A, R> {
         // Validate and construct routing before creating directories or starting workers.
         let mut router =
             SessionRouter::<1128, 64, 64>::new(self.receiver_limits).map_err(stream_error)?;
+        if self
+            .log_rollover
+            .is_some_and(|bytes| bytes <= self.section_bytes || !bytes.is_multiple_of(512))
+        {
+            return Err(CuError::from(
+                "Twin log rollover capacity must exceed the configured section size and be a multiple of 512 bytes",
+            ));
+        }
         let path = self
             .log_base
             .ok_or_else(|| CuError::from("Copper twin requires a log path"))?;
@@ -263,6 +281,9 @@ impl<A: LiveReplay, R: CuStreamRx + 'static> CuTwinBuilder<A, R> {
                                         return Ok(());
                                     }
                                     if let SessionEvent::Manifest(manifest) = &event {
+                                        if manifest.manifest().context.mission_index != A::MISSION_INDEX {
+                                            return Err(crate::Error::InvalidConfig("twin requires the matching sender mission"));
+                                        }
                                         status.identity = Some(manifest.manifest().identity);
                                         if feedback_tx.is_some() {
                                             reporter = crate::feedback::FeedbackReporter::new(
@@ -271,11 +292,23 @@ impl<A: LiveReplay, R: CuStreamRx + 'static> CuTwinBuilder<A, R> {
                                                 feedback_clock.now(),
                                             );
                                         }
-                                        archive = Some(CaptureArchive::<A::DataSet>::new(
-                                            &path,
-                                            manifest,
-                                            self.slab_bytes,
-                                            self.section_bytes,
+                                        let mut builder = UnifiedLoggerBuilder::new()
+                                            .file_base_name(&path)
+                                            .preallocated_size(self.log_rollover.unwrap_or(self.slab_bytes))
+                                            .write(true)
+                                            .create(true);
+                                        if let Some(bytes) = self.log_rollover {
+                                            builder = builder.rollover(bytes);
+                                        }
+                                        let logger = builder.build()
+                                            .map_err(|e| crate::Error::Codec(e.to_string()))?;
+                                        let UnifiedLogger::Write(mut logger) = logger else {
+                                            unreachable!()
+                                        };
+                                        A::seal_archive_metadata(&mut logger)
+                                            .map_err(|e| crate::Error::Codec(e.to_string()))?;
+                                        archive = Some(CaptureArchive::<A::DataSet>::new_with_logger(
+                                            manifest, self.section_bytes, logger,
                                         )?);
                                     }
                                     let writer =
@@ -468,6 +501,7 @@ impl<A: LiveReplay> CuTwin<A> {
             rx,
             feedback_tx: None,
             log_base: None,
+            log_rollover: None,
             frame_capacity: FRAME_CAPACITY,
             log_capacity: FRAME_CAPACITY,
             replay_capacity: REPLAY_CAPACITY,
