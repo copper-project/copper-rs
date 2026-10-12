@@ -2,6 +2,12 @@
 
 use crate::palette;
 use crate::ui::MonitorUi;
+use chrono::DateTime;
+use chrono::Local;
+use chrono::SecondsFormat;
+use chrono::Utc;
+use cu29::clock::ClockEpoch;
+use cu29::clock::ClockSource;
 use cu29::clock::CuDuration;
 use cu29::clock::sync::SyncState;
 use ratatui::Frame;
@@ -59,7 +65,26 @@ impl MonitorUi {
         let now = clock.now().as_nanos();
         let row =
             |name: &'static str, value: String| Row::new([Cell::from(name), Cell::from(value)]);
-        let mut rows = vec![row("Robot time", format!("{now} ns"))];
+        let origin = clock.origin();
+        let mut rows = vec![
+            row("Robot time", format!("{now} ns")),
+            row("Source", source_label(origin.source)),
+            row("Epoch", epoch_label(origin.epoch)),
+        ];
+        if let ClockEpoch::Tai {
+            tai_minus_utc_seconds,
+        } = origin.epoch
+        {
+            rows.push(row(
+                "TAI − UTC",
+                tai_minus_utc_seconds
+                    .map_or_else(|| "Unavailable".into(), |seconds| format!("{seconds:+} s")),
+            ));
+            rows.push(row(
+                "Local time",
+                tai_local_time(now, origin.epoch).unwrap_or_else(|| "Unavailable".into()),
+            ));
+        }
         let mut uncertainty_rows = Vec::new();
         if let Some(status) = clock.sync_status() {
             let (label, color) = match status.state {
@@ -77,7 +102,7 @@ impl MonitorUi {
                 .identity
                 .map(|byte| format!("{byte:02x}"))
                 .join(":");
-            rows.push(row("Origin", "External reference".into()));
+
             if status.estimated_error != CuDuration::MAX {
                 let phase = status.phase_offset_ns.unsigned_abs();
                 // Undo the combined bound using the same integer rounding as
@@ -152,15 +177,6 @@ impl MonitorUi {
                 0,
                 row("State", "LOCAL".into()).style(Style::default().fg(palette::GREEN)),
             );
-            rows.push(row(
-                "Origin",
-                if clock.is_mock() {
-                    "Mock counter"
-                } else {
-                    "Local monotonic counter"
-                }
-                .into(),
-            ));
         }
         let table = |rows, value_label| {
             Table::new(rows, [Constraint::Length(22), Constraint::Min(0)])
@@ -178,5 +194,106 @@ impl MonitorUi {
             scroll.render_widget(Paragraph::new("Unavailable"), uncertainty_area);
         }
         scroll.render(area, frame.buffer_mut(), &mut self.clock_scroll_state);
+    }
+}
+
+// Only draw_clock calls this conversion; other tabs and task execution never do.
+fn tai_local_time(nanos: u64, epoch: ClockEpoch) -> Option<String> {
+    let ClockEpoch::Tai {
+        tai_minus_utc_seconds: Some(offset),
+    } = epoch
+    else {
+        return None;
+    };
+    let utc_seconds = i64::try_from(nanos / 1_000_000_000)
+        .ok()?
+        .checked_sub(i64::from(offset))?;
+    let utc = DateTime::<Utc>::from_timestamp(utc_seconds, 0)?;
+    Some(
+        utc.with_timezone(&Local)
+            .to_rfc3339_opts(SecondsFormat::Secs, false),
+    )
+}
+
+fn source_label(source: ClockSource) -> String {
+    match source {
+        ClockSource::LocalMonotonic => "Local monotonic counter".into(),
+        ClockSource::Mock => "Mock counter".into(),
+        ClockSource::LocalRtc => "Local RTC".into(),
+        ClockSource::Gnss => "GNSS".into(),
+        ClockSource::AtomicClock => "Atomic clock".into(),
+        ClockSource::TerrestrialRadio => "Terrestrial radio".into(),
+        ClockSource::Ptp => "PTP".into(),
+        ClockSource::Ntp => "NTP".into(),
+        ClockSource::HandSet => "Hand set".into(),
+        ClockSource::InternalOscillator => "Internal oscillator".into(),
+        ClockSource::Other(code) => format!("Other 0x{code:02x}"),
+        ClockSource::Unknown => "Unknown".into(),
+    }
+}
+
+fn epoch_label(epoch: ClockEpoch) -> String {
+    match epoch {
+        ClockEpoch::Local => "Local".into(),
+        ClockEpoch::Tai { .. } => "TAI".into(),
+        ClockEpoch::Gps => "GPS".into(),
+        ClockEpoch::Utc => "UTC".into(),
+        ClockEpoch::Other(id) => format!("Other {id}"),
+        ClockEpoch::Unknown => "Unknown".into(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tai_date_uses_reference_offset_and_local_timezone_to_seconds() {
+        let epoch = ClockEpoch::Tai {
+            tai_minus_utc_seconds: Some(37),
+        };
+        let tai = 1_800_000_037_987_654_321;
+        let displayed = tai_local_time(tai, epoch).unwrap();
+        let parsed = DateTime::parse_from_rfc3339(&displayed).unwrap();
+        assert_eq!(parsed.timestamp(), 1_800_000_000);
+        assert_eq!(parsed.timestamp_subsec_nanos(), 0);
+        let expected = DateTime::<Utc>::from_timestamp(1_800_000_000, 0)
+            .unwrap()
+            .with_timezone(&Local);
+        assert_eq!(
+            parsed.offset().local_minus_utc(),
+            expected.offset().local_minus_utc()
+        );
+        assert_eq!(displayed.len(), 25);
+        assert!(!displayed.contains('.'));
+    }
+
+    #[test]
+    fn test_calendar_conversion_requires_tai_with_a_known_offset() {
+        for epoch in [
+            ClockEpoch::Local,
+            ClockEpoch::Gps,
+            ClockEpoch::Utc,
+            ClockEpoch::Unknown,
+            ClockEpoch::Other(42),
+            ClockEpoch::Tai {
+                tai_minus_utc_seconds: None,
+            },
+        ] {
+            assert_eq!(tai_local_time(1_800_000_000_000_000_000, epoch), None);
+        }
+        assert_eq!(
+            tai_local_time(
+                0,
+                ClockEpoch::Tai {
+                    tai_minus_utc_seconds: Some(37)
+                }
+            )
+            .unwrap(),
+            DateTime::<Utc>::from_timestamp(-37, 0)
+                .unwrap()
+                .with_timezone(&Local)
+                .to_rfc3339_opts(SecondsFormat::Secs, false)
+        );
     }
 }

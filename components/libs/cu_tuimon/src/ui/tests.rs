@@ -28,6 +28,12 @@ fn clock_panel_reads_the_live_shared_clock_and_shows_expiration() {
     sync.observe(ClockObservation {
         raw_local: CuInstant::from_nanos(0),
         parent_ns: epoch,
+        origin: cu29::clock::ClockOrigin {
+            source: cu29::clock::ClockSource::Gnss,
+            epoch: cu29::clock::ClockEpoch::Tai {
+                tai_minus_utc_seconds: Some(37),
+            },
+        },
         uncertainty: CuDuration::from_millis(1),
         domain,
     })
@@ -37,6 +43,12 @@ fn clock_panel_reads_the_live_shared_clock_and_shows_expiration() {
     sync.observe(ClockObservation {
         raw_local: CuInstant::from_nanos(1_000_000_000),
         parent_ns: epoch + 1_000_000_000 + 50_000,
+        origin: cu29::clock::ClockOrigin {
+            source: cu29::clock::ClockSource::Gnss,
+            epoch: cu29::clock::ClockEpoch::Tai {
+                tai_minus_utc_seconds: Some(37),
+            },
+        },
         uncertainty: CuDuration::from_millis(1),
         domain,
     })
@@ -47,7 +59,16 @@ fn clock_panel_reads_the_live_shared_clock_and_shows_expiration() {
     assert_eq!(ui.active_screen(), MonitorScreen::Clock);
     let initial = stream_text(&mut ui, 140, 22);
     assert!(initial.contains("LOCKED"));
-    assert!(initial.contains("External reference"));
+    assert!(initial.contains("GNSS"));
+    assert!(initial.contains("Epoch"));
+    assert!(initial.contains("TAI"));
+    assert!(initial.contains("+37 s"));
+    let date =
+        chrono::DateTime::<chrono::Utc>::from_timestamp((epoch / 1_000_000_000) as i64 + 1 - 37, 0)
+            .unwrap()
+            .with_timezone(&chrono::Local)
+            .to_rfc3339_opts(chrono::SecondsFormat::Secs, false);
+    assert!(initial.contains(&date));
     assert!(initial.contains("Offset from reference"));
     assert!(initial.contains("-50.000 µs"));
     assert!(initial.contains("Uncertainty bound"));
@@ -129,6 +150,28 @@ fn clock_panel_shows_the_live_local_mock_origin_without_sync_features() {
     assert!(!text.contains("Uncertainty limit"));
     raw.set_value(123_456);
     assert!(stream_text(&mut ui, 80, 20).contains("123456 ns"));
+}
+
+#[test]
+fn clock_panel_displays_bare_gps_provenance_without_calendar_conversion() {
+    use cu29::clock::{ClockEpoch, ClockOrigin, ClockSource, RobotClock};
+    let clock = RobotClock::from_ref_time_with_origin(
+        1_400_000_000_000_000_000,
+        ClockOrigin {
+            source: ClockSource::Gnss,
+            epoch: ClockEpoch::Gps,
+        },
+    );
+    let mut ui = MonitorUi::new(
+        test_monitor_model().with_clock(clock),
+        MonitorUiOptions::default(),
+    );
+    ui.set_active_screen(MonitorScreen::Clock);
+    let text = stream_text(&mut ui, 140, 22);
+    assert!(text.contains("GNSS"));
+    assert!(text.contains("GPS"));
+    assert!(!text.contains("Local time"));
+    assert!(!text.contains("TAI"));
 }
 
 #[test]
