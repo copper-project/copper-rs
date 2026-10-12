@@ -171,6 +171,13 @@ converts those errors to `CuError`.
   `background_process_empty: true` to opt into dispatching empty inputs.
 
 - LogStream session manifests and `ReceiverRequirements` decoder geometry/bounds.
+  Generated twins seal local application metadata and, with `self-describing-logs`,
+  the shared decode catalog before recording captures. Archive config capture is deferred.
+  `CuTwinBuilder::with_log_rollover(bytes)` bounds receiver archive storage using
+  the unified logger's `OverwriteOldest` policy.
+  Session manifests carry the producing construction's `SectionContext`; archive
+  sections retain its run, instance and mission indices across rollover. Generated
+  twins validate the sender mission against their compiled mission index.
 - `remote-debug` feature and `cu29::remote_debug`.
 - `parallel-rt` feature and parallel executor APIs.
 - `async-cl-io` feature and async CopperList I/O internals.
