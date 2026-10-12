@@ -279,6 +279,9 @@ barometer, and frame metadata. Bevy performs the camera rendering and GPU depth 
 simulator injects those buffers into the preempted `cu_zed::Zed` source. The compute graph runs
 ViTFly inference on the CPU by default and draws its predicted velocity over the top-right depth
 inset. Use `just sim-cuda` to run the same graph with ViTFly inference on NVIDIA CUDA.
+With Intel oneAPI MKL installed, use `just sim-mkl` for accelerated CPU inference. It defaults
+to `MKLROOT=/opt/intel/oneapi` and `MKL_NUM_THREADS=1`; both can be overridden in the environment.
+For a direct Cargo launch, use `cargo run --release --features vitfly-mkl`.
 
 The simulator has mutually exclusive `forest-world` and `urban-world` features. `forest-world` is
 the default for `cargo run` and `just sim`; use `just sim-urban` for the original city scene. The

@@ -60,6 +60,15 @@ sim-cuda:
   cd "{{ROOT}}"
   cargo run --release -p cu-flight-controller --no-default-features --features vitfly-cuda,forest-world --bin quad-sim
 
+# Run the simulator with ViTFly CPU inference accelerated by Intel MKL.
+sim-mkl:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  export MKLROOT="${MKLROOT:-/opt/intel/oneapi}"
+  export MKL_NUM_THREADS="${MKL_NUM_THREADS:-1}"
+  cd "{{ROOT}}"
+  cargo --config examples/cu_flight_controller/.cargo/config.toml run --release -p cu-flight-controller --no-default-features --features vitfly-mkl,forest-world --bin quad-sim
+
 # Run the replay-backed remote debug server for the flight controller log.
 resim-mcu-debug debug_base="copper/examples/cu_flight_controller/debug/v1" log="logs/flight_controller_sim.copper" replay_log="logs/flight_controller_resim.copper":
   #!/usr/bin/env bash
