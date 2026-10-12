@@ -55,6 +55,10 @@ impl ClockReference for MockPtp {
         Ok(Some(ClockObservation {
             raw_local: raw,
             parent_ns: EPOCH + (raw - *self.anchor.get_or_insert(raw)).as_nanos(),
+            origin: cu29::clock::ClockOrigin {
+                source: cu29::clock::ClockSource::Gnss,
+                epoch: cu29::clock::ClockEpoch::Gps,
+            },
             uncertainty: CuDuration(100),
             domain: DOMAIN,
         }))
@@ -77,6 +81,8 @@ impl CuSrcTask for Source {
     fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
         assert_eq!(ctx.clock.sync_status().unwrap().state, SyncState::Locked);
         assert!(ctx.now().0 >= EPOCH);
+        assert_eq!(ctx.clock.origin().epoch, cu29::clock::ClockEpoch::Gps);
+        assert_eq!(ctx.clock.origin().source, cu29::clock::ClockSource::Gnss);
         Ok(())
     }
     fn process(&mut self, ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
@@ -190,6 +196,7 @@ fn runtime_acquires_before_consumers_and_stops_reference() {
         let time = cu29::simulation::recorded_copperlist_timestamp(cl).unwrap();
         <Replay as CuRecordedReplayApplication<MmapSectionStorage, UnifiedLoggerWrite>>::set_recorded_clock_time(&mut replay, &mock, time).unwrap();
         assert_eq!(replay_clock.now(), time);
+        assert_eq!(replay_clock.origin(), observer.origin());
         assert_eq!(replay_clock.sync_status().unwrap().domain, DOMAIN);
         <Replay as CuRecordedReplayApplication<MmapSectionStorage, UnifiedLoggerWrite>>::replay_recorded_copperlist(&mut replay, &mock, cl, None).unwrap();
     }

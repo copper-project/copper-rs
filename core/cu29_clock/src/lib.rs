@@ -7,8 +7,10 @@ extern crate alloc;
 extern crate approx;
 
 mod calibration;
+mod origin;
 mod raw_counter;
 pub mod sync;
+pub use origin::{ClockEpoch, ClockOrigin, ClockSource};
 
 pub use raw_counter::*;
 
@@ -876,6 +878,8 @@ pub struct RobotClock {
     raw_anchor: u64,
     #[cfg(not(feature = "clock-sync"))]
     time_anchor: u64,
+    #[cfg(not(feature = "clock-sync"))]
+    origin: ClockOrigin,
     #[cfg(feature = "clock-sync")]
     mapping: Arc<sync::SharedClock>,
 }
@@ -932,14 +936,37 @@ impl RobotClock {
 
     fn from_inner(inner: InternalClock, initial: u64) -> Self {
         let raw = inner.now();
+        let origin = ClockOrigin {
+            source: if inner.mock_state.is_some() {
+                ClockSource::Mock
+            } else {
+                ClockSource::LocalMonotonic
+            },
+            epoch: if initial == 0 {
+                ClockEpoch::Local
+            } else {
+                ClockEpoch::Unknown
+            },
+        };
+        Self::from_inner_with_origin(inner, raw, initial, origin)
+    }
+
+    fn from_inner_with_origin(
+        inner: InternalClock,
+        raw: u64,
+        initial: u64,
+        origin: ClockOrigin,
+    ) -> Self {
         Self {
             inner,
             #[cfg(not(feature = "clock-sync"))]
             raw_anchor: raw,
             #[cfg(not(feature = "clock-sync"))]
             time_anchor: initial,
+            #[cfg(not(feature = "clock-sync"))]
+            origin,
             #[cfg(feature = "clock-sync")]
-            mapping: Arc::new(sync::SharedClock::new(raw, initial)),
+            mapping: Arc::new(sync::SharedClock::new(raw, initial, origin)),
         }
     }
 
@@ -993,6 +1020,30 @@ impl RobotClock {
         Self::from_inner(InternalClock::new(read_rtc_ns, sleep_ns), ref_time_ns)
     }
 
+    /// Builds a local monotonic clock at provider-selected reference nanoseconds.
+    ///
+    /// Metadata never transforms the timestamp or implies live synchronization.
+    #[cfg(feature = "std")]
+    pub fn from_ref_time_with_origin(ref_time_ns: u64, origin: ClockOrigin) -> Self {
+        let inner = InternalClock::new(read_rtc_ns, sleep_ns);
+        let raw = inner.now();
+        Self::from_inner_with_origin(inner, raw, ref_time_ns, origin)
+    }
+
+    /// Builds a clock at a named epoch using application RTC calibration.
+    ///
+    /// The RTC only calibrates elapsed time; `origin` describes the supplied epoch.
+    pub fn from_ref_time_with_rtc_and_origin(
+        read_rtc_ns: fn() -> u64,
+        sleep_ns: fn(u64),
+        ref_time_ns: u64,
+        origin: ClockOrigin,
+    ) -> Self {
+        let inner = InternalClock::new(read_rtc_ns, sleep_ns);
+        let raw = inner.now();
+        Self::from_inner_with_origin(inner, raw, ref_time_ns, origin)
+    }
+
     /// Builds a clock controlled by a mock, shared by all clones.
     pub fn mock() -> (Self, RobotClockMock) {
         let (inner, state) = InternalClock::mock();
@@ -1012,6 +1063,31 @@ impl RobotClock {
         #[cfg(feature = "clock-sync")]
         {
             self.mapping.now(self.raw_now())
+        }
+    }
+
+    /// Describes the source and epoch of execution timestamps without converting them.
+    ///
+    /// Reference metadata is published with the execution mapping and shared by
+    /// clones. Before initial acquisition, the local origin remains in effect.
+    /// During resynchronization, the previous epoch remains in effect while the
+    /// execution clock slews. Providers must preserve the epoch across resync.
+    /// This accessor performs no counter read, allocation, or reference I/O.
+    ///
+    /// ```rust
+    /// use cu29_clock::{ClockEpoch, ClockSource, RobotClock};
+    /// let (clock, _) = RobotClock::mock();
+    /// assert_eq!(clock.origin().source, ClockSource::Mock);
+    /// assert_eq!(clock.origin().epoch, ClockEpoch::Local);
+    /// ```
+    pub fn origin(&self) -> ClockOrigin {
+        #[cfg(feature = "clock-sync")]
+        {
+            self.mapping.origin()
+        }
+        #[cfg(not(feature = "clock-sync"))]
+        {
+            self.origin
         }
     }
 
@@ -1149,8 +1225,27 @@ mod tests {
             let quality: Option<sync::SyncStatus> = clock.sync_status();
             assert_eq!(quality, None);
             assert_eq!(clone.sync_status(), None);
+            assert_eq!(clock.origin(), clone.origin());
+            assert_eq!(clock.origin().epoch, ClockEpoch::Local);
+            assert_eq!(clock.origin().source, ClockSource::Mock);
             assert_eq!(clock.now(), CuTime(value));
         }
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_named_reference_epoch_is_shared_without_conversion() {
+        let origin = ClockOrigin {
+            source: ClockSource::Gnss,
+            epoch: ClockEpoch::Gps,
+        };
+        let initial = 1_400_000_000_000_000_000;
+        let clock = RobotClock::from_ref_time_with_origin(initial, origin);
+        assert_eq!(clock.origin(), origin);
+        assert_eq!(clock.clone().origin(), origin);
+        assert!(clock.now().0 >= initial);
+        assert!(clock.now().0 < initial + 1_000_000_000);
+        assert_eq!(clock.sync_status(), None);
     }
 
     #[test]
@@ -1194,18 +1289,20 @@ mod tests {
             let observation = sync::ClockObservation {
                 raw_local: instant,
                 parent_ns: 10_000_000_000,
+                origin: ClockOrigin::default(),
                 uncertainty: CuDuration(100),
                 domain,
             };
-            let legacy = (
+            let reference_fields = (
                 CuTime(nanos),
                 observation.parent_ns,
+                observation.origin,
                 observation.uncertainty,
                 domain,
             );
             assert_eq!(
                 bincode::encode_to_vec(observation, bincode::config::standard()).unwrap(),
-                bincode::encode_to_vec(legacy, bincode::config::standard()).unwrap()
+                bincode::encode_to_vec(reference_fields, bincode::config::standard()).unwrap()
             );
         }
     }

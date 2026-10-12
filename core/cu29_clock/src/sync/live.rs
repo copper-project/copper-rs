@@ -4,7 +4,7 @@ use super::{
     BILLION, ClockDomain, ClockObservation, ClockSnapshot, Quality, SyncConfig, SyncError,
     SyncState, SyncStatus, ceil_drift, checked_time, scaled,
 };
-use crate::{CuDuration, CuInstant, CuTime, RobotClock};
+use crate::{ClockOrigin, CuDuration, CuInstant, CuTime, RobotClock};
 use core::cell::UnsafeCell;
 use portable_atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 
@@ -29,12 +29,13 @@ pub(crate) struct SharedClock {
 unsafe impl Sync for SharedClock {}
 
 impl SharedClock {
-    pub(crate) fn new(raw: u64, time: u64) -> Self {
+    pub(crate) fn new(raw: u64, time: u64, origin: ClockOrigin) -> Self {
         let curve = ClockSnapshot {
             raw_anchor: raw,
             time_anchor: time,
             rate_ppb: 0,
             quality: None,
+            origin,
         };
         Self {
             slots: [UnsafeCell::new(curve), UnsafeCell::new(curve)],
@@ -52,6 +53,10 @@ impl SharedClock {
         let value = read(unsafe { &*self.slots[index].get() });
         self.readers.fetch_sub(1, Ordering::SeqCst);
         value
+    }
+
+    pub(crate) fn origin(&self) -> ClockOrigin {
+        self.read_with(|curve| curve.origin)
     }
 
     pub(crate) fn read(&self) -> ClockSnapshot {
@@ -145,6 +150,9 @@ impl ClockSync {
         {
             return Err(SyncError::InvalidSample);
         }
+        if self.aligned && !self.clock.origin().epoch.same_timeline(sample.origin.epoch) {
+            return Err(SyncError::WrongDomain);
+        }
         checked_time(i128::from(sample.parent_ns))?;
         if let Some(last) = self.len.checked_sub(1).and_then(|i| self.observations[i]) {
             if sample.raw_local <= last.raw_local {
@@ -222,6 +230,7 @@ impl ClockSync {
         if let Some(sample) = sample
             && !self.invalid
         {
+            curve.origin = sample.origin;
             let age = raw.as_nanos().saturating_sub(sample.raw_local.as_nanos());
             let parent =
                 checked_time(i128::from(sample.parent_ns) + scaled(i128::from(age), drift))?;
@@ -385,6 +394,7 @@ mod tests {
         sync.observe(ClockObservation {
             raw_local: CuInstant::from_nanos(raw),
             parent_ns: parent,
+            origin: ClockOrigin::default(),
             uncertainty: CuDuration(error),
             domain: DOMAIN,
         })
@@ -403,6 +413,113 @@ mod tests {
         observe(&mut sync, mock.value(), EPOCH + mock.value(), 100).unwrap();
         assert_eq!(sync.update().unwrap().state, SyncState::Locked);
         (clock, mock, sync)
+    }
+
+    #[test]
+    fn test_gps_origin_preserves_reference_nanoseconds_and_replays() {
+        use crate::{ClockEpoch, ClockSource};
+        let origin = ClockOrigin {
+            source: ClockSource::Gnss,
+            epoch: ClockEpoch::Gps,
+        };
+        let (clock, raw) = RobotClock::mock();
+        let clone = clock.clone();
+        let mut sync =
+            ClockSync::new(&clock, DOMAIN, SyncConfig::new(CuDuration(200_000))).unwrap();
+        assert_eq!(clone.origin().epoch, ClockEpoch::Local);
+        sync.observe(ClockObservation {
+            raw_local: raw.raw_now(),
+            parent_ns: EPOCH,
+            uncertainty: CuDuration(100),
+            domain: DOMAIN,
+            origin,
+        })
+        .unwrap();
+        // Observations alone must not relabel the still-local execution timeline.
+        assert_eq!(clone.origin().epoch, ClockEpoch::Local);
+        sync.update().unwrap();
+        assert_eq!(clock.now(), CuTime(EPOCH));
+        assert_eq!(clone.origin(), origin);
+        raw.increment(CuDuration::from_secs(1));
+        sync.observe(ClockObservation {
+            raw_local: raw.raw_now(),
+            parent_ns: EPOCH + raw.value(),
+            uncertainty: CuDuration(100),
+            domain: DOMAIN,
+            origin,
+        })
+        .unwrap();
+        assert_eq!(sync.update().unwrap().state, SyncState::Locked);
+        sync.reference_lost();
+        assert_eq!(sync.update().unwrap().state, SyncState::Holdover);
+        raw.increment(CuDuration::from_secs(6));
+        assert_eq!(clock.sync_status().unwrap().state, SyncState::Expired);
+        assert_eq!(clock.origin(), origin);
+        let encoded = bincode::encode_to_vec(sync.snapshot(), bincode::config::standard()).unwrap();
+        let (snapshot, used): (ClockSnapshot, _) =
+            bincode::decode_from_slice(&encoded, bincode::config::standard()).unwrap();
+        assert_eq!(used, encoded.len());
+        assert_eq!(snapshot.origin(), origin);
+        let (replay, replay_raw) = RobotClock::mock();
+        let _replay_sync = ClockSync::from_snapshot(&replay, snapshot).unwrap();
+        replay_raw.set_value(raw.value());
+        assert_eq!(replay.origin(), origin);
+        assert_eq!(replay.now(), clock.now());
+        sync.resync(ClockDomain {
+            session: 2,
+            ..DOMAIN
+        })
+        .unwrap();
+        assert_eq!(clock.origin(), origin);
+        let rejected = ClockObservation {
+            raw_local: raw.raw_now(),
+            parent_ns: EPOCH + raw.value(),
+            uncertainty: CuDuration(100),
+            domain: ClockDomain {
+                session: 2,
+                ..DOMAIN
+            },
+            origin: ClockOrigin {
+                epoch: ClockEpoch::Tai {
+                    tai_minus_utc_seconds: Some(37),
+                },
+                ..origin
+            },
+        };
+        assert_eq!(sync.observe(rejected), Err(SyncError::WrongDomain));
+        assert_eq!(clock.origin(), origin);
+    }
+
+    #[test]
+    fn test_tai_offset_and_provenance_updates_keep_the_epoch() {
+        use crate::{ClockEpoch, ClockSource};
+        let (clock, raw) = RobotClock::mock();
+        let mut sync =
+            ClockSync::new(&clock, DOMAIN, SyncConfig::new(CuDuration(200_000))).unwrap();
+        for (index, offset) in [None, Some(37), Some(38)].into_iter().enumerate() {
+            raw.set_value(index as u64 * 1_000_000_000);
+            let origin = ClockOrigin {
+                source: if index == 0 {
+                    ClockSource::Unknown
+                } else {
+                    ClockSource::Gnss
+                },
+                epoch: ClockEpoch::Tai {
+                    tai_minus_utc_seconds: offset,
+                },
+            };
+            sync.observe(ClockObservation {
+                raw_local: raw.raw_now(),
+                parent_ns: EPOCH + raw.value(),
+                uncertainty: CuDuration(100),
+                domain: DOMAIN,
+                origin,
+            })
+            .unwrap();
+            sync.update().unwrap();
+            assert_eq!(clock.origin(), origin);
+            assert_eq!(clock.now(), CuTime(EPOCH + raw.value()));
+        }
     }
 
     #[test]
@@ -632,6 +749,7 @@ mod tests {
             sync.observe(ClockObservation {
                 raw_local: mock.raw_now(),
                 parent_ns: EPOCH + mock.value(),
+                origin: ClockOrigin::default(),
                 uncertainty: CuDuration(100),
                 domain,
             })
@@ -753,6 +871,7 @@ mod tests {
         let sample = ClockObservation {
             raw_local: mock.raw_now(),
             parent_ns: EPOCH,
+            origin: ClockOrigin::default(),
             uncertainty: CuDuration(100),
             domain: ClockDomain {
                 session: 2,
