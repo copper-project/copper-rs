@@ -218,3 +218,21 @@ Maintainer release branches, versioning, tagging, and backporting are documented
 [RELEASING.md](RELEASING.md). Every stable minor and patch release also needs a
 published GitHub Release using its entry from the global Copper Release Notes;
 follow the [GitHub release checklist](RELEASING.md#github-release-checklist).
+
+### Clock synchronization checks
+
+Clock synchronization has deterministic raw-counter tests, mocked resource
+lifecycle/replay tests, and Linux management datagram fixtures. They require no
+PTP hardware or privileged daemon:
+
+```sh
+cargo test -p cu29-clock --features clock-sync
+cargo test -p cu29-runtime --features clock-sync,cu29/clock-sync --test clock_sync
+cargo test -p cu-ptp --features linux-phc
+cargo test -p cu-zenoh-bridge --features clock-sync --lib
+cargo check -p cu-ptp --no-default-features --target thumbv8m.main-none-eabihf
+```
+
+Run the [clock reference example](examples/cu_clock_sync/README.md) for a local
+software or PHC integration check. Clock-sync remains experimental; default and
+no-default-feature clock checks also protect the existing unsynchronized path.
