@@ -1366,651 +1366,665 @@
 <a href=#1366 id=1366 data-nosnippet>1366</a>            RuntimeLifecycleEvent::ShutdownCompleted =&gt; {
 <a href=#1367 id=1367 data-nosnippet>1367</a>                root.set_item(<span class="string">"kind"</span>, <span class="string">"shutdown_completed"</span>)<span class="question-mark">?</span>;
 <a href=#1368 id=1368 data-nosnippet>1368</a>            }
-<a href=#1369 id=1369 data-nosnippet>1369</a>        }
-<a href=#1370 id=1370 data-nosnippet>1370</a>
-<a href=#1371 id=1371 data-nosnippet>1371</a>        dict_to_namespace(root, py)
-<a href=#1372 id=1372 data-nosnippet>1372</a>    }
-<a href=#1373 id=1373 data-nosnippet>1373</a>
-<a href=#1374 id=1374 data-nosnippet>1374</a>    <span class="kw">fn </span>runtime_config_source_to_py(source: <span class="kw-2">&amp;</span>RuntimeLifecycleConfigSource) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str {
-<a href=#1375 id=1375 data-nosnippet>1375</a>        <span class="kw">match </span>source {
-<a href=#1376 id=1376 data-nosnippet>1376</a>            RuntimeLifecycleConfigSource::ProgrammaticOverride =&gt; <span class="string">"programmatic_override"</span>,
-<a href=#1377 id=1377 data-nosnippet>1377</a>            RuntimeLifecycleConfigSource::ExternalFile =&gt; <span class="string">"external_file"</span>,
-<a href=#1378 id=1378 data-nosnippet>1378</a>            RuntimeLifecycleConfigSource::BundledDefault =&gt; <span class="string">"bundled_default"</span>,
-<a href=#1379 id=1379 data-nosnippet>1379</a>        }
-<a href=#1380 id=1380 data-nosnippet>1380</a>    }
-<a href=#1381 id=1381 data-nosnippet>1381</a>
-<a href=#1382 id=1382 data-nosnippet>1382</a>    <span class="kw">fn </span>metadata_to_py(metadata: <span class="kw-2">&amp;</span><span class="kw">dyn </span>CuMsgMetadataTrait, py: Python&lt;<span class="lifetime">'_</span>&gt;) -&gt; PyResult&lt;Py&lt;PyAny&gt;&gt; {
-<a href=#1383 id=1383 data-nosnippet>1383</a>        <span class="kw">let </span>process = metadata.process_time();
-<a href=#1384 id=1384 data-nosnippet>1384</a>        <span class="kw">let </span>start: <span class="prelude-ty">Option</span>&lt;CuTime&gt; = process.start.into();
-<a href=#1385 id=1385 data-nosnippet>1385</a>        <span class="kw">let </span>end: <span class="prelude-ty">Option</span>&lt;CuTime&gt; = process.end.into();
-<a href=#1386 id=1386 data-nosnippet>1386</a>
-<a href=#1387 id=1387 data-nosnippet>1387</a>        <span class="kw">let </span>process_time = PyDict::new(py);
-<a href=#1388 id=1388 data-nosnippet>1388</a>        process_time.set_item(<span class="string">"start_ns"</span>, start.map(|t| t.as_nanos()))<span class="question-mark">?</span>;
-<a href=#1389 id=1389 data-nosnippet>1389</a>        process_time.set_item(<span class="string">"end_ns"</span>, end.map(|t| t.as_nanos()))<span class="question-mark">?</span>;
-<a href=#1390 id=1390 data-nosnippet>1390</a>
-<a href=#1391 id=1391 data-nosnippet>1391</a>        <span class="kw">let </span>metadata_py = PyDict::new(py);
-<a href=#1392 id=1392 data-nosnippet>1392</a>        metadata_py.set_item(<span class="string">"process_time"</span>, dict_to_namespace(process_time, py)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
-<a href=#1393 id=1393 data-nosnippet>1393</a>        metadata_py.set_item(<span class="string">"status_txt"</span>, metadata.status_txt().<span class="number">0</span>.to_string())<span class="question-mark">?</span>;
-<a href=#1394 id=1394 data-nosnippet>1394</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(origin) = metadata.origin() {
-<a href=#1395 id=1395 data-nosnippet>1395</a>            <span class="kw">let </span>origin_py = PyDict::new(py);
-<a href=#1396 id=1396 data-nosnippet>1396</a>            origin_py.set_item(<span class="string">"subsystem_code"</span>, origin.subsystem_code)<span class="question-mark">?</span>;
-<a href=#1397 id=1397 data-nosnippet>1397</a>            origin_py.set_item(<span class="string">"instance_id"</span>, origin.instance_id)<span class="question-mark">?</span>;
-<a href=#1398 id=1398 data-nosnippet>1398</a>            origin_py.set_item(<span class="string">"cl_id"</span>, origin.cl_id)<span class="question-mark">?</span>;
-<a href=#1399 id=1399 data-nosnippet>1399</a>            metadata_py.set_item(<span class="string">"origin"</span>, dict_to_namespace(origin_py, py)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
-<a href=#1400 id=1400 data-nosnippet>1400</a>        } <span class="kw">else </span>{
-<a href=#1401 id=1401 data-nosnippet>1401</a>            metadata_py.set_item(<span class="string">"origin"</span>, py.<span class="prelude-val">None</span>())<span class="question-mark">?</span>;
-<a href=#1402 id=1402 data-nosnippet>1402</a>        }
-<a href=#1403 id=1403 data-nosnippet>1403</a>        dict_to_namespace(metadata_py, py)
-<a href=#1404 id=1404 data-nosnippet>1404</a>    }
-<a href=#1405 id=1405 data-nosnippet>1405</a>
-<a href=#1406 id=1406 data-nosnippet>1406</a>    <span class="kw">fn </span>tov_to_py(tov: Tov, py: Python&lt;<span class="lifetime">'_</span>&gt;) -&gt; PyResult&lt;Py&lt;PyAny&gt;&gt; {
-<a href=#1407 id=1407 data-nosnippet>1407</a>        <span class="kw">let </span>tov_py = PyDict::new(py);
-<a href=#1408 id=1408 data-nosnippet>1408</a>        <span class="kw">match </span>tov {
-<a href=#1409 id=1409 data-nosnippet>1409</a>            Tov::None =&gt; {
-<a href=#1410 id=1410 data-nosnippet>1410</a>                tov_py.set_item(<span class="string">"kind"</span>, <span class="string">"none"</span>)<span class="question-mark">?</span>;
-<a href=#1411 id=1411 data-nosnippet>1411</a>            }
-<a href=#1412 id=1412 data-nosnippet>1412</a>            Tov::Time(t) =&gt; {
-<a href=#1413 id=1413 data-nosnippet>1413</a>                tov_py.set_item(<span class="string">"kind"</span>, <span class="string">"time"</span>)<span class="question-mark">?</span>;
-<a href=#1414 id=1414 data-nosnippet>1414</a>                tov_py.set_item(<span class="string">"time_ns"</span>, t.as_nanos())<span class="question-mark">?</span>;
-<a href=#1415 id=1415 data-nosnippet>1415</a>            }
-<a href=#1416 id=1416 data-nosnippet>1416</a>            Tov::Range(r) =&gt; {
-<a href=#1417 id=1417 data-nosnippet>1417</a>                tov_py.set_item(<span class="string">"kind"</span>, <span class="string">"range"</span>)<span class="question-mark">?</span>;
-<a href=#1418 id=1418 data-nosnippet>1418</a>                tov_py.set_item(<span class="string">"start_ns"</span>, r.start.as_nanos())<span class="question-mark">?</span>;
-<a href=#1419 id=1419 data-nosnippet>1419</a>                tov_py.set_item(<span class="string">"end_ns"</span>, r.end.as_nanos())<span class="question-mark">?</span>;
-<a href=#1420 id=1420 data-nosnippet>1420</a>            }
-<a href=#1421 id=1421 data-nosnippet>1421</a>        }
-<a href=#1422 id=1422 data-nosnippet>1422</a>        dict_to_namespace(tov_py, py)
-<a href=#1423 id=1423 data-nosnippet>1423</a>    }
-<a href=#1424 id=1424 data-nosnippet>1424</a>
-<a href=#1425 id=1425 data-nosnippet>1425</a>    <span class="kw">fn </span>partial_reflect_to_py(value: <span class="kw-2">&amp;</span><span class="kw">dyn </span>PartialReflect, py: Python&lt;<span class="lifetime">'_</span>&gt;) -&gt; PyResult&lt;Py&lt;PyAny&gt;&gt; {
-<a href=#1426 id=1426 data-nosnippet>1426</a>        <span class="attr">#[allow(unreachable_patterns)]
-<a href=#1427 id=1427 data-nosnippet>1427</a>        </span><span class="kw">match </span>value.reflect_ref() {
-<a href=#1428 id=1428 data-nosnippet>1428</a>            ReflectRef::Struct(s) =&gt; struct_to_py(s, py),
-<a href=#1429 id=1429 data-nosnippet>1429</a>            ReflectRef::TupleStruct(ts) =&gt; tuple_struct_to_py(ts, py),
-<a href=#1430 id=1430 data-nosnippet>1430</a>            ReflectRef::Tuple(t) =&gt; tuple_to_py(t, py),
-<a href=#1431 id=1431 data-nosnippet>1431</a>            ReflectRef::List(list) =&gt; list_to_py(list, py),
-<a href=#1432 id=1432 data-nosnippet>1432</a>            ReflectRef::Array(array) =&gt; array_to_py(array, py),
-<a href=#1433 id=1433 data-nosnippet>1433</a>            ReflectRef::Map(map) =&gt; map_to_py(map, py),
-<a href=#1434 id=1434 data-nosnippet>1434</a>            ReflectRef::Set(set) =&gt; set_to_py(set, py),
-<a href=#1435 id=1435 data-nosnippet>1435</a>            ReflectRef::Enum(e) =&gt; enum_to_py(e, py),
-<a href=#1436 id=1436 data-nosnippet>1436</a>            ReflectRef::Opaque(opaque) =&gt; opaque_to_py(opaque, py),
-<a href=#1437 id=1437 data-nosnippet>1437</a>            <span class="kw">_ </span>=&gt; <span class="prelude-val">Ok</span>(py.<span class="prelude-val">None</span>()),
-<a href=#1438 id=1438 data-nosnippet>1438</a>        }
-<a href=#1439 id=1439 data-nosnippet>1439</a>    }
-<a href=#1440 id=1440 data-nosnippet>1440</a>
-<a href=#1441 id=1441 data-nosnippet>1441</a>    <span class="kw">fn </span>struct_to_py(value: <span class="kw-2">&amp;</span><span class="kw">dyn </span>cu29::bevy_reflect::Struct, py: Python&lt;<span class="lifetime">'_</span>&gt;) -&gt; PyResult&lt;Py&lt;PyAny&gt;&gt; {
-<a href=#1442 id=1442 data-nosnippet>1442</a>        <span class="kw">let </span>dict = PyDict::new(py);
-<a href=#1443 id=1443 data-nosnippet>1443</a>        <span class="kw">for </span>idx <span class="kw">in </span><span class="number">0</span>..value.field_len() {
-<a href=#1444 id=1444 data-nosnippet>1444</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(field) = value.field_at(idx) {
-<a href=#1445 id=1445 data-nosnippet>1445</a>                <span class="kw">let </span>name = value
-<a href=#1446 id=1446 data-nosnippet>1446</a>                    .name_at(idx)
-<a href=#1447 id=1447 data-nosnippet>1447</a>                    .map(str::to_owned)
-<a href=#1448 id=1448 data-nosnippet>1448</a>                    .unwrap_or_else(|| <span class="macro">format!</span>(<span class="string">"field_{idx}"</span>));
-<a href=#1449 id=1449 data-nosnippet>1449</a>                dict.set_item(name, partial_reflect_to_py(field, py)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
-<a href=#1450 id=1450 data-nosnippet>1450</a>            }
-<a href=#1451 id=1451 data-nosnippet>1451</a>        }
-<a href=#1452 id=1452 data-nosnippet>1452</a>
-<a href=#1453 id=1453 data-nosnippet>1453</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(unit) = unit_abbrev_for_type_path(value.reflect_type_path())
-<a href=#1454 id=1454 data-nosnippet>1454</a>            &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(raw_value) = dict.get_item(<span class="string">"value"</span>)<span class="question-mark">?
-<a href=#1455 id=1455 data-nosnippet>1455</a>        </span>{
-<a href=#1456 id=1456 data-nosnippet>1456</a>            <span class="kw">if let </span><span class="prelude-val">Ok</span>(v) = raw_value.extract::&lt;f64&gt;() {
-<a href=#1457 id=1457 data-nosnippet>1457</a>                <span class="kw">let </span>unit_value = PyUnitValue {
-<a href=#1458 id=1458 data-nosnippet>1458</a>                    value: v,
-<a href=#1459 id=1459 data-nosnippet>1459</a>                    unit: unit.to_string(),
-<a href=#1460 id=1460 data-nosnippet>1460</a>                };
-<a href=#1461 id=1461 data-nosnippet>1461</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(Py::new(py, unit_value)<span class="question-mark">?</span>.into());
-<a href=#1462 id=1462 data-nosnippet>1462</a>            }
-<a href=#1463 id=1463 data-nosnippet>1463</a>            <span class="kw">if let </span><span class="prelude-val">Ok</span>(v) = raw_value.extract::&lt;f32&gt;() {
-<a href=#1464 id=1464 data-nosnippet>1464</a>                <span class="kw">let </span>unit_value = PyUnitValue {
-<a href=#1465 id=1465 data-nosnippet>1465</a>                    value: v <span class="kw">as </span>f64,
-<a href=#1466 id=1466 data-nosnippet>1466</a>                    unit: unit.to_string(),
-<a href=#1467 id=1467 data-nosnippet>1467</a>                };
-<a href=#1468 id=1468 data-nosnippet>1468</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(Py::new(py, unit_value)<span class="question-mark">?</span>.into());
-<a href=#1469 id=1469 data-nosnippet>1469</a>            }
-<a href=#1470 id=1470 data-nosnippet>1470</a>        }
-<a href=#1471 id=1471 data-nosnippet>1471</a>
-<a href=#1472 id=1472 data-nosnippet>1472</a>        dict_to_namespace(dict, py)
-<a href=#1473 id=1473 data-nosnippet>1473</a>    }
-<a href=#1474 id=1474 data-nosnippet>1474</a>
-<a href=#1475 id=1475 data-nosnippet>1475</a>    <span class="kw">fn </span>tuple_struct_to_py(
-<a href=#1476 id=1476 data-nosnippet>1476</a>        value: <span class="kw-2">&amp;</span><span class="kw">dyn </span>cu29::bevy_reflect::TupleStruct,
-<a href=#1477 id=1477 data-nosnippet>1477</a>        py: Python&lt;<span class="lifetime">'_</span>&gt;,
-<a href=#1478 id=1478 data-nosnippet>1478</a>    ) -&gt; PyResult&lt;Py&lt;PyAny&gt;&gt; {
-<a href=#1479 id=1479 data-nosnippet>1479</a>        <span class="kw">let </span><span class="kw-2">mut </span>fields = Vec::with_capacity(value.field_len());
-<a href=#1480 id=1480 data-nosnippet>1480</a>        <span class="kw">for </span>idx <span class="kw">in </span><span class="number">0</span>..value.field_len() {
-<a href=#1481 id=1481 data-nosnippet>1481</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(field) = value.field(idx) {
-<a href=#1482 id=1482 data-nosnippet>1482</a>                fields.push(partial_reflect_to_py(field, py)<span class="question-mark">?</span>);
-<a href=#1483 id=1483 data-nosnippet>1483</a>            } <span class="kw">else </span>{
-<a href=#1484 id=1484 data-nosnippet>1484</a>                fields.push(py.<span class="prelude-val">None</span>());
-<a href=#1485 id=1485 data-nosnippet>1485</a>            }
-<a href=#1486 id=1486 data-nosnippet>1486</a>        }
-<a href=#1487 id=1487 data-nosnippet>1487</a>        <span class="prelude-val">Ok</span>(PyList::new(py, fields)<span class="question-mark">?</span>.into_pyobject(py)<span class="question-mark">?</span>.into())
-<a href=#1488 id=1488 data-nosnippet>1488</a>    }
-<a href=#1489 id=1489 data-nosnippet>1489</a>
-<a href=#1490 id=1490 data-nosnippet>1490</a>    <span class="kw">fn </span>tuple_to_py(value: <span class="kw-2">&amp;</span><span class="kw">dyn </span>cu29::bevy_reflect::Tuple, py: Python&lt;<span class="lifetime">'_</span>&gt;) -&gt; PyResult&lt;Py&lt;PyAny&gt;&gt; {
-<a href=#1491 id=1491 data-nosnippet>1491</a>        <span class="kw">let </span><span class="kw-2">mut </span>fields = Vec::with_capacity(value.field_len());
-<a href=#1492 id=1492 data-nosnippet>1492</a>        <span class="kw">for </span>idx <span class="kw">in </span><span class="number">0</span>..value.field_len() {
-<a href=#1493 id=1493 data-nosnippet>1493</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(field) = value.field(idx) {
-<a href=#1494 id=1494 data-nosnippet>1494</a>                fields.push(partial_reflect_to_py(field, py)<span class="question-mark">?</span>);
-<a href=#1495 id=1495 data-nosnippet>1495</a>            } <span class="kw">else </span>{
-<a href=#1496 id=1496 data-nosnippet>1496</a>                fields.push(py.<span class="prelude-val">None</span>());
-<a href=#1497 id=1497 data-nosnippet>1497</a>            }
-<a href=#1498 id=1498 data-nosnippet>1498</a>        }
-<a href=#1499 id=1499 data-nosnippet>1499</a>        <span class="prelude-val">Ok</span>(PyList::new(py, fields)<span class="question-mark">?</span>.into_pyobject(py)<span class="question-mark">?</span>.into())
-<a href=#1500 id=1500 data-nosnippet>1500</a>    }
-<a href=#1501 id=1501 data-nosnippet>1501</a>
-<a href=#1502 id=1502 data-nosnippet>1502</a>    <span class="kw">fn </span>list_to_py(value: <span class="kw-2">&amp;</span><span class="kw">dyn </span>cu29::bevy_reflect::List, py: Python&lt;<span class="lifetime">'_</span>&gt;) -&gt; PyResult&lt;Py&lt;PyAny&gt;&gt; {
-<a href=#1503 id=1503 data-nosnippet>1503</a>        <span class="kw">let </span><span class="kw-2">mut </span>items = Vec::with_capacity(value.len());
-<a href=#1504 id=1504 data-nosnippet>1504</a>        <span class="kw">for </span>item <span class="kw">in </span>value.iter() {
-<a href=#1505 id=1505 data-nosnippet>1505</a>            items.push(partial_reflect_to_py(item, py)<span class="question-mark">?</span>);
-<a href=#1506 id=1506 data-nosnippet>1506</a>        }
-<a href=#1507 id=1507 data-nosnippet>1507</a>        <span class="prelude-val">Ok</span>(PyList::new(py, items)<span class="question-mark">?</span>.into_pyobject(py)<span class="question-mark">?</span>.into())
-<a href=#1508 id=1508 data-nosnippet>1508</a>    }
-<a href=#1509 id=1509 data-nosnippet>1509</a>
-<a href=#1510 id=1510 data-nosnippet>1510</a>    <span class="kw">fn </span>array_to_py(value: <span class="kw-2">&amp;</span><span class="kw">dyn </span>cu29::bevy_reflect::Array, py: Python&lt;<span class="lifetime">'_</span>&gt;) -&gt; PyResult&lt;Py&lt;PyAny&gt;&gt; {
-<a href=#1511 id=1511 data-nosnippet>1511</a>        <span class="kw">let </span><span class="kw-2">mut </span>items = Vec::with_capacity(value.len());
-<a href=#1512 id=1512 data-nosnippet>1512</a>        <span class="kw">for </span>item <span class="kw">in </span>value.iter() {
-<a href=#1513 id=1513 data-nosnippet>1513</a>            items.push(partial_reflect_to_py(item, py)<span class="question-mark">?</span>);
-<a href=#1514 id=1514 data-nosnippet>1514</a>        }
-<a href=#1515 id=1515 data-nosnippet>1515</a>        <span class="prelude-val">Ok</span>(PyList::new(py, items)<span class="question-mark">?</span>.into_pyobject(py)<span class="question-mark">?</span>.into())
-<a href=#1516 id=1516 data-nosnippet>1516</a>    }
-<a href=#1517 id=1517 data-nosnippet>1517</a>
-<a href=#1518 id=1518 data-nosnippet>1518</a>    <span class="kw">fn </span>map_to_py(value: <span class="kw-2">&amp;</span><span class="kw">dyn </span>cu29::bevy_reflect::Map, py: Python&lt;<span class="lifetime">'_</span>&gt;) -&gt; PyResult&lt;Py&lt;PyAny&gt;&gt; {
-<a href=#1519 id=1519 data-nosnippet>1519</a>        <span class="kw">let </span>dict = PyDict::new(py);
-<a href=#1520 id=1520 data-nosnippet>1520</a>        <span class="kw">for </span>(key, val) <span class="kw">in </span>value.iter() {
-<a href=#1521 id=1521 data-nosnippet>1521</a>            <span class="kw">let </span>key_str = reflect_key_to_string(key);
-<a href=#1522 id=1522 data-nosnippet>1522</a>            dict.set_item(key_str, partial_reflect_to_py(val, py)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
-<a href=#1523 id=1523 data-nosnippet>1523</a>        }
-<a href=#1524 id=1524 data-nosnippet>1524</a>        <span class="prelude-val">Ok</span>(dict.into_pyobject(py)<span class="question-mark">?</span>.into())
-<a href=#1525 id=1525 data-nosnippet>1525</a>    }
-<a href=#1526 id=1526 data-nosnippet>1526</a>
-<a href=#1527 id=1527 data-nosnippet>1527</a>    <span class="kw">fn </span>set_to_py(value: <span class="kw-2">&amp;</span><span class="kw">dyn </span>cu29::bevy_reflect::Set, py: Python&lt;<span class="lifetime">'_</span>&gt;) -&gt; PyResult&lt;Py&lt;PyAny&gt;&gt; {
-<a href=#1528 id=1528 data-nosnippet>1528</a>        <span class="kw">let </span><span class="kw-2">mut </span>items = Vec::with_capacity(value.len());
-<a href=#1529 id=1529 data-nosnippet>1529</a>        <span class="kw">for </span>item <span class="kw">in </span>value.iter() {
-<a href=#1530 id=1530 data-nosnippet>1530</a>            items.push(partial_reflect_to_py(item, py)<span class="question-mark">?</span>);
-<a href=#1531 id=1531 data-nosnippet>1531</a>        }
-<a href=#1532 id=1532 data-nosnippet>1532</a>        <span class="prelude-val">Ok</span>(PyList::new(py, items)<span class="question-mark">?</span>.into_pyobject(py)<span class="question-mark">?</span>.into())
-<a href=#1533 id=1533 data-nosnippet>1533</a>    }
-<a href=#1534 id=1534 data-nosnippet>1534</a>
-<a href=#1535 id=1535 data-nosnippet>1535</a>    <span class="kw">fn </span>enum_to_py(value: <span class="kw-2">&amp;</span><span class="kw">dyn </span>cu29::bevy_reflect::Enum, py: Python&lt;<span class="lifetime">'_</span>&gt;) -&gt; PyResult&lt;Py&lt;PyAny&gt;&gt; {
-<a href=#1536 id=1536 data-nosnippet>1536</a>        <span class="kw">let </span>dict = PyDict::new(py);
-<a href=#1537 id=1537 data-nosnippet>1537</a>        dict.set_item(<span class="string">"variant"</span>, value.variant_name())<span class="question-mark">?</span>;
-<a href=#1538 id=1538 data-nosnippet>1538</a>
-<a href=#1539 id=1539 data-nosnippet>1539</a>        <span class="kw">match </span>value.variant_type() {
-<a href=#1540 id=1540 data-nosnippet>1540</a>            VariantType::Unit =&gt; {}
-<a href=#1541 id=1541 data-nosnippet>1541</a>            VariantType::Tuple =&gt; {
-<a href=#1542 id=1542 data-nosnippet>1542</a>                <span class="kw">let </span><span class="kw-2">mut </span>fields = Vec::with_capacity(value.field_len());
-<a href=#1543 id=1543 data-nosnippet>1543</a>                <span class="kw">for </span>idx <span class="kw">in </span><span class="number">0</span>..value.field_len() {
-<a href=#1544 id=1544 data-nosnippet>1544</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(field) = value.field_at(idx) {
-<a href=#1545 id=1545 data-nosnippet>1545</a>                        fields.push(partial_reflect_to_py(field, py)<span class="question-mark">?</span>);
-<a href=#1546 id=1546 data-nosnippet>1546</a>                    } <span class="kw">else </span>{
-<a href=#1547 id=1547 data-nosnippet>1547</a>                        fields.push(py.<span class="prelude-val">None</span>());
-<a href=#1548 id=1548 data-nosnippet>1548</a>                    }
-<a href=#1549 id=1549 data-nosnippet>1549</a>                }
-<a href=#1550 id=1550 data-nosnippet>1550</a>                dict.set_item(<span class="string">"fields"</span>, PyList::new(py, fields)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
-<a href=#1551 id=1551 data-nosnippet>1551</a>            }
-<a href=#1552 id=1552 data-nosnippet>1552</a>            VariantType::Struct =&gt; {
-<a href=#1553 id=1553 data-nosnippet>1553</a>                <span class="kw">let </span>fields = PyDict::new(py);
-<a href=#1554 id=1554 data-nosnippet>1554</a>                <span class="kw">for </span>idx <span class="kw">in </span><span class="number">0</span>..value.field_len() {
-<a href=#1555 id=1555 data-nosnippet>1555</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(field) = value.field_at(idx) {
-<a href=#1556 id=1556 data-nosnippet>1556</a>                        <span class="kw">let </span>name = value
-<a href=#1557 id=1557 data-nosnippet>1557</a>                            .name_at(idx)
-<a href=#1558 id=1558 data-nosnippet>1558</a>                            .map(str::to_owned)
-<a href=#1559 id=1559 data-nosnippet>1559</a>                            .unwrap_or_else(|| <span class="macro">format!</span>(<span class="string">"field_{idx}"</span>));
-<a href=#1560 id=1560 data-nosnippet>1560</a>                        fields.set_item(name, partial_reflect_to_py(field, py)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
-<a href=#1561 id=1561 data-nosnippet>1561</a>                    }
-<a href=#1562 id=1562 data-nosnippet>1562</a>                }
-<a href=#1563 id=1563 data-nosnippet>1563</a>                dict.set_item(<span class="string">"fields"</span>, fields)<span class="question-mark">?</span>;
-<a href=#1564 id=1564 data-nosnippet>1564</a>            }
-<a href=#1565 id=1565 data-nosnippet>1565</a>        }
-<a href=#1566 id=1566 data-nosnippet>1566</a>
-<a href=#1567 id=1567 data-nosnippet>1567</a>        dict_to_namespace(dict, py)
-<a href=#1568 id=1568 data-nosnippet>1568</a>    }
-<a href=#1569 id=1569 data-nosnippet>1569</a>
-<a href=#1570 id=1570 data-nosnippet>1570</a>    <span class="kw">fn </span>dict_to_namespace(dict: Bound&lt;<span class="lifetime">'_</span>, PyDict&gt;, py: Python&lt;<span class="lifetime">'_</span>&gt;) -&gt; PyResult&lt;Py&lt;PyAny&gt;&gt; {
-<a href=#1571 id=1571 data-nosnippet>1571</a>        <span class="kw">let </span>types = py.import(<span class="string">"types"</span>)<span class="question-mark">?</span>;
-<a href=#1572 id=1572 data-nosnippet>1572</a>        <span class="kw">let </span>namespace_ctor = types.getattr(<span class="string">"SimpleNamespace"</span>)<span class="question-mark">?</span>;
-<a href=#1573 id=1573 data-nosnippet>1573</a>        <span class="kw">let </span>namespace = namespace_ctor.call((), <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>dict))<span class="question-mark">?</span>;
-<a href=#1574 id=1574 data-nosnippet>1574</a>        <span class="prelude-val">Ok</span>(namespace.into())
-<a href=#1575 id=1575 data-nosnippet>1575</a>    }
-<a href=#1576 id=1576 data-nosnippet>1576</a>
-<a href=#1577 id=1577 data-nosnippet>1577</a>    <span class="kw">fn </span>reflect_key_to_string(value: <span class="kw-2">&amp;</span><span class="kw">dyn </span>PartialReflect) -&gt; String {
-<a href=#1578 id=1578 data-nosnippet>1578</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(v) = value.try_downcast_ref::&lt;String&gt;() {
-<a href=#1579 id=1579 data-nosnippet>1579</a>            <span class="kw">return </span>v.clone();
-<a href=#1580 id=1580 data-nosnippet>1580</a>        }
-<a href=#1581 id=1581 data-nosnippet>1581</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(v) = value.try_downcast_ref::&lt;<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str&gt;() {
-<a href=#1582 id=1582 data-nosnippet>1582</a>            <span class="kw">return </span>(<span class="kw-2">*</span>v).to_string();
-<a href=#1583 id=1583 data-nosnippet>1583</a>        }
-<a href=#1584 id=1584 data-nosnippet>1584</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(v) = value.try_downcast_ref::&lt;char&gt;() {
-<a href=#1585 id=1585 data-nosnippet>1585</a>            <span class="kw">return </span>v.to_string();
-<a href=#1586 id=1586 data-nosnippet>1586</a>        }
-<a href=#1587 id=1587 data-nosnippet>1587</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(v) = value.try_downcast_ref::&lt;bool&gt;() {
-<a href=#1588 id=1588 data-nosnippet>1588</a>            <span class="kw">return </span>v.to_string();
-<a href=#1589 id=1589 data-nosnippet>1589</a>        }
-<a href=#1590 id=1590 data-nosnippet>1590</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(v) = value.try_downcast_ref::&lt;u64&gt;() {
-<a href=#1591 id=1591 data-nosnippet>1591</a>            <span class="kw">return </span>v.to_string();
-<a href=#1592 id=1592 data-nosnippet>1592</a>        }
-<a href=#1593 id=1593 data-nosnippet>1593</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(v) = value.try_downcast_ref::&lt;i64&gt;() {
-<a href=#1594 id=1594 data-nosnippet>1594</a>            <span class="kw">return </span>v.to_string();
-<a href=#1595 id=1595 data-nosnippet>1595</a>        }
-<a href=#1596 id=1596 data-nosnippet>1596</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(v) = value.try_downcast_ref::&lt;usize&gt;() {
-<a href=#1597 id=1597 data-nosnippet>1597</a>            <span class="kw">return </span>v.to_string();
-<a href=#1598 id=1598 data-nosnippet>1598</a>        }
-<a href=#1599 id=1599 data-nosnippet>1599</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(v) = value.try_downcast_ref::&lt;isize&gt;() {
-<a href=#1600 id=1600 data-nosnippet>1600</a>            <span class="kw">return </span>v.to_string();
-<a href=#1601 id=1601 data-nosnippet>1601</a>        }
-<a href=#1602 id=1602 data-nosnippet>1602</a>        <span class="macro">format!</span>(<span class="string">"{value:?}"</span>)
-<a href=#1603 id=1603 data-nosnippet>1603</a>    }
-<a href=#1604 id=1604 data-nosnippet>1604</a>
-<a href=#1605 id=1605 data-nosnippet>1605</a>    <span class="kw">fn </span>unit_abbrev_for_type_path(type_path: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str&gt; {
-<a href=#1606 id=1606 data-nosnippet>1606</a>        <span class="kw">match </span>type_path.rsplit(<span class="string">"::"</span>).next()<span class="question-mark">? </span>{
-<a href=#1607 id=1607 data-nosnippet>1607</a>            <span class="string">"Acceleration" </span>=&gt; <span class="prelude-val">Some</span>(<span class="string">"m/s^2"</span>),
-<a href=#1608 id=1608 data-nosnippet>1608</a>            <span class="string">"Angle" </span>=&gt; <span class="prelude-val">Some</span>(<span class="string">"rad"</span>),
-<a href=#1609 id=1609 data-nosnippet>1609</a>            <span class="string">"AngularVelocity" </span>=&gt; <span class="prelude-val">Some</span>(<span class="string">"rad/s"</span>),
-<a href=#1610 id=1610 data-nosnippet>1610</a>            <span class="string">"ElectricPotential" </span>=&gt; <span class="prelude-val">Some</span>(<span class="string">"V"</span>),
-<a href=#1611 id=1611 data-nosnippet>1611</a>            <span class="string">"Length" </span>=&gt; <span class="prelude-val">Some</span>(<span class="string">"m"</span>),
-<a href=#1612 id=1612 data-nosnippet>1612</a>            <span class="string">"MagneticFluxDensity" </span>=&gt; <span class="prelude-val">Some</span>(<span class="string">"T"</span>),
-<a href=#1613 id=1613 data-nosnippet>1613</a>            <span class="string">"Pressure" </span>=&gt; <span class="prelude-val">Some</span>(<span class="string">"Pa"</span>),
-<a href=#1614 id=1614 data-nosnippet>1614</a>            <span class="string">"Ratio" </span>=&gt; <span class="prelude-val">Some</span>(<span class="string">"1"</span>),
-<a href=#1615 id=1615 data-nosnippet>1615</a>            <span class="string">"ThermodynamicTemperature" </span>=&gt; <span class="prelude-val">Some</span>(<span class="string">"K"</span>),
-<a href=#1616 id=1616 data-nosnippet>1616</a>            <span class="string">"Time" </span>=&gt; <span class="prelude-val">Some</span>(<span class="string">"s"</span>),
-<a href=#1617 id=1617 data-nosnippet>1617</a>            <span class="string">"Velocity" </span>=&gt; <span class="prelude-val">Some</span>(<span class="string">"m/s"</span>),
-<a href=#1618 id=1618 data-nosnippet>1618</a>            <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
-<a href=#1619 id=1619 data-nosnippet>1619</a>        }
-<a href=#1620 id=1620 data-nosnippet>1620</a>    }
-<a href=#1621 id=1621 data-nosnippet>1621</a>
-<a href=#1622 id=1622 data-nosnippet>1622</a>    <span class="kw">fn </span>opaque_to_py(value: <span class="kw-2">&amp;</span><span class="kw">dyn </span>PartialReflect, py: Python&lt;<span class="lifetime">'_</span>&gt;) -&gt; PyResult&lt;Py&lt;PyAny&gt;&gt; {
-<a href=#1623 id=1623 data-nosnippet>1623</a>        <span class="macro">macro_rules!</span> downcast_copy {
-<a href=#1624 id=1624 data-nosnippet>1624</a>            (<span class="macro-nonterminal">$ty</span>:ty) =&gt; {
-<a href=#1625 id=1625 data-nosnippet>1625</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(v) = value.try_downcast_ref::&lt;<span class="macro-nonterminal">$ty</span>&gt;() {
-<a href=#1626 id=1626 data-nosnippet>1626</a>                    <span class="kw">return </span><span class="prelude-val">Ok</span>(v.into_pyobject(py)<span class="question-mark">?</span>.to_owned().into());
-<a href=#1627 id=1627 data-nosnippet>1627</a>                }
-<a href=#1628 id=1628 data-nosnippet>1628</a>            };
-<a href=#1629 id=1629 data-nosnippet>1629</a>        }
-<a href=#1630 id=1630 data-nosnippet>1630</a>
-<a href=#1631 id=1631 data-nosnippet>1631</a>        <span class="macro">downcast_copy!</span>(bool);
-<a href=#1632 id=1632 data-nosnippet>1632</a>        <span class="macro">downcast_copy!</span>(u8);
-<a href=#1633 id=1633 data-nosnippet>1633</a>        <span class="macro">downcast_copy!</span>(u16);
-<a href=#1634 id=1634 data-nosnippet>1634</a>        <span class="macro">downcast_copy!</span>(u32);
-<a href=#1635 id=1635 data-nosnippet>1635</a>        <span class="macro">downcast_copy!</span>(u64);
-<a href=#1636 id=1636 data-nosnippet>1636</a>        <span class="macro">downcast_copy!</span>(u128);
-<a href=#1637 id=1637 data-nosnippet>1637</a>        <span class="macro">downcast_copy!</span>(usize);
-<a href=#1638 id=1638 data-nosnippet>1638</a>        <span class="macro">downcast_copy!</span>(i8);
-<a href=#1639 id=1639 data-nosnippet>1639</a>        <span class="macro">downcast_copy!</span>(i16);
-<a href=#1640 id=1640 data-nosnippet>1640</a>        <span class="macro">downcast_copy!</span>(i32);
-<a href=#1641 id=1641 data-nosnippet>1641</a>        <span class="macro">downcast_copy!</span>(i64);
-<a href=#1642 id=1642 data-nosnippet>1642</a>        <span class="macro">downcast_copy!</span>(i128);
-<a href=#1643 id=1643 data-nosnippet>1643</a>        <span class="macro">downcast_copy!</span>(isize);
-<a href=#1644 id=1644 data-nosnippet>1644</a>        <span class="macro">downcast_copy!</span>(f32);
-<a href=#1645 id=1645 data-nosnippet>1645</a>        <span class="macro">downcast_copy!</span>(f64);
-<a href=#1646 id=1646 data-nosnippet>1646</a>        <span class="macro">downcast_copy!</span>(char);
-<a href=#1647 id=1647 data-nosnippet>1647</a>
-<a href=#1648 id=1648 data-nosnippet>1648</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(v) = value.try_downcast_ref::&lt;String&gt;() {
-<a href=#1649 id=1649 data-nosnippet>1649</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(v.into_pyobject(py)<span class="question-mark">?</span>.into());
-<a href=#1650 id=1650 data-nosnippet>1650</a>        }
-<a href=#1651 id=1651 data-nosnippet>1651</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(v) = value.try_downcast_ref::&lt;<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str&gt;() {
-<a href=#1652 id=1652 data-nosnippet>1652</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(v.into_pyobject(py)<span class="question-mark">?</span>.into());
-<a href=#1653 id=1653 data-nosnippet>1653</a>        }
-<a href=#1654 id=1654 data-nosnippet>1654</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(v) = value.try_downcast_ref::&lt;Vec&lt;u8&gt;&gt;() {
-<a href=#1655 id=1655 data-nosnippet>1655</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(v.into_pyobject(py)<span class="question-mark">?</span>.into());
-<a href=#1656 id=1656 data-nosnippet>1656</a>        }
-<a href=#1657 id=1657 data-nosnippet>1657</a>
-<a href=#1658 id=1658 data-nosnippet>1658</a>        <span class="kw">let </span>fallback = <span class="macro">format!</span>(<span class="string">"{value:?}"</span>);
-<a href=#1659 id=1659 data-nosnippet>1659</a>        <span class="prelude-val">Ok</span>(fallback.into_pyobject(py)<span class="question-mark">?</span>.into())
-<a href=#1660 id=1660 data-nosnippet>1660</a>    }
-<a href=#1661 id=1661 data-nosnippet>1661</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>value_to_py(value: <span class="kw-2">&amp;</span>cu29::prelude::Value, py: Python&lt;<span class="lifetime">'_</span>&gt;) -&gt; PyResult&lt;Py&lt;PyAny&gt;&gt; {
-<a href=#1662 id=1662 data-nosnippet>1662</a>        <span class="kw">match </span>value {
-<a href=#1663 id=1663 data-nosnippet>1663</a>            Value::String(s) =&gt; <span class="prelude-val">Ok</span>(s.into_pyobject(py)<span class="question-mark">?</span>.into()),
-<a href=#1664 id=1664 data-nosnippet>1664</a>            Value::U64(u) =&gt; <span class="prelude-val">Ok</span>(u.into_pyobject(py)<span class="question-mark">?</span>.into()),
-<a href=#1665 id=1665 data-nosnippet>1665</a>            Value::U128(u) =&gt; <span class="prelude-val">Ok</span>(u.into_pyobject(py)<span class="question-mark">?</span>.into()),
-<a href=#1666 id=1666 data-nosnippet>1666</a>            Value::I64(i) =&gt; <span class="prelude-val">Ok</span>(i.into_pyobject(py)<span class="question-mark">?</span>.into()),
-<a href=#1667 id=1667 data-nosnippet>1667</a>            Value::I128(i) =&gt; <span class="prelude-val">Ok</span>(i.into_pyobject(py)<span class="question-mark">?</span>.into()),
-<a href=#1668 id=1668 data-nosnippet>1668</a>            Value::F64(f) =&gt; <span class="prelude-val">Ok</span>(f.into_pyobject(py)<span class="question-mark">?</span>.into()),
-<a href=#1669 id=1669 data-nosnippet>1669</a>            Value::Bool(b) =&gt; <span class="prelude-val">Ok</span>(b.into_pyobject(py)<span class="question-mark">?</span>.to_owned().into()),
-<a href=#1670 id=1670 data-nosnippet>1670</a>            Value::CuTime(t) =&gt; <span class="prelude-val">Ok</span>(t.<span class="number">0</span>.into_pyobject(py)<span class="question-mark">?</span>.into()),
-<a href=#1671 id=1671 data-nosnippet>1671</a>            Value::Bytes(b) =&gt; <span class="prelude-val">Ok</span>(b.into_pyobject(py)<span class="question-mark">?</span>.into()),
-<a href=#1672 id=1672 data-nosnippet>1672</a>            Value::Char(c) =&gt; <span class="prelude-val">Ok</span>(c.into_pyobject(py)<span class="question-mark">?</span>.into()),
-<a href=#1673 id=1673 data-nosnippet>1673</a>            Value::I8(i) =&gt; <span class="prelude-val">Ok</span>(i.into_pyobject(py)<span class="question-mark">?</span>.into()),
-<a href=#1674 id=1674 data-nosnippet>1674</a>            Value::U8(u) =&gt; <span class="prelude-val">Ok</span>(u.into_pyobject(py)<span class="question-mark">?</span>.into()),
-<a href=#1675 id=1675 data-nosnippet>1675</a>            Value::I16(i) =&gt; <span class="prelude-val">Ok</span>(i.into_pyobject(py)<span class="question-mark">?</span>.into()),
-<a href=#1676 id=1676 data-nosnippet>1676</a>            Value::U16(u) =&gt; <span class="prelude-val">Ok</span>(u.into_pyobject(py)<span class="question-mark">?</span>.into()),
-<a href=#1677 id=1677 data-nosnippet>1677</a>            Value::I32(i) =&gt; <span class="prelude-val">Ok</span>(i.into_pyobject(py)<span class="question-mark">?</span>.into()),
-<a href=#1678 id=1678 data-nosnippet>1678</a>            Value::U32(u) =&gt; <span class="prelude-val">Ok</span>(u.into_pyobject(py)<span class="question-mark">?</span>.into()),
-<a href=#1679 id=1679 data-nosnippet>1679</a>            Value::Map(m) =&gt; {
-<a href=#1680 id=1680 data-nosnippet>1680</a>                <span class="kw">let </span>dict = PyDict::new(py);
-<a href=#1681 id=1681 data-nosnippet>1681</a>                <span class="kw">for </span>(k, v) <span class="kw">in </span>m.iter() {
-<a href=#1682 id=1682 data-nosnippet>1682</a>                    dict.set_item(value_to_py(k, py)<span class="question-mark">?</span>, value_to_py(v, py)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
-<a href=#1683 id=1683 data-nosnippet>1683</a>                }
-<a href=#1684 id=1684 data-nosnippet>1684</a>                <span class="prelude-val">Ok</span>(dict.into_pyobject(py)<span class="question-mark">?</span>.into())
-<a href=#1685 id=1685 data-nosnippet>1685</a>            }
-<a href=#1686 id=1686 data-nosnippet>1686</a>            Value::F32(f) =&gt; <span class="prelude-val">Ok</span>(f.into_pyobject(py)<span class="question-mark">?</span>.into()),
-<a href=#1687 id=1687 data-nosnippet>1687</a>            Value::Option(o) =&gt; <span class="kw">match </span>o.as_ref() {
-<a href=#1688 id=1688 data-nosnippet>1688</a>                <span class="prelude-val">Some</span>(value) =&gt; value_to_py(value, py),
-<a href=#1689 id=1689 data-nosnippet>1689</a>                <span class="prelude-val">None </span>=&gt; <span class="prelude-val">Ok</span>(py.<span class="prelude-val">None</span>()),
-<a href=#1690 id=1690 data-nosnippet>1690</a>            },
-<a href=#1691 id=1691 data-nosnippet>1691</a>            Value::Unit =&gt; <span class="prelude-val">Ok</span>(py.<span class="prelude-val">None</span>()),
-<a href=#1692 id=1692 data-nosnippet>1692</a>            Value::Newtype(v) =&gt; value_to_py(v, py),
-<a href=#1693 id=1693 data-nosnippet>1693</a>            Value::Seq(s) =&gt; {
-<a href=#1694 id=1694 data-nosnippet>1694</a>                <span class="kw">let </span>items: Vec&lt;Py&lt;PyAny&gt;&gt; = s
-<a href=#1695 id=1695 data-nosnippet>1695</a>                    .iter()
-<a href=#1696 id=1696 data-nosnippet>1696</a>                    .map(|value| value_to_py(value, py))
-<a href=#1697 id=1697 data-nosnippet>1697</a>                    .collect::&lt;PyResult&lt;<span class="kw">_</span>&gt;&gt;()<span class="question-mark">?</span>;
-<a href=#1698 id=1698 data-nosnippet>1698</a>                <span class="kw">let </span>list = PyList::new(py, items)<span class="question-mark">?</span>;
-<a href=#1699 id=1699 data-nosnippet>1699</a>                <span class="prelude-val">Ok</span>(list.into_pyobject(py)<span class="question-mark">?</span>.into())
-<a href=#1700 id=1700 data-nosnippet>1700</a>            }
-<a href=#1701 id=1701 data-nosnippet>1701</a>        }
-<a href=#1702 id=1702 data-nosnippet>1702</a>    }
-<a href=#1703 id=1703 data-nosnippet>1703</a>
-<a href=#1704 id=1704 data-nosnippet>1704</a>    <span class="attr">#[cfg(test)]
-<a href=#1705 id=1705 data-nosnippet>1705</a>    </span><span class="kw">mod </span>tests {
-<a href=#1706 id=1706 data-nosnippet>1706</a>        <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#1707 id=1707 data-nosnippet>1707</a>
-<a href=#1708 id=1708 data-nosnippet>1708</a>        <span class="attr">#[derive(Debug, Default, bincode::Encode, bincode::Decode, serde::Serialize)]
-<a href=#1709 id=1709 data-nosnippet>1709</a>        </span><span class="kw">struct </span>EmptyMessages;
-<a href=#1710 id=1710 data-nosnippet>1710</a>
-<a href=#1711 id=1711 data-nosnippet>1711</a>        <span class="kw">impl </span>ErasedCuStampedDataSet <span class="kw">for </span>EmptyMessages {
-<a href=#1712 id=1712 data-nosnippet>1712</a>            <span class="kw">fn </span>cumsgs(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;<span class="kw-2">&amp;</span><span class="kw">dyn </span>ErasedCuStampedData&gt; {
-<a href=#1713 id=1713 data-nosnippet>1713</a>                Vec::new()
+<a href=#1369 id=1369 data-nosnippet>1369</a>            <span class="attr">#[allow(unreachable_patterns)] </span><span class="comment">// dependency features may enable extended records
+<a href=#1370 id=1370 data-nosnippet>1370</a>            </span>event =&gt; {
+<a href=#1371 id=1371 data-nosnippet>1371</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(record) = event.clock_sync_record() {
+<a href=#1372 id=1372 data-nosnippet>1372</a>                    root.set_item(<span class="string">"kind"</span>, <span class="string">"clock_sync"</span>)<span class="question-mark">?</span>;
+<a href=#1373 id=1373 data-nosnippet>1373</a>                    root.set_item(<span class="string">"culistid"</span>, record.culistid)<span class="question-mark">?</span>;
+<a href=#1374 id=1374 data-nosnippet>1374</a>                    <span class="kw">let </span>snapshot = serde_json::to_string(<span class="kw-2">&amp;</span>record.snapshot).map_err(|error| {
+<a href=#1375 id=1375 data-nosnippet>1375</a>                        pyo3::exceptions::PyValueError::new_err(error.to_string())
+<a href=#1376 id=1376 data-nosnippet>1376</a>                    })<span class="question-mark">?</span>;
+<a href=#1377 id=1377 data-nosnippet>1377</a>                    root.set_item(
+<a href=#1378 id=1378 data-nosnippet>1378</a>                        <span class="string">"snapshot"</span>,
+<a href=#1379 id=1379 data-nosnippet>1379</a>                        py.import(<span class="string">"json"</span>)<span class="question-mark">?</span>.getattr(<span class="string">"loads"</span>)<span class="question-mark">?</span>.call1((snapshot,))<span class="question-mark">?</span>,
+<a href=#1380 id=1380 data-nosnippet>1380</a>                    )<span class="question-mark">?</span>;
+<a href=#1381 id=1381 data-nosnippet>1381</a>                }
+<a href=#1382 id=1382 data-nosnippet>1382</a>            }
+<a href=#1383 id=1383 data-nosnippet>1383</a>        }
+<a href=#1384 id=1384 data-nosnippet>1384</a>
+<a href=#1385 id=1385 data-nosnippet>1385</a>        dict_to_namespace(root, py)
+<a href=#1386 id=1386 data-nosnippet>1386</a>    }
+<a href=#1387 id=1387 data-nosnippet>1387</a>
+<a href=#1388 id=1388 data-nosnippet>1388</a>    <span class="kw">fn </span>runtime_config_source_to_py(source: <span class="kw-2">&amp;</span>RuntimeLifecycleConfigSource) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str {
+<a href=#1389 id=1389 data-nosnippet>1389</a>        <span class="kw">match </span>source {
+<a href=#1390 id=1390 data-nosnippet>1390</a>            RuntimeLifecycleConfigSource::ProgrammaticOverride =&gt; <span class="string">"programmatic_override"</span>,
+<a href=#1391 id=1391 data-nosnippet>1391</a>            RuntimeLifecycleConfigSource::ExternalFile =&gt; <span class="string">"external_file"</span>,
+<a href=#1392 id=1392 data-nosnippet>1392</a>            RuntimeLifecycleConfigSource::BundledDefault =&gt; <span class="string">"bundled_default"</span>,
+<a href=#1393 id=1393 data-nosnippet>1393</a>        }
+<a href=#1394 id=1394 data-nosnippet>1394</a>    }
+<a href=#1395 id=1395 data-nosnippet>1395</a>
+<a href=#1396 id=1396 data-nosnippet>1396</a>    <span class="kw">fn </span>metadata_to_py(metadata: <span class="kw-2">&amp;</span><span class="kw">dyn </span>CuMsgMetadataTrait, py: Python&lt;<span class="lifetime">'_</span>&gt;) -&gt; PyResult&lt;Py&lt;PyAny&gt;&gt; {
+<a href=#1397 id=1397 data-nosnippet>1397</a>        <span class="kw">let </span>process = metadata.process_time();
+<a href=#1398 id=1398 data-nosnippet>1398</a>        <span class="kw">let </span>start: <span class="prelude-ty">Option</span>&lt;CuTime&gt; = process.start.into();
+<a href=#1399 id=1399 data-nosnippet>1399</a>        <span class="kw">let </span>end: <span class="prelude-ty">Option</span>&lt;CuTime&gt; = process.end.into();
+<a href=#1400 id=1400 data-nosnippet>1400</a>
+<a href=#1401 id=1401 data-nosnippet>1401</a>        <span class="kw">let </span>process_time = PyDict::new(py);
+<a href=#1402 id=1402 data-nosnippet>1402</a>        process_time.set_item(<span class="string">"start_ns"</span>, start.map(|t| t.as_nanos()))<span class="question-mark">?</span>;
+<a href=#1403 id=1403 data-nosnippet>1403</a>        process_time.set_item(<span class="string">"end_ns"</span>, end.map(|t| t.as_nanos()))<span class="question-mark">?</span>;
+<a href=#1404 id=1404 data-nosnippet>1404</a>
+<a href=#1405 id=1405 data-nosnippet>1405</a>        <span class="kw">let </span>metadata_py = PyDict::new(py);
+<a href=#1406 id=1406 data-nosnippet>1406</a>        metadata_py.set_item(<span class="string">"process_time"</span>, dict_to_namespace(process_time, py)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
+<a href=#1407 id=1407 data-nosnippet>1407</a>        metadata_py.set_item(<span class="string">"status_txt"</span>, metadata.status_txt().<span class="number">0</span>.to_string())<span class="question-mark">?</span>;
+<a href=#1408 id=1408 data-nosnippet>1408</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(origin) = metadata.origin() {
+<a href=#1409 id=1409 data-nosnippet>1409</a>            <span class="kw">let </span>origin_py = PyDict::new(py);
+<a href=#1410 id=1410 data-nosnippet>1410</a>            origin_py.set_item(<span class="string">"subsystem_code"</span>, origin.subsystem_code)<span class="question-mark">?</span>;
+<a href=#1411 id=1411 data-nosnippet>1411</a>            origin_py.set_item(<span class="string">"instance_id"</span>, origin.instance_id)<span class="question-mark">?</span>;
+<a href=#1412 id=1412 data-nosnippet>1412</a>            origin_py.set_item(<span class="string">"cl_id"</span>, origin.cl_id)<span class="question-mark">?</span>;
+<a href=#1413 id=1413 data-nosnippet>1413</a>            metadata_py.set_item(<span class="string">"origin"</span>, dict_to_namespace(origin_py, py)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
+<a href=#1414 id=1414 data-nosnippet>1414</a>        } <span class="kw">else </span>{
+<a href=#1415 id=1415 data-nosnippet>1415</a>            metadata_py.set_item(<span class="string">"origin"</span>, py.<span class="prelude-val">None</span>())<span class="question-mark">?</span>;
+<a href=#1416 id=1416 data-nosnippet>1416</a>        }
+<a href=#1417 id=1417 data-nosnippet>1417</a>        dict_to_namespace(metadata_py, py)
+<a href=#1418 id=1418 data-nosnippet>1418</a>    }
+<a href=#1419 id=1419 data-nosnippet>1419</a>
+<a href=#1420 id=1420 data-nosnippet>1420</a>    <span class="kw">fn </span>tov_to_py(tov: Tov, py: Python&lt;<span class="lifetime">'_</span>&gt;) -&gt; PyResult&lt;Py&lt;PyAny&gt;&gt; {
+<a href=#1421 id=1421 data-nosnippet>1421</a>        <span class="kw">let </span>tov_py = PyDict::new(py);
+<a href=#1422 id=1422 data-nosnippet>1422</a>        <span class="kw">match </span>tov {
+<a href=#1423 id=1423 data-nosnippet>1423</a>            Tov::None =&gt; {
+<a href=#1424 id=1424 data-nosnippet>1424</a>                tov_py.set_item(<span class="string">"kind"</span>, <span class="string">"none"</span>)<span class="question-mark">?</span>;
+<a href=#1425 id=1425 data-nosnippet>1425</a>            }
+<a href=#1426 id=1426 data-nosnippet>1426</a>            Tov::Time(t) =&gt; {
+<a href=#1427 id=1427 data-nosnippet>1427</a>                tov_py.set_item(<span class="string">"kind"</span>, <span class="string">"time"</span>)<span class="question-mark">?</span>;
+<a href=#1428 id=1428 data-nosnippet>1428</a>                tov_py.set_item(<span class="string">"time_ns"</span>, t.as_nanos())<span class="question-mark">?</span>;
+<a href=#1429 id=1429 data-nosnippet>1429</a>            }
+<a href=#1430 id=1430 data-nosnippet>1430</a>            Tov::Range(r) =&gt; {
+<a href=#1431 id=1431 data-nosnippet>1431</a>                tov_py.set_item(<span class="string">"kind"</span>, <span class="string">"range"</span>)<span class="question-mark">?</span>;
+<a href=#1432 id=1432 data-nosnippet>1432</a>                tov_py.set_item(<span class="string">"start_ns"</span>, r.start.as_nanos())<span class="question-mark">?</span>;
+<a href=#1433 id=1433 data-nosnippet>1433</a>                tov_py.set_item(<span class="string">"end_ns"</span>, r.end.as_nanos())<span class="question-mark">?</span>;
+<a href=#1434 id=1434 data-nosnippet>1434</a>            }
+<a href=#1435 id=1435 data-nosnippet>1435</a>        }
+<a href=#1436 id=1436 data-nosnippet>1436</a>        dict_to_namespace(tov_py, py)
+<a href=#1437 id=1437 data-nosnippet>1437</a>    }
+<a href=#1438 id=1438 data-nosnippet>1438</a>
+<a href=#1439 id=1439 data-nosnippet>1439</a>    <span class="kw">fn </span>partial_reflect_to_py(value: <span class="kw-2">&amp;</span><span class="kw">dyn </span>PartialReflect, py: Python&lt;<span class="lifetime">'_</span>&gt;) -&gt; PyResult&lt;Py&lt;PyAny&gt;&gt; {
+<a href=#1440 id=1440 data-nosnippet>1440</a>        <span class="attr">#[allow(unreachable_patterns)]
+<a href=#1441 id=1441 data-nosnippet>1441</a>        </span><span class="kw">match </span>value.reflect_ref() {
+<a href=#1442 id=1442 data-nosnippet>1442</a>            ReflectRef::Struct(s) =&gt; struct_to_py(s, py),
+<a href=#1443 id=1443 data-nosnippet>1443</a>            ReflectRef::TupleStruct(ts) =&gt; tuple_struct_to_py(ts, py),
+<a href=#1444 id=1444 data-nosnippet>1444</a>            ReflectRef::Tuple(t) =&gt; tuple_to_py(t, py),
+<a href=#1445 id=1445 data-nosnippet>1445</a>            ReflectRef::List(list) =&gt; list_to_py(list, py),
+<a href=#1446 id=1446 data-nosnippet>1446</a>            ReflectRef::Array(array) =&gt; array_to_py(array, py),
+<a href=#1447 id=1447 data-nosnippet>1447</a>            ReflectRef::Map(map) =&gt; map_to_py(map, py),
+<a href=#1448 id=1448 data-nosnippet>1448</a>            ReflectRef::Set(set) =&gt; set_to_py(set, py),
+<a href=#1449 id=1449 data-nosnippet>1449</a>            ReflectRef::Enum(e) =&gt; enum_to_py(e, py),
+<a href=#1450 id=1450 data-nosnippet>1450</a>            ReflectRef::Opaque(opaque) =&gt; opaque_to_py(opaque, py),
+<a href=#1451 id=1451 data-nosnippet>1451</a>            <span class="kw">_ </span>=&gt; <span class="prelude-val">Ok</span>(py.<span class="prelude-val">None</span>()),
+<a href=#1452 id=1452 data-nosnippet>1452</a>        }
+<a href=#1453 id=1453 data-nosnippet>1453</a>    }
+<a href=#1454 id=1454 data-nosnippet>1454</a>
+<a href=#1455 id=1455 data-nosnippet>1455</a>    <span class="kw">fn </span>struct_to_py(value: <span class="kw-2">&amp;</span><span class="kw">dyn </span>cu29::bevy_reflect::Struct, py: Python&lt;<span class="lifetime">'_</span>&gt;) -&gt; PyResult&lt;Py&lt;PyAny&gt;&gt; {
+<a href=#1456 id=1456 data-nosnippet>1456</a>        <span class="kw">let </span>dict = PyDict::new(py);
+<a href=#1457 id=1457 data-nosnippet>1457</a>        <span class="kw">for </span>idx <span class="kw">in </span><span class="number">0</span>..value.field_len() {
+<a href=#1458 id=1458 data-nosnippet>1458</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(field) = value.field_at(idx) {
+<a href=#1459 id=1459 data-nosnippet>1459</a>                <span class="kw">let </span>name = value
+<a href=#1460 id=1460 data-nosnippet>1460</a>                    .name_at(idx)
+<a href=#1461 id=1461 data-nosnippet>1461</a>                    .map(str::to_owned)
+<a href=#1462 id=1462 data-nosnippet>1462</a>                    .unwrap_or_else(|| <span class="macro">format!</span>(<span class="string">"field_{idx}"</span>));
+<a href=#1463 id=1463 data-nosnippet>1463</a>                dict.set_item(name, partial_reflect_to_py(field, py)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
+<a href=#1464 id=1464 data-nosnippet>1464</a>            }
+<a href=#1465 id=1465 data-nosnippet>1465</a>        }
+<a href=#1466 id=1466 data-nosnippet>1466</a>
+<a href=#1467 id=1467 data-nosnippet>1467</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(unit) = unit_abbrev_for_type_path(value.reflect_type_path())
+<a href=#1468 id=1468 data-nosnippet>1468</a>            &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(raw_value) = dict.get_item(<span class="string">"value"</span>)<span class="question-mark">?
+<a href=#1469 id=1469 data-nosnippet>1469</a>        </span>{
+<a href=#1470 id=1470 data-nosnippet>1470</a>            <span class="kw">if let </span><span class="prelude-val">Ok</span>(v) = raw_value.extract::&lt;f64&gt;() {
+<a href=#1471 id=1471 data-nosnippet>1471</a>                <span class="kw">let </span>unit_value = PyUnitValue {
+<a href=#1472 id=1472 data-nosnippet>1472</a>                    value: v,
+<a href=#1473 id=1473 data-nosnippet>1473</a>                    unit: unit.to_string(),
+<a href=#1474 id=1474 data-nosnippet>1474</a>                };
+<a href=#1475 id=1475 data-nosnippet>1475</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(Py::new(py, unit_value)<span class="question-mark">?</span>.into());
+<a href=#1476 id=1476 data-nosnippet>1476</a>            }
+<a href=#1477 id=1477 data-nosnippet>1477</a>            <span class="kw">if let </span><span class="prelude-val">Ok</span>(v) = raw_value.extract::&lt;f32&gt;() {
+<a href=#1478 id=1478 data-nosnippet>1478</a>                <span class="kw">let </span>unit_value = PyUnitValue {
+<a href=#1479 id=1479 data-nosnippet>1479</a>                    value: v <span class="kw">as </span>f64,
+<a href=#1480 id=1480 data-nosnippet>1480</a>                    unit: unit.to_string(),
+<a href=#1481 id=1481 data-nosnippet>1481</a>                };
+<a href=#1482 id=1482 data-nosnippet>1482</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(Py::new(py, unit_value)<span class="question-mark">?</span>.into());
+<a href=#1483 id=1483 data-nosnippet>1483</a>            }
+<a href=#1484 id=1484 data-nosnippet>1484</a>        }
+<a href=#1485 id=1485 data-nosnippet>1485</a>
+<a href=#1486 id=1486 data-nosnippet>1486</a>        dict_to_namespace(dict, py)
+<a href=#1487 id=1487 data-nosnippet>1487</a>    }
+<a href=#1488 id=1488 data-nosnippet>1488</a>
+<a href=#1489 id=1489 data-nosnippet>1489</a>    <span class="kw">fn </span>tuple_struct_to_py(
+<a href=#1490 id=1490 data-nosnippet>1490</a>        value: <span class="kw-2">&amp;</span><span class="kw">dyn </span>cu29::bevy_reflect::TupleStruct,
+<a href=#1491 id=1491 data-nosnippet>1491</a>        py: Python&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#1492 id=1492 data-nosnippet>1492</a>    ) -&gt; PyResult&lt;Py&lt;PyAny&gt;&gt; {
+<a href=#1493 id=1493 data-nosnippet>1493</a>        <span class="kw">let </span><span class="kw-2">mut </span>fields = Vec::with_capacity(value.field_len());
+<a href=#1494 id=1494 data-nosnippet>1494</a>        <span class="kw">for </span>idx <span class="kw">in </span><span class="number">0</span>..value.field_len() {
+<a href=#1495 id=1495 data-nosnippet>1495</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(field) = value.field(idx) {
+<a href=#1496 id=1496 data-nosnippet>1496</a>                fields.push(partial_reflect_to_py(field, py)<span class="question-mark">?</span>);
+<a href=#1497 id=1497 data-nosnippet>1497</a>            } <span class="kw">else </span>{
+<a href=#1498 id=1498 data-nosnippet>1498</a>                fields.push(py.<span class="prelude-val">None</span>());
+<a href=#1499 id=1499 data-nosnippet>1499</a>            }
+<a href=#1500 id=1500 data-nosnippet>1500</a>        }
+<a href=#1501 id=1501 data-nosnippet>1501</a>        <span class="prelude-val">Ok</span>(PyList::new(py, fields)<span class="question-mark">?</span>.into_pyobject(py)<span class="question-mark">?</span>.into())
+<a href=#1502 id=1502 data-nosnippet>1502</a>    }
+<a href=#1503 id=1503 data-nosnippet>1503</a>
+<a href=#1504 id=1504 data-nosnippet>1504</a>    <span class="kw">fn </span>tuple_to_py(value: <span class="kw-2">&amp;</span><span class="kw">dyn </span>cu29::bevy_reflect::Tuple, py: Python&lt;<span class="lifetime">'_</span>&gt;) -&gt; PyResult&lt;Py&lt;PyAny&gt;&gt; {
+<a href=#1505 id=1505 data-nosnippet>1505</a>        <span class="kw">let </span><span class="kw-2">mut </span>fields = Vec::with_capacity(value.field_len());
+<a href=#1506 id=1506 data-nosnippet>1506</a>        <span class="kw">for </span>idx <span class="kw">in </span><span class="number">0</span>..value.field_len() {
+<a href=#1507 id=1507 data-nosnippet>1507</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(field) = value.field(idx) {
+<a href=#1508 id=1508 data-nosnippet>1508</a>                fields.push(partial_reflect_to_py(field, py)<span class="question-mark">?</span>);
+<a href=#1509 id=1509 data-nosnippet>1509</a>            } <span class="kw">else </span>{
+<a href=#1510 id=1510 data-nosnippet>1510</a>                fields.push(py.<span class="prelude-val">None</span>());
+<a href=#1511 id=1511 data-nosnippet>1511</a>            }
+<a href=#1512 id=1512 data-nosnippet>1512</a>        }
+<a href=#1513 id=1513 data-nosnippet>1513</a>        <span class="prelude-val">Ok</span>(PyList::new(py, fields)<span class="question-mark">?</span>.into_pyobject(py)<span class="question-mark">?</span>.into())
+<a href=#1514 id=1514 data-nosnippet>1514</a>    }
+<a href=#1515 id=1515 data-nosnippet>1515</a>
+<a href=#1516 id=1516 data-nosnippet>1516</a>    <span class="kw">fn </span>list_to_py(value: <span class="kw-2">&amp;</span><span class="kw">dyn </span>cu29::bevy_reflect::List, py: Python&lt;<span class="lifetime">'_</span>&gt;) -&gt; PyResult&lt;Py&lt;PyAny&gt;&gt; {
+<a href=#1517 id=1517 data-nosnippet>1517</a>        <span class="kw">let </span><span class="kw-2">mut </span>items = Vec::with_capacity(value.len());
+<a href=#1518 id=1518 data-nosnippet>1518</a>        <span class="kw">for </span>item <span class="kw">in </span>value.iter() {
+<a href=#1519 id=1519 data-nosnippet>1519</a>            items.push(partial_reflect_to_py(item, py)<span class="question-mark">?</span>);
+<a href=#1520 id=1520 data-nosnippet>1520</a>        }
+<a href=#1521 id=1521 data-nosnippet>1521</a>        <span class="prelude-val">Ok</span>(PyList::new(py, items)<span class="question-mark">?</span>.into_pyobject(py)<span class="question-mark">?</span>.into())
+<a href=#1522 id=1522 data-nosnippet>1522</a>    }
+<a href=#1523 id=1523 data-nosnippet>1523</a>
+<a href=#1524 id=1524 data-nosnippet>1524</a>    <span class="kw">fn </span>array_to_py(value: <span class="kw-2">&amp;</span><span class="kw">dyn </span>cu29::bevy_reflect::Array, py: Python&lt;<span class="lifetime">'_</span>&gt;) -&gt; PyResult&lt;Py&lt;PyAny&gt;&gt; {
+<a href=#1525 id=1525 data-nosnippet>1525</a>        <span class="kw">let </span><span class="kw-2">mut </span>items = Vec::with_capacity(value.len());
+<a href=#1526 id=1526 data-nosnippet>1526</a>        <span class="kw">for </span>item <span class="kw">in </span>value.iter() {
+<a href=#1527 id=1527 data-nosnippet>1527</a>            items.push(partial_reflect_to_py(item, py)<span class="question-mark">?</span>);
+<a href=#1528 id=1528 data-nosnippet>1528</a>        }
+<a href=#1529 id=1529 data-nosnippet>1529</a>        <span class="prelude-val">Ok</span>(PyList::new(py, items)<span class="question-mark">?</span>.into_pyobject(py)<span class="question-mark">?</span>.into())
+<a href=#1530 id=1530 data-nosnippet>1530</a>    }
+<a href=#1531 id=1531 data-nosnippet>1531</a>
+<a href=#1532 id=1532 data-nosnippet>1532</a>    <span class="kw">fn </span>map_to_py(value: <span class="kw-2">&amp;</span><span class="kw">dyn </span>cu29::bevy_reflect::Map, py: Python&lt;<span class="lifetime">'_</span>&gt;) -&gt; PyResult&lt;Py&lt;PyAny&gt;&gt; {
+<a href=#1533 id=1533 data-nosnippet>1533</a>        <span class="kw">let </span>dict = PyDict::new(py);
+<a href=#1534 id=1534 data-nosnippet>1534</a>        <span class="kw">for </span>(key, val) <span class="kw">in </span>value.iter() {
+<a href=#1535 id=1535 data-nosnippet>1535</a>            <span class="kw">let </span>key_str = reflect_key_to_string(key);
+<a href=#1536 id=1536 data-nosnippet>1536</a>            dict.set_item(key_str, partial_reflect_to_py(val, py)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
+<a href=#1537 id=1537 data-nosnippet>1537</a>        }
+<a href=#1538 id=1538 data-nosnippet>1538</a>        <span class="prelude-val">Ok</span>(dict.into_pyobject(py)<span class="question-mark">?</span>.into())
+<a href=#1539 id=1539 data-nosnippet>1539</a>    }
+<a href=#1540 id=1540 data-nosnippet>1540</a>
+<a href=#1541 id=1541 data-nosnippet>1541</a>    <span class="kw">fn </span>set_to_py(value: <span class="kw-2">&amp;</span><span class="kw">dyn </span>cu29::bevy_reflect::Set, py: Python&lt;<span class="lifetime">'_</span>&gt;) -&gt; PyResult&lt;Py&lt;PyAny&gt;&gt; {
+<a href=#1542 id=1542 data-nosnippet>1542</a>        <span class="kw">let </span><span class="kw-2">mut </span>items = Vec::with_capacity(value.len());
+<a href=#1543 id=1543 data-nosnippet>1543</a>        <span class="kw">for </span>item <span class="kw">in </span>value.iter() {
+<a href=#1544 id=1544 data-nosnippet>1544</a>            items.push(partial_reflect_to_py(item, py)<span class="question-mark">?</span>);
+<a href=#1545 id=1545 data-nosnippet>1545</a>        }
+<a href=#1546 id=1546 data-nosnippet>1546</a>        <span class="prelude-val">Ok</span>(PyList::new(py, items)<span class="question-mark">?</span>.into_pyobject(py)<span class="question-mark">?</span>.into())
+<a href=#1547 id=1547 data-nosnippet>1547</a>    }
+<a href=#1548 id=1548 data-nosnippet>1548</a>
+<a href=#1549 id=1549 data-nosnippet>1549</a>    <span class="kw">fn </span>enum_to_py(value: <span class="kw-2">&amp;</span><span class="kw">dyn </span>cu29::bevy_reflect::Enum, py: Python&lt;<span class="lifetime">'_</span>&gt;) -&gt; PyResult&lt;Py&lt;PyAny&gt;&gt; {
+<a href=#1550 id=1550 data-nosnippet>1550</a>        <span class="kw">let </span>dict = PyDict::new(py);
+<a href=#1551 id=1551 data-nosnippet>1551</a>        dict.set_item(<span class="string">"variant"</span>, value.variant_name())<span class="question-mark">?</span>;
+<a href=#1552 id=1552 data-nosnippet>1552</a>
+<a href=#1553 id=1553 data-nosnippet>1553</a>        <span class="kw">match </span>value.variant_type() {
+<a href=#1554 id=1554 data-nosnippet>1554</a>            VariantType::Unit =&gt; {}
+<a href=#1555 id=1555 data-nosnippet>1555</a>            VariantType::Tuple =&gt; {
+<a href=#1556 id=1556 data-nosnippet>1556</a>                <span class="kw">let </span><span class="kw-2">mut </span>fields = Vec::with_capacity(value.field_len());
+<a href=#1557 id=1557 data-nosnippet>1557</a>                <span class="kw">for </span>idx <span class="kw">in </span><span class="number">0</span>..value.field_len() {
+<a href=#1558 id=1558 data-nosnippet>1558</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(field) = value.field_at(idx) {
+<a href=#1559 id=1559 data-nosnippet>1559</a>                        fields.push(partial_reflect_to_py(field, py)<span class="question-mark">?</span>);
+<a href=#1560 id=1560 data-nosnippet>1560</a>                    } <span class="kw">else </span>{
+<a href=#1561 id=1561 data-nosnippet>1561</a>                        fields.push(py.<span class="prelude-val">None</span>());
+<a href=#1562 id=1562 data-nosnippet>1562</a>                    }
+<a href=#1563 id=1563 data-nosnippet>1563</a>                }
+<a href=#1564 id=1564 data-nosnippet>1564</a>                dict.set_item(<span class="string">"fields"</span>, PyList::new(py, fields)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
+<a href=#1565 id=1565 data-nosnippet>1565</a>            }
+<a href=#1566 id=1566 data-nosnippet>1566</a>            VariantType::Struct =&gt; {
+<a href=#1567 id=1567 data-nosnippet>1567</a>                <span class="kw">let </span>fields = PyDict::new(py);
+<a href=#1568 id=1568 data-nosnippet>1568</a>                <span class="kw">for </span>idx <span class="kw">in </span><span class="number">0</span>..value.field_len() {
+<a href=#1569 id=1569 data-nosnippet>1569</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(field) = value.field_at(idx) {
+<a href=#1570 id=1570 data-nosnippet>1570</a>                        <span class="kw">let </span>name = value
+<a href=#1571 id=1571 data-nosnippet>1571</a>                            .name_at(idx)
+<a href=#1572 id=1572 data-nosnippet>1572</a>                            .map(str::to_owned)
+<a href=#1573 id=1573 data-nosnippet>1573</a>                            .unwrap_or_else(|| <span class="macro">format!</span>(<span class="string">"field_{idx}"</span>));
+<a href=#1574 id=1574 data-nosnippet>1574</a>                        fields.set_item(name, partial_reflect_to_py(field, py)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
+<a href=#1575 id=1575 data-nosnippet>1575</a>                    }
+<a href=#1576 id=1576 data-nosnippet>1576</a>                }
+<a href=#1577 id=1577 data-nosnippet>1577</a>                dict.set_item(<span class="string">"fields"</span>, fields)<span class="question-mark">?</span>;
+<a href=#1578 id=1578 data-nosnippet>1578</a>            }
+<a href=#1579 id=1579 data-nosnippet>1579</a>        }
+<a href=#1580 id=1580 data-nosnippet>1580</a>
+<a href=#1581 id=1581 data-nosnippet>1581</a>        dict_to_namespace(dict, py)
+<a href=#1582 id=1582 data-nosnippet>1582</a>    }
+<a href=#1583 id=1583 data-nosnippet>1583</a>
+<a href=#1584 id=1584 data-nosnippet>1584</a>    <span class="kw">fn </span>dict_to_namespace(dict: Bound&lt;<span class="lifetime">'_</span>, PyDict&gt;, py: Python&lt;<span class="lifetime">'_</span>&gt;) -&gt; PyResult&lt;Py&lt;PyAny&gt;&gt; {
+<a href=#1585 id=1585 data-nosnippet>1585</a>        <span class="kw">let </span>types = py.import(<span class="string">"types"</span>)<span class="question-mark">?</span>;
+<a href=#1586 id=1586 data-nosnippet>1586</a>        <span class="kw">let </span>namespace_ctor = types.getattr(<span class="string">"SimpleNamespace"</span>)<span class="question-mark">?</span>;
+<a href=#1587 id=1587 data-nosnippet>1587</a>        <span class="kw">let </span>namespace = namespace_ctor.call((), <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>dict))<span class="question-mark">?</span>;
+<a href=#1588 id=1588 data-nosnippet>1588</a>        <span class="prelude-val">Ok</span>(namespace.into())
+<a href=#1589 id=1589 data-nosnippet>1589</a>    }
+<a href=#1590 id=1590 data-nosnippet>1590</a>
+<a href=#1591 id=1591 data-nosnippet>1591</a>    <span class="kw">fn </span>reflect_key_to_string(value: <span class="kw-2">&amp;</span><span class="kw">dyn </span>PartialReflect) -&gt; String {
+<a href=#1592 id=1592 data-nosnippet>1592</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(v) = value.try_downcast_ref::&lt;String&gt;() {
+<a href=#1593 id=1593 data-nosnippet>1593</a>            <span class="kw">return </span>v.clone();
+<a href=#1594 id=1594 data-nosnippet>1594</a>        }
+<a href=#1595 id=1595 data-nosnippet>1595</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(v) = value.try_downcast_ref::&lt;<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str&gt;() {
+<a href=#1596 id=1596 data-nosnippet>1596</a>            <span class="kw">return </span>(<span class="kw-2">*</span>v).to_string();
+<a href=#1597 id=1597 data-nosnippet>1597</a>        }
+<a href=#1598 id=1598 data-nosnippet>1598</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(v) = value.try_downcast_ref::&lt;char&gt;() {
+<a href=#1599 id=1599 data-nosnippet>1599</a>            <span class="kw">return </span>v.to_string();
+<a href=#1600 id=1600 data-nosnippet>1600</a>        }
+<a href=#1601 id=1601 data-nosnippet>1601</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(v) = value.try_downcast_ref::&lt;bool&gt;() {
+<a href=#1602 id=1602 data-nosnippet>1602</a>            <span class="kw">return </span>v.to_string();
+<a href=#1603 id=1603 data-nosnippet>1603</a>        }
+<a href=#1604 id=1604 data-nosnippet>1604</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(v) = value.try_downcast_ref::&lt;u64&gt;() {
+<a href=#1605 id=1605 data-nosnippet>1605</a>            <span class="kw">return </span>v.to_string();
+<a href=#1606 id=1606 data-nosnippet>1606</a>        }
+<a href=#1607 id=1607 data-nosnippet>1607</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(v) = value.try_downcast_ref::&lt;i64&gt;() {
+<a href=#1608 id=1608 data-nosnippet>1608</a>            <span class="kw">return </span>v.to_string();
+<a href=#1609 id=1609 data-nosnippet>1609</a>        }
+<a href=#1610 id=1610 data-nosnippet>1610</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(v) = value.try_downcast_ref::&lt;usize&gt;() {
+<a href=#1611 id=1611 data-nosnippet>1611</a>            <span class="kw">return </span>v.to_string();
+<a href=#1612 id=1612 data-nosnippet>1612</a>        }
+<a href=#1613 id=1613 data-nosnippet>1613</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(v) = value.try_downcast_ref::&lt;isize&gt;() {
+<a href=#1614 id=1614 data-nosnippet>1614</a>            <span class="kw">return </span>v.to_string();
+<a href=#1615 id=1615 data-nosnippet>1615</a>        }
+<a href=#1616 id=1616 data-nosnippet>1616</a>        <span class="macro">format!</span>(<span class="string">"{value:?}"</span>)
+<a href=#1617 id=1617 data-nosnippet>1617</a>    }
+<a href=#1618 id=1618 data-nosnippet>1618</a>
+<a href=#1619 id=1619 data-nosnippet>1619</a>    <span class="kw">fn </span>unit_abbrev_for_type_path(type_path: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str&gt; {
+<a href=#1620 id=1620 data-nosnippet>1620</a>        <span class="kw">match </span>type_path.rsplit(<span class="string">"::"</span>).next()<span class="question-mark">? </span>{
+<a href=#1621 id=1621 data-nosnippet>1621</a>            <span class="string">"Acceleration" </span>=&gt; <span class="prelude-val">Some</span>(<span class="string">"m/s^2"</span>),
+<a href=#1622 id=1622 data-nosnippet>1622</a>            <span class="string">"Angle" </span>=&gt; <span class="prelude-val">Some</span>(<span class="string">"rad"</span>),
+<a href=#1623 id=1623 data-nosnippet>1623</a>            <span class="string">"AngularVelocity" </span>=&gt; <span class="prelude-val">Some</span>(<span class="string">"rad/s"</span>),
+<a href=#1624 id=1624 data-nosnippet>1624</a>            <span class="string">"ElectricPotential" </span>=&gt; <span class="prelude-val">Some</span>(<span class="string">"V"</span>),
+<a href=#1625 id=1625 data-nosnippet>1625</a>            <span class="string">"Length" </span>=&gt; <span class="prelude-val">Some</span>(<span class="string">"m"</span>),
+<a href=#1626 id=1626 data-nosnippet>1626</a>            <span class="string">"MagneticFluxDensity" </span>=&gt; <span class="prelude-val">Some</span>(<span class="string">"T"</span>),
+<a href=#1627 id=1627 data-nosnippet>1627</a>            <span class="string">"Pressure" </span>=&gt; <span class="prelude-val">Some</span>(<span class="string">"Pa"</span>),
+<a href=#1628 id=1628 data-nosnippet>1628</a>            <span class="string">"Ratio" </span>=&gt; <span class="prelude-val">Some</span>(<span class="string">"1"</span>),
+<a href=#1629 id=1629 data-nosnippet>1629</a>            <span class="string">"ThermodynamicTemperature" </span>=&gt; <span class="prelude-val">Some</span>(<span class="string">"K"</span>),
+<a href=#1630 id=1630 data-nosnippet>1630</a>            <span class="string">"Time" </span>=&gt; <span class="prelude-val">Some</span>(<span class="string">"s"</span>),
+<a href=#1631 id=1631 data-nosnippet>1631</a>            <span class="string">"Velocity" </span>=&gt; <span class="prelude-val">Some</span>(<span class="string">"m/s"</span>),
+<a href=#1632 id=1632 data-nosnippet>1632</a>            <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
+<a href=#1633 id=1633 data-nosnippet>1633</a>        }
+<a href=#1634 id=1634 data-nosnippet>1634</a>    }
+<a href=#1635 id=1635 data-nosnippet>1635</a>
+<a href=#1636 id=1636 data-nosnippet>1636</a>    <span class="kw">fn </span>opaque_to_py(value: <span class="kw-2">&amp;</span><span class="kw">dyn </span>PartialReflect, py: Python&lt;<span class="lifetime">'_</span>&gt;) -&gt; PyResult&lt;Py&lt;PyAny&gt;&gt; {
+<a href=#1637 id=1637 data-nosnippet>1637</a>        <span class="macro">macro_rules!</span> downcast_copy {
+<a href=#1638 id=1638 data-nosnippet>1638</a>            (<span class="macro-nonterminal">$ty</span>:ty) =&gt; {
+<a href=#1639 id=1639 data-nosnippet>1639</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(v) = value.try_downcast_ref::&lt;<span class="macro-nonterminal">$ty</span>&gt;() {
+<a href=#1640 id=1640 data-nosnippet>1640</a>                    <span class="kw">return </span><span class="prelude-val">Ok</span>(v.into_pyobject(py)<span class="question-mark">?</span>.to_owned().into());
+<a href=#1641 id=1641 data-nosnippet>1641</a>                }
+<a href=#1642 id=1642 data-nosnippet>1642</a>            };
+<a href=#1643 id=1643 data-nosnippet>1643</a>        }
+<a href=#1644 id=1644 data-nosnippet>1644</a>
+<a href=#1645 id=1645 data-nosnippet>1645</a>        <span class="macro">downcast_copy!</span>(bool);
+<a href=#1646 id=1646 data-nosnippet>1646</a>        <span class="macro">downcast_copy!</span>(u8);
+<a href=#1647 id=1647 data-nosnippet>1647</a>        <span class="macro">downcast_copy!</span>(u16);
+<a href=#1648 id=1648 data-nosnippet>1648</a>        <span class="macro">downcast_copy!</span>(u32);
+<a href=#1649 id=1649 data-nosnippet>1649</a>        <span class="macro">downcast_copy!</span>(u64);
+<a href=#1650 id=1650 data-nosnippet>1650</a>        <span class="macro">downcast_copy!</span>(u128);
+<a href=#1651 id=1651 data-nosnippet>1651</a>        <span class="macro">downcast_copy!</span>(usize);
+<a href=#1652 id=1652 data-nosnippet>1652</a>        <span class="macro">downcast_copy!</span>(i8);
+<a href=#1653 id=1653 data-nosnippet>1653</a>        <span class="macro">downcast_copy!</span>(i16);
+<a href=#1654 id=1654 data-nosnippet>1654</a>        <span class="macro">downcast_copy!</span>(i32);
+<a href=#1655 id=1655 data-nosnippet>1655</a>        <span class="macro">downcast_copy!</span>(i64);
+<a href=#1656 id=1656 data-nosnippet>1656</a>        <span class="macro">downcast_copy!</span>(i128);
+<a href=#1657 id=1657 data-nosnippet>1657</a>        <span class="macro">downcast_copy!</span>(isize);
+<a href=#1658 id=1658 data-nosnippet>1658</a>        <span class="macro">downcast_copy!</span>(f32);
+<a href=#1659 id=1659 data-nosnippet>1659</a>        <span class="macro">downcast_copy!</span>(f64);
+<a href=#1660 id=1660 data-nosnippet>1660</a>        <span class="macro">downcast_copy!</span>(char);
+<a href=#1661 id=1661 data-nosnippet>1661</a>
+<a href=#1662 id=1662 data-nosnippet>1662</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(v) = value.try_downcast_ref::&lt;String&gt;() {
+<a href=#1663 id=1663 data-nosnippet>1663</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(v.into_pyobject(py)<span class="question-mark">?</span>.into());
+<a href=#1664 id=1664 data-nosnippet>1664</a>        }
+<a href=#1665 id=1665 data-nosnippet>1665</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(v) = value.try_downcast_ref::&lt;<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str&gt;() {
+<a href=#1666 id=1666 data-nosnippet>1666</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(v.into_pyobject(py)<span class="question-mark">?</span>.into());
+<a href=#1667 id=1667 data-nosnippet>1667</a>        }
+<a href=#1668 id=1668 data-nosnippet>1668</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(v) = value.try_downcast_ref::&lt;Vec&lt;u8&gt;&gt;() {
+<a href=#1669 id=1669 data-nosnippet>1669</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(v.into_pyobject(py)<span class="question-mark">?</span>.into());
+<a href=#1670 id=1670 data-nosnippet>1670</a>        }
+<a href=#1671 id=1671 data-nosnippet>1671</a>
+<a href=#1672 id=1672 data-nosnippet>1672</a>        <span class="kw">let </span>fallback = <span class="macro">format!</span>(<span class="string">"{value:?}"</span>);
+<a href=#1673 id=1673 data-nosnippet>1673</a>        <span class="prelude-val">Ok</span>(fallback.into_pyobject(py)<span class="question-mark">?</span>.into())
+<a href=#1674 id=1674 data-nosnippet>1674</a>    }
+<a href=#1675 id=1675 data-nosnippet>1675</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>value_to_py(value: <span class="kw-2">&amp;</span>cu29::prelude::Value, py: Python&lt;<span class="lifetime">'_</span>&gt;) -&gt; PyResult&lt;Py&lt;PyAny&gt;&gt; {
+<a href=#1676 id=1676 data-nosnippet>1676</a>        <span class="kw">match </span>value {
+<a href=#1677 id=1677 data-nosnippet>1677</a>            Value::String(s) =&gt; <span class="prelude-val">Ok</span>(s.into_pyobject(py)<span class="question-mark">?</span>.into()),
+<a href=#1678 id=1678 data-nosnippet>1678</a>            Value::U64(u) =&gt; <span class="prelude-val">Ok</span>(u.into_pyobject(py)<span class="question-mark">?</span>.into()),
+<a href=#1679 id=1679 data-nosnippet>1679</a>            Value::U128(u) =&gt; <span class="prelude-val">Ok</span>(u.into_pyobject(py)<span class="question-mark">?</span>.into()),
+<a href=#1680 id=1680 data-nosnippet>1680</a>            Value::I64(i) =&gt; <span class="prelude-val">Ok</span>(i.into_pyobject(py)<span class="question-mark">?</span>.into()),
+<a href=#1681 id=1681 data-nosnippet>1681</a>            Value::I128(i) =&gt; <span class="prelude-val">Ok</span>(i.into_pyobject(py)<span class="question-mark">?</span>.into()),
+<a href=#1682 id=1682 data-nosnippet>1682</a>            Value::F64(f) =&gt; <span class="prelude-val">Ok</span>(f.into_pyobject(py)<span class="question-mark">?</span>.into()),
+<a href=#1683 id=1683 data-nosnippet>1683</a>            Value::Bool(b) =&gt; <span class="prelude-val">Ok</span>(b.into_pyobject(py)<span class="question-mark">?</span>.to_owned().into()),
+<a href=#1684 id=1684 data-nosnippet>1684</a>            Value::CuTime(t) =&gt; <span class="prelude-val">Ok</span>(t.<span class="number">0</span>.into_pyobject(py)<span class="question-mark">?</span>.into()),
+<a href=#1685 id=1685 data-nosnippet>1685</a>            Value::Bytes(b) =&gt; <span class="prelude-val">Ok</span>(b.into_pyobject(py)<span class="question-mark">?</span>.into()),
+<a href=#1686 id=1686 data-nosnippet>1686</a>            Value::Char(c) =&gt; <span class="prelude-val">Ok</span>(c.into_pyobject(py)<span class="question-mark">?</span>.into()),
+<a href=#1687 id=1687 data-nosnippet>1687</a>            Value::I8(i) =&gt; <span class="prelude-val">Ok</span>(i.into_pyobject(py)<span class="question-mark">?</span>.into()),
+<a href=#1688 id=1688 data-nosnippet>1688</a>            Value::U8(u) =&gt; <span class="prelude-val">Ok</span>(u.into_pyobject(py)<span class="question-mark">?</span>.into()),
+<a href=#1689 id=1689 data-nosnippet>1689</a>            Value::I16(i) =&gt; <span class="prelude-val">Ok</span>(i.into_pyobject(py)<span class="question-mark">?</span>.into()),
+<a href=#1690 id=1690 data-nosnippet>1690</a>            Value::U16(u) =&gt; <span class="prelude-val">Ok</span>(u.into_pyobject(py)<span class="question-mark">?</span>.into()),
+<a href=#1691 id=1691 data-nosnippet>1691</a>            Value::I32(i) =&gt; <span class="prelude-val">Ok</span>(i.into_pyobject(py)<span class="question-mark">?</span>.into()),
+<a href=#1692 id=1692 data-nosnippet>1692</a>            Value::U32(u) =&gt; <span class="prelude-val">Ok</span>(u.into_pyobject(py)<span class="question-mark">?</span>.into()),
+<a href=#1693 id=1693 data-nosnippet>1693</a>            Value::Map(m) =&gt; {
+<a href=#1694 id=1694 data-nosnippet>1694</a>                <span class="kw">let </span>dict = PyDict::new(py);
+<a href=#1695 id=1695 data-nosnippet>1695</a>                <span class="kw">for </span>(k, v) <span class="kw">in </span>m.iter() {
+<a href=#1696 id=1696 data-nosnippet>1696</a>                    dict.set_item(value_to_py(k, py)<span class="question-mark">?</span>, value_to_py(v, py)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
+<a href=#1697 id=1697 data-nosnippet>1697</a>                }
+<a href=#1698 id=1698 data-nosnippet>1698</a>                <span class="prelude-val">Ok</span>(dict.into_pyobject(py)<span class="question-mark">?</span>.into())
+<a href=#1699 id=1699 data-nosnippet>1699</a>            }
+<a href=#1700 id=1700 data-nosnippet>1700</a>            Value::F32(f) =&gt; <span class="prelude-val">Ok</span>(f.into_pyobject(py)<span class="question-mark">?</span>.into()),
+<a href=#1701 id=1701 data-nosnippet>1701</a>            Value::Option(o) =&gt; <span class="kw">match </span>o.as_ref() {
+<a href=#1702 id=1702 data-nosnippet>1702</a>                <span class="prelude-val">Some</span>(value) =&gt; value_to_py(value, py),
+<a href=#1703 id=1703 data-nosnippet>1703</a>                <span class="prelude-val">None </span>=&gt; <span class="prelude-val">Ok</span>(py.<span class="prelude-val">None</span>()),
+<a href=#1704 id=1704 data-nosnippet>1704</a>            },
+<a href=#1705 id=1705 data-nosnippet>1705</a>            Value::Unit =&gt; <span class="prelude-val">Ok</span>(py.<span class="prelude-val">None</span>()),
+<a href=#1706 id=1706 data-nosnippet>1706</a>            Value::Newtype(v) =&gt; value_to_py(v, py),
+<a href=#1707 id=1707 data-nosnippet>1707</a>            Value::Seq(s) =&gt; {
+<a href=#1708 id=1708 data-nosnippet>1708</a>                <span class="kw">let </span>items: Vec&lt;Py&lt;PyAny&gt;&gt; = s
+<a href=#1709 id=1709 data-nosnippet>1709</a>                    .iter()
+<a href=#1710 id=1710 data-nosnippet>1710</a>                    .map(|value| value_to_py(value, py))
+<a href=#1711 id=1711 data-nosnippet>1711</a>                    .collect::&lt;PyResult&lt;<span class="kw">_</span>&gt;&gt;()<span class="question-mark">?</span>;
+<a href=#1712 id=1712 data-nosnippet>1712</a>                <span class="kw">let </span>list = PyList::new(py, items)<span class="question-mark">?</span>;
+<a href=#1713 id=1713 data-nosnippet>1713</a>                <span class="prelude-val">Ok</span>(list.into_pyobject(py)<span class="question-mark">?</span>.into())
 <a href=#1714 id=1714 data-nosnippet>1714</a>            }
 <a href=#1715 id=1715 data-nosnippet>1715</a>        }
-<a href=#1716 id=1716 data-nosnippet>1716</a>
-<a href=#1717 id=1717 data-nosnippet>1717</a>        <span class="kw">impl </span>MatchingTasks <span class="kw">for </span>EmptyMessages {
-<a href=#1718 id=1718 data-nosnippet>1718</a>            <span class="kw">fn </span>get_all_task_ids() -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>[<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str] {
-<a href=#1719 id=1719 data-nosnippet>1719</a>                <span class="kw-2">&amp;</span>[]
-<a href=#1720 id=1720 data-nosnippet>1720</a>            }
-<a href=#1721 id=1721 data-nosnippet>1721</a>        }
-<a href=#1722 id=1722 data-nosnippet>1722</a>
-<a href=#1723 id=1723 data-nosnippet>1723</a>        <span class="attr">#[test]
-<a href=#1724 id=1724 data-nosnippet>1724</a>        </span><span class="kw">fn </span>copperlist_python_export_omits_runtime_state() {
-<a href=#1725 id=1725 data-nosnippet>1725</a>            Python::initialize();
-<a href=#1726 id=1726 data-nosnippet>1726</a>            Python::attach(|py| {
-<a href=#1727 id=1727 data-nosnippet>1727</a>                <span class="kw">let </span>list = CopperList::new(<span class="number">7</span>, EmptyMessages);
-<a href=#1728 id=1728 data-nosnippet>1728</a>                <span class="kw">let </span>value = copperlist_to_py(<span class="kw-2">&amp;</span>list, py).unwrap();
-<a href=#1729 id=1729 data-nosnippet>1729</a>                <span class="macro">assert!</span>(!value.bind(py).hasattr(<span class="string">"state"</span>).unwrap());
-<a href=#1730 id=1730 data-nosnippet>1730</a>                <span class="macro">assert_eq!</span>(
-<a href=#1731 id=1731 data-nosnippet>1731</a>                    value
-<a href=#1732 id=1732 data-nosnippet>1732</a>                        .bind(py)
-<a href=#1733 id=1733 data-nosnippet>1733</a>                        .getattr(<span class="string">"id"</span>)
-<a href=#1734 id=1734 data-nosnippet>1734</a>                        .unwrap()
-<a href=#1735 id=1735 data-nosnippet>1735</a>                        .extract::&lt;u64&gt;()
-<a href=#1736 id=1736 data-nosnippet>1736</a>                        .unwrap(),
-<a href=#1737 id=1737 data-nosnippet>1737</a>                    <span class="number">7
-<a href=#1738 id=1738 data-nosnippet>1738</a>                </span>);
-<a href=#1739 id=1739 data-nosnippet>1739</a>            });
-<a href=#1740 id=1740 data-nosnippet>1740</a>        }
-<a href=#1741 id=1741 data-nosnippet>1741</a>
-<a href=#1742 id=1742 data-nosnippet>1742</a>        <span class="attr">#[test]
-<a href=#1743 id=1743 data-nosnippet>1743</a>        </span><span class="kw">fn </span>value_to_py_preserves_128_bit_integers() {
-<a href=#1744 id=1744 data-nosnippet>1744</a>            Python::initialize();
-<a href=#1745 id=1745 data-nosnippet>1745</a>            Python::attach(|py| {
-<a href=#1746 id=1746 data-nosnippet>1746</a>                <span class="kw">let </span>u128_value = u128::from(u64::MAX) + <span class="number">99</span>;
-<a href=#1747 id=1747 data-nosnippet>1747</a>                <span class="kw">let </span>u128_py = value_to_py(<span class="kw-2">&amp;</span>Value::U128(u128_value), py).unwrap();
-<a href=#1748 id=1748 data-nosnippet>1748</a>                <span class="macro">assert_eq!</span>(u128_py.bind(py).extract::&lt;u128&gt;().unwrap(), u128_value);
-<a href=#1749 id=1749 data-nosnippet>1749</a>
-<a href=#1750 id=1750 data-nosnippet>1750</a>                <span class="kw">let </span>i128_value = i128::from(i64::MIN) - <span class="number">99</span>;
-<a href=#1751 id=1751 data-nosnippet>1751</a>                <span class="kw">let </span>i128_py = value_to_py(<span class="kw-2">&amp;</span>Value::I128(i128_value), py).unwrap();
-<a href=#1752 id=1752 data-nosnippet>1752</a>                <span class="macro">assert_eq!</span>(i128_py.bind(py).extract::&lt;i128&gt;().unwrap(), i128_value);
+<a href=#1716 id=1716 data-nosnippet>1716</a>    }
+<a href=#1717 id=1717 data-nosnippet>1717</a>
+<a href=#1718 id=1718 data-nosnippet>1718</a>    <span class="attr">#[cfg(test)]
+<a href=#1719 id=1719 data-nosnippet>1719</a>    </span><span class="kw">mod </span>tests {
+<a href=#1720 id=1720 data-nosnippet>1720</a>        <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#1721 id=1721 data-nosnippet>1721</a>
+<a href=#1722 id=1722 data-nosnippet>1722</a>        <span class="attr">#[derive(Debug, Default, bincode::Encode, bincode::Decode, serde::Serialize)]
+<a href=#1723 id=1723 data-nosnippet>1723</a>        </span><span class="kw">struct </span>EmptyMessages;
+<a href=#1724 id=1724 data-nosnippet>1724</a>
+<a href=#1725 id=1725 data-nosnippet>1725</a>        <span class="kw">impl </span>ErasedCuStampedDataSet <span class="kw">for </span>EmptyMessages {
+<a href=#1726 id=1726 data-nosnippet>1726</a>            <span class="kw">fn </span>cumsgs(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;<span class="kw-2">&amp;</span><span class="kw">dyn </span>ErasedCuStampedData&gt; {
+<a href=#1727 id=1727 data-nosnippet>1727</a>                Vec::new()
+<a href=#1728 id=1728 data-nosnippet>1728</a>            }
+<a href=#1729 id=1729 data-nosnippet>1729</a>        }
+<a href=#1730 id=1730 data-nosnippet>1730</a>
+<a href=#1731 id=1731 data-nosnippet>1731</a>        <span class="kw">impl </span>MatchingTasks <span class="kw">for </span>EmptyMessages {
+<a href=#1732 id=1732 data-nosnippet>1732</a>            <span class="kw">fn </span>get_all_task_ids() -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>[<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str] {
+<a href=#1733 id=1733 data-nosnippet>1733</a>                <span class="kw-2">&amp;</span>[]
+<a href=#1734 id=1734 data-nosnippet>1734</a>            }
+<a href=#1735 id=1735 data-nosnippet>1735</a>        }
+<a href=#1736 id=1736 data-nosnippet>1736</a>
+<a href=#1737 id=1737 data-nosnippet>1737</a>        <span class="attr">#[test]
+<a href=#1738 id=1738 data-nosnippet>1738</a>        </span><span class="kw">fn </span>copperlist_python_export_omits_runtime_state() {
+<a href=#1739 id=1739 data-nosnippet>1739</a>            Python::initialize();
+<a href=#1740 id=1740 data-nosnippet>1740</a>            Python::attach(|py| {
+<a href=#1741 id=1741 data-nosnippet>1741</a>                <span class="kw">let </span>list = CopperList::new(<span class="number">7</span>, EmptyMessages);
+<a href=#1742 id=1742 data-nosnippet>1742</a>                <span class="kw">let </span>value = copperlist_to_py(<span class="kw-2">&amp;</span>list, py).unwrap();
+<a href=#1743 id=1743 data-nosnippet>1743</a>                <span class="macro">assert!</span>(!value.bind(py).hasattr(<span class="string">"state"</span>).unwrap());
+<a href=#1744 id=1744 data-nosnippet>1744</a>                <span class="macro">assert_eq!</span>(
+<a href=#1745 id=1745 data-nosnippet>1745</a>                    value
+<a href=#1746 id=1746 data-nosnippet>1746</a>                        .bind(py)
+<a href=#1747 id=1747 data-nosnippet>1747</a>                        .getattr(<span class="string">"id"</span>)
+<a href=#1748 id=1748 data-nosnippet>1748</a>                        .unwrap()
+<a href=#1749 id=1749 data-nosnippet>1749</a>                        .extract::&lt;u64&gt;()
+<a href=#1750 id=1750 data-nosnippet>1750</a>                        .unwrap(),
+<a href=#1751 id=1751 data-nosnippet>1751</a>                    <span class="number">7
+<a href=#1752 id=1752 data-nosnippet>1752</a>                </span>);
 <a href=#1753 id=1753 data-nosnippet>1753</a>            });
 <a href=#1754 id=1754 data-nosnippet>1754</a>        }
-<a href=#1755 id=1755 data-nosnippet>1755</a>    }
-<a href=#1756 id=1756 data-nosnippet>1756</a>}
-<a href=#1757 id=1757 data-nosnippet>1757</a>
-<a href=#1758 id=1758 data-nosnippet>1758</a><span class="attr">#[cfg(test)]
-<a href=#1759 id=1759 data-nosnippet>1759</a></span><span class="kw">mod </span>tests {
-<a href=#1760 id=1760 data-nosnippet>1760</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#1761 id=1761 data-nosnippet>1761</a>    <span class="kw">use </span>bincode::{Decode, Encode, encode_into_slice};
-<a href=#1762 id=1762 data-nosnippet>1762</a>    <span class="kw">use </span>serde::Deserialize;
-<a href=#1763 id=1763 data-nosnippet>1763</a>    <span class="kw">use </span>std::env;
-<a href=#1764 id=1764 data-nosnippet>1764</a>    <span class="kw">use </span>std::fs;
-<a href=#1765 id=1765 data-nosnippet>1765</a>    <span class="kw">use </span>std::io::Cursor;
-<a href=#1766 id=1766 data-nosnippet>1766</a>    <span class="kw">use </span>std::path::PathBuf;
-<a href=#1767 id=1767 data-nosnippet>1767</a>    <span class="kw">use </span>std::sync::{Arc, Mutex};
-<a href=#1768 id=1768 data-nosnippet>1768</a>    <span class="kw">use </span>tempfile::{TempDir, tempdir};
-<a href=#1769 id=1769 data-nosnippet>1769</a>
-<a href=#1770 id=1770 data-nosnippet>1770</a>    <span class="kw">fn </span>copy_stringindex_to_temp(tmpdir: <span class="kw-2">&amp;</span>TempDir) -&gt; PathBuf {
-<a href=#1771 id=1771 data-nosnippet>1771</a>        <span class="comment">// Build a minimal index on the fly so tests don't depend on build-time artifacts.
-<a href=#1772 id=1772 data-nosnippet>1772</a>        </span><span class="kw">let </span>fake_out_dir = tmpdir.path().join(<span class="string">"build"</span>).join(<span class="string">"out"</span>).join(<span class="string">"dir"</span>);
-<a href=#1773 id=1773 data-nosnippet>1773</a>        fs::create_dir_all(<span class="kw-2">&amp;</span>fake_out_dir).unwrap();
-<a href=#1774 id=1774 data-nosnippet>1774</a>        <span class="comment">// SAFETY: Tests run single-threaded here and we only read the variable after setting it.
-<a href=#1775 id=1775 data-nosnippet>1775</a>        </span><span class="kw">unsafe </span>{
-<a href=#1776 id=1776 data-nosnippet>1776</a>            env::set_var(<span class="string">"LOG_INDEX_DIR"</span>, <span class="kw-2">&amp;</span>fake_out_dir);
-<a href=#1777 id=1777 data-nosnippet>1777</a>        }
-<a href=#1778 id=1778 data-nosnippet>1778</a>
-<a href=#1779 id=1779 data-nosnippet>1779</a>        <span class="comment">// Provide entries for the message indexes used in this test module.
-<a href=#1780 id=1780 data-nosnippet>1780</a>        </span><span class="kw">let _ </span>= cu29_intern_strs::intern_string(<span class="string">"unused to start counter"</span>);
-<a href=#1781 id=1781 data-nosnippet>1781</a>        <span class="kw">let _ </span>= cu29_intern_strs::intern_string(<span class="string">"Just a String {}"</span>);
-<a href=#1782 id=1782 data-nosnippet>1782</a>        <span class="kw">let _ </span>= cu29_intern_strs::intern_string(<span class="string">"Just a String (low level) {}"</span>);
-<a href=#1783 id=1783 data-nosnippet>1783</a>        <span class="kw">let _ </span>= cu29_intern_strs::intern_string(<span class="string">"Just a String (end to end) {}"</span>);
-<a href=#1784 id=1784 data-nosnippet>1784</a>
-<a href=#1785 id=1785 data-nosnippet>1785</a>        <span class="kw">let </span>index_dir = cu29_intern_strs::default_log_index_dir();
-<a href=#1786 id=1786 data-nosnippet>1786</a>        cu29_intern_strs::read_interned_strings(<span class="kw-2">&amp;</span>index_dir).unwrap();
-<a href=#1787 id=1787 data-nosnippet>1787</a>        index_dir
-<a href=#1788 id=1788 data-nosnippet>1788</a>    }
-<a href=#1789 id=1789 data-nosnippet>1789</a>
-<a href=#1790 id=1790 data-nosnippet>1790</a>    <span class="attr">#[test]
-<a href=#1791 id=1791 data-nosnippet>1791</a>    </span><span class="kw">fn </span>test_extract_low_level_cu29_log() {
-<a href=#1792 id=1792 data-nosnippet>1792</a>        <span class="kw">let </span>temp_dir = TempDir::new().unwrap();
-<a href=#1793 id=1793 data-nosnippet>1793</a>        <span class="kw">let </span>temp_path = copy_stringindex_to_temp(<span class="kw-2">&amp;</span>temp_dir);
-<a href=#1794 id=1794 data-nosnippet>1794</a>        <span class="kw">let </span>entry = CuLogEntry::new(<span class="number">3</span>, CuLogLevel::Info);
-<a href=#1795 id=1795 data-nosnippet>1795</a>        <span class="kw">let </span>bytes = bincode::encode_to_vec(<span class="kw-2">&amp;</span>entry, standard()).unwrap();
-<a href=#1796 id=1796 data-nosnippet>1796</a>        <span class="kw">let </span>reader = Cursor::new(bytes.as_slice());
-<a href=#1797 id=1797 data-nosnippet>1797</a>        textlog_dump(reader, temp_path.as_path()).unwrap();
-<a href=#1798 id=1798 data-nosnippet>1798</a>    }
-<a href=#1799 id=1799 data-nosnippet>1799</a>
-<a href=#1800 id=1800 data-nosnippet>1800</a>    <span class="attr">#[test]
-<a href=#1801 id=1801 data-nosnippet>1801</a>    </span><span class="kw">fn </span>end_to_end_datalogger_and_structlog_test() {
-<a href=#1802 id=1802 data-nosnippet>1802</a>        <span class="kw">let </span>dir = tempdir().expect(<span class="string">"Failed to create temp dir"</span>);
-<a href=#1803 id=1803 data-nosnippet>1803</a>        <span class="kw">let </span>path = dir
-<a href=#1804 id=1804 data-nosnippet>1804</a>            .path()
-<a href=#1805 id=1805 data-nosnippet>1805</a>            .join(<span class="string">"end_to_end_datalogger_and_structlog_test.copper"</span>);
-<a href=#1806 id=1806 data-nosnippet>1806</a>        {
-<a href=#1807 id=1807 data-nosnippet>1807</a>            <span class="comment">// Write a couple log entries
-<a href=#1808 id=1808 data-nosnippet>1808</a>            </span><span class="kw">let </span>UnifiedLogger::Write(logger) = UnifiedLoggerBuilder::new()
-<a href=#1809 id=1809 data-nosnippet>1809</a>                .write(<span class="bool-val">true</span>)
-<a href=#1810 id=1810 data-nosnippet>1810</a>                .create(<span class="bool-val">true</span>)
-<a href=#1811 id=1811 data-nosnippet>1811</a>                .file_base_name(<span class="kw-2">&amp;</span>path)
-<a href=#1812 id=1812 data-nosnippet>1812</a>                .preallocated_size(<span class="number">100000</span>)
-<a href=#1813 id=1813 data-nosnippet>1813</a>                .build()
-<a href=#1814 id=1814 data-nosnippet>1814</a>                .expect(<span class="string">"Failed to create logger"</span>)
-<a href=#1815 id=1815 data-nosnippet>1815</a>            <span class="kw">else </span>{
-<a href=#1816 id=1816 data-nosnippet>1816</a>                <span class="macro">panic!</span>(<span class="string">"Failed to create logger"</span>)
-<a href=#1817 id=1817 data-nosnippet>1817</a>            };
-<a href=#1818 id=1818 data-nosnippet>1818</a>            <span class="kw">let </span>data_logger = Arc::new(Mutex::new(logger));
-<a href=#1819 id=1819 data-nosnippet>1819</a>            <span class="kw">let </span>stream = stream_write(data_logger.clone(), UnifiedLogType::StructuredLogLine, <span class="number">1024</span>)
-<a href=#1820 id=1820 data-nosnippet>1820</a>                .expect(<span class="string">"Failed to create stream"</span>);
-<a href=#1821 id=1821 data-nosnippet>1821</a>            <span class="kw">let </span>rt = LoggerRuntime::init(RobotClock::default(), stream, <span class="prelude-val">None</span>::&lt;NullLog&gt;);
-<a href=#1822 id=1822 data-nosnippet>1822</a>
-<a href=#1823 id=1823 data-nosnippet>1823</a>            <span class="kw">let </span><span class="kw-2">mut </span>entry = CuLogEntry::new(<span class="number">4</span>, CuLogLevel::Info); <span class="comment">// this is a "Just a String {}" log line
-<a href=#1824 id=1824 data-nosnippet>1824</a>            </span>entry.add_param(<span class="number">0</span>, Value::String(<span class="string">"Parameter for the log line"</span>.into()));
-<a href=#1825 id=1825 data-nosnippet>1825</a>            log(<span class="kw-2">&amp;mut </span>entry).expect(<span class="string">"Failed to log"</span>);
-<a href=#1826 id=1826 data-nosnippet>1826</a>            <span class="kw">let </span><span class="kw-2">mut </span>entry = CuLogEntry::new(<span class="number">2</span>, CuLogLevel::Info); <span class="comment">// this is a "Just a String {}" log line
-<a href=#1827 id=1827 data-nosnippet>1827</a>            </span>entry.add_param(<span class="number">0</span>, Value::String(<span class="string">"Parameter for the log line"</span>.into()));
-<a href=#1828 id=1828 data-nosnippet>1828</a>            log(<span class="kw-2">&amp;mut </span>entry).expect(<span class="string">"Failed to log"</span>);
-<a href=#1829 id=1829 data-nosnippet>1829</a>
-<a href=#1830 id=1830 data-nosnippet>1830</a>            <span class="comment">// everything is dropped here
-<a href=#1831 id=1831 data-nosnippet>1831</a>            </span>drop(rt);
-<a href=#1832 id=1832 data-nosnippet>1832</a>        }
-<a href=#1833 id=1833 data-nosnippet>1833</a>        <span class="comment">// Read back the log
-<a href=#1834 id=1834 data-nosnippet>1834</a>        </span><span class="kw">let </span>UnifiedLogger::Read(logger) = UnifiedLoggerBuilder::new()
-<a href=#1835 id=1835 data-nosnippet>1835</a>            .file_base_name(
-<a href=#1836 id=1836 data-nosnippet>1836</a>                <span class="kw-2">&amp;</span>dir.path()
-<a href=#1837 id=1837 data-nosnippet>1837</a>                    .join(<span class="string">"end_to_end_datalogger_and_structlog_test.copper"</span>),
-<a href=#1838 id=1838 data-nosnippet>1838</a>            )
-<a href=#1839 id=1839 data-nosnippet>1839</a>            .build()
-<a href=#1840 id=1840 data-nosnippet>1840</a>            .expect(<span class="string">"Failed to create logger"</span>)
-<a href=#1841 id=1841 data-nosnippet>1841</a>        <span class="kw">else </span>{
-<a href=#1842 id=1842 data-nosnippet>1842</a>            <span class="macro">panic!</span>(<span class="string">"Failed to create logger"</span>)
-<a href=#1843 id=1843 data-nosnippet>1843</a>        };
-<a href=#1844 id=1844 data-nosnippet>1844</a>        <span class="kw">let </span>reader = UnifiedLoggerIOReader::new(logger, UnifiedLogType::StructuredLogLine);
-<a href=#1845 id=1845 data-nosnippet>1845</a>        <span class="kw">let </span>temp_dir = TempDir::new().unwrap();
-<a href=#1846 id=1846 data-nosnippet>1846</a>        textlog_dump(
-<a href=#1847 id=1847 data-nosnippet>1847</a>            reader,
-<a href=#1848 id=1848 data-nosnippet>1848</a>            Path::new(copy_stringindex_to_temp(<span class="kw-2">&amp;</span>temp_dir).as_path()),
-<a href=#1849 id=1849 data-nosnippet>1849</a>        )
-<a href=#1850 id=1850 data-nosnippet>1850</a>        .expect(<span class="string">"Failed to dump log"</span>);
-<a href=#1851 id=1851 data-nosnippet>1851</a>    }
-<a href=#1852 id=1852 data-nosnippet>1852</a>
-<a href=#1853 id=1853 data-nosnippet>1853</a>    <span class="comment">// This is normally generated at compile time in CuPayload.
-<a href=#1854 id=1854 data-nosnippet>1854</a>    </span><span class="attr">#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize, Encode, Decode, Default)]
-<a href=#1855 id=1855 data-nosnippet>1855</a>    </span><span class="kw">struct </span>MyMsgs((u8, i32, f32));
-<a href=#1856 id=1856 data-nosnippet>1856</a>
-<a href=#1857 id=1857 data-nosnippet>1857</a>    <span class="kw">impl </span>ErasedCuStampedDataSet <span class="kw">for </span>MyMsgs {
-<a href=#1858 id=1858 data-nosnippet>1858</a>        <span class="kw">fn </span>cumsgs(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;<span class="kw-2">&amp;</span><span class="kw">dyn </span>ErasedCuStampedData&gt; {
-<a href=#1859 id=1859 data-nosnippet>1859</a>            Vec::new()
-<a href=#1860 id=1860 data-nosnippet>1860</a>        }
-<a href=#1861 id=1861 data-nosnippet>1861</a>    }
-<a href=#1862 id=1862 data-nosnippet>1862</a>
-<a href=#1863 id=1863 data-nosnippet>1863</a>    <span class="kw">impl </span>MatchingTasks <span class="kw">for </span>MyMsgs {
-<a href=#1864 id=1864 data-nosnippet>1864</a>        <span class="kw">fn </span>get_all_task_ids() -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>[<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str] {
-<a href=#1865 id=1865 data-nosnippet>1865</a>            <span class="kw-2">&amp;</span>[]
-<a href=#1866 id=1866 data-nosnippet>1866</a>        }
-<a href=#1867 id=1867 data-nosnippet>1867</a>    }
-<a href=#1868 id=1868 data-nosnippet>1868</a>
-<a href=#1869 id=1869 data-nosnippet>1869</a>    <span class="doccomment">/// Checks if we can recover the copper lists from a binary representation.
-<a href=#1870 id=1870 data-nosnippet>1870</a>    </span><span class="attr">#[test]
-<a href=#1871 id=1871 data-nosnippet>1871</a>    </span><span class="kw">fn </span>test_copperlists_dump() {
-<a href=#1872 id=1872 data-nosnippet>1872</a>        <span class="kw">let </span><span class="kw-2">mut </span>data = <span class="macro">vec!</span>[<span class="number">0u8</span>; <span class="number">10000</span>];
-<a href=#1873 id=1873 data-nosnippet>1873</a>        <span class="kw">let </span>mypls: [MyMsgs; <span class="number">4</span>] = [
-<a href=#1874 id=1874 data-nosnippet>1874</a>            MyMsgs((<span class="number">1</span>, <span class="number">2</span>, <span class="number">3.0</span>)),
-<a href=#1875 id=1875 data-nosnippet>1875</a>            MyMsgs((<span class="number">2</span>, <span class="number">3</span>, <span class="number">4.0</span>)),
-<a href=#1876 id=1876 data-nosnippet>1876</a>            MyMsgs((<span class="number">3</span>, <span class="number">4</span>, <span class="number">5.0</span>)),
-<a href=#1877 id=1877 data-nosnippet>1877</a>            MyMsgs((<span class="number">4</span>, <span class="number">5</span>, <span class="number">6.0</span>)),
-<a href=#1878 id=1878 data-nosnippet>1878</a>        ];
-<a href=#1879 id=1879 data-nosnippet>1879</a>
-<a href=#1880 id=1880 data-nosnippet>1880</a>        <span class="kw">let </span><span class="kw-2">mut </span>offset: usize = <span class="number">0</span>;
-<a href=#1881 id=1881 data-nosnippet>1881</a>        <span class="kw">for </span>pl <span class="kw">in </span>mypls.iter() {
-<a href=#1882 id=1882 data-nosnippet>1882</a>            <span class="kw">let </span>cl = CopperList::&lt;MyMsgs&gt;::new(<span class="number">1</span>, <span class="kw-2">*</span>pl);
-<a href=#1883 id=1883 data-nosnippet>1883</a>            offset +=
-<a href=#1884 id=1884 data-nosnippet>1884</a>                encode_into_slice(<span class="kw-2">&amp;</span>cl, <span class="kw-2">&amp;mut </span>data.as_mut_slice()[offset..], standard()).unwrap();
-<a href=#1885 id=1885 data-nosnippet>1885</a>        }
-<a href=#1886 id=1886 data-nosnippet>1886</a>
-<a href=#1887 id=1887 data-nosnippet>1887</a>        <span class="kw">let </span>reader = Cursor::new(data);
-<a href=#1888 id=1888 data-nosnippet>1888</a>
-<a href=#1889 id=1889 data-nosnippet>1889</a>        <span class="kw">let </span><span class="kw-2">mut </span>iter = copperlists_reader::&lt;MyMsgs&gt;(reader);
-<a href=#1890 id=1890 data-nosnippet>1890</a>        <span class="macro">assert_eq!</span>(iter.next().unwrap().msgs, MyMsgs((<span class="number">1</span>, <span class="number">2</span>, <span class="number">3.0</span>)));
-<a href=#1891 id=1891 data-nosnippet>1891</a>        <span class="macro">assert_eq!</span>(iter.next().unwrap().msgs, MyMsgs((<span class="number">2</span>, <span class="number">3</span>, <span class="number">4.0</span>)));
-<a href=#1892 id=1892 data-nosnippet>1892</a>        <span class="macro">assert_eq!</span>(iter.next().unwrap().msgs, MyMsgs((<span class="number">3</span>, <span class="number">4</span>, <span class="number">5.0</span>)));
-<a href=#1893 id=1893 data-nosnippet>1893</a>        <span class="macro">assert_eq!</span>(iter.next().unwrap().msgs, MyMsgs((<span class="number">4</span>, <span class="number">5</span>, <span class="number">6.0</span>)));
-<a href=#1894 id=1894 data-nosnippet>1894</a>    }
-<a href=#1895 id=1895 data-nosnippet>1895</a>
-<a href=#1896 id=1896 data-nosnippet>1896</a>    <span class="attr">#[test]
-<a href=#1897 id=1897 data-nosnippet>1897</a>    </span><span class="kw">fn </span>runtime_lifecycle_reader_retains_timestamps_and_events() {
-<a href=#1898 id=1898 data-nosnippet>1898</a>        <span class="kw">let </span>records = <span class="macro">vec!</span>[
-<a href=#1899 id=1899 data-nosnippet>1899</a>            RuntimeLifecycleRecord {
-<a href=#1900 id=1900 data-nosnippet>1900</a>                timestamp: CuTime::default(),
-<a href=#1901 id=1901 data-nosnippet>1901</a>                event: RuntimeLifecycleEvent::Instantiated {
-<a href=#1902 id=1902 data-nosnippet>1902</a>                    config_source: RuntimeLifecycleConfigSource::BundledDefault,
-<a href=#1903 id=1903 data-nosnippet>1903</a>                },
-<a href=#1904 id=1904 data-nosnippet>1904</a>            },
-<a href=#1905 id=1905 data-nosnippet>1905</a>            RuntimeLifecycleRecord {
-<a href=#1906 id=1906 data-nosnippet>1906</a>                timestamp: CuTime::from_nanos(<span class="number">42</span>),
-<a href=#1907 id=1907 data-nosnippet>1907</a>                event: RuntimeLifecycleEvent::MissionStarted,
-<a href=#1908 id=1908 data-nosnippet>1908</a>            },
-<a href=#1909 id=1909 data-nosnippet>1909</a>        ];
-<a href=#1910 id=1910 data-nosnippet>1910</a>        <span class="kw">let </span><span class="kw-2">mut </span>bytes = Vec::new();
-<a href=#1911 id=1911 data-nosnippet>1911</a>        <span class="kw">for </span>record <span class="kw">in </span><span class="kw-2">&amp;</span>records {
-<a href=#1912 id=1912 data-nosnippet>1912</a>            bytes.extend(bincode::encode_to_vec(record, standard()).unwrap());
-<a href=#1913 id=1913 data-nosnippet>1913</a>        }
-<a href=#1914 id=1914 data-nosnippet>1914</a>
-<a href=#1915 id=1915 data-nosnippet>1915</a>        <span class="macro">assert_eq!</span>(
-<a href=#1916 id=1916 data-nosnippet>1916</a>            runtime_lifecycle_reader(Cursor::new(bytes)).collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;(),
-<a href=#1917 id=1917 data-nosnippet>1917</a>            records
-<a href=#1918 id=1918 data-nosnippet>1918</a>        );
-<a href=#1919 id=1919 data-nosnippet>1919</a>    }
-<a href=#1920 id=1920 data-nosnippet>1920</a>
-<a href=#1921 id=1921 data-nosnippet>1921</a>    <span class="attr">#[test]
-<a href=#1922 id=1922 data-nosnippet>1922</a>    </span><span class="kw">fn </span>logstats_mission_defaults_to_log_then_named_default_then_first() {
-<a href=#1923 id=1923 data-nosnippet>1923</a>        <span class="kw">let </span>config = CuConfig::deserialize_ron(
-<a href=#1924 id=1924 data-nosnippet>1924</a>            <span class="string">r#"(
-<a href=#1925 id=1925 data-nosnippet>1925</a>                missions: [(id: "zeta"), (id: "default"), (id: "alpha")],
-<a href=#1926 id=1926 data-nosnippet>1926</a>                tasks: [],
-<a href=#1927 id=1927 data-nosnippet>1927</a>                cnx: [],
-<a href=#1928 id=1928 data-nosnippet>1928</a>            )"#</span>,
-<a href=#1929 id=1929 data-nosnippet>1929</a>        )
-<a href=#1930 id=1930 data-nosnippet>1930</a>        .unwrap();
-<a href=#1931 id=1931 data-nosnippet>1931</a>        <span class="macro">assert_eq!</span>(
-<a href=#1932 id=1932 data-nosnippet>1932</a>            resolve_logstats_mission(<span class="kw-2">&amp;</span>config, <span class="prelude-val">None</span>, <span class="prelude-val">Some</span>(<span class="string">"zeta"</span>.to_string()))
-<a href=#1933 id=1933 data-nosnippet>1933</a>                .unwrap()
-<a href=#1934 id=1934 data-nosnippet>1934</a>                .as_deref(),
-<a href=#1935 id=1935 data-nosnippet>1935</a>            <span class="prelude-val">Some</span>(<span class="string">"zeta"</span>)
-<a href=#1936 id=1936 data-nosnippet>1936</a>        );
-<a href=#1937 id=1937 data-nosnippet>1937</a>        <span class="macro">assert!</span>(resolve_logstats_mission(<span class="kw-2">&amp;</span>config, <span class="prelude-val">None</span>, <span class="prelude-val">Some</span>(<span class="string">"missing"</span>.to_string())).is_err());
-<a href=#1938 id=1938 data-nosnippet>1938</a>        <span class="macro">assert_eq!</span>(
-<a href=#1939 id=1939 data-nosnippet>1939</a>            resolve_logstats_mission(<span class="kw-2">&amp;</span>config, <span class="prelude-val">Some</span>(<span class="string">"alpha"</span>.to_string()), <span class="prelude-val">None</span>)
-<a href=#1940 id=1940 data-nosnippet>1940</a>                .unwrap()
-<a href=#1941 id=1941 data-nosnippet>1941</a>                .as_deref(),
-<a href=#1942 id=1942 data-nosnippet>1942</a>            <span class="prelude-val">Some</span>(<span class="string">"alpha"</span>)
-<a href=#1943 id=1943 data-nosnippet>1943</a>        );
-<a href=#1944 id=1944 data-nosnippet>1944</a>
-<a href=#1945 id=1945 data-nosnippet>1945</a>        <span class="kw">let </span>config = CuConfig::deserialize_ron(
-<a href=#1946 id=1946 data-nosnippet>1946</a>            <span class="string">r#"(
-<a href=#1947 id=1947 data-nosnippet>1947</a>                missions: [(id: "zeta"), (id: "alpha")],
-<a href=#1948 id=1948 data-nosnippet>1948</a>                tasks: [],
-<a href=#1949 id=1949 data-nosnippet>1949</a>                cnx: [],
-<a href=#1950 id=1950 data-nosnippet>1950</a>            )"#</span>,
-<a href=#1951 id=1951 data-nosnippet>1951</a>        )
-<a href=#1952 id=1952 data-nosnippet>1952</a>        .unwrap();
-<a href=#1953 id=1953 data-nosnippet>1953</a>        <span class="macro">assert_eq!</span>(
-<a href=#1954 id=1954 data-nosnippet>1954</a>            resolve_logstats_mission(<span class="kw-2">&amp;</span>config, <span class="prelude-val">None</span>, <span class="prelude-val">None</span>)
-<a href=#1955 id=1955 data-nosnippet>1955</a>                .unwrap()
-<a href=#1956 id=1956 data-nosnippet>1956</a>                .as_deref(),
-<a href=#1957 id=1957 data-nosnippet>1957</a>            <span class="prelude-val">Some</span>(<span class="string">"alpha"</span>)
-<a href=#1958 id=1958 data-nosnippet>1958</a>        );
-<a href=#1959 id=1959 data-nosnippet>1959</a>    }
-<a href=#1960 id=1960 data-nosnippet>1960</a>
-<a href=#1961 id=1961 data-nosnippet>1961</a>    <span class="attr">#[test]
-<a href=#1962 id=1962 data-nosnippet>1962</a>    </span><span class="kw">fn </span>schedule_optimizer_cli_is_explicit_and_measurements_are_validated() {
-<a href=#1963 id=1963 data-nosnippet>1963</a>        <span class="kw">let </span>args = LogReaderCli::try_parse_from([
-<a href=#1964 id=1964 data-nosnippet>1964</a>            <span class="string">"logreader"</span>,
-<a href=#1965 id=1965 data-nosnippet>1965</a>            <span class="string">"robot.copper"</span>,
-<a href=#1966 id=1966 data-nosnippet>1966</a>            <span class="string">"optimize-schedule"</span>,
-<a href=#1967 id=1967 data-nosnippet>1967</a>            <span class="string">"--contract"</span>,
-<a href=#1968 id=1968 data-nosnippet>1968</a>            <span class="string">"schedule.ron"</span>,
-<a href=#1969 id=1969 data-nosnippet>1969</a>            <span class="string">"--output"</span>,
-<a href=#1970 id=1970 data-nosnippet>1970</a>            <span class="string">"target/pgs"</span>,
-<a href=#1971 id=1971 data-nosnippet>1971</a>            <span class="string">"--candidates"</span>,
-<a href=#1972 id=1972 data-nosnippet>1972</a>            <span class="string">"2"</span>,
-<a href=#1973 id=1973 data-nosnippet>1973</a>            <span class="string">"--measure"</span>,
-<a href=#1974 id=1974 data-nosnippet>1974</a>            <span class="string">"plan-1=logs/plan-1.copper"</span>,
-<a href=#1975 id=1975 data-nosnippet>1975</a>        ])
-<a href=#1976 id=1976 data-nosnippet>1976</a>        .unwrap();
-<a href=#1977 id=1977 data-nosnippet>1977</a>        <span class="kw">let </span>Command::OptimizeSchedule {
-<a href=#1978 id=1978 data-nosnippet>1978</a>            contract,
-<a href=#1979 id=1979 data-nosnippet>1979</a>            output,
-<a href=#1980 id=1980 data-nosnippet>1980</a>            candidates,
-<a href=#1981 id=1981 data-nosnippet>1981</a>            measurements,
-<a href=#1982 id=1982 data-nosnippet>1982</a>        } = args.command
-<a href=#1983 id=1983 data-nosnippet>1983</a>        <span class="kw">else </span>{
-<a href=#1984 id=1984 data-nosnippet>1984</a>            <span class="macro">panic!</span>(<span class="string">"expected optimize-schedule command"</span>);
-<a href=#1985 id=1985 data-nosnippet>1985</a>        };
-<a href=#1986 id=1986 data-nosnippet>1986</a>        <span class="macro">assert_eq!</span>(contract, PathBuf::from(<span class="string">"schedule.ron"</span>));
-<a href=#1987 id=1987 data-nosnippet>1987</a>        <span class="macro">assert_eq!</span>(output, PathBuf::from(<span class="string">"target/pgs"</span>));
-<a href=#1988 id=1988 data-nosnippet>1988</a>        <span class="macro">assert_eq!</span>(candidates, <span class="number">2</span>);
-<a href=#1989 id=1989 data-nosnippet>1989</a>        <span class="macro">assert_eq!</span>(measurements, [<span class="string">"plan-1=logs/plan-1.copper"</span>]);
-<a href=#1990 id=1990 data-nosnippet>1990</a>        <span class="macro">assert_eq!</span>(
-<a href=#1991 id=1991 data-nosnippet>1991</a>            parse_measurement(<span class="kw-2">&amp;</span>measurements[<span class="number">0</span>]).unwrap(),
-<a href=#1992 id=1992 data-nosnippet>1992</a>            (<span class="string">"plan-1"</span>, Path::new(<span class="string">"logs/plan-1.copper"</span>))
-<a href=#1993 id=1993 data-nosnippet>1993</a>        );
-<a href=#1994 id=1994 data-nosnippet>1994</a>        <span class="macro">assert!</span>(parse_measurement(<span class="string">"plan-1"</span>).is_err());
-<a href=#1995 id=1995 data-nosnippet>1995</a>        <span class="macro">assert!</span>(parse_measurement(<span class="string">"baseline=other.copper"</span>).is_err());
-<a href=#1996 id=1996 data-nosnippet>1996</a>        <span class="macro">assert_eq!</span>(candidate_index(<span class="string">"plan-2/round-3"</span>), <span class="prelude-val">Some</span>(<span class="number">1</span>));
-<a href=#1997 id=1997 data-nosnippet>1997</a>        <span class="macro">assert_eq!</span>(candidate_index(<span class="string">"baseline"</span>), <span class="prelude-val">None</span>);
-<a href=#1998 id=1998 data-nosnippet>1998</a>
-<a href=#1999 id=1999 data-nosnippet>1999</a>        <span class="kw">let </span>config = CuConfig::deserialize_ron(
-<a href=#2000 id=2000 data-nosnippet>2000</a>            <span class="string">r#"(
-<a href=#2001 id=2001 data-nosnippet>2001</a>                missions: [(id: "drive"), (id: "park")],
-<a href=#2002 id=2002 data-nosnippet>2002</a>                tasks: [],
-<a href=#2003 id=2003 data-nosnippet>2003</a>                cnx: [],
-<a href=#2004 id=2004 data-nosnippet>2004</a>            )"#</span>,
-<a href=#2005 id=2005 data-nosnippet>2005</a>        )
-<a href=#2006 id=2006 data-nosnippet>2006</a>        .unwrap();
-<a href=#2007 id=2007 data-nosnippet>2007</a>        <span class="macro">assert!</span>(resolve_schedule_mission(<span class="kw-2">&amp;</span>config, <span class="kw-2">&amp;</span>[<span class="string">"drive"</span>.into(), <span class="string">"park"</span>.into()]).is_err());
-<a href=#2008 id=2008 data-nosnippet>2008</a>        <span class="macro">assert_eq!</span>(
-<a href=#2009 id=2009 data-nosnippet>2009</a>            resolve_schedule_mission(<span class="kw-2">&amp;</span>config, <span class="kw-2">&amp;</span>[<span class="string">"park"</span>.into()])
-<a href=#2010 id=2010 data-nosnippet>2010</a>                .unwrap()
-<a href=#2011 id=2011 data-nosnippet>2011</a>                .as_deref(),
-<a href=#2012 id=2012 data-nosnippet>2012</a>            <span class="prelude-val">Some</span>(<span class="string">"park"</span>)
-<a href=#2013 id=2013 data-nosnippet>2013</a>        );
-<a href=#2014 id=2014 data-nosnippet>2014</a>    }
-<a href=#2015 id=2015 data-nosnippet>2015</a>}
+<a href=#1755 id=1755 data-nosnippet>1755</a>
+<a href=#1756 id=1756 data-nosnippet>1756</a>        <span class="attr">#[test]
+<a href=#1757 id=1757 data-nosnippet>1757</a>        </span><span class="kw">fn </span>value_to_py_preserves_128_bit_integers() {
+<a href=#1758 id=1758 data-nosnippet>1758</a>            Python::initialize();
+<a href=#1759 id=1759 data-nosnippet>1759</a>            Python::attach(|py| {
+<a href=#1760 id=1760 data-nosnippet>1760</a>                <span class="kw">let </span>u128_value = u128::from(u64::MAX) + <span class="number">99</span>;
+<a href=#1761 id=1761 data-nosnippet>1761</a>                <span class="kw">let </span>u128_py = value_to_py(<span class="kw-2">&amp;</span>Value::U128(u128_value), py).unwrap();
+<a href=#1762 id=1762 data-nosnippet>1762</a>                <span class="macro">assert_eq!</span>(u128_py.bind(py).extract::&lt;u128&gt;().unwrap(), u128_value);
+<a href=#1763 id=1763 data-nosnippet>1763</a>
+<a href=#1764 id=1764 data-nosnippet>1764</a>                <span class="kw">let </span>i128_value = i128::from(i64::MIN) - <span class="number">99</span>;
+<a href=#1765 id=1765 data-nosnippet>1765</a>                <span class="kw">let </span>i128_py = value_to_py(<span class="kw-2">&amp;</span>Value::I128(i128_value), py).unwrap();
+<a href=#1766 id=1766 data-nosnippet>1766</a>                <span class="macro">assert_eq!</span>(i128_py.bind(py).extract::&lt;i128&gt;().unwrap(), i128_value);
+<a href=#1767 id=1767 data-nosnippet>1767</a>            });
+<a href=#1768 id=1768 data-nosnippet>1768</a>        }
+<a href=#1769 id=1769 data-nosnippet>1769</a>    }
+<a href=#1770 id=1770 data-nosnippet>1770</a>}
+<a href=#1771 id=1771 data-nosnippet>1771</a>
+<a href=#1772 id=1772 data-nosnippet>1772</a><span class="attr">#[cfg(test)]
+<a href=#1773 id=1773 data-nosnippet>1773</a></span><span class="kw">mod </span>tests {
+<a href=#1774 id=1774 data-nosnippet>1774</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#1775 id=1775 data-nosnippet>1775</a>    <span class="kw">use </span>bincode::{Decode, Encode, encode_into_slice};
+<a href=#1776 id=1776 data-nosnippet>1776</a>    <span class="kw">use </span>serde::Deserialize;
+<a href=#1777 id=1777 data-nosnippet>1777</a>    <span class="kw">use </span>std::env;
+<a href=#1778 id=1778 data-nosnippet>1778</a>    <span class="kw">use </span>std::fs;
+<a href=#1779 id=1779 data-nosnippet>1779</a>    <span class="kw">use </span>std::io::Cursor;
+<a href=#1780 id=1780 data-nosnippet>1780</a>    <span class="kw">use </span>std::path::PathBuf;
+<a href=#1781 id=1781 data-nosnippet>1781</a>    <span class="kw">use </span>std::sync::{Arc, Mutex};
+<a href=#1782 id=1782 data-nosnippet>1782</a>    <span class="kw">use </span>tempfile::{TempDir, tempdir};
+<a href=#1783 id=1783 data-nosnippet>1783</a>
+<a href=#1784 id=1784 data-nosnippet>1784</a>    <span class="kw">fn </span>copy_stringindex_to_temp(tmpdir: <span class="kw-2">&amp;</span>TempDir) -&gt; PathBuf {
+<a href=#1785 id=1785 data-nosnippet>1785</a>        <span class="comment">// Build a minimal index on the fly so tests don't depend on build-time artifacts.
+<a href=#1786 id=1786 data-nosnippet>1786</a>        </span><span class="kw">let </span>fake_out_dir = tmpdir.path().join(<span class="string">"build"</span>).join(<span class="string">"out"</span>).join(<span class="string">"dir"</span>);
+<a href=#1787 id=1787 data-nosnippet>1787</a>        fs::create_dir_all(<span class="kw-2">&amp;</span>fake_out_dir).unwrap();
+<a href=#1788 id=1788 data-nosnippet>1788</a>        <span class="comment">// SAFETY: Tests run single-threaded here and we only read the variable after setting it.
+<a href=#1789 id=1789 data-nosnippet>1789</a>        </span><span class="kw">unsafe </span>{
+<a href=#1790 id=1790 data-nosnippet>1790</a>            env::set_var(<span class="string">"LOG_INDEX_DIR"</span>, <span class="kw-2">&amp;</span>fake_out_dir);
+<a href=#1791 id=1791 data-nosnippet>1791</a>        }
+<a href=#1792 id=1792 data-nosnippet>1792</a>
+<a href=#1793 id=1793 data-nosnippet>1793</a>        <span class="comment">// Provide entries for the message indexes used in this test module.
+<a href=#1794 id=1794 data-nosnippet>1794</a>        </span><span class="kw">let _ </span>= cu29_intern_strs::intern_string(<span class="string">"unused to start counter"</span>);
+<a href=#1795 id=1795 data-nosnippet>1795</a>        <span class="kw">let _ </span>= cu29_intern_strs::intern_string(<span class="string">"Just a String {}"</span>);
+<a href=#1796 id=1796 data-nosnippet>1796</a>        <span class="kw">let _ </span>= cu29_intern_strs::intern_string(<span class="string">"Just a String (low level) {}"</span>);
+<a href=#1797 id=1797 data-nosnippet>1797</a>        <span class="kw">let _ </span>= cu29_intern_strs::intern_string(<span class="string">"Just a String (end to end) {}"</span>);
+<a href=#1798 id=1798 data-nosnippet>1798</a>
+<a href=#1799 id=1799 data-nosnippet>1799</a>        <span class="kw">let </span>index_dir = cu29_intern_strs::default_log_index_dir();
+<a href=#1800 id=1800 data-nosnippet>1800</a>        cu29_intern_strs::read_interned_strings(<span class="kw-2">&amp;</span>index_dir).unwrap();
+<a href=#1801 id=1801 data-nosnippet>1801</a>        index_dir
+<a href=#1802 id=1802 data-nosnippet>1802</a>    }
+<a href=#1803 id=1803 data-nosnippet>1803</a>
+<a href=#1804 id=1804 data-nosnippet>1804</a>    <span class="attr">#[test]
+<a href=#1805 id=1805 data-nosnippet>1805</a>    </span><span class="kw">fn </span>test_extract_low_level_cu29_log() {
+<a href=#1806 id=1806 data-nosnippet>1806</a>        <span class="kw">let </span>temp_dir = TempDir::new().unwrap();
+<a href=#1807 id=1807 data-nosnippet>1807</a>        <span class="kw">let </span>temp_path = copy_stringindex_to_temp(<span class="kw-2">&amp;</span>temp_dir);
+<a href=#1808 id=1808 data-nosnippet>1808</a>        <span class="kw">let </span>entry = CuLogEntry::new(<span class="number">3</span>, CuLogLevel::Info);
+<a href=#1809 id=1809 data-nosnippet>1809</a>        <span class="kw">let </span>bytes = bincode::encode_to_vec(<span class="kw-2">&amp;</span>entry, standard()).unwrap();
+<a href=#1810 id=1810 data-nosnippet>1810</a>        <span class="kw">let </span>reader = Cursor::new(bytes.as_slice());
+<a href=#1811 id=1811 data-nosnippet>1811</a>        textlog_dump(reader, temp_path.as_path()).unwrap();
+<a href=#1812 id=1812 data-nosnippet>1812</a>    }
+<a href=#1813 id=1813 data-nosnippet>1813</a>
+<a href=#1814 id=1814 data-nosnippet>1814</a>    <span class="attr">#[test]
+<a href=#1815 id=1815 data-nosnippet>1815</a>    </span><span class="kw">fn </span>end_to_end_datalogger_and_structlog_test() {
+<a href=#1816 id=1816 data-nosnippet>1816</a>        <span class="kw">let </span>dir = tempdir().expect(<span class="string">"Failed to create temp dir"</span>);
+<a href=#1817 id=1817 data-nosnippet>1817</a>        <span class="kw">let </span>path = dir
+<a href=#1818 id=1818 data-nosnippet>1818</a>            .path()
+<a href=#1819 id=1819 data-nosnippet>1819</a>            .join(<span class="string">"end_to_end_datalogger_and_structlog_test.copper"</span>);
+<a href=#1820 id=1820 data-nosnippet>1820</a>        {
+<a href=#1821 id=1821 data-nosnippet>1821</a>            <span class="comment">// Write a couple log entries
+<a href=#1822 id=1822 data-nosnippet>1822</a>            </span><span class="kw">let </span>UnifiedLogger::Write(logger) = UnifiedLoggerBuilder::new()
+<a href=#1823 id=1823 data-nosnippet>1823</a>                .write(<span class="bool-val">true</span>)
+<a href=#1824 id=1824 data-nosnippet>1824</a>                .create(<span class="bool-val">true</span>)
+<a href=#1825 id=1825 data-nosnippet>1825</a>                .file_base_name(<span class="kw-2">&amp;</span>path)
+<a href=#1826 id=1826 data-nosnippet>1826</a>                .preallocated_size(<span class="number">100000</span>)
+<a href=#1827 id=1827 data-nosnippet>1827</a>                .build()
+<a href=#1828 id=1828 data-nosnippet>1828</a>                .expect(<span class="string">"Failed to create logger"</span>)
+<a href=#1829 id=1829 data-nosnippet>1829</a>            <span class="kw">else </span>{
+<a href=#1830 id=1830 data-nosnippet>1830</a>                <span class="macro">panic!</span>(<span class="string">"Failed to create logger"</span>)
+<a href=#1831 id=1831 data-nosnippet>1831</a>            };
+<a href=#1832 id=1832 data-nosnippet>1832</a>            <span class="kw">let </span>data_logger = Arc::new(Mutex::new(logger));
+<a href=#1833 id=1833 data-nosnippet>1833</a>            <span class="kw">let </span>stream = stream_write(data_logger.clone(), UnifiedLogType::StructuredLogLine, <span class="number">1024</span>)
+<a href=#1834 id=1834 data-nosnippet>1834</a>                .expect(<span class="string">"Failed to create stream"</span>);
+<a href=#1835 id=1835 data-nosnippet>1835</a>            <span class="kw">let </span>rt = LoggerRuntime::init(RobotClock::default(), stream, <span class="prelude-val">None</span>::&lt;NullLog&gt;);
+<a href=#1836 id=1836 data-nosnippet>1836</a>
+<a href=#1837 id=1837 data-nosnippet>1837</a>            <span class="kw">let </span><span class="kw-2">mut </span>entry = CuLogEntry::new(<span class="number">4</span>, CuLogLevel::Info); <span class="comment">// this is a "Just a String {}" log line
+<a href=#1838 id=1838 data-nosnippet>1838</a>            </span>entry.add_param(<span class="number">0</span>, Value::String(<span class="string">"Parameter for the log line"</span>.into()));
+<a href=#1839 id=1839 data-nosnippet>1839</a>            log(<span class="kw-2">&amp;mut </span>entry).expect(<span class="string">"Failed to log"</span>);
+<a href=#1840 id=1840 data-nosnippet>1840</a>            <span class="kw">let </span><span class="kw-2">mut </span>entry = CuLogEntry::new(<span class="number">2</span>, CuLogLevel::Info); <span class="comment">// this is a "Just a String {}" log line
+<a href=#1841 id=1841 data-nosnippet>1841</a>            </span>entry.add_param(<span class="number">0</span>, Value::String(<span class="string">"Parameter for the log line"</span>.into()));
+<a href=#1842 id=1842 data-nosnippet>1842</a>            log(<span class="kw-2">&amp;mut </span>entry).expect(<span class="string">"Failed to log"</span>);
+<a href=#1843 id=1843 data-nosnippet>1843</a>
+<a href=#1844 id=1844 data-nosnippet>1844</a>            <span class="comment">// everything is dropped here
+<a href=#1845 id=1845 data-nosnippet>1845</a>            </span>drop(rt);
+<a href=#1846 id=1846 data-nosnippet>1846</a>        }
+<a href=#1847 id=1847 data-nosnippet>1847</a>        <span class="comment">// Read back the log
+<a href=#1848 id=1848 data-nosnippet>1848</a>        </span><span class="kw">let </span>UnifiedLogger::Read(logger) = UnifiedLoggerBuilder::new()
+<a href=#1849 id=1849 data-nosnippet>1849</a>            .file_base_name(
+<a href=#1850 id=1850 data-nosnippet>1850</a>                <span class="kw-2">&amp;</span>dir.path()
+<a href=#1851 id=1851 data-nosnippet>1851</a>                    .join(<span class="string">"end_to_end_datalogger_and_structlog_test.copper"</span>),
+<a href=#1852 id=1852 data-nosnippet>1852</a>            )
+<a href=#1853 id=1853 data-nosnippet>1853</a>            .build()
+<a href=#1854 id=1854 data-nosnippet>1854</a>            .expect(<span class="string">"Failed to create logger"</span>)
+<a href=#1855 id=1855 data-nosnippet>1855</a>        <span class="kw">else </span>{
+<a href=#1856 id=1856 data-nosnippet>1856</a>            <span class="macro">panic!</span>(<span class="string">"Failed to create logger"</span>)
+<a href=#1857 id=1857 data-nosnippet>1857</a>        };
+<a href=#1858 id=1858 data-nosnippet>1858</a>        <span class="kw">let </span>reader = UnifiedLoggerIOReader::new(logger, UnifiedLogType::StructuredLogLine);
+<a href=#1859 id=1859 data-nosnippet>1859</a>        <span class="kw">let </span>temp_dir = TempDir::new().unwrap();
+<a href=#1860 id=1860 data-nosnippet>1860</a>        textlog_dump(
+<a href=#1861 id=1861 data-nosnippet>1861</a>            reader,
+<a href=#1862 id=1862 data-nosnippet>1862</a>            Path::new(copy_stringindex_to_temp(<span class="kw-2">&amp;</span>temp_dir).as_path()),
+<a href=#1863 id=1863 data-nosnippet>1863</a>        )
+<a href=#1864 id=1864 data-nosnippet>1864</a>        .expect(<span class="string">"Failed to dump log"</span>);
+<a href=#1865 id=1865 data-nosnippet>1865</a>    }
+<a href=#1866 id=1866 data-nosnippet>1866</a>
+<a href=#1867 id=1867 data-nosnippet>1867</a>    <span class="comment">// This is normally generated at compile time in CuPayload.
+<a href=#1868 id=1868 data-nosnippet>1868</a>    </span><span class="attr">#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize, Encode, Decode, Default)]
+<a href=#1869 id=1869 data-nosnippet>1869</a>    </span><span class="kw">struct </span>MyMsgs((u8, i32, f32));
+<a href=#1870 id=1870 data-nosnippet>1870</a>
+<a href=#1871 id=1871 data-nosnippet>1871</a>    <span class="kw">impl </span>ErasedCuStampedDataSet <span class="kw">for </span>MyMsgs {
+<a href=#1872 id=1872 data-nosnippet>1872</a>        <span class="kw">fn </span>cumsgs(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;<span class="kw-2">&amp;</span><span class="kw">dyn </span>ErasedCuStampedData&gt; {
+<a href=#1873 id=1873 data-nosnippet>1873</a>            Vec::new()
+<a href=#1874 id=1874 data-nosnippet>1874</a>        }
+<a href=#1875 id=1875 data-nosnippet>1875</a>    }
+<a href=#1876 id=1876 data-nosnippet>1876</a>
+<a href=#1877 id=1877 data-nosnippet>1877</a>    <span class="kw">impl </span>MatchingTasks <span class="kw">for </span>MyMsgs {
+<a href=#1878 id=1878 data-nosnippet>1878</a>        <span class="kw">fn </span>get_all_task_ids() -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>[<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str] {
+<a href=#1879 id=1879 data-nosnippet>1879</a>            <span class="kw-2">&amp;</span>[]
+<a href=#1880 id=1880 data-nosnippet>1880</a>        }
+<a href=#1881 id=1881 data-nosnippet>1881</a>    }
+<a href=#1882 id=1882 data-nosnippet>1882</a>
+<a href=#1883 id=1883 data-nosnippet>1883</a>    <span class="doccomment">/// Checks if we can recover the copper lists from a binary representation.
+<a href=#1884 id=1884 data-nosnippet>1884</a>    </span><span class="attr">#[test]
+<a href=#1885 id=1885 data-nosnippet>1885</a>    </span><span class="kw">fn </span>test_copperlists_dump() {
+<a href=#1886 id=1886 data-nosnippet>1886</a>        <span class="kw">let </span><span class="kw-2">mut </span>data = <span class="macro">vec!</span>[<span class="number">0u8</span>; <span class="number">10000</span>];
+<a href=#1887 id=1887 data-nosnippet>1887</a>        <span class="kw">let </span>mypls: [MyMsgs; <span class="number">4</span>] = [
+<a href=#1888 id=1888 data-nosnippet>1888</a>            MyMsgs((<span class="number">1</span>, <span class="number">2</span>, <span class="number">3.0</span>)),
+<a href=#1889 id=1889 data-nosnippet>1889</a>            MyMsgs((<span class="number">2</span>, <span class="number">3</span>, <span class="number">4.0</span>)),
+<a href=#1890 id=1890 data-nosnippet>1890</a>            MyMsgs((<span class="number">3</span>, <span class="number">4</span>, <span class="number">5.0</span>)),
+<a href=#1891 id=1891 data-nosnippet>1891</a>            MyMsgs((<span class="number">4</span>, <span class="number">5</span>, <span class="number">6.0</span>)),
+<a href=#1892 id=1892 data-nosnippet>1892</a>        ];
+<a href=#1893 id=1893 data-nosnippet>1893</a>
+<a href=#1894 id=1894 data-nosnippet>1894</a>        <span class="kw">let </span><span class="kw-2">mut </span>offset: usize = <span class="number">0</span>;
+<a href=#1895 id=1895 data-nosnippet>1895</a>        <span class="kw">for </span>pl <span class="kw">in </span>mypls.iter() {
+<a href=#1896 id=1896 data-nosnippet>1896</a>            <span class="kw">let </span>cl = CopperList::&lt;MyMsgs&gt;::new(<span class="number">1</span>, <span class="kw-2">*</span>pl);
+<a href=#1897 id=1897 data-nosnippet>1897</a>            offset +=
+<a href=#1898 id=1898 data-nosnippet>1898</a>                encode_into_slice(<span class="kw-2">&amp;</span>cl, <span class="kw-2">&amp;mut </span>data.as_mut_slice()[offset..], standard()).unwrap();
+<a href=#1899 id=1899 data-nosnippet>1899</a>        }
+<a href=#1900 id=1900 data-nosnippet>1900</a>
+<a href=#1901 id=1901 data-nosnippet>1901</a>        <span class="kw">let </span>reader = Cursor::new(data);
+<a href=#1902 id=1902 data-nosnippet>1902</a>
+<a href=#1903 id=1903 data-nosnippet>1903</a>        <span class="kw">let </span><span class="kw-2">mut </span>iter = copperlists_reader::&lt;MyMsgs&gt;(reader);
+<a href=#1904 id=1904 data-nosnippet>1904</a>        <span class="macro">assert_eq!</span>(iter.next().unwrap().msgs, MyMsgs((<span class="number">1</span>, <span class="number">2</span>, <span class="number">3.0</span>)));
+<a href=#1905 id=1905 data-nosnippet>1905</a>        <span class="macro">assert_eq!</span>(iter.next().unwrap().msgs, MyMsgs((<span class="number">2</span>, <span class="number">3</span>, <span class="number">4.0</span>)));
+<a href=#1906 id=1906 data-nosnippet>1906</a>        <span class="macro">assert_eq!</span>(iter.next().unwrap().msgs, MyMsgs((<span class="number">3</span>, <span class="number">4</span>, <span class="number">5.0</span>)));
+<a href=#1907 id=1907 data-nosnippet>1907</a>        <span class="macro">assert_eq!</span>(iter.next().unwrap().msgs, MyMsgs((<span class="number">4</span>, <span class="number">5</span>, <span class="number">6.0</span>)));
+<a href=#1908 id=1908 data-nosnippet>1908</a>    }
+<a href=#1909 id=1909 data-nosnippet>1909</a>
+<a href=#1910 id=1910 data-nosnippet>1910</a>    <span class="attr">#[test]
+<a href=#1911 id=1911 data-nosnippet>1911</a>    </span><span class="kw">fn </span>runtime_lifecycle_reader_retains_timestamps_and_events() {
+<a href=#1912 id=1912 data-nosnippet>1912</a>        <span class="kw">let </span>records = <span class="macro">vec!</span>[
+<a href=#1913 id=1913 data-nosnippet>1913</a>            RuntimeLifecycleRecord {
+<a href=#1914 id=1914 data-nosnippet>1914</a>                timestamp: CuTime::default(),
+<a href=#1915 id=1915 data-nosnippet>1915</a>                event: RuntimeLifecycleEvent::Instantiated {
+<a href=#1916 id=1916 data-nosnippet>1916</a>                    config_source: RuntimeLifecycleConfigSource::BundledDefault,
+<a href=#1917 id=1917 data-nosnippet>1917</a>                },
+<a href=#1918 id=1918 data-nosnippet>1918</a>            },
+<a href=#1919 id=1919 data-nosnippet>1919</a>            RuntimeLifecycleRecord {
+<a href=#1920 id=1920 data-nosnippet>1920</a>                timestamp: CuTime::from_nanos(<span class="number">42</span>),
+<a href=#1921 id=1921 data-nosnippet>1921</a>                event: RuntimeLifecycleEvent::MissionStarted,
+<a href=#1922 id=1922 data-nosnippet>1922</a>            },
+<a href=#1923 id=1923 data-nosnippet>1923</a>        ];
+<a href=#1924 id=1924 data-nosnippet>1924</a>        <span class="kw">let </span><span class="kw-2">mut </span>bytes = Vec::new();
+<a href=#1925 id=1925 data-nosnippet>1925</a>        <span class="kw">for </span>record <span class="kw">in </span><span class="kw-2">&amp;</span>records {
+<a href=#1926 id=1926 data-nosnippet>1926</a>            bytes.extend(bincode::encode_to_vec(record, standard()).unwrap());
+<a href=#1927 id=1927 data-nosnippet>1927</a>        }
+<a href=#1928 id=1928 data-nosnippet>1928</a>
+<a href=#1929 id=1929 data-nosnippet>1929</a>        <span class="macro">assert_eq!</span>(
+<a href=#1930 id=1930 data-nosnippet>1930</a>            runtime_lifecycle_reader(Cursor::new(bytes)).collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;(),
+<a href=#1931 id=1931 data-nosnippet>1931</a>            records
+<a href=#1932 id=1932 data-nosnippet>1932</a>        );
+<a href=#1933 id=1933 data-nosnippet>1933</a>    }
+<a href=#1934 id=1934 data-nosnippet>1934</a>
+<a href=#1935 id=1935 data-nosnippet>1935</a>    <span class="attr">#[test]
+<a href=#1936 id=1936 data-nosnippet>1936</a>    </span><span class="kw">fn </span>logstats_mission_defaults_to_log_then_named_default_then_first() {
+<a href=#1937 id=1937 data-nosnippet>1937</a>        <span class="kw">let </span>config = CuConfig::deserialize_ron(
+<a href=#1938 id=1938 data-nosnippet>1938</a>            <span class="string">r#"(
+<a href=#1939 id=1939 data-nosnippet>1939</a>                missions: [(id: "zeta"), (id: "default"), (id: "alpha")],
+<a href=#1940 id=1940 data-nosnippet>1940</a>                tasks: [],
+<a href=#1941 id=1941 data-nosnippet>1941</a>                cnx: [],
+<a href=#1942 id=1942 data-nosnippet>1942</a>            )"#</span>,
+<a href=#1943 id=1943 data-nosnippet>1943</a>        )
+<a href=#1944 id=1944 data-nosnippet>1944</a>        .unwrap();
+<a href=#1945 id=1945 data-nosnippet>1945</a>        <span class="macro">assert_eq!</span>(
+<a href=#1946 id=1946 data-nosnippet>1946</a>            resolve_logstats_mission(<span class="kw-2">&amp;</span>config, <span class="prelude-val">None</span>, <span class="prelude-val">Some</span>(<span class="string">"zeta"</span>.to_string()))
+<a href=#1947 id=1947 data-nosnippet>1947</a>                .unwrap()
+<a href=#1948 id=1948 data-nosnippet>1948</a>                .as_deref(),
+<a href=#1949 id=1949 data-nosnippet>1949</a>            <span class="prelude-val">Some</span>(<span class="string">"zeta"</span>)
+<a href=#1950 id=1950 data-nosnippet>1950</a>        );
+<a href=#1951 id=1951 data-nosnippet>1951</a>        <span class="macro">assert!</span>(resolve_logstats_mission(<span class="kw-2">&amp;</span>config, <span class="prelude-val">None</span>, <span class="prelude-val">Some</span>(<span class="string">"missing"</span>.to_string())).is_err());
+<a href=#1952 id=1952 data-nosnippet>1952</a>        <span class="macro">assert_eq!</span>(
+<a href=#1953 id=1953 data-nosnippet>1953</a>            resolve_logstats_mission(<span class="kw-2">&amp;</span>config, <span class="prelude-val">Some</span>(<span class="string">"alpha"</span>.to_string()), <span class="prelude-val">None</span>)
+<a href=#1954 id=1954 data-nosnippet>1954</a>                .unwrap()
+<a href=#1955 id=1955 data-nosnippet>1955</a>                .as_deref(),
+<a href=#1956 id=1956 data-nosnippet>1956</a>            <span class="prelude-val">Some</span>(<span class="string">"alpha"</span>)
+<a href=#1957 id=1957 data-nosnippet>1957</a>        );
+<a href=#1958 id=1958 data-nosnippet>1958</a>
+<a href=#1959 id=1959 data-nosnippet>1959</a>        <span class="kw">let </span>config = CuConfig::deserialize_ron(
+<a href=#1960 id=1960 data-nosnippet>1960</a>            <span class="string">r#"(
+<a href=#1961 id=1961 data-nosnippet>1961</a>                missions: [(id: "zeta"), (id: "alpha")],
+<a href=#1962 id=1962 data-nosnippet>1962</a>                tasks: [],
+<a href=#1963 id=1963 data-nosnippet>1963</a>                cnx: [],
+<a href=#1964 id=1964 data-nosnippet>1964</a>            )"#</span>,
+<a href=#1965 id=1965 data-nosnippet>1965</a>        )
+<a href=#1966 id=1966 data-nosnippet>1966</a>        .unwrap();
+<a href=#1967 id=1967 data-nosnippet>1967</a>        <span class="macro">assert_eq!</span>(
+<a href=#1968 id=1968 data-nosnippet>1968</a>            resolve_logstats_mission(<span class="kw-2">&amp;</span>config, <span class="prelude-val">None</span>, <span class="prelude-val">None</span>)
+<a href=#1969 id=1969 data-nosnippet>1969</a>                .unwrap()
+<a href=#1970 id=1970 data-nosnippet>1970</a>                .as_deref(),
+<a href=#1971 id=1971 data-nosnippet>1971</a>            <span class="prelude-val">Some</span>(<span class="string">"alpha"</span>)
+<a href=#1972 id=1972 data-nosnippet>1972</a>        );
+<a href=#1973 id=1973 data-nosnippet>1973</a>    }
+<a href=#1974 id=1974 data-nosnippet>1974</a>
+<a href=#1975 id=1975 data-nosnippet>1975</a>    <span class="attr">#[test]
+<a href=#1976 id=1976 data-nosnippet>1976</a>    </span><span class="kw">fn </span>schedule_optimizer_cli_is_explicit_and_measurements_are_validated() {
+<a href=#1977 id=1977 data-nosnippet>1977</a>        <span class="kw">let </span>args = LogReaderCli::try_parse_from([
+<a href=#1978 id=1978 data-nosnippet>1978</a>            <span class="string">"logreader"</span>,
+<a href=#1979 id=1979 data-nosnippet>1979</a>            <span class="string">"robot.copper"</span>,
+<a href=#1980 id=1980 data-nosnippet>1980</a>            <span class="string">"optimize-schedule"</span>,
+<a href=#1981 id=1981 data-nosnippet>1981</a>            <span class="string">"--contract"</span>,
+<a href=#1982 id=1982 data-nosnippet>1982</a>            <span class="string">"schedule.ron"</span>,
+<a href=#1983 id=1983 data-nosnippet>1983</a>            <span class="string">"--output"</span>,
+<a href=#1984 id=1984 data-nosnippet>1984</a>            <span class="string">"target/pgs"</span>,
+<a href=#1985 id=1985 data-nosnippet>1985</a>            <span class="string">"--candidates"</span>,
+<a href=#1986 id=1986 data-nosnippet>1986</a>            <span class="string">"2"</span>,
+<a href=#1987 id=1987 data-nosnippet>1987</a>            <span class="string">"--measure"</span>,
+<a href=#1988 id=1988 data-nosnippet>1988</a>            <span class="string">"plan-1=logs/plan-1.copper"</span>,
+<a href=#1989 id=1989 data-nosnippet>1989</a>        ])
+<a href=#1990 id=1990 data-nosnippet>1990</a>        .unwrap();
+<a href=#1991 id=1991 data-nosnippet>1991</a>        <span class="kw">let </span>Command::OptimizeSchedule {
+<a href=#1992 id=1992 data-nosnippet>1992</a>            contract,
+<a href=#1993 id=1993 data-nosnippet>1993</a>            output,
+<a href=#1994 id=1994 data-nosnippet>1994</a>            candidates,
+<a href=#1995 id=1995 data-nosnippet>1995</a>            measurements,
+<a href=#1996 id=1996 data-nosnippet>1996</a>        } = args.command
+<a href=#1997 id=1997 data-nosnippet>1997</a>        <span class="kw">else </span>{
+<a href=#1998 id=1998 data-nosnippet>1998</a>            <span class="macro">panic!</span>(<span class="string">"expected optimize-schedule command"</span>);
+<a href=#1999 id=1999 data-nosnippet>1999</a>        };
+<a href=#2000 id=2000 data-nosnippet>2000</a>        <span class="macro">assert_eq!</span>(contract, PathBuf::from(<span class="string">"schedule.ron"</span>));
+<a href=#2001 id=2001 data-nosnippet>2001</a>        <span class="macro">assert_eq!</span>(output, PathBuf::from(<span class="string">"target/pgs"</span>));
+<a href=#2002 id=2002 data-nosnippet>2002</a>        <span class="macro">assert_eq!</span>(candidates, <span class="number">2</span>);
+<a href=#2003 id=2003 data-nosnippet>2003</a>        <span class="macro">assert_eq!</span>(measurements, [<span class="string">"plan-1=logs/plan-1.copper"</span>]);
+<a href=#2004 id=2004 data-nosnippet>2004</a>        <span class="macro">assert_eq!</span>(
+<a href=#2005 id=2005 data-nosnippet>2005</a>            parse_measurement(<span class="kw-2">&amp;</span>measurements[<span class="number">0</span>]).unwrap(),
+<a href=#2006 id=2006 data-nosnippet>2006</a>            (<span class="string">"plan-1"</span>, Path::new(<span class="string">"logs/plan-1.copper"</span>))
+<a href=#2007 id=2007 data-nosnippet>2007</a>        );
+<a href=#2008 id=2008 data-nosnippet>2008</a>        <span class="macro">assert!</span>(parse_measurement(<span class="string">"plan-1"</span>).is_err());
+<a href=#2009 id=2009 data-nosnippet>2009</a>        <span class="macro">assert!</span>(parse_measurement(<span class="string">"baseline=other.copper"</span>).is_err());
+<a href=#2010 id=2010 data-nosnippet>2010</a>        <span class="macro">assert_eq!</span>(candidate_index(<span class="string">"plan-2/round-3"</span>), <span class="prelude-val">Some</span>(<span class="number">1</span>));
+<a href=#2011 id=2011 data-nosnippet>2011</a>        <span class="macro">assert_eq!</span>(candidate_index(<span class="string">"baseline"</span>), <span class="prelude-val">None</span>);
+<a href=#2012 id=2012 data-nosnippet>2012</a>
+<a href=#2013 id=2013 data-nosnippet>2013</a>        <span class="kw">let </span>config = CuConfig::deserialize_ron(
+<a href=#2014 id=2014 data-nosnippet>2014</a>            <span class="string">r#"(
+<a href=#2015 id=2015 data-nosnippet>2015</a>                missions: [(id: "drive"), (id: "park")],
+<a href=#2016 id=2016 data-nosnippet>2016</a>                tasks: [],
+<a href=#2017 id=2017 data-nosnippet>2017</a>                cnx: [],
+<a href=#2018 id=2018 data-nosnippet>2018</a>            )"#</span>,
+<a href=#2019 id=2019 data-nosnippet>2019</a>        )
+<a href=#2020 id=2020 data-nosnippet>2020</a>        .unwrap();
+<a href=#2021 id=2021 data-nosnippet>2021</a>        <span class="macro">assert!</span>(resolve_schedule_mission(<span class="kw-2">&amp;</span>config, <span class="kw-2">&amp;</span>[<span class="string">"drive"</span>.into(), <span class="string">"park"</span>.into()]).is_err());
+<a href=#2022 id=2022 data-nosnippet>2022</a>        <span class="macro">assert_eq!</span>(
+<a href=#2023 id=2023 data-nosnippet>2023</a>            resolve_schedule_mission(<span class="kw-2">&amp;</span>config, <span class="kw-2">&amp;</span>[<span class="string">"park"</span>.into()])
+<a href=#2024 id=2024 data-nosnippet>2024</a>                .unwrap()
+<a href=#2025 id=2025 data-nosnippet>2025</a>                .as_deref(),
+<a href=#2026 id=2026 data-nosnippet>2026</a>            <span class="prelude-val">Some</span>(<span class="string">"park"</span>)
+<a href=#2027 id=2027 data-nosnippet>2027</a>        );
+<a href=#2028 id=2028 data-nosnippet>2028</a>    }
+<a href=#2029 id=2029 data-nosnippet>2029</a>}
 </code></pre></div></section></main></body></html>
