@@ -64,6 +64,7 @@ Use arrow keys to scroll on narrow terminals.
 | --- | --- |
 | State | LOCAL uses a local counter; ACQUIRING awaits synchronization; LOCKED follows the reference; HOLDOVER continues without the reference; EXPIRED requires reacquisition. |
 | Robot time | Current shared `RobotClock` time in ns. Task timestamps from `ctx.now()` use this same clock. |
+| Uptime | For a local epoch, robot time displayed as elapsed days, hours, minutes and whole seconds. This uses the same RobotClock value, not host uptime. |
 | Source | Advertised upstream provenance, such as GNSS, atomic clock, local counter, or unknown. |
 | Epoch | Provider-selected timestamp epoch, such as GPS, TAI, UTC, or local elapsed time. |
 | TAI − UTC | Valid reference-advertised difference in seconds, when the epoch is TAI. |

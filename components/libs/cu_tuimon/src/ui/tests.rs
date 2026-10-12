@@ -59,6 +59,7 @@ fn clock_panel_reads_the_live_shared_clock_and_shows_expiration() {
     assert_eq!(ui.active_screen(), MonitorScreen::Clock);
     let initial = stream_text(&mut ui, 140, 22);
     assert!(initial.contains("LOCKED"));
+    assert!(!initial.contains("Uptime"));
     assert!(initial.contains("GNSS"));
     assert!(initial.contains("Epoch"));
     assert!(initial.contains("TAI"));
@@ -150,6 +151,19 @@ fn clock_panel_shows_the_live_local_mock_origin_without_sync_features() {
     assert!(!text.contains("Uncertainty limit"));
     raw.set_value(123_456);
     assert!(stream_text(&mut ui, 80, 20).contains("123456 ns"));
+    for (nanos, expected) in [
+        (0, "0 s"),
+        (8_481_433_101, "8 s"),
+        (68_000_000_000, "1 min 08 s"),
+        (3_668_000_000_000, "1 h 01 min 08 s"),
+        (90_068_000_000_000, "1 d 01 h 01 min 08 s"),
+    ] {
+        raw.set_value(nanos);
+        let text = stream_text(&mut ui, 80, 20);
+        assert!(text.contains("Uptime"));
+        assert!(text.contains(expected), "Missing {expected} in {text}");
+        assert!(text.contains(&format!("{nanos} ns")));
+    }
 }
 
 #[test]
@@ -170,6 +184,7 @@ fn clock_panel_displays_bare_gps_provenance_without_calendar_conversion() {
     let text = stream_text(&mut ui, 140, 22);
     assert!(text.contains("GNSS"));
     assert!(text.contains("GPS"));
+    assert!(!text.contains("Uptime"));
     assert!(!text.contains("Local time"));
     assert!(!text.contains("TAI"));
 }

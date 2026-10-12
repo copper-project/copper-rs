@@ -87,6 +87,7 @@ Input ownership:
 
 This crate lives under `components/libs` because it is a reusable UI backend, not a standalone monitor component.
 
-The CLK panel shows provider-advertised source and epoch. It formats a local ISO 8601
+The CLK panel shows provider-advertised source and epoch, plus readable robot uptime
+for local epochs. It formats a local ISO 8601
 date to seconds only for TAI with a known TAI minus UTC offset, and only while that
 panel is drawn. GPS timestamps remain in their provider epoch without conversion.

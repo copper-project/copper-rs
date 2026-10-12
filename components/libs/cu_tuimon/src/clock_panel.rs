@@ -71,6 +71,9 @@ impl MonitorUi {
             row("Source", source_label(origin.source)),
             row("Epoch", epoch_label(origin.epoch)),
         ];
+        if origin.epoch == ClockEpoch::Local {
+            rows.insert(1, row("Uptime", format_uptime(now)));
+        }
         if let ClockEpoch::Tai {
             tai_minus_utc_seconds,
         } = origin.epoch
@@ -194,6 +197,23 @@ impl MonitorUi {
             scroll.render_widget(Paragraph::new("Unavailable"), uncertainty_area);
         }
         scroll.render(area, frame.buffer_mut(), &mut self.clock_scroll_state);
+    }
+}
+
+fn format_uptime(nanos: u64) -> String {
+    let total_seconds = nanos / 1_000_000_000;
+    let seconds = total_seconds % 60;
+    let minutes = (total_seconds / 60) % 60;
+    let hours = (total_seconds / 3600) % 24;
+    let days = total_seconds / 86_400;
+    if days > 0 {
+        format!("{days} d {hours:02} h {minutes:02} min {seconds:02} s")
+    } else if total_seconds >= 3600 {
+        format!("{hours} h {minutes:02} min {seconds:02} s")
+    } else if total_seconds >= 60 {
+        format!("{minutes} min {seconds:02} s")
+    } else {
+        format!("{seconds} s")
     }
 }
 
