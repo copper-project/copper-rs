@@ -123,26 +123,34 @@ impl<P: CopperListTuple> NativeArchive<P> {
         let logger = Arc::new(Mutex::new(logger));
         let mut archive = Self {
             last_structured: None,
-            copperlists: NativeStream::new(
+            copperlists: NativeStream::with_context(
                 UnifiedLogType::CopperList,
                 logger.clone(),
                 section_bytes,
+                manifest.context,
             )
             .map_err(io_error)?,
-            keyframes: NativeStream::new(
+            keyframes: NativeStream::with_context(
                 UnifiedLogType::FrozenTasks,
                 logger.clone(),
                 section_bytes,
+                manifest.context,
             )
             .map_err(io_error)?,
-            structured: NativeStream::new(
+            structured: NativeStream::with_context(
                 UnifiedLogType::StructuredLogLine,
                 logger.clone(),
                 section_bytes,
+                manifest.context,
             )
             .map_err(io_error)?,
-            continuity: NativeStream::new(UnifiedLogType::StreamContinuity, logger, section_bytes)
-                .map_err(io_error)?,
+            continuity: NativeStream::with_context(
+                UnifiedLogType::StreamContinuity,
+                logger,
+                section_bytes,
+                manifest.context,
+            )
+            .map_err(io_error)?,
             identity: manifest.identity,
             manifest_digest: received.record().decoded().digest,
             manifest_object_id: received.record().decoded().object_id,

@@ -312,6 +312,10 @@ the oldest data sections while retaining static metadata and the decode catalog.
 The capacity includes metadata, must exceed the configured section size and must be a multiple of 512
 bytes. It must also fit the application's static metadata and one archive section.
 For example, `.with_log_rollover(256 * 1024 * 1024)` keeps a 256 MiB archive.
+Each sender session belongs to one application construction. Its repeated manifest
+carries the onboard `SectionContext` (run, instance and mission indices). Archive
+sections retain that identity across rollover and late joins; use the twin generated
+for the sender's active mission. A new construction uses a new session and archive.
 Replay retains up to the configured queue capacity in events and pending captures,
 plus one recovery point and one executing frame. Presentation retains up to the
 configured frame and structured-entry capacities; payload storage and thread/runtime
@@ -360,8 +364,9 @@ payload length as a big endian u64, and payload. Recovery-point references retai
 the same digests for the same semantic records. Truncated headers are rejected;
 truncated payloads and appended bytes fail digest verification. Receiver allocation
 bounds still apply to the complete framed record before assembly.
-Session manifests encode identity, `ReceiverRequirements`, and application schema
-using standard bincode encoding. Requirements carry only symbol size, RLC field,
+Session manifests encode identity, `ReceiverRequirements`, application schema and
+the producing construction's section context using standard bincode encoding.
+Requirements carry only symbol size, RLC field,
 window symbols, maximum complete CopperList record bytes, and optional feedback
 requirements (report interval and destination key). Receivers validate
 this geometry and enforce their own symbol, window, record, and buffering limits

@@ -99,6 +99,7 @@ pub(super) fn dataset_support(
 pub(super) fn runtime_support(
     app: &Ident,
     mission: &Ident,
+    mission_index: u32,
     plan: &CuExecutionLoop,
     entities: &[ExecutionEntity],
 ) -> proc_macro2::TokenStream {
@@ -154,6 +155,7 @@ pub(super) fn runtime_support(
         }
         impl ::cu29::logstream::twin::LiveReplay for #app {
             type DataSet = #mission::CuStampedDataSet;
+            const MISSION_INDEX: u32 = #mission_index;
             fn seal_archive_metadata(logger: &mut cu29::prelude::UnifiedLoggerWrite) -> CuResult<()> {
                 let metadata = Self::application_log_metadata(String::new());
                 Self::seal_log_metadata::<cu29::prelude::memmap::MmapSectionStorage, _>(logger, &metadata)

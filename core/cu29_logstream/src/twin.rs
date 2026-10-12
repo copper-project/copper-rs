@@ -22,6 +22,9 @@ use std::{
 /// Implemented by `#[copper_runtime(..., sim_mode = true)]` with logstream enabled.
 pub trait LiveReplay: Sized + 'static {
     type DataSet: CaptureDataSet + Send + 'static;
+    /// Index into the generated application's shared mission catalog.
+    #[doc(hidden)]
+    const MISSION_INDEX: u32;
     /// Seal locally generated application metadata and the optional decode catalog.
     #[doc(hidden)]
     fn seal_archive_metadata(logger: &mut cu29_unifiedlog::UnifiedLoggerWrite) -> CuResult<()>;
