@@ -21,6 +21,12 @@ See the main crate cu29 for more information about the overall Copper project.
 
 ## Examples
 
+`clock.sync_status()` is available with or without the `clock-sync` feature and
+returns `Option<sync::SyncStatus>`. It returns `None` without the feature or before
+discipline is published. Reusable tasks can inspect quality without enabling
+synchronization; enable the feature to attach a live controller. Feature-disabled
+status reads require no counter read or synchronization storage.
+
 ### Basic Clock Usage
 
 ```rust
@@ -44,6 +50,37 @@ assert_eq!(clock.now(), clock_clone.now()); // more or less :)
 let ref_time_ns = 1_000_000_000; // 1 second
 let clock_with_ref = RobotClock::from_ref_time(ref_time_ns);
 ```
+
+### Raw Counter Time and Busy Waits
+
+Each `RobotClock` owns its counter calibration. `raw_now()` reads undisciplined
+local time as `CuInstant`, while `now()` reads the robot's execution timeline
+as `CuTime`. These types cannot be compared, subtracted, or used interchangeably
+as deadlines or message timestamps. Both use nanoseconds; elapsed intervals use
+`CuDuration`.
+Clones share the same raw origin; compare raw readings within one clock and its
+clones. Synchronization adjusts the execution timeline and leaves raw time unchanged.
+
+```rust
+use cu29_clock::{CuDuration, RobotClock};
+
+let clock = RobotClock::new();
+let start = clock.raw_now();
+clock.busy_wait_for(CuDuration::from_micros(10));
+let elapsed = clock.raw_now() - start;
+
+let deadline = clock.raw_now() + CuDuration::from_micros(10);
+clock.busy_wait_until(deadline);
+```
+
+`CuInstant` readings come from `clock.raw_now()`. Reconstruct a captured raw
+reading with `CuInstant::from_nanos(nanos)` using that clock's origin. A recorded
+`ClockSnapshot::at(instant)` maps a raw instant to execution `CuTime`.
+Replace instance-free `CuInstant::now()`/`Instant::now()` and free
+`busy_wait_for(duration)` and `busy_wait_until(deadline)` calls with the
+corresponding methods on that clock. Raw reads and waits are available in
+both `std` and `no_std` builds. Busy waits require an advancing clock; a mock must
+be advanced through its control handle.
 
 ### Working with Time Durations
 
