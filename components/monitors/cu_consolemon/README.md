@@ -58,13 +58,27 @@ origin. Ordinary clocks show LOCAL with a local monotonic or mock counter. The
 optional `clock-sync` feature enables clock discipline; synchronized clocks open
 CLK initially. It has two bordered panes side by side: **Clock / reference**
 for live time and alignment, and **Timestamp uncertainty** for bounds and limits.
-Use arrow keys to scroll on narrow terminals. **Robot vs reference** shows the signed
-difference: positive is ahead, negative is behind. **Uncertainty bound** shows the conservative
-total and its reference/capture, sample-aging, and clock-mismatch contributions.
-It includes configured allowances rather than measuring total clock error.
-**Allowed uncertainty** is the configured maximum; exceeding it expires a locked
-or holdover clock. The panel also shows estimated drift, sample age, reference
-identity, and domain. Clock sampling and formatting happen on the UI thread;
-no per-iteration clock telemetry is added to the task graph.
+Use arrow keys to scroll on narrow terminals.
+
+| Metric | Meaning |
+| --- | --- |
+| State | LOCAL uses a local counter; ACQUIRING awaits synchronization; LOCKED follows the reference; HOLDOVER continues without the reference; EXPIRED requires reacquisition. |
+| Robot time | Current shared `RobotClock` time in ns. Task timestamps from `ctx.now()` use this same clock. |
+| Origin | Local monotonic counter, mock counter, or external reference. |
+| Offset from reference | Signed robot time minus reference time in µs: positive is ahead, negative is behind. |
+| Estimated drift | Estimated clock rate difference in ppm. |
+| Sample age | Elapsed time since the latest reference sample in ms. |
+| Reference identity | Reference provider's clock identifier. |
+| Domain / session | Reference domain and session identifiers; the provider determines the time scale. |
+| Uncertainty bound | Conservative total timestamp uncertainty in ms: reference uncertainty + aging uncertainty + offset magnitude. Includes configured allowances; it is not measured total clock error. |
+| Reference uncertainty | Reported or configured reference uncertainty plus capture uncertainty in ms. |
+| Aging uncertainty | Uncertainty accumulated since the latest sample in µs, using the drift bound. |
+| Offset magnitude | Absolute offset from the reference in µs. |
+| Drift bound | Rate uncertainty allowance in ppm used to calculate aging uncertainty. |
+| Uncertainty limit | Configured maximum uncertainty in ms. Exceeding it expires LOCKED or HOLDOVER; sample-age limits can also expire synchronization. This is not a precision target. |
+
+Unavailable indicates that no usable uncertainty estimate exists or that the clock
+has no external synchronization. Clock sampling and formatting happen on the UI
+thread; no per-iteration clock telemetry is added to the task graph.
 
 Try the [standalone PTP demo](../../../examples/cu_clock_sync/README.md).

@@ -13,8 +13,8 @@ use ratatui::widgets::Borders;
 use ratatui::widgets::Cell;
 use ratatui::widgets::Paragraph;
 use ratatui::widgets::Row;
+use ratatui::widgets::StatefulWidget;
 use ratatui::widgets::Table;
-use ratatui::widgets::{StatefulWidget, Wrap};
 use tui_widgets::scrollview::ScrollView;
 
 impl MonitorUi {
@@ -59,14 +59,14 @@ impl MonitorUi {
         let now = clock.now().as_nanos();
         let row =
             |name: &'static str, value: String| Row::new([Cell::from(name), Cell::from(value)]);
-        let mut rows = vec![row("Robot time (ns)", now.to_string())];
+        let mut rows = vec![row("Robot time", format!("{now} ns"))];
         let mut uncertainty_rows = Vec::new();
         if let Some(status) = clock.sync_status() {
             let (label, color) = match status.state {
                 SyncState::Acquiring => ("ACQUIRING", palette::YELLOW),
                 SyncState::Locked => ("LOCKED", palette::GREEN),
-                SyncState::Holdover => ("HOLDOVER (reference unavailable)", palette::YELLOW),
-                SyncState::Expired => ("EXPIRED (reacquire reference)", palette::LIGHT_RED),
+                SyncState::Holdover => ("HOLDOVER", palette::YELLOW),
+                SyncState::Expired => ("EXPIRED", palette::LIGHT_RED),
             };
             rows.insert(
                 0,
@@ -92,51 +92,42 @@ impl MonitorUi {
                     .saturating_sub(phase)
                     .saturating_sub(aging);
                 rows.push(row(
-                    "Robot vs reference",
+                    "Offset from reference",
                     format!("{:+.3} µs", -(status.phase_offset_ns as f64) / 1000.0),
                 ));
                 uncertainty_rows.extend([
                     row(
                         "Uncertainty bound",
                         format!(
-                            "≤ {:.3} ms (conservative total)",
+                            "≤ {:.3} ms",
                             status.estimated_error.as_nanos() as f64 / 1_000_000.0
                         ),
                     ),
                     row(
-                        "Reference + capture",
-                        format!(
-                            "{:.3} ms (reported/configured bound)",
-                            reference as f64 / 1_000_000.0
-                        ),
+                        "Reference uncertainty",
+                        format!("{:.3} ms", reference as f64 / 1_000_000.0),
                     ),
                     row(
-                        "Sample aging",
-                        format!(
-                            "{:.3} µs ({:.0} ppm allowance)",
-                            aging as f64 / 1000.0,
-                            f64::from(status.drift_bound_ppb) / 1000.0
-                        ),
+                        "Aging uncertainty",
+                        format!("{:.3} µs", aging as f64 / 1000.0),
                     ),
                     row(
-                        "Clock mismatch",
-                        format!("{:.3} µs (offset magnitude)", phase as f64 / 1000.0),
+                        "Offset magnitude",
+                        format!("{:.3} µs", phase as f64 / 1000.0),
                     ),
                 ]);
             } else {
-                rows.push(row("Robot vs reference", "Unavailable".into()));
-                uncertainty_rows.push(row(
-                    "Uncertainty bound",
-                    "No usable reference sample".into(),
-                ));
+                rows.push(row("Offset from reference", "Unavailable".into()));
+                uncertainty_rows.push(row("Uncertainty bound", "Unavailable".into()));
             }
+            uncertainty_rows.push(row(
+                "Drift bound",
+                format!("{:.3} ppm", f64::from(status.drift_bound_ppb) / 1000.0),
+            ));
             uncertainty_rows.push(row("", "".into()));
             uncertainty_rows.push(row(
-                "Allowed uncertainty",
-                format!(
-                    "{:.3} ms (configured maximum)",
-                    status.max_error.as_nanos() as f64 / 1_000_000.0
-                ),
+                "Uncertainty limit",
+                format!("{:.3} ms", status.max_error.as_nanos() as f64 / 1_000_000.0),
             ));
             rows.extend([
                 row(
@@ -171,7 +162,6 @@ impl MonitorUi {
                 .into(),
             ));
         }
-        rows.push(row("Task timestamps", "ctx.now() shares this clock".into()));
         let table = |rows, value_label| {
             Table::new(rows, [Constraint::Length(22), Constraint::Min(0)])
                 .header(
@@ -183,20 +173,9 @@ impl MonitorUi {
         };
         scroll.render_widget(table(rows, "Live value").block(clock_block), panels[0]);
         if !uncertainty_rows.is_empty() {
-            let sections = Layout::vertical([Constraint::Length(9), Constraint::Min(0)])
-                .split(uncertainty_area);
-            scroll.render_widget(table(uncertainty_rows, "Bound / limit"), sections[0]);
-            scroll.render_widget(
-                Paragraph::new("Allowed uncertainty is a configured maximum.\nAbove limit: LOCKED/HOLDOVER expires.\nSample-age limits also apply.")
-                    .wrap(Wrap { trim: false }),
-                sections[1],
-            );
+            scroll.render_widget(table(uncertainty_rows, "Bound / limit"), uncertainty_area);
         } else {
-            scroll.render_widget(
-                Paragraph::new("Local clock.\nNo external synchronization configured.")
-                    .wrap(Wrap { trim: false }),
-                uncertainty_area,
-            );
+            scroll.render_widget(Paragraph::new("Unavailable"), uncertainty_area);
         }
         scroll.render(area, frame.buffer_mut(), &mut self.clock_scroll_state);
     }

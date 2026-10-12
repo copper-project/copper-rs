@@ -48,15 +48,19 @@ fn clock_panel_reads_the_live_shared_clock_and_shows_expiration() {
     let initial = stream_text(&mut ui, 140, 22);
     assert!(initial.contains("LOCKED"));
     assert!(initial.contains("External reference"));
-    assert!(initial.contains("Robot vs reference"));
+    assert!(initial.contains("Offset from reference"));
     assert!(initial.contains("-50.000 µs"));
     assert!(initial.contains("Uncertainty bound"));
-    assert!(initial.contains("1.050 ms (conservative total)"));
-    assert!(initial.contains("Reference + capture"));
-    assert!(initial.contains("1.000 ms (reported/configured bound)"));
-    assert!(initial.contains("Allowed uncertainty"));
-    assert!(initial.contains("20.000 ms (configured maximum)"));
-    assert!(initial.contains("Above limit: LOCKED/HOLDOVER expires"));
+    assert!(initial.contains("1.050 ms"));
+    assert!(initial.contains("Reference uncertainty"));
+    assert!(initial.contains("1.000 ms"));
+    assert!(initial.contains("Uncertainty limit"));
+    assert!(initial.contains("20.000 ms"));
+    assert!(initial.contains("Drift bound"));
+    assert!(initial.contains("100.000 ppm"));
+    assert!(!initial.contains('('));
+    assert!(!initial.contains("Task timestamps"));
+    assert!(!initial.contains("Above limit"));
     assert!(initial.contains(&(epoch + 1_000_000_000).to_string()));
     assert!(initial.contains("64:65:6d:6f:2d:70:74:70"));
     raw.set_value(1_500_000_000);
@@ -68,9 +72,9 @@ fn clock_panel_reads_the_live_shared_clock_and_shows_expiration() {
     ui.scroll(ScrollDirection::Right, 100);
     let uncertainty = stream_text(&mut ui, 80, 22);
     assert!(uncertainty.contains("Timestamp uncertainty"));
-    assert!(uncertainty.contains("50.000 µs (100 ppm allowance)"));
-    assert!(uncertainty.contains("1.075 ms (conservative total)"));
-    assert!(uncertainty.contains("Above limit: LOCKED/HOLDOVER expires"));
+    assert!(uncertainty.contains("50.000 µs"));
+    assert!(uncertainty.contains("1.075 ms"));
+    assert!(!uncertainty.contains('('));
     raw.set_value(7_000_000_000);
     let expired = stream_text(&mut ui, 140, 22);
     assert!(expired.contains("EXPIRED"));
@@ -104,9 +108,9 @@ fn clock_panel_does_not_present_unknown_uncertainty_as_a_measurement() {
     assert!(text.contains("Unavailable"));
     ui.scroll(ScrollDirection::Right, 100);
     let text = stream_text(&mut ui, 80, 22);
-    assert!(text.contains("No usable reference sample"));
+    assert!(text.contains("Unavailable"));
     assert!(!text.contains("aligned"));
-    assert!(!text.contains("Reference + capture"));
+    assert!(!text.contains("Reference uncertainty"));
     assert!(!text.contains("184467"));
 }
 
@@ -122,9 +126,9 @@ fn clock_panel_shows_the_live_local_mock_origin_without_sync_features() {
     assert!(text.contains("Mock counter"));
     assert!(!text.contains("Reference identity"));
     assert!(!text.contains("Uncertainty bound"));
-    assert!(!text.contains("Allowed uncertainty"));
+    assert!(!text.contains("Uncertainty limit"));
     raw.set_value(123_456);
-    assert!(stream_text(&mut ui, 80, 20).contains("123456"));
+    assert!(stream_text(&mut ui, 80, 20).contains("123456 ns"));
 }
 
 #[test]
@@ -169,11 +173,11 @@ fn clock_panels_stay_side_by_side_and_scroll_on_small_terminals() {
             .collect::<Vec<_>>()
             .join("\n");
         assert!(left.contains("Clock / reference"));
-        assert!(left.contains("Robot time (ns)"));
+        assert!(left.contains("Robot time"));
         assert!(!left.contains("Timestamp uncertainty"));
         assert!(right.contains("Timestamp uncertainty"));
-        assert!(right.contains("No external synchronization configured"));
-        assert!(!right.contains("Robot time (ns)"));
+        assert!(right.contains("Unavailable"));
+        assert!(!right.contains("Robot time"));
         let bottom: Vec<_> = lines[23].chars().collect();
         for start in [0, half] {
             assert_eq!(bottom[start], '╰');
@@ -185,7 +189,7 @@ fn clock_panels_stay_side_by_side_and_scroll_on_small_terminals() {
     ui.scroll(ScrollDirection::Right, 100);
     let narrow = stream_text(&mut ui, 80, 22);
     assert!(narrow.contains("Timestamp uncertainty"));
-    assert!(narrow.contains("No external synchronization configured"));
+    assert!(narrow.contains("Unavailable"));
     stream_text(&mut ui, 1, 1);
     ui.scroll(ScrollDirection::Down, 100);
     stream_text(&mut ui, 80, 8);
