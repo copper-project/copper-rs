@@ -81,6 +81,7 @@ pub use cu29_runtime::app;
 #[cfg(feature = "std")]
 #[doc(hidden)]
 pub use cu29_runtime::arena;
+pub use cu29_runtime::clock_sync;
 pub use cu29_runtime::config;
 pub use cu29_runtime::context;
 pub use cu29_runtime::continuity;

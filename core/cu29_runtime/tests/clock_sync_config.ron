@@ -1,0 +1,14 @@
+(
+    resources: [(id: "ptp", provider: "crate::PtpBundle")],
+    runtime: (
+        clock: (
+            parent: "ptp.reference",
+            max_error_ns: 1000000,
+            sample_interval_ns: 1000000,
+            acquisition_timeout_ns: 100000000,
+        ),
+    ),
+    tasks: [(id: "src", type: "crate::Source"), (id: "sink", type: "crate::Sink")],
+    cnx: [(src: "src", dst: "sink", msg: "u64")],
+    logging: (enable_task_logging: true, slab_size_mib: 4, section_size_mib: 1),
+)
