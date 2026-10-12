@@ -1,0 +1,25 @@
+[package]
+name = "cu-clock-sync"
+description = "Copper PTP clock synchronization example"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+default-run = "cu-clock-sync"
+
+[dependencies]
+cu29 = { workspace = true, features = ["clock-sync"] }
+cu29-export = { workspace = true }
+cu-consolemon = { path = "../../components/monitors/cu_consolemon", features = [
+  "clock-sync",
+] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+cu-ptp = { path = "../../components/res/cu_ptp", features = ["linux-phc"] }
+
+[build-dependencies]
+cu29-build = { workspace = true }
+
+[[bin]]
+name = "clock-sync-logreader"
+path = "src/bin/logreader.rs"
