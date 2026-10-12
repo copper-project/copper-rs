@@ -281,259 +281,262 @@
 <a href=#281 id=281 data-nosnippet>281</a>                                        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
 <a href=#282 id=282 data-nosnippet>282</a>                                    }
 <a href=#283 id=283 data-nosnippet>283</a>                                    <span class="kw">if let </span>SessionEvent::Manifest(manifest) = <span class="kw-2">&amp;</span>event {
-<a href=#284 id=284 data-nosnippet>284</a>                                        status.identity = <span class="prelude-val">Some</span>(manifest.manifest().identity);
-<a href=#285 id=285 data-nosnippet>285</a>                                        <span class="kw">if </span>feedback_tx.is_some() {
-<a href=#286 id=286 data-nosnippet>286</a>                                            reporter = <span class="kw">crate</span>::feedback::FeedbackReporter::new(
-<a href=#287 id=287 data-nosnippet>287</a>                                                manifest.manifest(),
-<a href=#288 id=288 data-nosnippet>288</a>                                                receiver_id,
-<a href=#289 id=289 data-nosnippet>289</a>                                                feedback_clock.now(),
-<a href=#290 id=290 data-nosnippet>290</a>                                            );
-<a href=#291 id=291 data-nosnippet>291</a>                                        }
-<a href=#292 id=292 data-nosnippet>292</a>                                        <span class="kw">let </span><span class="kw-2">mut </span>builder = UnifiedLoggerBuilder::new()
-<a href=#293 id=293 data-nosnippet>293</a>                                            .file_base_name(<span class="kw-2">&amp;</span>path)
-<a href=#294 id=294 data-nosnippet>294</a>                                            .preallocated_size(<span class="self">self</span>.log_rollover.unwrap_or(<span class="self">self</span>.slab_bytes))
-<a href=#295 id=295 data-nosnippet>295</a>                                            .write(<span class="bool-val">true</span>)
-<a href=#296 id=296 data-nosnippet>296</a>                                            .create(<span class="bool-val">true</span>);
-<a href=#297 id=297 data-nosnippet>297</a>                                        <span class="kw">if let </span><span class="prelude-val">Some</span>(bytes) = <span class="self">self</span>.log_rollover {
-<a href=#298 id=298 data-nosnippet>298</a>                                            builder = builder.rollover(bytes);
-<a href=#299 id=299 data-nosnippet>299</a>                                        }
-<a href=#300 id=300 data-nosnippet>300</a>                                        <span class="kw">let </span>logger = builder.build()
-<a href=#301 id=301 data-nosnippet>301</a>                                            .map_err(|e| <span class="kw">crate</span>::Error::Codec(e.to_string()))<span class="question-mark">?</span>;
-<a href=#302 id=302 data-nosnippet>302</a>                                        <span class="kw">let </span>UnifiedLogger::Write(<span class="kw-2">mut </span>logger) = logger <span class="kw">else </span>{
-<a href=#303 id=303 data-nosnippet>303</a>                                            <span class="macro">unreachable!</span>()
-<a href=#304 id=304 data-nosnippet>304</a>                                        };
-<a href=#305 id=305 data-nosnippet>305</a>                                        A::seal_archive_metadata(<span class="kw-2">&amp;mut </span>logger)
-<a href=#306 id=306 data-nosnippet>306</a>                                            .map_err(|e| <span class="kw">crate</span>::Error::Codec(e.to_string()))<span class="question-mark">?</span>;
-<a href=#307 id=307 data-nosnippet>307</a>                                        archive = <span class="prelude-val">Some</span>(CaptureArchive::&lt;A::DataSet&gt;::new_with_logger(
-<a href=#308 id=308 data-nosnippet>308</a>                                            manifest, <span class="self">self</span>.section_bytes, logger,
-<a href=#309 id=309 data-nosnippet>309</a>                                        )<span class="question-mark">?</span>);
-<a href=#310 id=310 data-nosnippet>310</a>                                    }
-<a href=#311 id=311 data-nosnippet>311</a>                                    <span class="kw">let </span>writer =
-<a href=#312 id=312 data-nosnippet>312</a>                                        archive.as_mut().ok_or(<span class="kw">crate</span>::Error::InvalidConfig(
-<a href=#313 id=313 data-nosnippet>313</a>                                            <span class="string">"capture arrived before its manifest"</span>,
-<a href=#314 id=314 data-nosnippet>314</a>                                        ))<span class="question-mark">?</span>;
-<a href=#315 id=315 data-nosnippet>315</a>                                    <span class="kw">let </span>capture = writer.accept(<span class="kw-2">&amp;</span>event)<span class="question-mark">?</span>;
-<a href=#316 id=316 data-nosnippet>316</a>                                    <span class="kw">if let </span><span class="prelude-val">Some</span>(entry) = writer.take_structured_log() {
-<a href=#317 id=317 data-nosnippet>317</a>                                        status.structured_logs += <span class="number">1</span>;
-<a href=#318 id=318 data-nosnippet>318</a>                                        <span class="kw">if let </span>SessionEvent::Object { identity, record } = <span class="kw-2">&amp;</span>event {
-<a href=#319 id=319 data-nosnippet>319</a>                                            log_publisher.publish(ReceivedStructuredLog {
-<a href=#320 id=320 data-nosnippet>320</a>                                                identity: <span class="kw-2">*</span>identity, sequence: record.decoded().object_id, entry,
-<a href=#321 id=321 data-nosnippet>321</a>                                            });
-<a href=#322 id=322 data-nosnippet>322</a>                                        }
-<a href=#323 id=323 data-nosnippet>323</a>                                    }
-<a href=#324 id=324 data-nosnippet>324</a>                                    <span class="kw">if let </span><span class="prelude-val">Some</span>(capture) = <span class="kw-2">&amp;</span>capture {
-<a href=#325 id=325 data-nosnippet>325</a>                                        status.latest = <span class="prelude-val">Some</span>(capture.copperlist.id);
-<a href=#326 id=326 data-nosnippet>326</a>                                        status.archived += <span class="number">1</span>;
-<a href=#327 id=327 data-nosnippet>327</a>                                        status.state = CuTwinRecordingState::Recording;
-<a href=#328 id=328 data-nosnippet>328</a>                                    }
-<a href=#329 id=329 data-nosnippet>329</a>                                    <span class="kw">if let </span><span class="prelude-val">Some</span>(replay) = <span class="kw-2">&amp;</span>replay {
-<a href=#330 id=330 data-nosnippet>330</a>                                        replay.accept(<span class="kw-2">&amp;</span>event, capture)<span class="question-mark">?</span>;
+<a href=#284 id=284 data-nosnippet>284</a>                                        <span class="kw">if </span>manifest.manifest().context.mission_index != A::MISSION_INDEX {
+<a href=#285 id=285 data-nosnippet>285</a>                                            <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="kw">crate</span>::Error::InvalidConfig(<span class="string">"twin requires the matching sender mission"</span>));
+<a href=#286 id=286 data-nosnippet>286</a>                                        }
+<a href=#287 id=287 data-nosnippet>287</a>                                        status.identity = <span class="prelude-val">Some</span>(manifest.manifest().identity);
+<a href=#288 id=288 data-nosnippet>288</a>                                        <span class="kw">if </span>feedback_tx.is_some() {
+<a href=#289 id=289 data-nosnippet>289</a>                                            reporter = <span class="kw">crate</span>::feedback::FeedbackReporter::new(
+<a href=#290 id=290 data-nosnippet>290</a>                                                manifest.manifest(),
+<a href=#291 id=291 data-nosnippet>291</a>                                                receiver_id,
+<a href=#292 id=292 data-nosnippet>292</a>                                                feedback_clock.now(),
+<a href=#293 id=293 data-nosnippet>293</a>                                            );
+<a href=#294 id=294 data-nosnippet>294</a>                                        }
+<a href=#295 id=295 data-nosnippet>295</a>                                        <span class="kw">let </span><span class="kw-2">mut </span>builder = UnifiedLoggerBuilder::new()
+<a href=#296 id=296 data-nosnippet>296</a>                                            .file_base_name(<span class="kw-2">&amp;</span>path)
+<a href=#297 id=297 data-nosnippet>297</a>                                            .preallocated_size(<span class="self">self</span>.log_rollover.unwrap_or(<span class="self">self</span>.slab_bytes))
+<a href=#298 id=298 data-nosnippet>298</a>                                            .write(<span class="bool-val">true</span>)
+<a href=#299 id=299 data-nosnippet>299</a>                                            .create(<span class="bool-val">true</span>);
+<a href=#300 id=300 data-nosnippet>300</a>                                        <span class="kw">if let </span><span class="prelude-val">Some</span>(bytes) = <span class="self">self</span>.log_rollover {
+<a href=#301 id=301 data-nosnippet>301</a>                                            builder = builder.rollover(bytes);
+<a href=#302 id=302 data-nosnippet>302</a>                                        }
+<a href=#303 id=303 data-nosnippet>303</a>                                        <span class="kw">let </span>logger = builder.build()
+<a href=#304 id=304 data-nosnippet>304</a>                                            .map_err(|e| <span class="kw">crate</span>::Error::Codec(e.to_string()))<span class="question-mark">?</span>;
+<a href=#305 id=305 data-nosnippet>305</a>                                        <span class="kw">let </span>UnifiedLogger::Write(<span class="kw-2">mut </span>logger) = logger <span class="kw">else </span>{
+<a href=#306 id=306 data-nosnippet>306</a>                                            <span class="macro">unreachable!</span>()
+<a href=#307 id=307 data-nosnippet>307</a>                                        };
+<a href=#308 id=308 data-nosnippet>308</a>                                        A::seal_archive_metadata(<span class="kw-2">&amp;mut </span>logger)
+<a href=#309 id=309 data-nosnippet>309</a>                                            .map_err(|e| <span class="kw">crate</span>::Error::Codec(e.to_string()))<span class="question-mark">?</span>;
+<a href=#310 id=310 data-nosnippet>310</a>                                        archive = <span class="prelude-val">Some</span>(CaptureArchive::&lt;A::DataSet&gt;::new_with_logger(
+<a href=#311 id=311 data-nosnippet>311</a>                                            manifest, <span class="self">self</span>.section_bytes, logger,
+<a href=#312 id=312 data-nosnippet>312</a>                                        )<span class="question-mark">?</span>);
+<a href=#313 id=313 data-nosnippet>313</a>                                    }
+<a href=#314 id=314 data-nosnippet>314</a>                                    <span class="kw">let </span>writer =
+<a href=#315 id=315 data-nosnippet>315</a>                                        archive.as_mut().ok_or(<span class="kw">crate</span>::Error::InvalidConfig(
+<a href=#316 id=316 data-nosnippet>316</a>                                            <span class="string">"capture arrived before its manifest"</span>,
+<a href=#317 id=317 data-nosnippet>317</a>                                        ))<span class="question-mark">?</span>;
+<a href=#318 id=318 data-nosnippet>318</a>                                    <span class="kw">let </span>capture = writer.accept(<span class="kw-2">&amp;</span>event)<span class="question-mark">?</span>;
+<a href=#319 id=319 data-nosnippet>319</a>                                    <span class="kw">if let </span><span class="prelude-val">Some</span>(entry) = writer.take_structured_log() {
+<a href=#320 id=320 data-nosnippet>320</a>                                        status.structured_logs += <span class="number">1</span>;
+<a href=#321 id=321 data-nosnippet>321</a>                                        <span class="kw">if let </span>SessionEvent::Object { identity, record } = <span class="kw-2">&amp;</span>event {
+<a href=#322 id=322 data-nosnippet>322</a>                                            log_publisher.publish(ReceivedStructuredLog {
+<a href=#323 id=323 data-nosnippet>323</a>                                                identity: <span class="kw-2">*</span>identity, sequence: record.decoded().object_id, entry,
+<a href=#324 id=324 data-nosnippet>324</a>                                            });
+<a href=#325 id=325 data-nosnippet>325</a>                                        }
+<a href=#326 id=326 data-nosnippet>326</a>                                    }
+<a href=#327 id=327 data-nosnippet>327</a>                                    <span class="kw">if let </span><span class="prelude-val">Some</span>(capture) = <span class="kw-2">&amp;</span>capture {
+<a href=#328 id=328 data-nosnippet>328</a>                                        status.latest = <span class="prelude-val">Some</span>(capture.copperlist.id);
+<a href=#329 id=329 data-nosnippet>329</a>                                        status.archived += <span class="number">1</span>;
+<a href=#330 id=330 data-nosnippet>330</a>                                        status.state = CuTwinRecordingState::Recording;
 <a href=#331 id=331 data-nosnippet>331</a>                                    }
-<a href=#332 id=332 data-nosnippet>332</a>                                    <span class="kw">match </span>event {
-<a href=#333 id=333 data-nosnippet>333</a>                                        SessionEvent::Gap { .. } =&gt; status.gaps += <span class="number">1</span>,
-<a href=#334 id=334 data-nosnippet>334</a>                                        SessionEvent::VerifiedRecoveryPoint {
-<a href=#335 id=335 data-nosnippet>335</a>                                            recovery_point,
-<a href=#336 id=336 data-nosnippet>336</a>                                            ..
-<a href=#337 id=337 data-nosnippet>337</a>                                        } =&gt; {
-<a href=#338 id=338 data-nosnippet>338</a>                                            status.recovery_point =
-<a href=#339 id=339 data-nosnippet>339</a>                                                <span class="prelude-val">Some</span>(recovery_point.copperlist_id)
-<a href=#340 id=340 data-nosnippet>340</a>                                        }
-<a href=#341 id=341 data-nosnippet>341</a>                                        <span class="kw">_ </span>=&gt; {}
-<a href=#342 id=342 data-nosnippet>342</a>                                    }
-<a href=#343 id=343 data-nosnippet>343</a>                                    <span class="prelude-val">Ok</span>::&lt;(), <span class="kw">crate</span>::Error&gt;(())
-<a href=#344 id=344 data-nosnippet>344</a>                                })
-<a href=#345 id=345 data-nosnippet>345</a>                                .map_err(|e| CuError::from(<span class="macro">format!</span>(<span class="string">"Twin receive: {e}"</span>)))<span class="question-mark">?</span>;
-<a href=#346 id=346 data-nosnippet>346</a>                            status.packets = router.stats().datagrams_seen;
-<a href=#347 id=347 data-nosnippet>347</a>                            publish_status(status);
-<a href=#348 id=348 data-nosnippet>348</a>                        } <span class="kw">else </span>{
-<a href=#349 id=349 data-nosnippet>349</a>                            thread::park_timeout(POLL_INTERVAL);
-<a href=#350 id=350 data-nosnippet>350</a>                        }
-<a href=#351 id=351 data-nosnippet>351</a>                        <span class="kw">if let </span>(<span class="prelude-val">Some</span>(reporter), <span class="prelude-val">Some</span>(tx), <span class="prelude-val">Some</span>(identity)) =
-<a href=#352 id=352 data-nosnippet>352</a>                            (<span class="kw-2">&amp;mut </span>reporter, <span class="kw-2">&amp;mut </span>feedback_tx, status.identity)
-<a href=#353 id=353 data-nosnippet>353</a>                            &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(<span class="kw-2">mut </span>counters) = router.feedback_counters(identity)
-<a href=#354 id=354 data-nosnippet>354</a>                        {
-<a href=#355 id=355 data-nosnippet>355</a>                            counters.latest_copperlist = status.latest;
-<a href=#356 id=356 data-nosnippet>356</a>                            <span class="kw">if let </span><span class="prelude-val">Some</span>(report) = reporter.report(feedback_clock.now(), counters) {
-<a href=#357 id=357 data-nosnippet>357</a>                                <span class="kw">let </span>len = report
-<a href=#358 id=358 data-nosnippet>358</a>                                    .encode_into(<span class="kw-2">&amp;mut </span>feedback_packet)
-<a href=#359 id=359 data-nosnippet>359</a>                                    .map_err(stream_error)<span class="question-mark">?</span>;
-<a href=#360 id=360 data-nosnippet>360</a>                                <span class="kw">match </span>tx.try_send_feedback(<span class="kw-2">&amp;</span>feedback_packet[..len]) {
-<a href=#361 id=361 data-nosnippet>361</a>                                    <span class="prelude-val">Ok</span>(()) =&gt; status.feedback_reports_sent += <span class="number">1</span>,
-<a href=#362 id=362 data-nosnippet>362</a>                                    <span class="prelude-val">Err</span>(<span class="kw">crate</span>::CuStreamTxError::WouldBlock) =&gt; {
-<a href=#363 id=363 data-nosnippet>363</a>                                        status.feedback_reports_dropped += <span class="number">1
-<a href=#364 id=364 data-nosnippet>364</a>                                    </span>}
-<a href=#365 id=365 data-nosnippet>365</a>                                    <span class="prelude-val">Err</span>(<span class="kw">crate</span>::CuStreamTxError::Failed(<span class="kw">_</span>)) =&gt; {
-<a href=#366 id=366 data-nosnippet>366</a>                                        feedback_tx = <span class="prelude-val">None</span>;
-<a href=#367 id=367 data-nosnippet>367</a>                                        status.feedback_failed = <span class="bool-val">true</span>;
-<a href=#368 id=368 data-nosnippet>368</a>                                    }
-<a href=#369 id=369 data-nosnippet>369</a>                                }
-<a href=#370 id=370 data-nosnippet>370</a>                                publish_status(status);
-<a href=#371 id=371 data-nosnippet>371</a>                            }
-<a href=#372 id=372 data-nosnippet>372</a>                        }
-<a href=#373 id=373 data-nosnippet>373</a>                    }
-<a href=#374 id=374 data-nosnippet>374</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(archive) = archive.take() {
-<a href=#375 id=375 data-nosnippet>375</a>                        archive.finish().map_err(stream_error)<span class="question-mark">?</span>;
+<a href=#332 id=332 data-nosnippet>332</a>                                    <span class="kw">if let </span><span class="prelude-val">Some</span>(replay) = <span class="kw-2">&amp;</span>replay {
+<a href=#333 id=333 data-nosnippet>333</a>                                        replay.accept(<span class="kw-2">&amp;</span>event, capture)<span class="question-mark">?</span>;
+<a href=#334 id=334 data-nosnippet>334</a>                                    }
+<a href=#335 id=335 data-nosnippet>335</a>                                    <span class="kw">match </span>event {
+<a href=#336 id=336 data-nosnippet>336</a>                                        SessionEvent::Gap { .. } =&gt; status.gaps += <span class="number">1</span>,
+<a href=#337 id=337 data-nosnippet>337</a>                                        SessionEvent::VerifiedRecoveryPoint {
+<a href=#338 id=338 data-nosnippet>338</a>                                            recovery_point,
+<a href=#339 id=339 data-nosnippet>339</a>                                            ..
+<a href=#340 id=340 data-nosnippet>340</a>                                        } =&gt; {
+<a href=#341 id=341 data-nosnippet>341</a>                                            status.recovery_point =
+<a href=#342 id=342 data-nosnippet>342</a>                                                <span class="prelude-val">Some</span>(recovery_point.copperlist_id)
+<a href=#343 id=343 data-nosnippet>343</a>                                        }
+<a href=#344 id=344 data-nosnippet>344</a>                                        <span class="kw">_ </span>=&gt; {}
+<a href=#345 id=345 data-nosnippet>345</a>                                    }
+<a href=#346 id=346 data-nosnippet>346</a>                                    <span class="prelude-val">Ok</span>::&lt;(), <span class="kw">crate</span>::Error&gt;(())
+<a href=#347 id=347 data-nosnippet>347</a>                                })
+<a href=#348 id=348 data-nosnippet>348</a>                                .map_err(|e| CuError::from(<span class="macro">format!</span>(<span class="string">"Twin receive: {e}"</span>)))<span class="question-mark">?</span>;
+<a href=#349 id=349 data-nosnippet>349</a>                            status.packets = router.stats().datagrams_seen;
+<a href=#350 id=350 data-nosnippet>350</a>                            publish_status(status);
+<a href=#351 id=351 data-nosnippet>351</a>                        } <span class="kw">else </span>{
+<a href=#352 id=352 data-nosnippet>352</a>                            thread::park_timeout(POLL_INTERVAL);
+<a href=#353 id=353 data-nosnippet>353</a>                        }
+<a href=#354 id=354 data-nosnippet>354</a>                        <span class="kw">if let </span>(<span class="prelude-val">Some</span>(reporter), <span class="prelude-val">Some</span>(tx), <span class="prelude-val">Some</span>(identity)) =
+<a href=#355 id=355 data-nosnippet>355</a>                            (<span class="kw-2">&amp;mut </span>reporter, <span class="kw-2">&amp;mut </span>feedback_tx, status.identity)
+<a href=#356 id=356 data-nosnippet>356</a>                            &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(<span class="kw-2">mut </span>counters) = router.feedback_counters(identity)
+<a href=#357 id=357 data-nosnippet>357</a>                        {
+<a href=#358 id=358 data-nosnippet>358</a>                            counters.latest_copperlist = status.latest;
+<a href=#359 id=359 data-nosnippet>359</a>                            <span class="kw">if let </span><span class="prelude-val">Some</span>(report) = reporter.report(feedback_clock.now(), counters) {
+<a href=#360 id=360 data-nosnippet>360</a>                                <span class="kw">let </span>len = report
+<a href=#361 id=361 data-nosnippet>361</a>                                    .encode_into(<span class="kw-2">&amp;mut </span>feedback_packet)
+<a href=#362 id=362 data-nosnippet>362</a>                                    .map_err(stream_error)<span class="question-mark">?</span>;
+<a href=#363 id=363 data-nosnippet>363</a>                                <span class="kw">match </span>tx.try_send_feedback(<span class="kw-2">&amp;</span>feedback_packet[..len]) {
+<a href=#364 id=364 data-nosnippet>364</a>                                    <span class="prelude-val">Ok</span>(()) =&gt; status.feedback_reports_sent += <span class="number">1</span>,
+<a href=#365 id=365 data-nosnippet>365</a>                                    <span class="prelude-val">Err</span>(<span class="kw">crate</span>::CuStreamTxError::WouldBlock) =&gt; {
+<a href=#366 id=366 data-nosnippet>366</a>                                        status.feedback_reports_dropped += <span class="number">1
+<a href=#367 id=367 data-nosnippet>367</a>                                    </span>}
+<a href=#368 id=368 data-nosnippet>368</a>                                    <span class="prelude-val">Err</span>(<span class="kw">crate</span>::CuStreamTxError::Failed(<span class="kw">_</span>)) =&gt; {
+<a href=#369 id=369 data-nosnippet>369</a>                                        feedback_tx = <span class="prelude-val">None</span>;
+<a href=#370 id=370 data-nosnippet>370</a>                                        status.feedback_failed = <span class="bool-val">true</span>;
+<a href=#371 id=371 data-nosnippet>371</a>                                    }
+<a href=#372 id=372 data-nosnippet>372</a>                                }
+<a href=#373 id=373 data-nosnippet>373</a>                                publish_status(status);
+<a href=#374 id=374 data-nosnippet>374</a>                            }
+<a href=#375 id=375 data-nosnippet>375</a>                        }
 <a href=#376 id=376 data-nosnippet>376</a>                    }
-<a href=#377 id=377 data-nosnippet>377</a>                    <span class="prelude-val">Ok</span>(())
-<a href=#378 id=378 data-nosnippet>378</a>                })();
-<a href=#379 id=379 data-nosnippet>379</a>                status.state = <span class="kw">if </span>result.is_ok() {
-<a href=#380 id=380 data-nosnippet>380</a>                    CuTwinRecordingState::Closed
-<a href=#381 id=381 data-nosnippet>381</a>                } <span class="kw">else </span>{
-<a href=#382 id=382 data-nosnippet>382</a>                    CuTwinRecordingState::Failed
-<a href=#383 id=383 data-nosnippet>383</a>                };
-<a href=#384 id=384 data-nosnippet>384</a>                publish_status(status);
-<a href=#385 id=385 data-nosnippet>385</a>                <span class="comment">// Drain admitted replay before returning the final receiver status.
-<a href=#386 id=386 data-nosnippet>386</a>                </span><span class="kw">if let </span><span class="prelude-val">Some</span>(replay) = replay {
-<a href=#387 id=387 data-nosnippet>387</a>                    status.twin = replay.finish()<span class="question-mark">?</span>;
-<a href=#388 id=388 data-nosnippet>388</a>                }
-<a href=#389 id=389 data-nosnippet>389</a>                result.map(|()| status)
-<a href=#390 id=390 data-nosnippet>390</a>            })
-<a href=#391 id=391 data-nosnippet>391</a>            .map_err(|e| CuError::new_with_cause(<span class="string">"Start Copper twin"</span>, e))<span class="question-mark">?</span>;
-<a href=#392 id=392 data-nosnippet>392</a>        <span class="kw">if let </span><span class="prelude-val">Err</span>(error) = ready_rx
-<a href=#393 id=393 data-nosnippet>393</a>            .recv()
-<a href=#394 id=394 data-nosnippet>394</a>            .map_err(|<span class="kw">_</span>| CuError::from(<span class="string">"Copper twin initialization failed"</span>))
-<a href=#395 id=395 data-nosnippet>395</a>            .and_then(|ready| ready)
-<a href=#396 id=396 data-nosnippet>396</a>        {
-<a href=#397 id=397 data-nosnippet>397</a>            stop.store(<span class="bool-val">true</span>, Ordering::Release);
-<a href=#398 id=398 data-nosnippet>398</a>            <span class="kw">let _ </span>= worker.join();
-<a href=#399 id=399 data-nosnippet>399</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(error);
-<a href=#400 id=400 data-nosnippet>400</a>        }
-<a href=#401 id=401 data-nosnippet>401</a>        <span class="prelude-val">Ok</span>((
-<a href=#402 id=402 data-nosnippet>402</a>            CuTwin {
-<a href=#403 id=403 data-nosnippet>403</a>                stop,
-<a href=#404 id=404 data-nosnippet>404</a>                worker: <span class="prelude-val">Some</span>(worker),
-<a href=#405 id=405 data-nosnippet>405</a>                final_status: <span class="prelude-val">None</span>,
-<a href=#406 id=406 data-nosnippet>406</a>                log_reader: <span class="prelude-val">Some</span>(log_reader),
-<a href=#407 id=407 data-nosnippet>407</a>                app: PhantomData,
-<a href=#408 id=408 data-nosnippet>408</a>            },
-<a href=#409 id=409 data-nosnippet>409</a>            reader,
-<a href=#410 id=410 data-nosnippet>410</a>        ))
-<a href=#411 id=411 data-nosnippet>411</a>    }
-<a href=#412 id=412 data-nosnippet>412</a>}
-<a href=#413 id=413 data-nosnippet>413</a>
-<a href=#414 id=414 data-nosnippet>414</a><span class="kw">fn </span>stream_error(error: <span class="kw">crate</span>::Error) -&gt; CuError {
-<a href=#415 id=415 data-nosnippet>415</a>    CuError::from(error.to_string())
-<a href=#416 id=416 data-nosnippet>416</a>}
-<a href=#417 id=417 data-nosnippet>417</a>
-<a href=#418 id=418 data-nosnippet>418</a><span class="doccomment">/// Reader for a generated graph's reconstructed frames and recording status.
-<a href=#419 id=419 data-nosnippet>419</a></span><span class="kw">pub type </span>CuTwinReader&lt;A&gt; = TelemetryReader&lt;TwinFrame&lt;&lt;A <span class="kw">as </span>LiveReplay&gt;::DataSet&gt;, CuTwinStatus&gt;;
+<a href=#377 id=377 data-nosnippet>377</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(archive) = archive.take() {
+<a href=#378 id=378 data-nosnippet>378</a>                        archive.finish().map_err(stream_error)<span class="question-mark">?</span>;
+<a href=#379 id=379 data-nosnippet>379</a>                    }
+<a href=#380 id=380 data-nosnippet>380</a>                    <span class="prelude-val">Ok</span>(())
+<a href=#381 id=381 data-nosnippet>381</a>                })();
+<a href=#382 id=382 data-nosnippet>382</a>                status.state = <span class="kw">if </span>result.is_ok() {
+<a href=#383 id=383 data-nosnippet>383</a>                    CuTwinRecordingState::Closed
+<a href=#384 id=384 data-nosnippet>384</a>                } <span class="kw">else </span>{
+<a href=#385 id=385 data-nosnippet>385</a>                    CuTwinRecordingState::Failed
+<a href=#386 id=386 data-nosnippet>386</a>                };
+<a href=#387 id=387 data-nosnippet>387</a>                publish_status(status);
+<a href=#388 id=388 data-nosnippet>388</a>                <span class="comment">// Drain admitted replay before returning the final receiver status.
+<a href=#389 id=389 data-nosnippet>389</a>                </span><span class="kw">if let </span><span class="prelude-val">Some</span>(replay) = replay {
+<a href=#390 id=390 data-nosnippet>390</a>                    status.twin = replay.finish()<span class="question-mark">?</span>;
+<a href=#391 id=391 data-nosnippet>391</a>                }
+<a href=#392 id=392 data-nosnippet>392</a>                result.map(|()| status)
+<a href=#393 id=393 data-nosnippet>393</a>            })
+<a href=#394 id=394 data-nosnippet>394</a>            .map_err(|e| CuError::new_with_cause(<span class="string">"Start Copper twin"</span>, e))<span class="question-mark">?</span>;
+<a href=#395 id=395 data-nosnippet>395</a>        <span class="kw">if let </span><span class="prelude-val">Err</span>(error) = ready_rx
+<a href=#396 id=396 data-nosnippet>396</a>            .recv()
+<a href=#397 id=397 data-nosnippet>397</a>            .map_err(|<span class="kw">_</span>| CuError::from(<span class="string">"Copper twin initialization failed"</span>))
+<a href=#398 id=398 data-nosnippet>398</a>            .and_then(|ready| ready)
+<a href=#399 id=399 data-nosnippet>399</a>        {
+<a href=#400 id=400 data-nosnippet>400</a>            stop.store(<span class="bool-val">true</span>, Ordering::Release);
+<a href=#401 id=401 data-nosnippet>401</a>            <span class="kw">let _ </span>= worker.join();
+<a href=#402 id=402 data-nosnippet>402</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(error);
+<a href=#403 id=403 data-nosnippet>403</a>        }
+<a href=#404 id=404 data-nosnippet>404</a>        <span class="prelude-val">Ok</span>((
+<a href=#405 id=405 data-nosnippet>405</a>            CuTwin {
+<a href=#406 id=406 data-nosnippet>406</a>                stop,
+<a href=#407 id=407 data-nosnippet>407</a>                worker: <span class="prelude-val">Some</span>(worker),
+<a href=#408 id=408 data-nosnippet>408</a>                final_status: <span class="prelude-val">None</span>,
+<a href=#409 id=409 data-nosnippet>409</a>                log_reader: <span class="prelude-val">Some</span>(log_reader),
+<a href=#410 id=410 data-nosnippet>410</a>                app: PhantomData,
+<a href=#411 id=411 data-nosnippet>411</a>            },
+<a href=#412 id=412 data-nosnippet>412</a>            reader,
+<a href=#413 id=413 data-nosnippet>413</a>        ))
+<a href=#414 id=414 data-nosnippet>414</a>    }
+<a href=#415 id=415 data-nosnippet>415</a>}
+<a href=#416 id=416 data-nosnippet>416</a>
+<a href=#417 id=417 data-nosnippet>417</a><span class="kw">fn </span>stream_error(error: <span class="kw">crate</span>::Error) -&gt; CuError {
+<a href=#418 id=418 data-nosnippet>418</a>    CuError::from(error.to_string())
+<a href=#419 id=419 data-nosnippet>419</a>}
 <a href=#420 id=420 data-nosnippet>420</a>
-<a href=#421 id=421 data-nosnippet>421</a><span class="doccomment">/// One original robot log entry, published only after native archival succeeds.
-<a href=#422 id=422 data-nosnippet>422</a></span><span class="attr">#[derive(Debug)]
-<a href=#423 id=423 data-nosnippet>423</a></span><span class="kw">pub struct </span>ReceivedStructuredLog {
-<a href=#424 id=424 data-nosnippet>424</a>    <span class="kw">pub </span>identity: StreamIdentity,
-<a href=#425 id=425 data-nosnippet>425</a>    <span class="kw">pub </span>sequence: u64,
-<a href=#426 id=426 data-nosnippet>426</a>    <span class="kw">pub </span>entry: cu29_log::CuLogEntry,
-<a href=#427 id=427 data-nosnippet>427</a>}
-<a href=#428 id=428 data-nosnippet>428</a>
-<a href=#429 id=429 data-nosnippet>429</a><span class="doccomment">/// Independent bounded log reader; a stalled reader never delays native recording.
-<a href=#430 id=430 data-nosnippet>430</a></span><span class="kw">pub type </span>CuTwinLogReader = TelemetryReader&lt;ReceivedStructuredLog, ()&gt;;
+<a href=#421 id=421 data-nosnippet>421</a><span class="doccomment">/// Reader for a generated graph's reconstructed frames and recording status.
+<a href=#422 id=422 data-nosnippet>422</a></span><span class="kw">pub type </span>CuTwinReader&lt;A&gt; = TelemetryReader&lt;TwinFrame&lt;&lt;A <span class="kw">as </span>LiveReplay&gt;::DataSet&gt;, CuTwinStatus&gt;;
+<a href=#423 id=423 data-nosnippet>423</a>
+<a href=#424 id=424 data-nosnippet>424</a><span class="doccomment">/// One original robot log entry, published only after native archival succeeds.
+<a href=#425 id=425 data-nosnippet>425</a></span><span class="attr">#[derive(Debug)]
+<a href=#426 id=426 data-nosnippet>426</a></span><span class="kw">pub struct </span>ReceivedStructuredLog {
+<a href=#427 id=427 data-nosnippet>427</a>    <span class="kw">pub </span>identity: StreamIdentity,
+<a href=#428 id=428 data-nosnippet>428</a>    <span class="kw">pub </span>sequence: u64,
+<a href=#429 id=429 data-nosnippet>429</a>    <span class="kw">pub </span>entry: cu29_log::CuLogEntry,
+<a href=#430 id=430 data-nosnippet>430</a>}
 <a href=#431 id=431 data-nosnippet>431</a>
-<a href=#432 id=432 data-nosnippet>432</a><span class="kw">fn </span>validate_sizes(
-<a href=#433 id=433 data-nosnippet>433</a>    slab_bytes: usize,
-<a href=#434 id=434 data-nosnippet>434</a>    section_bytes: usize,
-<a href=#435 id=435 data-nosnippet>435</a>    limits: SessionRouterLimits,
-<a href=#436 id=436 data-nosnippet>436</a>) -&gt; CuResult&lt;()&gt; {
-<a href=#437 id=437 data-nosnippet>437</a>    <span class="kw">let </span>header = usize::from(cu29_unifiedlog::SECTION_HEADER_COMPACT_SIZE);
-<a href=#438 id=438 data-nosnippet>438</a>    <span class="kw">if </span>slab_bytes &lt; <span class="number">1024 </span>|| !slab_bytes.is_multiple_of(header) {
-<a href=#439 id=439 data-nosnippet>439</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(
-<a href=#440 id=440 data-nosnippet>440</a>            <span class="string">"Twin slab size must be at least 1024 bytes and a multiple of 512"</span>,
-<a href=#441 id=441 data-nosnippet>441</a>        ));
-<a href=#442 id=442 data-nosnippet>442</a>    }
-<a href=#443 id=443 data-nosnippet>443</a>    <span class="kw">if </span>section_bytes &lt;= header
-<a href=#444 id=444 data-nosnippet>444</a>        || !section_bytes.is_multiple_of(header)
-<a href=#445 id=445 data-nosnippet>445</a>        || section_bytes &gt; slab_bytes
-<a href=#446 id=446 data-nosnippet>446</a>    {
-<a href=#447 id=447 data-nosnippet>447</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(
-<a href=#448 id=448 data-nosnippet>448</a>            <span class="string">"Twin section size must exceed 512 bytes, be a multiple of 512, and fit in its slab"</span>,
-<a href=#449 id=449 data-nosnippet>449</a>        ));
-<a href=#450 id=450 data-nosnippet>450</a>    }
-<a href=#451 id=451 data-nosnippet>451</a>    <span class="kw">if </span>section_bytes - header &gt; u32::MAX <span class="kw">as </span>usize {
-<a href=#452 id=452 data-nosnippet>452</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(<span class="string">"Twin section payload size exceeds u32"</span>));
+<a href=#432 id=432 data-nosnippet>432</a><span class="doccomment">/// Independent bounded log reader; a stalled reader never delays native recording.
+<a href=#433 id=433 data-nosnippet>433</a></span><span class="kw">pub type </span>CuTwinLogReader = TelemetryReader&lt;ReceivedStructuredLog, ()&gt;;
+<a href=#434 id=434 data-nosnippet>434</a>
+<a href=#435 id=435 data-nosnippet>435</a><span class="kw">fn </span>validate_sizes(
+<a href=#436 id=436 data-nosnippet>436</a>    slab_bytes: usize,
+<a href=#437 id=437 data-nosnippet>437</a>    section_bytes: usize,
+<a href=#438 id=438 data-nosnippet>438</a>    limits: SessionRouterLimits,
+<a href=#439 id=439 data-nosnippet>439</a>) -&gt; CuResult&lt;()&gt; {
+<a href=#440 id=440 data-nosnippet>440</a>    <span class="kw">let </span>header = usize::from(cu29_unifiedlog::SECTION_HEADER_COMPACT_SIZE);
+<a href=#441 id=441 data-nosnippet>441</a>    <span class="kw">if </span>slab_bytes &lt; <span class="number">1024 </span>|| !slab_bytes.is_multiple_of(header) {
+<a href=#442 id=442 data-nosnippet>442</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(
+<a href=#443 id=443 data-nosnippet>443</a>            <span class="string">"Twin slab size must be at least 1024 bytes and a multiple of 512"</span>,
+<a href=#444 id=444 data-nosnippet>444</a>        ));
+<a href=#445 id=445 data-nosnippet>445</a>    }
+<a href=#446 id=446 data-nosnippet>446</a>    <span class="kw">if </span>section_bytes &lt;= header
+<a href=#447 id=447 data-nosnippet>447</a>        || !section_bytes.is_multiple_of(header)
+<a href=#448 id=448 data-nosnippet>448</a>        || section_bytes &gt; slab_bytes
+<a href=#449 id=449 data-nosnippet>449</a>    {
+<a href=#450 id=450 data-nosnippet>450</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(
+<a href=#451 id=451 data-nosnippet>451</a>            <span class="string">"Twin section size must exceed 512 bytes, be a multiple of 512, and fit in its slab"</span>,
+<a href=#452 id=452 data-nosnippet>452</a>        ));
 <a href=#453 id=453 data-nosnippet>453</a>    }
-<a href=#454 id=454 data-nosnippet>454</a>    <span class="kw">if </span>limits.max_sessions != <span class="number">1 </span>{
-<a href=#455 id=455 data-nosnippet>455</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(
-<a href=#456 id=456 data-nosnippet>456</a>            <span class="string">"Twin receiver limits must allow exactly one sender session"</span>,
-<a href=#457 id=457 data-nosnippet>457</a>        ));
-<a href=#458 id=458 data-nosnippet>458</a>    }
-<a href=#459 id=459 data-nosnippet>459</a>    <span class="kw">if </span>limits.equation_capacity &gt; <span class="number">64 </span>|| usize::from(limits.finite_objects.max_symbol_size) &gt; <span class="number">1128 </span>{
-<a href=#460 id=460 data-nosnippet>460</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(
-<a href=#461 id=461 data-nosnippet>461</a>            <span class="string">"Twin receiver limits exceed the 1128-byte-symbol, 64-equation FEC profile"</span>,
-<a href=#462 id=462 data-nosnippet>462</a>        ));
-<a href=#463 id=463 data-nosnippet>463</a>    }
-<a href=#464 id=464 data-nosnippet>464</a>    <span class="kw">crate</span>::object::validate_limits(limits.finite_objects).map_err(stream_error)<span class="question-mark">?</span>;
-<a href=#465 id=465 data-nosnippet>465</a>    <span class="kw">if </span>limits.max_record_bytes &gt; u32::MAX <span class="kw">as </span>usize {
-<a href=#466 id=466 data-nosnippet>466</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(<span class="string">"Twin maximum record size exceeds u32"</span>));
-<a href=#467 id=467 data-nosnippet>467</a>    }
-<a href=#468 id=468 data-nosnippet>468</a>    <span class="kw">let </span>object_bytes = usize::try_from(limits.finite_objects.max_object_bytes)
-<a href=#469 id=469 data-nosnippet>469</a>        .map_err(|<span class="kw">_</span>| CuError::from(<span class="string">"Twin maximum object size exceeds usize"</span>))<span class="question-mark">?</span>;
-<a href=#470 id=470 data-nosnippet>470</a>    <span class="kw">let </span>required = limits
-<a href=#471 id=471 data-nosnippet>471</a>        .max_record_bytes
-<a href=#472 id=472 data-nosnippet>472</a>        .max(object_bytes)
-<a href=#473 id=473 data-nosnippet>473</a>        .checked_add(CONTINUITY_OVERHEAD)
-<a href=#474 id=474 data-nosnippet>474</a>        .and_then(|bytes| bytes.checked_add(header))
-<a href=#475 id=475 data-nosnippet>475</a>        .ok_or_else(|| CuError::from(<span class="string">"Twin section size requirement overflow"</span>))<span class="question-mark">?</span>;
-<a href=#476 id=476 data-nosnippet>476</a>    <span class="kw">if </span>section_bytes &lt; required {
-<a href=#477 id=477 data-nosnippet>477</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(<span class="macro">format!</span>(
-<a href=#478 id=478 data-nosnippet>478</a>            <span class="string">"Twin section size is {section_bytes} bytes; configured record/object bounds require at least {required} bytes including header and continuity envelope"
-<a href=#479 id=479 data-nosnippet>479</a>        </span>)));
-<a href=#480 id=480 data-nosnippet>480</a>    }
-<a href=#481 id=481 data-nosnippet>481</a>    <span class="prelude-val">Ok</span>(())
-<a href=#482 id=482 data-nosnippet>482</a>}
-<a href=#483 id=483 data-nosnippet>483</a>
-<a href=#484 id=484 data-nosnippet>484</a><span class="doccomment">/// Running Copper twin. The separately owned reader can be paused or dropped
-<a href=#485 id=485 data-nosnippet>485</a>/// without affecting recording. `stop()` closes the archive and drains admitted
-<a href=#486 id=486 data-nosnippet>486</a>/// replay; dropping the handle also stops and joins Copper's workers.
-<a href=#487 id=487 data-nosnippet>487</a></span><span class="kw">pub struct </span>CuTwin&lt;A: LiveReplay&gt; {
-<a href=#488 id=488 data-nosnippet>488</a>    stop: Arc&lt;AtomicBool&gt;,
-<a href=#489 id=489 data-nosnippet>489</a>    worker: <span class="prelude-ty">Option</span>&lt;JoinHandle&lt;CuResult&lt;CuTwinStatus&gt;&gt;&gt;,
-<a href=#490 id=490 data-nosnippet>490</a>    final_status: <span class="prelude-ty">Option</span>&lt;CuTwinStatus&gt;,
-<a href=#491 id=491 data-nosnippet>491</a>    log_reader: <span class="prelude-ty">Option</span>&lt;CuTwinLogReader&gt;,
-<a href=#492 id=492 data-nosnippet>492</a>    app: PhantomData&lt;<span class="kw">fn</span>() -&gt; A&gt;,
-<a href=#493 id=493 data-nosnippet>493</a>}
-<a href=#494 id=494 data-nosnippet>494</a>
-<a href=#495 id=495 data-nosnippet>495</a><span class="kw">impl</span>&lt;A: LiveReplay&gt; CuTwin&lt;A&gt; {
-<a href=#496 id=496 data-nosnippet>496</a>    <span class="kw">pub fn </span>builder&lt;R: CuStreamRx + <span class="lifetime">'static</span>&gt;(rx: R) -&gt; CuTwinBuilder&lt;A, R&gt; {
-<a href=#497 id=497 data-nosnippet>497</a>        CuTwinBuilder {
-<a href=#498 id=498 data-nosnippet>498</a>            rx,
-<a href=#499 id=499 data-nosnippet>499</a>            feedback_tx: <span class="prelude-val">None</span>,
-<a href=#500 id=500 data-nosnippet>500</a>            log_base: <span class="prelude-val">None</span>,
-<a href=#501 id=501 data-nosnippet>501</a>            log_rollover: <span class="prelude-val">None</span>,
-<a href=#502 id=502 data-nosnippet>502</a>            frame_capacity: FRAME_CAPACITY,
-<a href=#503 id=503 data-nosnippet>503</a>            log_capacity: FRAME_CAPACITY,
-<a href=#504 id=504 data-nosnippet>504</a>            replay_capacity: REPLAY_CAPACITY,
-<a href=#505 id=505 data-nosnippet>505</a>            slab_bytes: SLAB_BYTES,
-<a href=#506 id=506 data-nosnippet>506</a>            section_bytes: SECTION_BYTES,
-<a href=#507 id=507 data-nosnippet>507</a>            receiver_limits: SessionRouterLimits::default(),
-<a href=#508 id=508 data-nosnippet>508</a>            reconstruct: <span class="bool-val">true</span>,
-<a href=#509 id=509 data-nosnippet>509</a>            app: PhantomData,
-<a href=#510 id=510 data-nosnippet>510</a>        }
-<a href=#511 id=511 data-nosnippet>511</a>    }
-<a href=#512 id=512 data-nosnippet>512</a>
-<a href=#513 id=513 data-nosnippet>513</a>    <span class="doccomment">/// Take the independent bounded log view once (64 entries by default).
-<a href=#514 id=514 data-nosnippet>514</a>    /// Entries retain sender string IDs; use the producing application's string index to render text.
-<a href=#515 id=515 data-nosnippet>515</a>    </span><span class="kw">pub fn </span>take_log_reader(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;CuTwinLogReader&gt; {
-<a href=#516 id=516 data-nosnippet>516</a>        <span class="self">self</span>.log_reader.take()
-<a href=#517 id=517 data-nosnippet>517</a>    }
-<a href=#518 id=518 data-nosnippet>518</a>
-<a href=#519 id=519 data-nosnippet>519</a>    <span class="kw">pub fn </span>stop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; CuResult&lt;CuTwinStatus&gt; {
-<a href=#520 id=520 data-nosnippet>520</a>        <span class="self">self</span>.stop.store(<span class="bool-val">true</span>, Ordering::Release);
-<a href=#521 id=521 data-nosnippet>521</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(worker) = <span class="self">self</span>.worker.take() {
-<a href=#522 id=522 data-nosnippet>522</a>            worker.thread().unpark();
-<a href=#523 id=523 data-nosnippet>523</a>            <span class="self">self</span>.final_status = <span class="prelude-val">Some</span>(
-<a href=#524 id=524 data-nosnippet>524</a>                worker
-<a href=#525 id=525 data-nosnippet>525</a>                    .join()
-<a href=#526 id=526 data-nosnippet>526</a>                    .map_err(|<span class="kw">_</span>| CuError::from(<span class="string">"Copper twin receiver panicked"</span>))<span class="question-mark">??</span>,
-<a href=#527 id=527 data-nosnippet>527</a>            );
-<a href=#528 id=528 data-nosnippet>528</a>        }
-<a href=#529 id=529 data-nosnippet>529</a>        <span class="self">self</span>.final_status
-<a href=#530 id=530 data-nosnippet>530</a>            .ok_or_else(|| CuError::from(<span class="string">"Copper twin stopped after a worker failure"</span>))
-<a href=#531 id=531 data-nosnippet>531</a>    }
-<a href=#532 id=532 data-nosnippet>532</a>}
-<a href=#533 id=533 data-nosnippet>533</a>
-<a href=#534 id=534 data-nosnippet>534</a><span class="kw">impl</span>&lt;A: LiveReplay&gt; Drop <span class="kw">for </span>CuTwin&lt;A&gt; {
-<a href=#535 id=535 data-nosnippet>535</a>    <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-<a href=#536 id=536 data-nosnippet>536</a>        <span class="kw">let _ </span>= <span class="self">self</span>.stop();
-<a href=#537 id=537 data-nosnippet>537</a>    }
-<a href=#538 id=538 data-nosnippet>538</a>}
+<a href=#454 id=454 data-nosnippet>454</a>    <span class="kw">if </span>section_bytes - header &gt; u32::MAX <span class="kw">as </span>usize {
+<a href=#455 id=455 data-nosnippet>455</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(<span class="string">"Twin section payload size exceeds u32"</span>));
+<a href=#456 id=456 data-nosnippet>456</a>    }
+<a href=#457 id=457 data-nosnippet>457</a>    <span class="kw">if </span>limits.max_sessions != <span class="number">1 </span>{
+<a href=#458 id=458 data-nosnippet>458</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(
+<a href=#459 id=459 data-nosnippet>459</a>            <span class="string">"Twin receiver limits must allow exactly one sender session"</span>,
+<a href=#460 id=460 data-nosnippet>460</a>        ));
+<a href=#461 id=461 data-nosnippet>461</a>    }
+<a href=#462 id=462 data-nosnippet>462</a>    <span class="kw">if </span>limits.equation_capacity &gt; <span class="number">64 </span>|| usize::from(limits.finite_objects.max_symbol_size) &gt; <span class="number">1128 </span>{
+<a href=#463 id=463 data-nosnippet>463</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(
+<a href=#464 id=464 data-nosnippet>464</a>            <span class="string">"Twin receiver limits exceed the 1128-byte-symbol, 64-equation FEC profile"</span>,
+<a href=#465 id=465 data-nosnippet>465</a>        ));
+<a href=#466 id=466 data-nosnippet>466</a>    }
+<a href=#467 id=467 data-nosnippet>467</a>    <span class="kw">crate</span>::object::validate_limits(limits.finite_objects).map_err(stream_error)<span class="question-mark">?</span>;
+<a href=#468 id=468 data-nosnippet>468</a>    <span class="kw">if </span>limits.max_record_bytes &gt; u32::MAX <span class="kw">as </span>usize {
+<a href=#469 id=469 data-nosnippet>469</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(<span class="string">"Twin maximum record size exceeds u32"</span>));
+<a href=#470 id=470 data-nosnippet>470</a>    }
+<a href=#471 id=471 data-nosnippet>471</a>    <span class="kw">let </span>object_bytes = usize::try_from(limits.finite_objects.max_object_bytes)
+<a href=#472 id=472 data-nosnippet>472</a>        .map_err(|<span class="kw">_</span>| CuError::from(<span class="string">"Twin maximum object size exceeds usize"</span>))<span class="question-mark">?</span>;
+<a href=#473 id=473 data-nosnippet>473</a>    <span class="kw">let </span>required = limits
+<a href=#474 id=474 data-nosnippet>474</a>        .max_record_bytes
+<a href=#475 id=475 data-nosnippet>475</a>        .max(object_bytes)
+<a href=#476 id=476 data-nosnippet>476</a>        .checked_add(CONTINUITY_OVERHEAD)
+<a href=#477 id=477 data-nosnippet>477</a>        .and_then(|bytes| bytes.checked_add(header))
+<a href=#478 id=478 data-nosnippet>478</a>        .ok_or_else(|| CuError::from(<span class="string">"Twin section size requirement overflow"</span>))<span class="question-mark">?</span>;
+<a href=#479 id=479 data-nosnippet>479</a>    <span class="kw">if </span>section_bytes &lt; required {
+<a href=#480 id=480 data-nosnippet>480</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(<span class="macro">format!</span>(
+<a href=#481 id=481 data-nosnippet>481</a>            <span class="string">"Twin section size is {section_bytes} bytes; configured record/object bounds require at least {required} bytes including header and continuity envelope"
+<a href=#482 id=482 data-nosnippet>482</a>        </span>)));
+<a href=#483 id=483 data-nosnippet>483</a>    }
+<a href=#484 id=484 data-nosnippet>484</a>    <span class="prelude-val">Ok</span>(())
+<a href=#485 id=485 data-nosnippet>485</a>}
+<a href=#486 id=486 data-nosnippet>486</a>
+<a href=#487 id=487 data-nosnippet>487</a><span class="doccomment">/// Running Copper twin. The separately owned reader can be paused or dropped
+<a href=#488 id=488 data-nosnippet>488</a>/// without affecting recording. `stop()` closes the archive and drains admitted
+<a href=#489 id=489 data-nosnippet>489</a>/// replay; dropping the handle also stops and joins Copper's workers.
+<a href=#490 id=490 data-nosnippet>490</a></span><span class="kw">pub struct </span>CuTwin&lt;A: LiveReplay&gt; {
+<a href=#491 id=491 data-nosnippet>491</a>    stop: Arc&lt;AtomicBool&gt;,
+<a href=#492 id=492 data-nosnippet>492</a>    worker: <span class="prelude-ty">Option</span>&lt;JoinHandle&lt;CuResult&lt;CuTwinStatus&gt;&gt;&gt;,
+<a href=#493 id=493 data-nosnippet>493</a>    final_status: <span class="prelude-ty">Option</span>&lt;CuTwinStatus&gt;,
+<a href=#494 id=494 data-nosnippet>494</a>    log_reader: <span class="prelude-ty">Option</span>&lt;CuTwinLogReader&gt;,
+<a href=#495 id=495 data-nosnippet>495</a>    app: PhantomData&lt;<span class="kw">fn</span>() -&gt; A&gt;,
+<a href=#496 id=496 data-nosnippet>496</a>}
+<a href=#497 id=497 data-nosnippet>497</a>
+<a href=#498 id=498 data-nosnippet>498</a><span class="kw">impl</span>&lt;A: LiveReplay&gt; CuTwin&lt;A&gt; {
+<a href=#499 id=499 data-nosnippet>499</a>    <span class="kw">pub fn </span>builder&lt;R: CuStreamRx + <span class="lifetime">'static</span>&gt;(rx: R) -&gt; CuTwinBuilder&lt;A, R&gt; {
+<a href=#500 id=500 data-nosnippet>500</a>        CuTwinBuilder {
+<a href=#501 id=501 data-nosnippet>501</a>            rx,
+<a href=#502 id=502 data-nosnippet>502</a>            feedback_tx: <span class="prelude-val">None</span>,
+<a href=#503 id=503 data-nosnippet>503</a>            log_base: <span class="prelude-val">None</span>,
+<a href=#504 id=504 data-nosnippet>504</a>            log_rollover: <span class="prelude-val">None</span>,
+<a href=#505 id=505 data-nosnippet>505</a>            frame_capacity: FRAME_CAPACITY,
+<a href=#506 id=506 data-nosnippet>506</a>            log_capacity: FRAME_CAPACITY,
+<a href=#507 id=507 data-nosnippet>507</a>            replay_capacity: REPLAY_CAPACITY,
+<a href=#508 id=508 data-nosnippet>508</a>            slab_bytes: SLAB_BYTES,
+<a href=#509 id=509 data-nosnippet>509</a>            section_bytes: SECTION_BYTES,
+<a href=#510 id=510 data-nosnippet>510</a>            receiver_limits: SessionRouterLimits::default(),
+<a href=#511 id=511 data-nosnippet>511</a>            reconstruct: <span class="bool-val">true</span>,
+<a href=#512 id=512 data-nosnippet>512</a>            app: PhantomData,
+<a href=#513 id=513 data-nosnippet>513</a>        }
+<a href=#514 id=514 data-nosnippet>514</a>    }
+<a href=#515 id=515 data-nosnippet>515</a>
+<a href=#516 id=516 data-nosnippet>516</a>    <span class="doccomment">/// Take the independent bounded log view once (64 entries by default).
+<a href=#517 id=517 data-nosnippet>517</a>    /// Entries retain sender string IDs; use the producing application's string index to render text.
+<a href=#518 id=518 data-nosnippet>518</a>    </span><span class="kw">pub fn </span>take_log_reader(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;CuTwinLogReader&gt; {
+<a href=#519 id=519 data-nosnippet>519</a>        <span class="self">self</span>.log_reader.take()
+<a href=#520 id=520 data-nosnippet>520</a>    }
+<a href=#521 id=521 data-nosnippet>521</a>
+<a href=#522 id=522 data-nosnippet>522</a>    <span class="kw">pub fn </span>stop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; CuResult&lt;CuTwinStatus&gt; {
+<a href=#523 id=523 data-nosnippet>523</a>        <span class="self">self</span>.stop.store(<span class="bool-val">true</span>, Ordering::Release);
+<a href=#524 id=524 data-nosnippet>524</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(worker) = <span class="self">self</span>.worker.take() {
+<a href=#525 id=525 data-nosnippet>525</a>            worker.thread().unpark();
+<a href=#526 id=526 data-nosnippet>526</a>            <span class="self">self</span>.final_status = <span class="prelude-val">Some</span>(
+<a href=#527 id=527 data-nosnippet>527</a>                worker
+<a href=#528 id=528 data-nosnippet>528</a>                    .join()
+<a href=#529 id=529 data-nosnippet>529</a>                    .map_err(|<span class="kw">_</span>| CuError::from(<span class="string">"Copper twin receiver panicked"</span>))<span class="question-mark">??</span>,
+<a href=#530 id=530 data-nosnippet>530</a>            );
+<a href=#531 id=531 data-nosnippet>531</a>        }
+<a href=#532 id=532 data-nosnippet>532</a>        <span class="self">self</span>.final_status
+<a href=#533 id=533 data-nosnippet>533</a>            .ok_or_else(|| CuError::from(<span class="string">"Copper twin stopped after a worker failure"</span>))
+<a href=#534 id=534 data-nosnippet>534</a>    }
+<a href=#535 id=535 data-nosnippet>535</a>}
+<a href=#536 id=536 data-nosnippet>536</a>
+<a href=#537 id=537 data-nosnippet>537</a><span class="kw">impl</span>&lt;A: LiveReplay&gt; Drop <span class="kw">for </span>CuTwin&lt;A&gt; {
+<a href=#538 id=538 data-nosnippet>538</a>    <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#539 id=539 data-nosnippet>539</a>        <span class="kw">let _ </span>= <span class="self">self</span>.stop();
+<a href=#540 id=540 data-nosnippet>540</a>    }
+<a href=#541 id=541 data-nosnippet>541</a>}
 </code></pre></div></section></main></body></html>
