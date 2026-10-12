@@ -15,6 +15,7 @@ fn main() {
     let _ = ClockObservation {
         raw_local: execution, //~ E0308
         parent_ns: 0,
+        origin: cu29::clock::ClockOrigin::default(),
         uncertainty: CuDuration(0),
         domain: ClockDomain { id: 0, identity: [0; 8], session: 0 },
     };

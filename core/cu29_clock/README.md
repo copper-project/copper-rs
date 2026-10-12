@@ -27,6 +27,30 @@ discipline is published. Reusable tasks can inspect quality without enabling
 synchronization; enable the feature to attach a live controller. Feature-disabled
 status reads require no counter read or synchronization storage.
 
+### Reference Source and Epoch
+
+`clock.origin()` returns a `ClockOrigin` containing the advertised upstream
+`ClockSource` and timestamp `ClockEpoch`. These are informational: GNSS provenance
+can accompany GPS or TAI timestamps. Local counter calibration does not imply an
+RTC epoch or an atomic source. A manually supplied initial timestamp has an unknown
+epoch unless reference observations establish one. Use
+`from_ref_time_with_origin(ns, origin)` or the `from_ref_time_with_rtc_and_origin`
+constructor to initialize a named epoch without live synchronization.
+
+Reference observations provide `parent_ns` and `origin` together. RobotClock keeps
+nanoseconds in the provider's epoch, including bare GPS time or an application-defined
+`ClockEpoch::Other(id)`. It performs no UTC or calendar conversion. TAI metadata may
+include `tai_minus_utc_seconds` when the provider knows it; display code can use it.
+
+Clones see metadata published with the execution curve. Initial acquisition adopts
+the reference epoch; holdover and expiration retain it. Resynchronization preserves
+the running execution epoch and rejects observations from a different epoch. Create
+a new clock to select a different epoch. TAI UTC-offset updates do not change epochs.
+Snapshots record metadata for replay without reference I/O. Origin reads do not read
+the counter, allocate, or change `now()` and `recent()` behavior. Without `clock-sync`,
+the accessor returns the clock's local metadata. Source/epoch metadata is diagnostic,
+not a promise of traceability or a scheduling API.
+
 ### Basic Clock Usage
 
 ```rust
