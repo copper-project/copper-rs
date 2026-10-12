@@ -10,6 +10,252 @@ use cu29::monitoring::{
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 
+#[cfg(feature = "clock-sync")]
+#[test]
+fn clock_panel_reads_the_live_shared_clock_and_shows_expiration() {
+    use cu29::clock::sync::{ClockDomain, ClockObservation, ClockSync, SyncConfig};
+    use cu29::clock::{CuDuration, CuInstant, RobotClock};
+
+    let (clock, raw) = RobotClock::mock();
+    let domain = ClockDomain {
+        id: 7,
+        identity: *b"demo-ptp",
+        session: 1,
+    };
+    let mut sync =
+        ClockSync::new(&clock, domain, SyncConfig::new(CuDuration::from_millis(20))).unwrap();
+    let epoch = 1_800_000_000_000_000_000;
+    sync.observe(ClockObservation {
+        raw_local: CuInstant::from_nanos(0),
+        parent_ns: epoch,
+        origin: cu29::clock::ClockOrigin {
+            source: cu29::clock::ClockSource::Gnss,
+            epoch: cu29::clock::ClockEpoch::Tai {
+                tai_minus_utc_seconds: Some(37),
+            },
+        },
+        uncertainty: CuDuration::from_millis(1),
+        domain,
+    })
+    .unwrap();
+    sync.update().unwrap();
+    raw.set_value(1_000_000_000);
+    sync.observe(ClockObservation {
+        raw_local: CuInstant::from_nanos(1_000_000_000),
+        parent_ns: epoch + 1_000_000_000 + 50_000,
+        origin: cu29::clock::ClockOrigin {
+            source: cu29::clock::ClockSource::Gnss,
+            epoch: cu29::clock::ClockEpoch::Tai {
+                tai_minus_utc_seconds: Some(37),
+            },
+        },
+        uncertainty: CuDuration::from_millis(1),
+        domain,
+    })
+    .unwrap();
+    sync.update().unwrap();
+    let model = test_monitor_model().with_clock(clock);
+    let mut ui = MonitorUi::new(model, MonitorUiOptions::default());
+    assert_eq!(ui.active_screen(), MonitorScreen::Clock);
+    let initial = stream_text(&mut ui, 140, 22);
+    assert!(initial.contains("LOCKED"));
+    assert!(!initial.contains("Uptime"));
+    assert!(initial.contains("GNSS"));
+    assert!(initial.contains("Epoch"));
+    assert!(initial.contains("TAI"));
+    assert!(initial.contains("+37 s"));
+    let date =
+        chrono::DateTime::<chrono::Utc>::from_timestamp((epoch / 1_000_000_000) as i64 + 1 - 37, 0)
+            .unwrap()
+            .with_timezone(&chrono::Local)
+            .to_rfc3339_opts(chrono::SecondsFormat::Secs, false);
+    assert!(initial.contains(&date));
+    assert!(initial.contains("Offset from reference"));
+    assert!(initial.contains("-50.000 µs"));
+    assert!(initial.contains("Uncertainty bound"));
+    assert!(initial.contains("1.050 ms"));
+    assert!(initial.contains("Reference uncertainty"));
+    assert!(initial.contains("1.000 ms"));
+    assert!(initial.contains("Uncertainty limit"));
+    assert!(initial.contains("20.000 ms"));
+    assert!(initial.contains("Drift bound"));
+    assert!(initial.contains("100.000 ppm"));
+    assert!(!initial.contains('('));
+    assert!(!initial.contains("Task timestamps"));
+    assert!(!initial.contains("Above limit"));
+    assert!(initial.contains(&(epoch + 1_000_000_000).to_string()));
+    assert!(initial.contains("64:65:6d:6f:2d:70:74:70"));
+    raw.set_value(1_500_000_000);
+    sync.reference_lost();
+    sync.update().unwrap();
+    let holdover = stream_text(&mut ui, 80, 22);
+    assert!(holdover.contains("HOLDOVER"));
+    assert!(holdover.contains("-25.000 µs"));
+    ui.scroll(ScrollDirection::Right, 100);
+    let uncertainty = stream_text(&mut ui, 80, 22);
+    assert!(uncertainty.contains("Timestamp uncertainty"));
+    assert!(uncertainty.contains("50.000 µs"));
+    assert!(uncertainty.contains("1.075 ms"));
+    assert!(!uncertainty.contains('('));
+    raw.set_value(7_000_000_000);
+    let expired = stream_text(&mut ui, 140, 22);
+    assert!(expired.contains("EXPIRED"));
+    assert!(!expired.contains(&(epoch + 1_000_000_000).to_string()));
+}
+
+#[cfg(feature = "clock-sync")]
+#[test]
+fn clock_panel_does_not_present_unknown_uncertainty_as_a_measurement() {
+    use cu29::clock::sync::{ClockDomain, ClockSync, SyncConfig};
+    use cu29::clock::{CuDuration, RobotClock};
+
+    let (clock, _) = RobotClock::mock();
+    let mut sync = ClockSync::new(
+        &clock,
+        ClockDomain {
+            id: 0,
+            identity: [0; 8],
+            session: 0,
+        },
+        SyncConfig::new(CuDuration::from_millis(20)),
+    )
+    .unwrap();
+    sync.update().unwrap();
+    let mut ui = MonitorUi::new(
+        test_monitor_model().with_clock(clock),
+        MonitorUiOptions::default(),
+    );
+    let text = stream_text(&mut ui, 80, 22);
+    assert!(text.contains("ACQUIRING"));
+    assert!(text.contains("Unavailable"));
+    ui.scroll(ScrollDirection::Right, 100);
+    let text = stream_text(&mut ui, 80, 22);
+    assert!(text.contains("Unavailable"));
+    assert!(!text.contains("aligned"));
+    assert!(!text.contains("Reference uncertainty"));
+    assert!(!text.contains("184467"));
+}
+
+#[test]
+fn clock_panel_shows_the_live_local_mock_origin_without_sync_features() {
+    let (clock, raw) = cu29::clock::RobotClock::mock();
+    let model = test_monitor_model().with_clock(clock);
+    let mut ui = MonitorUi::new(model, MonitorUiOptions::default());
+    assert_eq!(ui.active_screen(), default_screen());
+    ui.set_active_screen(MonitorScreen::Clock);
+    let text = stream_text(&mut ui, 80, 20);
+    assert!(text.contains("LOCAL"));
+    assert!(text.contains("Mock counter"));
+    assert!(!text.contains("Reference identity"));
+    assert!(!text.contains("Uncertainty bound"));
+    assert!(!text.contains("Uncertainty limit"));
+    raw.set_value(123_456);
+    assert!(stream_text(&mut ui, 80, 20).contains("123456 ns"));
+    for (nanos, expected) in [
+        (0, "0 s"),
+        (8_481_433_101, "8 s"),
+        (68_000_000_000, "1 min 08 s"),
+        (3_668_000_000_000, "1 h 01 min 08 s"),
+        (90_068_000_000_000, "1 d 01 h 01 min 08 s"),
+    ] {
+        raw.set_value(nanos);
+        let text = stream_text(&mut ui, 80, 20);
+        assert!(text.contains("Uptime"));
+        assert!(text.contains(expected), "Missing {expected} in {text}");
+        assert!(text.contains(&format!("{nanos} ns")));
+    }
+}
+
+#[test]
+fn clock_panel_displays_bare_gps_provenance_without_calendar_conversion() {
+    use cu29::clock::{ClockEpoch, ClockOrigin, ClockSource, RobotClock};
+    let clock = RobotClock::from_ref_time_with_origin(
+        1_400_000_000_000_000_000,
+        ClockOrigin {
+            source: ClockSource::Gnss,
+            epoch: ClockEpoch::Gps,
+        },
+    );
+    let mut ui = MonitorUi::new(
+        test_monitor_model().with_clock(clock),
+        MonitorUiOptions::default(),
+    );
+    ui.set_active_screen(MonitorScreen::Clock);
+    let text = stream_text(&mut ui, 140, 22);
+    assert!(text.contains("GNSS"));
+    assert!(text.contains("GPS"));
+    assert!(!text.contains("Uptime"));
+    assert!(!text.contains("Local time"));
+    assert!(!text.contains("TAI"));
+}
+
+#[test]
+fn clock_attached_after_ui_creation_is_visible_in_existing_model_clones() {
+    let model = test_monitor_model();
+    let mut ui = MonitorUi::new(model.clone(), MonitorUiOptions::default());
+    let clock_tab = TAB_DEFS
+        .iter()
+        .position(|tab| tab.screen == MonitorScreen::Clock)
+        .unwrap();
+    ui.handle_event(MonitorUiEvent::Key(MonitorUiKey::Char(
+        char::from_digit(clock_tab as u32 + 1, 10).unwrap(),
+    )));
+    assert_eq!(ui.active_screen(), MonitorScreen::Clock);
+    assert!(stream_text(&mut ui, 80, 20).contains("No clock attached"));
+    let _model = model.with_clock(cu29::clock::RobotClock::new());
+    let text = stream_text(&mut ui, 80, 20);
+    assert!(text.contains("LOCAL"));
+    assert!(text.contains("Local monotonic counter"));
+}
+
+#[test]
+fn clock_panels_stay_side_by_side_and_scroll_on_small_terminals() {
+    let (clock, _) = cu29::clock::RobotClock::mock();
+    let mut ui = MonitorUi::new(
+        test_monitor_model().with_clock(clock),
+        MonitorUiOptions::default(),
+    );
+    ui.set_active_screen(MonitorScreen::Clock);
+    for width in [128, 180] {
+        let text = stream_text(&mut ui, width, 24);
+        let lines: Vec<_> = text.lines().collect();
+        let half = usize::from(width / 2);
+        let left = lines
+            .iter()
+            .map(|line| line.chars().take(half).collect::<String>())
+            .collect::<Vec<_>>()
+            .join("\n");
+        let right = lines
+            .iter()
+            .map(|line| line.chars().skip(half).collect::<String>())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(left.contains("Clock / reference"));
+        assert!(left.contains("Robot time"));
+        assert!(!left.contains("Timestamp uncertainty"));
+        assert!(right.contains("Timestamp uncertainty"));
+        assert!(right.contains("Unavailable"));
+        assert!(!right.contains("Robot time"));
+        let bottom: Vec<_> = lines[23].chars().collect();
+        for start in [0, half] {
+            assert_eq!(bottom[start], '╰');
+            assert_eq!(bottom[start + half - 1], '╯');
+        }
+    }
+    stream_text(&mut ui, 80, 22);
+    ui.handle_key(MonitorUiKey::Right);
+    ui.scroll(ScrollDirection::Right, 100);
+    let narrow = stream_text(&mut ui, 80, 22);
+    assert!(narrow.contains("Timestamp uncertainty"));
+    assert!(narrow.contains("Unavailable"));
+    stream_text(&mut ui, 1, 1);
+    ui.scroll(ScrollDirection::Down, 100);
+    stream_text(&mut ui, 80, 8);
+    let resized = stream_text(&mut ui, 140, 24);
+    assert!(resized.contains("Clock / reference"));
+    assert!(resized.contains("Timestamp uncertainty"));
+}
+
 #[derive(Debug)]
 struct StreamFixture(cu29::monitoring::LogStreamStats);
 impl cu29::monitoring::LogStreamStatsSource for StreamFixture {
