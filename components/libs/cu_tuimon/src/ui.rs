@@ -43,6 +43,7 @@ pub enum MonitorScreen {
     MemoryPools,
     #[cfg(feature = "log_pane")]
     Logs,
+    Clock,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -181,6 +182,10 @@ const TAB_DEFS: &[TabDef] = &[
         screen: MonitorScreen::Logs,
         label: "LOG",
     },
+    TabDef {
+        screen: MonitorScreen::Clock,
+        label: "CLK",
+    },
 ];
 
 pub struct MonitorUi {
@@ -196,6 +201,7 @@ pub struct MonitorUi {
     hop: crate::hop::HopView,
     latency_scroll_state: ScrollViewState,
     bandwidth_scroll_state: ScrollViewState,
+    pub(super) clock_scroll_state: ScrollViewState,
     stream_rates: Vec<crate::stream_panel::StreamRates>,
 
     #[cfg(feature = "sysinfo_pane")]
@@ -217,12 +223,21 @@ impl MonitorUi {
                 .map(|_| crate::stream_panel::StreamRates::default())
                 .collect()
         });
+        let active_screen = default_screen();
+        let active_screen = if model
+            .clock()
+            .is_some_and(|clock| clock.sync_status().is_some())
+        {
+            MonitorScreen::Clock
+        } else {
+            active_screen
+        };
         Self {
             #[cfg(feature = "hop")]
             hop: crate::hop::HopView::new(model.clone()),
             model,
             runtime_node_col_width,
-            active_screen: default_screen(),
+            active_screen,
             show_quit_hint: options.show_quit_hint,
             tab_hitboxes: Vec::new(),
             help_hitboxes: Vec::new(),
@@ -230,6 +245,7 @@ impl MonitorUi {
             nodes_scrollable_widget_state,
             latency_scroll_state: ScrollViewState::default(),
             bandwidth_scroll_state: ScrollViewState::default(),
+            clock_scroll_state: ScrollViewState::default(),
             stream_rates,
 
             #[cfg(feature = "sysinfo_pane")]
@@ -336,6 +352,17 @@ impl MonitorUi {
                         ScrollDirection::Down => self.bandwidth_scroll_state.scroll_down(),
                         ScrollDirection::Left => self.bandwidth_scroll_state.scroll_left(),
                         ScrollDirection::Right => self.bandwidth_scroll_state.scroll_right(),
+                    }
+                }
+            }
+
+            (MonitorScreen::Clock, direction) => {
+                for _ in 0..steps {
+                    match direction {
+                        ScrollDirection::Up => self.clock_scroll_state.scroll_up(),
+                        ScrollDirection::Down => self.clock_scroll_state.scroll_down(),
+                        ScrollDirection::Left => self.clock_scroll_state.scroll_left(),
+                        ScrollDirection::Right => self.clock_scroll_state.scroll_right(),
                     }
                 }
             }
@@ -479,6 +506,7 @@ impl MonitorUi {
 
             #[cfg(feature = "log_pane")]
             MonitorScreen::Logs => self.draw_logs(f, area),
+            MonitorScreen::Clock => self.draw_clock(f, area),
         }
     }
 

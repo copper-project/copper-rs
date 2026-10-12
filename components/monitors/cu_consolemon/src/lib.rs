@@ -261,7 +261,8 @@ impl CuMonitor for CuConsoleMon {
         self.model.observe_copperlist_io(stats);
     }
 
-    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
+    fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
+        self.model = self.model.clone().with_clock(ctx.clock.clone());
         #[cfg(feature = "debug_pane")]
         {
             self.log_capture = Some(Mutex::new(if should_start_ui() {

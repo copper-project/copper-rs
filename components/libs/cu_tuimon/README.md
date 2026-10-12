@@ -13,6 +13,28 @@ features; for example, use `default-features = false, features = ["hop"]` on a
 monitor dependency to select only the HOP view. The initial screen is DAG when
 enabled, otherwise HOP, otherwise Latency. Tab numbers follow the enabled tabs.
 
+The `CLK` tab is always available. It shows live robot time and its origin:
+a local monotonic counter, a mock counter, or an external reference. ConsoleMon
+and BevyMon attach the shared clock in their start hooks; existing model clones
+see that clock through `MonitorModel::with_clock`. The optional `clock-sync`
+feature enables clock discipline and its quality display. A synchronized clock
+selects CLK initially. The UI samples quality on each draw, including holdover
+and expiration, without adding per-CopperList telemetry callbacks.
+
+CLK uses two bordered panes side by side: **Clock / reference** for live time
+and alignment, and **Timestamp uncertainty** for the bounds and configured limit.
+Use arrow keys to scroll on narrow terminals, as on the bandwidth tab.
+
+**Offset from reference** shows the estimated phase difference and whether RobotClock
+is ahead or behind. **Uncertainty bound** shows a conservative total, followed by
+its reference/capture, sample-aging, and clock-mismatch contributions. These
+include configured allowances; the total is not measured clock error.
+**Uncertainty limit** is the configured maximum, not a precision target:
+exceeding it expires a locked or holdover clock. Sample-age limits can also expire
+synchronization, even when uncertainty remains below this maximum.
+The reference identity and domain are generic; their time scale depends on the
+reference provider.
+
 Select `HOP` in the monitor’s top bar (content area: at least 100 × 16).
 Node names use the same symbols as DAG throughout HOP: `◈` source, `⚙` task,
 `⭳` sink, and `⇆` bridge.
@@ -64,3 +86,8 @@ Input ownership:
 - `cu_tuimon` never needs to know whether it is running in a terminal or in Bevy
 
 This crate lives under `components/libs` because it is a reusable UI backend, not a standalone monitor component.
+
+The CLK panel shows provider-advertised source and epoch, plus readable robot uptime
+for local epochs. It formats a local ISO 8601
+date to seconds only for TAI with a known TAI minus UTC offset, and only while that
+panel is drawn. GPS timestamps remain in their provider epoch without conversion.

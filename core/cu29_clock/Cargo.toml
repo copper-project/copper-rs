@@ -31,6 +31,7 @@ approx = { version = "0.5", default-features = false }
 
 [features]
 default = ["std"]
+clock-sync = []
 reflect = ["dep:bevy_reflect"]
 std = ["portable-atomic/std", "portable-atomic/require-cas", "dep:web-time"]
 

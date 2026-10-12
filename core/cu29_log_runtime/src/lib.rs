@@ -61,9 +61,24 @@ pub type LiveLogListener = Box<dyn Fn(&CuLogEntry, &str, &[&str]) + Send + Sync 
 
 pub type LiveLogListenerId = usize;
 
+struct LiveLogRegistration {
+    id: LiveLogListenerId,
+    callback: LiveLogListener,
+    #[cfg(all(feature = "std", debug_assertions))]
+    output: LiveLogOutput,
+}
+
+#[cfg(all(feature = "std", debug_assertions))]
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum LiveLogOutput {
+    Observer,
+    Stdout,
+    Monitor,
+}
+
 struct LiveLogListeners {
     next_id: LiveLogListenerId,
-    listeners: Vec<(LiveLogListenerId, LiveLogListener)>,
+    listeners: Vec<LiveLogRegistration>,
 }
 
 impl Default for LiveLogListeners {
@@ -79,12 +94,37 @@ impl LiveLogListeners {
     fn insert(&mut self, listener: LiveLogListener) -> LiveLogListenerId {
         let id = self.next_id;
         self.next_id = self.next_id.saturating_add(1).max(1);
-        self.listeners.push((id, listener));
+        self.listeners.push(LiveLogRegistration {
+            id,
+            callback: listener,
+            #[cfg(all(feature = "std", debug_assertions))]
+            output: LiveLogOutput::Observer,
+        });
         id
     }
 
     fn remove(&mut self, id: LiveLogListenerId) {
-        self.listeners.retain(|(listener_id, _)| *listener_id != id);
+        self.listeners.retain(|listener| listener.id != id);
+    }
+
+    fn notify(&self, entry: &CuLogEntry, format_str: &str, param_names: &[&str]) {
+        #[cfg(all(feature = "std", debug_assertions))]
+        let monitor_active = self
+            .listeners
+            .iter()
+            .any(|listener| listener.output == LiveLogOutput::Monitor);
+        #[cfg(all(feature = "std", debug_assertions))]
+        let mut stdout_notified = false;
+        for listener in &self.listeners {
+            #[cfg(all(feature = "std", debug_assertions))]
+            if listener.output == LiveLogOutput::Stdout {
+                if monitor_active || stdout_notified {
+                    continue;
+                }
+                stdout_notified = true;
+            }
+            (listener.callback)(entry, format_str, param_names);
+        }
     }
 }
 
@@ -358,6 +398,43 @@ where
     }
 }
 
+/// Register automatic console output, used only when no monitor log pane is active.
+#[doc(hidden)]
+#[cfg(all(feature = "std", debug_assertions))]
+pub fn scoped_live_log_stdout_listener<F>(cb: F) -> LiveLogListenerGuard
+where
+    F: Fn(&CuLogEntry, &str, &[&str]) + Send + Sync + 'static,
+{
+    scoped_live_log_output_listener(cb, LiveLogOutput::Stdout)
+}
+
+/// Register a monitor log pane and suspend automatic console output until it closes.
+#[doc(hidden)]
+#[cfg(all(feature = "std", debug_assertions))]
+pub fn scoped_live_log_monitor_listener<F>(cb: F) -> LiveLogListenerGuard
+where
+    F: Fn(&CuLogEntry, &str, &[&str]) + Send + Sync + 'static,
+{
+    scoped_live_log_output_listener(cb, LiveLogOutput::Monitor)
+}
+
+#[cfg(all(feature = "std", debug_assertions))]
+fn scoped_live_log_output_listener<F>(cb: F, output: LiveLogOutput) -> LiveLogListenerGuard
+where
+    F: Fn(&CuLogEntry, &str, &[&str]) + Send + Sync + 'static,
+{
+    LiveLogListenerGuard {
+        id: LOGGER_STATE.get().map(|state| {
+            let mut guard = lock_mutex(&state.live_listeners);
+            let id = guard.insert(Box::new(cb));
+            if let Some(listener) = guard.listeners.last_mut() {
+                listener.output = output;
+            }
+            id
+        }),
+    }
+}
+
 /// Remove a live log listener by id. No-op if runtime not initialized.
 pub fn unregister_live_log_listener_id(id: LiveLogListenerId) {
     if let Some(state) = LOGGER_STATE.get() {
@@ -409,9 +486,7 @@ where
 pub(crate) fn notify_live_listeners(entry: &CuLogEntry, format_str: &str, param_names: &[&str]) {
     if let Some(state) = LOGGER_STATE.get() {
         let guard = lock_mutex(&state.live_listeners);
-        for (_, cb) in &guard.listeners {
-            cb(entry, format_str, param_names);
-        }
+        guard.notify(entry, format_str, param_names);
     }
 }
 // This is an adaptation of the Iowriter from bincode.
@@ -520,6 +595,52 @@ mod tests {
 
     #[cfg(not(feature = "std"))]
     use alloc::string::ToString;
+
+    #[cfg(all(feature = "std", debug_assertions))]
+    #[test]
+    fn test_monitor_routes_logs_without_stdout_and_preserves_observers() {
+        use crate::{LiveLogListeners, LiveLogOutput};
+        use std::sync::{Arc, Mutex};
+
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let mut listeners = LiveLogListeners::default();
+        let mut add = |name, output| {
+            let calls = calls.clone();
+            let id = listeners.insert(Box::new(move |_, _, _| {
+                calls.lock().unwrap().push(name);
+            }));
+            listeners.listeners.last_mut().unwrap().output = output;
+            id
+        };
+        let stdout = add("stdout", LiveLogOutput::Stdout);
+        add("other stdout", LiveLogOutput::Stdout);
+        add("observer", LiveLogOutput::Observer);
+        let monitor = add("monitor", LiveLogOutput::Monitor);
+        let entry = CuLogEntry {
+            time: 0.into(),
+            level: CuLogLevel::Debug,
+            origin: CuLogOrigin::default(),
+            msg_index: 1,
+            paramname_indexes: smallvec![],
+            params: smallvec![],
+        };
+
+        // Both runtimes' automatic stdout listeners are suppressed while the pane is active.
+        listeners.notify(&entry, "rc channels", &[]);
+        assert_eq!(*calls.lock().unwrap(), ["observer", "monitor"]);
+
+        // Closing the pane resumes headless output without removing the independent observer.
+        listeners.remove(monitor);
+        calls.lock().unwrap().clear();
+        listeners.notify(&entry, "rc channels", &[]);
+        assert_eq!(*calls.lock().unwrap(), ["stdout", "observer"]);
+
+        // Removing one runtime's listener leaves the other runtime's fallback available.
+        listeners.remove(stdout);
+        calls.lock().unwrap().clear();
+        listeners.notify(&entry, "rc channels", &[]);
+        assert_eq!(*calls.lock().unwrap(), ["other stdout", "observer"]);
+    }
 
     #[test]
     fn test_encode_decode_structured_log() {

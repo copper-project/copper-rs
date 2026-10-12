@@ -1,3 +1,4 @@
+mod clock_panel;
 #[cfg(feature = "hop")]
 mod hop;
 mod model;

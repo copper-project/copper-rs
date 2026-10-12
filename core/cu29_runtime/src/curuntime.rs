@@ -2890,6 +2890,20 @@ pub enum RuntimeLifecycleEvent {
         column: Option<u32>,
     },
     ShutdownCompleted,
+    /// Clock-curve correction, recorded outside task processing.
+    #[cfg(feature = "clock-sync")]
+    ClockSync(crate::clock_sync::ClockSyncRecord),
+}
+
+impl RuntimeLifecycleEvent {
+    /// Reads an extended clock record, including in offline tooling.
+    pub fn clock_sync_record(&self) -> Option<&crate::clock_sync::ClockSyncRecord> {
+        #[cfg(feature = "clock-sync")]
+        if let Self::ClockSync(record) = self {
+            return Some(record);
+        }
+        None
+    }
 }
 
 /// One event record persisted in the `UnifiedLogType::RuntimeLifecycle` section.

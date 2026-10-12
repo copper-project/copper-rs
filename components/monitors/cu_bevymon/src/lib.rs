@@ -46,7 +46,8 @@ impl CuMonitor for CuBevyMon {
         })
     }
 
-    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
+    fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
+        self.model = self.model.clone().with_clock(ctx.clock.clone());
         self.log_capture = Some(std::sync::Mutex::new(MonitorLogCapture::to_model(
             self.model.clone(),
         )));

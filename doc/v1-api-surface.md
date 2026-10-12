@@ -99,6 +99,35 @@ option select recorded runs identified by `Instantiated` lifecycle records.
   - `CuPool`
   - `Value`
 
+### Clock synchronization
+
+`cu29_clock::{CuInstant, sync}`, `RobotClockMock::raw_now` and
+`RobotClock::{raw_now, busy_wait_for, busy_wait_until, sync_status, origin, new_with_frequency}` provide raw-time and synchronization APIs. Raw-counter reads and
+busy waits and `sync_status()` are available with or without `clock-sync`;
+status returns `None` without the feature. Synchronization control and the
+known-frequency constructor require it. Portable observation/snapshot
+types are available for log decoding. `ClockSync` owns reference
+discipline for a shared clock; `ClockSnapshot` records its affine mapping and
+quality and origin for offline replay. `ClockOrigin`, `ClockSource`, and
+`ClockEpoch` describe provenance and timestamp interpretation. Observations carry
+that metadata without converting reference nanoseconds; GPS and application-defined
+epochs remain provider-selected. `RobotClock::origin()` requires no counter read
+or reference I/O and is available without `clock-sync`.
+`from_ref_time_with_origin` and `from_ref_time_with_rtc_and_origin` initialize
+a named reference without live synchronization. TAI metadata may include
+a valid provider-supplied TAI minus UTC offset for display consumers.
+The unmerged synchronization snapshot encoding now includes origin metadata. Existing `RobotClock` constructors and mock controls
+retain their source compatibility, including the legacy `RobotClockMock::now()`
+view of its raw counter as `CuTime`. `RobotClockMock::raw_now()` provides typed raw
+instants. `CuInstant` represents raw counter time, while `CuTime` remains execution
+time with its existing timestamp encoding. Raw deadlines, observations and
+snapshot inputs use `CuInstant`; snapshot evaluation returns `CuTime`. The
+instance-free `CuInstant::now()`/`Instant` API and free busy-wait functions are
+removed; use `RobotClock::raw_now()` and its busy-wait methods with an explicit
+clock handle. The clock crate uses allocation-free
+`SyncError` results because `cu29_traits` depends on it. Runtime integration
+converts those errors to `CuError`.
+
 ## Experimental
 
 - `cu29::logstream::CuTwinBuilder`: `with_slab_size`, `with_section_size`,
@@ -142,6 +171,13 @@ option select recorded runs identified by `Instantiated` lifecycle records.
   `background_process_empty: true` to opt into dispatching empty inputs.
 
 - LogStream session manifests and `ReceiverRequirements` decoder geometry/bounds.
+  Generated twins seal local application metadata and, with `self-describing-logs`,
+  the shared decode catalog before recording captures. Archive config capture is deferred.
+  `CuTwinBuilder::with_log_rollover(bytes)` bounds receiver archive storage using
+  the unified logger's `OverwriteOldest` policy.
+  Session manifests carry the producing construction's `SectionContext`; archive
+  sections retain its run, instance and mission indices across rollover. Generated
+  twins validate the sender mission against their compiled mission index.
 - `remote-debug` feature and `cu29::remote_debug`.
 - `parallel-rt` feature and parallel executor APIs.
 - `async-cl-io` feature and async CopperList I/O internals.

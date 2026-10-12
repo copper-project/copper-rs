@@ -1,0 +1,130 @@
+import "../../justfile"
+
+# Start a local PTP reference and open the live clock monitor.
+[default]
+demo:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    session=$(mktemp -d /tmp/cu-clock-sync-XXXXXX)
+    cleanup() {
+        just --justfile "{{justfile_directory()}}/justfile" local-stop "$session"
+        rm -rf -- "$session"
+    }
+    trap cleanup EXIT
+    trap 'exit 130' INT TERM
+    just --justfile "{{justfile_directory()}}/justfile" local-start "$session"
+    just --justfile "{{justfile_directory()}}/justfile" local-ready "$session"
+    just --justfile "{{justfile_directory()}}/justfile" run
+
+# Run against PTP services that are already configured.
+run:
+    cargo run -p cu-clock-sync
+
+# Find the active Ethernet interface owning /dev/ptp0.
+interface:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for tool in ptp4l phc2sys pmc ethtool ip; do
+        command -v "$tool" >/dev/null || { echo "Missing $tool. See README.md." >&2; exit 1; }
+    done
+    while IFS= read -r candidate; do
+        phc=$(ethtool -T "$candidate" 2>/dev/null | awk '/PTP Hardware Clock:|Hardware timestamp provider index:/ {print $NF}')
+        if [[ "$phc" == 0 ]]; then
+            echo "$candidate"
+            exit 0
+        fi
+    done < <(ip -o link show up | awk -F ': ' '/state UP/ {sub(/@.*/, "", $2); print $2}')
+    echo "No active Ethernet interface owns /dev/ptp0. See docs/linux-setup.md." >&2
+    exit 1
+
+# Start local services, or reuse the existing local master.
+[private]
+[positional-arguments]
+local-start session:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    session=$1
+    iface=$(just --justfile "{{justfile_directory()}}/justfile" interface)
+    [[ -r /dev/ptp0 ]] || { echo "Read access to /dev/ptp0 is required. See README.md." >&2; exit 1; }
+    mkdir -p logs
+    if [[ -S /var/run/ptp4l ]]; then
+        echo "Using the existing PTP service on $iface. Its phc2sys must stay running."
+    else
+        echo "Starting a local PTP master on $iface (/dev/ptp0)."
+        echo "Daemon output: logs/ptp4l.log and logs/phc2sys.log."
+        sudo -v
+        sudo sh -c 'echo $$ > "$1"; exec ptp4l -H -i "$2" --serverOnly 1 -m' sh "$session/ptp4l.pid" "$iface" >logs/ptp4l.log 2>&1 < /dev/null &
+        for ((attempt=0; attempt<100; attempt++)); do
+            [[ -S /var/run/ptp4l ]] && break
+            sleep 0.1
+        done
+        [[ -S /var/run/ptp4l ]] || { cat logs/ptp4l.log >&2; exit 1; }
+        # Only this demo's master is configured here. PTP defaults do not mark
+        # the UTC offset valid, even though phc2sys uses it to construct TAI.
+        # Read the offset from a current system leap table instead of guessing.
+        ntp_now=$(($(date +%s) + 2208988800))
+        if [[ -r /usr/share/zoneinfo/leap-seconds.list ]] && utc_offset=$(awk -v now="$ntp_now" '
+            /^#@/ { expires = $2 }
+            /^[0-9]/ && $1 <= now { offset = $2 }
+            END { if (offset == "" || expires <= now) exit 1; print offset }
+        ' /usr/share/zoneinfo/leap-seconds.list); then
+            settings=$(sudo pmc -u -b 0 -i "$session/pmc-setup" -s /var/run/ptp4l \
+                "SET GRANDMASTER_SETTINGS_NP clockClass 248 clockAccuracy 0xfe offsetScaledLogVariance 0xffff currentUtcOffset $utc_offset leap61 0 leap59 0 currentUtcOffsetValid 1 ptpTimescale 1 timeTraceable 0 frequencyTraceable 0 timeSource 0xa0")
+            if [[ ! "$settings" =~ currentUtcOffsetValid[[:space:]]+1 ]] || [[ ! "$settings" =~ currentUtcOffset[[:space:]]+$utc_offset[[:space:]] ]]; then
+                echo "Local PTP master did not accept the UTC offset:" >&2
+                echo "$settings" >&2
+                exit 1
+            fi
+        fi
+        sudo sh -c 'echo $$ > "$1"; exec phc2sys -s CLOCK_REALTIME -c /dev/ptp0 -w -m' sh "$session/phc2sys.pid" >logs/phc2sys.log 2>&1 < /dev/null &
+    fi
+    # linuxptp restricts PHC identity queries to its read-write socket.
+    # Give this user's group access for the demo and restore it on exit.
+    if [[ ! -w /var/run/ptp4l ]]; then
+        stat -c '%d:%i %g' /var/run/ptp4l > "$session/socket-group"
+        sudo chgrp -- "$(id -g)" /var/run/ptp4l
+        [[ -w /var/run/ptp4l ]] || { echo "Cannot access /var/run/ptp4l; see docs/linux-setup.md." >&2; exit 1; }
+    fi
+
+# Wait for MASTER and, for services we started, a settled PHC servo.
+[private]
+[positional-arguments]
+local-ready session:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    session=$1
+    echo "Waiting for the local PTP reference..."
+    for ((attempt=0; attempt<30; attempt++)); do
+        status=$(pmc -u -b 0 -i "$session/pmc" -s /var/run/ptp4l 'GET PORT_DATA_SET')
+        if [[ "$status" =~ portState[[:space:]]+MASTER ]]; then
+            if [[ ! -f "$session/ptp4l.pid" ]] || { [[ -f "$session/phc2sys.pid" ]] && awk '/ offset / { for (i=1;i<=NF;i++) if ($i=="offset") ready=($(i+2)=="s2" && $(i+1)>-1000000 && $(i+1)<1000000) } END {exit !ready}' logs/phc2sys.log; }; then
+                echo "Local PTP reference ready. Opening the live CLK panel."
+                exit 0
+            fi
+        elif [[ ! -f "$session/ptp4l.pid" ]]; then
+            echo "The existing service is not a local master. See docs/linux-setup.md to follow a network reference." >&2
+            exit 1
+        fi
+        sleep 0.5
+    done
+    echo "PTP did not become ready. Check logs/ptp4l.log and logs/phc2sys.log." >&2
+    exit 1
+
+# Stop only this demo's daemons and restore an existing socket's group.
+[private]
+[positional-arguments]
+local-stop session:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    session=$1
+    for daemon in phc2sys ptp4l; do
+        if [[ -f "$session/$daemon.pid" ]]; then
+            sudo kill -TERM -- "$(cat "$session/$daemon.pid")" 2>/dev/null || true
+        fi
+    done
+    if [[ -f "$session/socket-group" && -S /var/run/ptp4l ]]; then
+        read -r identity group < "$session/socket-group"
+        if [[ "$(stat -c '%d:%i' /var/run/ptp4l)" == "$identity" ]]; then
+            sudo chgrp -- "$group" /var/run/ptp4l
+        fi
+    fi
