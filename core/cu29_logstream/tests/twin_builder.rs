@@ -56,6 +56,9 @@ impl CaptureDataSet for Cameras {
 struct App;
 impl LiveReplay for App {
     type DataSet = Cameras;
+    fn seal_archive_metadata(_: &mut cu29_unifiedlog::UnifiedLoggerWrite) -> CuResult<()> {
+        Ok(())
+    }
     fn build_twin() -> CuResult<(Self, cu29_clock::RobotClockMock)> {
         let (_, clock) = cu29_clock::RobotClock::mock();
         Ok((Self, clock))

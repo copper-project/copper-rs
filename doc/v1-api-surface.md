@@ -142,6 +142,8 @@ option select recorded runs identified by `Instantiated` lifecycle records.
   `background_process_empty: true` to opt into dispatching empty inputs.
 
 - LogStream session manifests and `ReceiverRequirements` decoder geometry/bounds.
+  Generated twins seal local application metadata and, with `self-describing-logs`,
+  the shared decode catalog before recording captures. Archive config capture is deferred.
 - `remote-debug` feature and `cu29::remote_debug`.
 - `parallel-rt` feature and parallel executor APIs.
 - `async-cl-io` feature and async CopperList I/O internals.
