@@ -3335,6 +3335,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             live_twin::runtime_support(
                 application_name,
                 &mission_mod,
+                mission_index,
                 &culist_plan,
                 &culist_exec_entities,
             )
@@ -3898,6 +3899,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             sender_id: instance_id,
                         },
                         logstream_schema.clone(),
+                        log_context,
                     )
                     .map_err(|error| CuError::from(error.to_string()))?;
                 let #transport_ident: #transport_type = resources
@@ -3961,13 +3963,15 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         sender_config.continuous.identity.sender_id = instance_id;
                         sender_config.recovery.finite.identity.sender_id = instance_id;
                         let schema = <#mission_mod::CuStampedDataSet as ::cu29::logstream::capture::CaptureDataSet>::stream_schema();
-                        if !schema.reconstruction.is_empty() {
-                            let manifest = ::cu29::logstream::SessionManifest::decode_record(&sender_config.recovery.manifest_record)
-                                .map_err(|e| CuError::from(e.to_string()))?;
-                            if manifest.application_schema != schema {
-                                return Err(CuError::from("injected sender must use the generated reconstruction schema"));
-                            }
+                        let mut manifest = ::cu29::logstream::SessionManifest::decode_record(&sender_config.recovery.manifest_record)
+                            .map_err(|e| CuError::from(e.to_string()))?;
+                        if manifest.application_schema != schema {
+                            return Err(CuError::from("injected sender must use the generated application schema"));
                         }
+                        manifest.identity = sender_config.continuous.identity;
+                        manifest.context = log_context;
+                        sender_config.recovery.manifest_record = manifest.encode_record()
+                            .map_err(|e| CuError::from(e.to_string()))?;
                         let bitrate = sender_config.pacing.bitrate_bps;
                         let baseline = sender_config.continuous.repair_every_source_symbols;
                         let (mut copperlist, keyframe, sender_monitor) = ::cu29::logstream::scheduled_sinks::<
@@ -4194,9 +4198,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     layout: cu29::prelude::ValueDecodeCatalogLayout::#layout,
                     missions: &[#(super::#modules::VALUE_DECODE_CATALOG_MISSION),*],
                 };
-                logger.seal_metadata(&metadata, Some(&cu29::prelude::CompressedCatalog(&catalog)))?;
+                logger.seal_metadata(metadata, Some(&cu29::prelude::CompressedCatalog(&catalog)))?;
             }
-        } else { quote! { logger.seal_metadata::<()>(&metadata, None)?; } };
+        } else { quote! { logger.seal_metadata::<()>(metadata, None)?; } };
         let app_inherent_impl = quote! {
             impl #application_name {
                 #stop_components
@@ -4209,10 +4213,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 }
 
                 #[doc(hidden)]
-                fn prepare_log_metadata<S: SectionStorage, L: UnifiedLogWrite<S>>(
-                    logger: &Arc<Mutex<L>>, config: &CuConfig, instance_id: u32,
-                ) -> CuResult<cu29::prelude::SectionContext> {
-                    let metadata = cu29::prelude::ApplicationMetadata {
+                fn application_log_metadata(effective_config_ron: String) -> cu29::prelude::ApplicationMetadata {
+                    cu29::prelude::ApplicationMetadata {
                         app_type: stringify!(#application_name).to_string(),
                         app_name: env!("CARGO_PKG_NAME").to_string(),
                         app_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -4220,12 +4222,27 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         git_dirty: #git_dirty_tokens,
                         subsystem_id: Self::subsystem().id().map(str::to_string),
                         subsystem_code: Self::subsystem().code(),
-                        effective_config_ron: config.serialize_ron()?,
+                        effective_config_ron,
                         missions: vec![#(#mission_names.to_string()),*],
                         catalog_offset: 0,
-                    };
-                    #metadata_log_lock
+                    }
+                }
+
+                #[doc(hidden)]
+                fn seal_log_metadata<S: SectionStorage, L: UnifiedLogWrite<S>>(
+                    logger: &mut L, metadata: &cu29::prelude::ApplicationMetadata,
+                ) -> CuResult<()> {
                     #seal_metadata
+                    Ok(())
+                }
+
+                #[doc(hidden)]
+                fn prepare_log_metadata<S: SectionStorage, L: UnifiedLogWrite<S>>(
+                    logger: &Arc<Mutex<L>>, config: &CuConfig, instance_id: u32,
+                ) -> CuResult<cu29::prelude::SectionContext> {
+                    let metadata = Self::application_log_metadata(config.serialize_ron()?);
+                    #metadata_log_lock
+                    Self::seal_log_metadata::<S, L>(&mut *logger, &metadata)?;
                     logger.construction_context(instance_id, #mission_index)
                 }
 

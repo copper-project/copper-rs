@@ -13,6 +13,7 @@ use alloc::{
 use bincode::{Decode, Encode};
 use cu29_runtime::config::{LogStreamDestinationConfig, LogStreamRepairDensity, LogStreamRlcField};
 use cu29_traits::TaskOutputSpec;
+use cu29_unifiedlog::SectionContext;
 
 /// Link and codec policy after RON validation and MTU resolution.
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
@@ -156,6 +157,8 @@ pub struct SessionManifest {
     pub identity: StreamIdentity,
     pub requirements: ReceiverRequirements,
     pub application_schema: ApplicationSchema,
+    /// Onboard section identity for this construction; repeated for late joins.
+    pub context: SectionContext,
 }
 
 impl SessionManifest {
@@ -163,11 +166,13 @@ impl SessionManifest {
         identity: StreamIdentity,
         requirements: ReceiverRequirements,
         application_schema: ApplicationSchema,
+        context: SectionContext,
     ) -> Self {
         Self {
             identity,
             requirements,
             application_schema,
+            context,
         }
     }
 
@@ -193,6 +198,11 @@ impl SessionManifest {
             return Err(Error::Codec("session manifest has trailing bytes".into()));
         }
         manifest.requirements.validate()?;
+        if manifest.context.instance_id != manifest.identity.sender_id {
+            return Err(Error::InvalidConfig(
+                "manifest instance differs from sender identity",
+            ));
+        }
         Ok(manifest)
     }
 }
@@ -341,12 +351,19 @@ impl LogStreamPlan {
         &self,
         identity: StreamIdentity,
         schema: ApplicationSchema,
+        context: SectionContext,
     ) -> Result<LogStreamSenderConfig> {
         self.validate()?;
+        if context.instance_id != identity.sender_id {
+            return Err(Error::InvalidConfig(
+                "manifest instance differs from sender identity",
+            ));
+        }
         let max_record_bytes = usize::try_from(self.max_record_bytes)
             .map_err(|_| Error::InvalidConfig("record bound exceeds usize"))?;
         let manifest =
-            SessionManifest::new(identity, self.receiver_requirements(), schema).encode_record()?;
+            SessionManifest::new(identity, self.receiver_requirements(), schema, context)
+                .encode_record()?;
         if manifest.len() as u64 > self.objects.max_object_bytes {
             return Err(Error::ObjectTooLarge {
                 actual: manifest.len() as u64,

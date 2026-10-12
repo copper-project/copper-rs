@@ -299,6 +299,23 @@ and shutdown. The caller owns the frame reader and presentation. Pausing or drop
 that reader never blocks recording. Dropping the twin stops and joins its workers;
 `stop()` also reports receiver errors and final counters. `archive_only()` records
 without running a twin. Each handle accepts one sender session and a fresh log path.
+At archive startup, the generated twin seals its local application metadata. With
+`cu29/self-describing-logs`, it also seals the same generated decode catalog as the
+onboard application, enabling standalone decoding of received captures. Catalogs
+are generated from the compiled missions, payload recipes and encoding features;
+use the same definitions and features for sender and twin. Configuration capture
+is deferred: the archive's effective configuration string is empty.
+The shared catalog includes streamed payload recipes when onboard task logging is
+disabled, so streaming-only recordings also support standalone decoding.
+Use `.with_log_rollover(bytes)` on the twin builder to bound storage and overwrite
+the oldest data sections while retaining static metadata and the decode catalog.
+The capacity includes metadata, must exceed the configured section size and must be a multiple of 512
+bytes. It must also fit the application's static metadata and one archive section.
+For example, `.with_log_rollover(256 * 1024 * 1024)` keeps a 256 MiB archive.
+Each sender session belongs to one application construction. Its repeated manifest
+carries the onboard `SectionContext` (run, instance and mission indices). Archive
+sections retain that identity across rollover and late joins; use the twin generated
+for the sender's active mission. A new construction uses a new session and archive.
 Replay retains up to the configured queue capacity in events and pending captures,
 plus one recovery point and one executing frame. Presentation retains up to the
 configured frame and structured-entry capacities; payload storage and thread/runtime
@@ -307,8 +324,9 @@ allocations are additional.
 Production sends the native CopperList format with selected payloads omitted.
 CopperLists carry `id` followed by `msgs`, without runtime lifecycle state.
 There are no transmitted version fields in packets, records, RLC fragments, or
-session manifests. Always use the receiver/logreader built for the producing
-application version. Archived unified logs retain encapsulation version **1**;
+session manifests. Use the receiver built for the producing application version.
+Archives with an embedded catalog support the standalone log extractor.
+Archived unified logs retain encapsulation version **2**;
 that version describes file/section layout only, never encoded content.
 The compressed metadata bytes are unchanged by moving ULEB128 timestamp-delta
 and backreference encoding into `cu-bincode` 2.1.
@@ -346,8 +364,9 @@ payload length as a big endian u64, and payload. Recovery-point references retai
 the same digests for the same semantic records. Truncated headers are rejected;
 truncated payloads and appended bytes fail digest verification. Receiver allocation
 bounds still apply to the complete framed record before assembly.
-Session manifests encode identity, `ReceiverRequirements`, and application schema
-using standard bincode encoding. Requirements carry only symbol size, RLC field,
+Session manifests encode identity, `ReceiverRequirements`, application schema and
+the producing construction's section context using standard bincode encoding.
+Requirements carry only symbol size, RLC field,
 window symbols, maximum complete CopperList record bytes, and optional feedback
 requirements (report interval and destination key). Receivers validate
 this geometry and enforce their own symbol, window, record, and buffering limits
