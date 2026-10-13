@@ -13,4 +13,6 @@ ignore = [
   "RUSTSEC-2026-0192", # ttf-parser is unmaintained; current UI dependencies still require it and no safe upgrade is available.
   "RUSTSEC-2026-0291", # Zenoh shared memory -> lockfree -> owned-alloc; no fixed release. Track eclipse-zenoh/zenoh#2811.
   "RUSTSEC-2026-0299", # owned-alloc is unmaintained on the same Zenoh path; remove both ignores when Zenoh drops lockfree.
+  "RUSTSEC-2026-0319", # anymap2 is unmaintained; cargo-cunew -> liquid-core still requires it. Remove when Liquid adopts a maintained replacement.
+  "RUSTSEC-2024-0449", # unsafe-libyaml is unmaintained; Zenoh and velodyne-lidar still require serde_yaml. Remove when both replace their YAML dependencies.
 ]
