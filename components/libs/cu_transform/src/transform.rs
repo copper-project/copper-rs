@@ -190,8 +190,8 @@ impl<T: Copy + Debug + Default + 'static, const N: usize> ConstTransformBuffer<T
         } else if self.count < N {
             // Buffer not full - find insertion position
             let mut insert_pos = 0;
-            for i in 0..self.count {
-                if let Some(ref t) = self.transforms[i] {
+            for (i, transform_slot) in self.transforms[..self.count].iter().enumerate() {
+                if let Some(t) = transform_slot {
                     if t.stamp <= transform.stamp {
                         insert_pos = i + 1;
                     } else {
@@ -228,8 +228,8 @@ impl<T: Copy + Debug + Default + 'static, const N: usize> ConstTransformBuffer<T
         let mut latest_time = None;
         let mut latest_idx = 0;
 
-        for i in 0..self.count.min(N) {
-            if let Some(ref t) = self.transforms[i]
+        for (i, transform_slot) in self.transforms[..self.count.min(N)].iter().enumerate() {
+            if let Some(t) = transform_slot
                 && (latest_time.is_none() || t.stamp > latest_time.unwrap())
             {
                 latest_time = Some(t.stamp);
@@ -248,23 +248,21 @@ impl<T: Copy + Debug + Default + 'static, const N: usize> ConstTransformBuffer<T
         let mut min_time = None;
         let mut max_time = None;
 
-        for i in 0..self.count.min(N) {
-            if let Some(ref t) = self.transforms[i] {
-                match (min_time, max_time) {
-                    (None, None) => {
+        for t in self.transforms[..self.count.min(N)].iter().flatten() {
+            match (min_time, max_time) {
+                (None, None) => {
+                    min_time = Some(t.stamp);
+                    max_time = Some(t.stamp);
+                }
+                (Some(min), Some(max)) => {
+                    if t.stamp < min {
                         min_time = Some(t.stamp);
+                    }
+                    if t.stamp > max {
                         max_time = Some(t.stamp);
                     }
-                    (Some(min), Some(max)) => {
-                        if t.stamp < min {
-                            min_time = Some(t.stamp);
-                        }
-                        if t.stamp > max {
-                            max_time = Some(t.stamp);
-                        }
-                    }
-                    _ => unreachable!(),
                 }
+                _ => unreachable!(),
             }
         }
 
@@ -281,8 +279,8 @@ impl<T: Copy + Debug + Default + 'static, const N: usize> ConstTransformBuffer<T
     ) -> Vec<&StampedTransform<T>> {
         let mut result = Vec::new();
 
-        for i in 0..self.count.min(N) {
-            if let Some(ref t) = self.transforms[i]
+        for transform_slot in &self.transforms[..self.count.min(N)] {
+            if let Some(t) = transform_slot
                 && t.stamp >= start_time
                 && t.stamp <= end_time
             {
@@ -302,8 +300,8 @@ impl<T: Copy + Debug + Default + 'static, const N: usize> ConstTransformBuffer<T
         let mut closest_diff = None;
         let mut closest_idx = 0;
 
-        for i in 0..self.count.min(N) {
-            if let Some(ref t) = self.transforms[i] {
+        for (i, transform_slot) in self.transforms[..self.count.min(N)].iter().enumerate() {
+            if let Some(t) = transform_slot {
                 let diff = if t.stamp.as_nanos() > time.as_nanos() {
                     t.stamp.as_nanos() - time.as_nanos()
                 } else {
@@ -579,10 +577,11 @@ impl<T: Copy + Debug + Default + 'static, const N: usize> ConstTransformBufferSy
         let mut best_distance = u64::MAX;
 
         // Compare all pairs of transforms to find the ones closest to the target time
-        for i in 0..buffer.count.min(N) {
-            if let Some(ref t1) = buffer.transforms[i] {
-                for j in (i + 1)..buffer.count.min(N) {
-                    if let Some(ref t2) = buffer.transforms[j] {
+        let transforms = &buffer.transforms[..buffer.count.min(N)];
+        for (i, transform_slot) in transforms.iter().enumerate() {
+            if let Some(t1) = transform_slot {
+                for (j, transform_slot) in transforms.iter().enumerate().skip(i + 1) {
+                    if let Some(t2) = transform_slot {
                         // Ensure t1 is before t2
                         let (earlier, later) = if t1.stamp <= t2.stamp {
                             (t1, t2)
