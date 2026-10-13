@@ -323,6 +323,62 @@
   
   
     <li class="md-nav__item">
+      <a href="https://copper-project.github.io/copper-rs-book/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Copper Book
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Copper-Release-Notes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../Project-Templates/" class="md-nav__link">
         
   
@@ -426,6 +482,17 @@
     <span class="md-ellipsis">
       
         Runtime and task implementation (Rust)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#experimental-self-describing-logs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Experimental self-describing logs
       
     </span>
   </a>
@@ -946,6 +1013,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../Self-Describing-Logs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Self-describing logs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../Remote-Debugging/" class="md-nav__link">
         
   
@@ -1038,34 +1133,6 @@
     
   
     FAQ
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../Copper-Release-Notes/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Copper Release Notes
   
 
     
@@ -1300,6 +1367,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#experimental-self-describing-logs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Experimental self-describing logs
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1388,6 +1466,28 @@ fn main() {
     application.run().expect(&quot;Failed to run application.&quot;);
     debug!(&quot;End of program: {}.&quot;, application.clock().now());
 }
+</code></pre>
+<h2 id="experimental-self-describing-logs">Experimental self-describing logs<a class="headerlink" href="#experimental-self-describing-logs" title="Permanent link">&para;</a></h2>
+<p>Enable <code>cu29/self-describing-logs</code> and use the ordinary application builder.
+During construction, before resource initialization, Copper serializes native
+encoding descriptions for every compiled mission and saves one compressed catalog
+in static log metadata. Matching appended runs reuse it. The catalog and application
+metadata survive byte-addressed rollover; data sections identify their run,
+instance and mission, so surviving CopperLists remain decodable after startup
+markers rotate out.</p>
+<p>The producer supports <code>no_std</code> and uses bounded memory for startup compression.
+Native payload encoding retains its existing recording pass. Host readers enable
+<code>cu29/decode-catalog</code> for allocated value trees. Use the standalone CLI's <code>catalog</code>,
+<code>extract-copperlists</code> and <code>fsck --deep</code> commands, or its Python API, to inspect logs.</p>
+<p>Expose the feature in your application's <code>Cargo.toml</code>:</p>
+<pre><code class="language-toml">[features]
+self-describing-logs = [&quot;cu29/self-describing-logs&quot;]
+</code></pre>
+<p>Record with <code>cargo run --features self-describing-logs</code>. From a Copper checkout,
+inspect the resulting log with:</p>
+<pre><code class="language-sh">just logextract logs/app.copper catalog
+just logextract logs/app.copper extract-copperlists --export-format jsonl
+just logextract logs/app.copper fsck --deep
 </code></pre>
 <p>For a deeper explanation of task lifecycle hooks and scheduling, see <a href="../Task-Lifecycle/">Task Lifecycle</a>.</p>
 

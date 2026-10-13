@@ -321,6 +321,62 @@
   
   
     <li class="md-nav__item">
+      <a href="https://copper-project.github.io/copper-rs-book/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Copper Book
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Copper-Release-Notes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../Project-Templates/" class="md-nav__link">
         
   
@@ -617,6 +673,23 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Fast Structured Logging">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#remote-structured-logs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Remote structured logs
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1012,6 +1085,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../Self-Describing-Logs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Self-describing logs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../Remote-Debugging/" class="md-nav__link">
         
   
@@ -1104,34 +1205,6 @@
     
   
     FAQ
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../Copper-Release-Notes/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Copper Release Notes
   
 
     
@@ -1386,6 +1459,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Fast Structured Logging">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#remote-structured-logs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Remote structured logs
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1474,15 +1564,16 @@
 runtime-only. Binary logs, Serde exports, Python exports, and remote-debug
 snapshots all omit it. Decoding reconstructs <code>BeingSerialized</code> internally rather
 than restoring recorded lifecycle history.</p>
-<p>Unified-log encapsulation version <strong>1</strong> describes only file and section layout;
-it must never change for encoded-content changes. Always use the logreader built
-for the exact application version that produced the recording. Logstream carries
+<p>Unified-log encapsulation version <strong>2</strong> describes file and section layout, including
+static metadata and construction context. Decode messages with the producing
+application's typed logreader or its embedded catalog. Logstream carries
 no version fields in packets, records, RLC fragments, or session manifests.
 Compressed metadata keeps the same bytes while reusing <code>cu-bincode</code> 2.1's selective
 <code>Uleb128&lt;T&gt;</code> wrapper for timestamp deltas and metadata backreferences. Ordinary
 bincode integers and payload encoding keep their existing representation.</p>
-<p>Logstream session manifests carry identity, receiver requirements, and application
-schema using standard bincode encoding. Requirements contain only symbol size,
+<p>Logstream session manifests carry identity, receiver requirements, application
+schema and the producing section context using standard bincode encoding.
+Requirements contain only symbol size,
 RLC field, window symbols, maximum complete CopperList record bytes, and optional
 feedback requirements: report interval and destination key. Feedback timeout and
 adaptation bounds stay in the local sender configuration. The receiver validates those values and enforces its own decoder and buffering limits.
@@ -1536,8 +1627,16 @@ peers need the new framing; the older adapter that relied on the common CRC is
 incompatible. Direct decoder callers must supply complete, carrier-verified packets.
 Record digests and recovery-point digest references retain their content binding.
 Sender and receiver must use the matching wire layout.</p>
+<p>Generated LogStream twins seal application metadata when opening their receiver archive. With <code>cu29/self-describing-logs</code>, the twin also writes the shared decode catalog from its compiled missions and payload recipes. Build sender and twin from the same application definitions and encoding features to obtain identical catalogs. Received captures can then be decoded by the standalone log extractor. Archive configuration capture is deferred; the effective configuration string is empty.</p>
+<p>With LogStream enabled, the shared catalog includes streamed payload recipes even when onboard task logging is disabled.</p>
+<p>Set <code>.with_log_rollover(bytes)</code> on the twin builder to retain recent data within a fixed archive capacity. This uses the unified logger's <code>OverwriteOldest</code> policy and retains static metadata and the decode catalog. Capacity must exceed the configured section size, be a multiple of 512 bytes, and fit static metadata plus one archive section. For example, <code>.with_log_rollover(256 * 1024 * 1024)</code> bounds the archive slabs to 256 MiB.</p>
+<p>Each sender session belongs to one construction. Its repeated manifest carries the onboard section context: run ID, instance ID and mission index. All receiver archive sections preserve that context across rollover, and late joins recover it from the manifest. Select the twin generated for the sender's active mission; a new construction requires a new session and archive. Lifecycle transitions and failures remain runtime events in the onboard log.</p>
 <h2 id="fast-structured-logging">Fast Structured Logging<a class="headerlink" href="#fast-structured-logging" title="Permanent link">&para;</a></h2>
 <p>Structured log strings are interned and indexed at compile time. Runtime logging avoids string construction overhead and keeps hot paths fast.</p>
+<h3 id="remote-structured-logs">Remote structured logs<a class="headerlink" href="#remote-structured-logs" title="Permanent link">&para;</a></h3>
+<p>With <code>cu29/logstream</code> and a configured <code>log_streaming</code> destination, generated runtimes forward structured entries alongside CopperLists and keyframes. Each destination gets a bounded copy of the bytes from the existing local serialization pass; framing, FEC, and transmission run on background workers. Local logging continues when streamed entries exceed their buffer limit or are shed under pressure.</p>
+<p>Message templates and parameter names travel as interned numeric IDs. Typed parameter values retain their native encoding. The receiver uses the producing application's <code>cu29_log_index</code> to reconstruct readable text and archives the original binary entries in <code>StructuredLogLine</code> sections.</p>
+<p>A generated twin exposes <code>take_log_reader()</code> for an independent log view after archival, with a default capacity of 64 entries. Configure it with <code>.with_log_capacity(capacity)</code> before <code>.spawn()</code>. Pausing or dropping the view leaves recording active. In <code>examples/cu_logstream_demo</code>, run <code>just telemetry</code>, then <code>just sender</code> in another terminal: the robot emits simulated encoder temperature and supply-voltage diagnostics with <code>info!(ctx, ...)</code>, and the remote log pane displays them. These numeric diagnostics travel only in structured logs; task messages carry joint angles. Use <code>--log-index &lt;path&gt;</code> to select the sender build's index on another machine.</p>
 <h2 id="sdk-capabilities">SDK Capabilities<a class="headerlink" href="#sdk-capabilities" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Task interface and lifecycle traits for implementing new algorithms, sensors, and actuators.</li>
@@ -1609,9 +1708,10 @@ feedback requests share the sender scheduler and retention bounds. Run
 <p>The UDP demo now includes an optional Ratatui screen. In <code>examples/cu_logstream_demo</code>,
 start <code>just telemetry</code>, then <code>just sender</code> in another terminal. Use fresh log paths
 for repeated runs. The manual sender runs for about a minute. Space pauses the view;
-q closes the receiver and its archive. The screen shows counter/sum values, a counter
-chart, packet freshness, archive progress, recovery anchors, and separate source-gap
-and UI-overwrite counts.</p>
+q closes the receiver and its archive. The screen shows captured joint angles,
+the reconstructed arm pose, encoder charts, remote structured logs, packet
+freshness, archive progress, recovery anchors, and separate source-gap and
+UI-overwrite counts.</p>
 <p>The std-only <code>cu29_logstream::telemetry::telemetry_channel</code> moves successfully archived,
 already decoded frames into a bounded circular buffer. User code waits on <code>ready().await</code>,
 <code>wait_timeout</code>, or a registered scheduling waker, then pulls <code>try_read()</code> on its own thread.
@@ -1628,13 +1728,14 @@ archive equality with fast/stalled/disconnected readers, terminal layouts, and a
 existing UDP recovery/replay scenarios. The UI dependency is behind the example's <code>tui</code>
 feature; telemetry is std-only and adds no work to the robot's real-time task path.</p>
 <h2 id="live-copper-twin">Live Copper twin<a class="headerlink" href="#live-copper-twin" title="Permanent link">&para;</a></h2>
-<p>The demo graph is <code>counter -&gt; sum -&gt; derived</code>. The ordinary <code>Derived</code> Copper task
-computes <code>sum % 256</code> on the robot and in generated ground-side replay. Its payload
-is never transmitted, including repeated anchor boundaries and FEC repairs. The
-robot's onboard log contains the full output for comparison. Ratatui explicitly
-labels the derived value <strong>reconstructed locally; payload not transmitted</strong>.</p>
+<p>The demo graph is <code>encoders -&gt; kinematics</code>. The ordinary <code>Kinematics</code> Copper task
+computes the arm pose from joint angles on the robot and in generated ground-side
+replay. Its payload is never transmitted, including repeated anchor boundaries
+and FEC repairs. The robot's onboard log contains the full output for comparison.
+The telemetry screen identifies the reconstructed pose and labels it
+<strong>pose payload not transmitted</strong>.</p>
 <p>Declare the static contract in the same RON used by the robot and ground build:</p>
-<pre><code class="language-ron">(id: &quot;derived&quot;, type: &quot;tasks::Derived&quot;,
+<pre><code class="language-ron">(id: &quot;kinematics&quot;, type: &quot;cu_logstream_demo::tasks::Kinematics&quot;,
  streaming: (replay: reconstruct)),
 </code></pre>
 <p>Reconstruction recomputes outputs from captured inputs, clock, and frozen state.
@@ -1661,10 +1762,33 @@ and shutdown. The caller owns the frame reader and presentation. Pausing or drop
 that reader never blocks recording. Dropping the twin stops and joins its workers;
 <code>stop()</code> also reports receiver errors and final counters. <code>archive_only()</code> records
 without running a twin. Each handle accepts one sender session and a fresh log path.
-The default receiver supports the 1200-byte-MTU, 64-symbol streaming profile, with
-4 KiB records and 64 KiB recovery objects. It retains 32 replay events, 32 pending
-captures, one anchor, one executing frame and 64 display frames; payload storage and
-thread/runtime allocations are additional. <code>with_frame_capacity</code> changes display retention.</p>
+Configure the twin by chaining <code>.with_slab_size(bytes)</code>, <code>.with_section_size(bytes)</code>,
+<code>.with_receiver_limits(limits)</code>, <code>.with_replay_capacity(capacity)</code>,
+<code>.with_frame_capacity(capacity)</code>, and <code>.with_log_capacity(capacity)</code> before <code>.spawn()</code>.
+<code>SessionRouterLimits::default()</code> supplies one sender using the 1200-byte-MTU,
+64-symbol FEC profile, 4 KiB records and 64 KiB finite objects. Override record and
+finite-object bounds for the application's largest serialized CopperList and
+keyframe. Defaults are 16 MiB slabs, 128 KiB sections, 32 replay events and
+pending captures per buffer, and 64 unread reconstructed CopperLists and
+structured log entries per reader buffer.</p>
+<p>Sections must fit the larger configured record/object bound plus a 512-byte header
+and 32 bytes of continuity envelope allowance, and must fit in a slab. Both sizes
+must be multiples of 512 bytes. Prefer slabs roughly 10–100 times larger than
+sections so each backing file holds many sections and file turnover stays low.
+Larger slabs reserve more disk space at a time. The archive grows with additional
+slabs. Local settings are validated before workers start; sender record requirements are checked
+when the manifest arrives. Size retention and concurrency counts together with
+byte bounds for the receiver's memory budget.</p>
+<p>Replay buffers absorb temporary reconstruction slowdowns; overflow interrupts
+replay until a matching recovery point is available while recording continues.
+A frame is one reconstructed CopperList containing captured inputs and locally
+computed outputs for one iteration. Frame buffering lets UI or analysis readers
+pause. Structured log buffering separately holds the robot's logging calls,
+such as <code>info!</code> and <code>debug!</code>, for <code>twin.take_log_reader()</code>. Both reader buffers
+replace the oldest unread item when full; the archive keeps the received data.
+Higher counts retain more message payloads and log entries in memory. The
+<a href="https://github.com/copper-project/copper-rs/blob/master/examples/cu_logstream_demo/src/receiver.rs">receiver example</a>
+uses named constants with explanations of the storage and buffer sizing.</p>
 <p>Production sends the existing native CopperList format with selected payloads omitted.
 The native codec already carries original/captured presence. The receiver records received native bytes before replay; synthesized outputs remain
 in the ground-side frame. Sender and receiver use the same application schema and

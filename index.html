@@ -12,7 +12,7 @@
       
       
       
-        <link rel="next" href="Project-Templates/">
+        <link rel="next" href="Copper-Release-Notes/">
       
       
         
@@ -353,10 +353,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#start-here" class="md-nav__link">
+  <a href="#set-up-an-application" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Start Here
+        Set Up an Application
       
     </span>
   </a>
@@ -364,10 +364,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#visual-overview" class="md-nav__link">
+  <a href="#runtime-and-configuration" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Visual Overview
+        Runtime and Configuration
       
     </span>
   </a>
@@ -375,10 +375,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#whats-new" class="md-nav__link">
+  <a href="#development-and-debugging" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What's New
+        Development and Debugging
       
     </span>
   </a>
@@ -386,10 +386,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#resources" class="md-nav__link">
+  <a href="#visual-guides" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Resources
+        Visual Guides
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reference-and-project-links" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reference and Project Links
       
     </span>
   </a>
@@ -400,6 +411,62 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://copper-project.github.io/copper-rs-book/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Copper Book
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Copper-Release-Notes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -966,6 +1033,34 @@
   
   
     <li class="md-nav__item">
+      <a href="Self-Describing-Logs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Self-describing logs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="Remote-Debugging/" class="md-nav__link">
         
   
@@ -1058,34 +1153,6 @@
     
   
     FAQ
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="Copper-Release-Notes/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Copper Release Notes
   
 
     
@@ -1299,10 +1366,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#start-here" class="md-nav__link">
+  <a href="#set-up-an-application" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Start Here
+        Set Up an Application
       
     </span>
   </a>
@@ -1310,10 +1377,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#visual-overview" class="md-nav__link">
+  <a href="#runtime-and-configuration" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Visual Overview
+        Runtime and Configuration
       
     </span>
   </a>
@@ -1321,10 +1388,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#whats-new" class="md-nav__link">
+  <a href="#development-and-debugging" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What's New
+        Development and Debugging
       
     </span>
   </a>
@@ -1332,10 +1399,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#resources" class="md-nav__link">
+  <a href="#visual-guides" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Resources
+        Visual Guides
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reference-and-project-links" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reference and Project Links
       
     </span>
   </a>
@@ -1364,85 +1442,129 @@
 
 <h1 id="copper-documentation">Copper Documentation<a class="headerlink" href="#copper-documentation" title="Permanent link">&para;</a></h1>
 <p><img src="imgs/cu29.png" width="80" align="right" alt="Copper logo" /></p>
-<p>Copper is a deterministic robotics runtime written in Rust. Think of it as a "game engine for robots": describe your system declaratively and Copper will create a custom scheduler and run it deterministically from cloud simulation down to embedded controllers.</p>
-<p><strong>Why Copper</strong></p>
-<ul>
-<li>⚡ Sub-microsecond latency with a zero-alloc, data-oriented runtime. Comparative benchmarks with ROS2 and others <a href="Benchmarks/">here</a></li>
-<li>⏱️ Deterministic replay for debugging and certification.</li>
-<li>🧠 Interoperable with ROS 2 via bridges.</li>
-<li>🪶 Runs anywhere from x86 servers to bare metal.</li>
-</ul>
-<blockquote>
-<p>Ready to get started? Check out the <a href="https://github.com/copper-project/copper-rs#readme">README</a> or jump into <a href="Build-and-Deploy-a-Copper-Application/">Build and Deploy a Copper Application</a>.</p>
-</blockquote>
-<h2 id="start-here">Start Here<a class="headerlink" href="#start-here" title="Permanent link">&para;</a></h2>
+<p>Copper is a deterministic robotics runtime and SDK written in Rust. Define your robot's task graph in configuration, then build, run, record, and replay it on targets from Linux to bare metal.</p>
+<p><strong><a href="https://copper-project.github.io/copper-rs-book/">Read the Copper book</a></strong> for tutorials and a guided tour, from your first project through Copper's core concepts. Use this wiki to look up configuration, runtime behavior, and development tools.</p>
+<p><strong><a href="Copper-Release-Notes/">Release notes</a></strong> cover changes between versions and migration guidance.</p>
+<h2 id="set-up-an-application">Set Up an Application<a class="headerlink" href="#set-up-an-application" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
 <th>Topic</th>
-<th>What you'll get</th>
+<th>What it covers</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>🧭 <a href="Copper-Application-Overview/">Copper Application Overview</a></td>
-<td>A minimal task graph and runtime walk through.</td>
+<td><a href="Copper-Application-Overview/">Application overview</a></td>
+<td>Project structure and a minimal task graph.</td>
 </tr>
 <tr>
-<td>🚀 <a href="Build-and-Deploy-a-Copper-Application/">Build and Deploy a Copper Application</a></td>
-<td>Project structure, build artifacts, and deployment flow.</td>
+<td><a href="Project-Templates/">Project templates</a></td>
+<td>Scaffold a new Copper project.</td>
 </tr>
 <tr>
-<td>📋 <a href="Project-Templates/">Project Templates</a></td>
-<td>Scaffold a new Copper project quickly.</td>
+<td><a href="Build-and-Deploy-a-Copper-Application/">Build and deploy</a></td>
+<td>Build artifacts and deployment.</td>
 </tr>
 <tr>
-<td>⚙️ <a href="Copper-RON-Configuration-Reference/">Copper Configuration file Reference</a></td>
-<td>The RON schema for tasks, messages, and connections.</td>
+<td><a href="Supported-Platforms/">Supported platforms</a></td>
+<td>Desktop, SBC, and embedded targets.</td>
 </tr>
 <tr>
-<td><a href="Copper-Runtime-Overview/">Copper Runtime Overview</a></td>
-<td>Core runtime concepts and SDK capabilities.</td>
-</tr>
-<tr>
-<td>🗺️ <a href="Config-and-Missions-Visualization/">Copper Configuration and Mission Visualization</a></td>
-<td>Render task graphs and mission definitions.</td>
-</tr>
-<tr>
-<td>🧭 <a href="Task-Lifecycle/">Copper Tasks lifecycle overview</a></td>
-<td>How tasks run, pause, and serialize state.</td>
-</tr>
-<tr>
-<td>🧩 <a href="Modular-Configuration/">Modular Configuration</a></td>
-<td>Split big configs into reusable chunks.</td>
-</tr>
-<tr>
-<td><a href="Task-Automation-with-Just/">Task Automation with just</a></td>
-<td>Repeatable task helpers across the repo.</td>
-</tr>
-<tr>
-<td>🌉 <a href="CuBridge-Concept/">Copper Bridge concept</a></td>
-<td>Link Copper to external systems and protocols.</td>
-</tr>
-<tr>
-<td>🧰 <a href="Resources/">Resources</a></td>
-<td>Wire hardware and shared services into tasks and bridges.</td>
-</tr>
-<tr>
-<td>🔧 <a href="Baremetal-Development/">Baremetal Development</a></td>
-<td>Running Copper as a bare-metal runtime.</td>
-</tr>
-<tr>
-<td>🖥️ <a href="Supported-Platforms/">Supported Platforms</a></td>
-<td>Desktop, mobile, and embedded targets.</td>
-</tr>
-<tr>
-<td>💡 <a href="Ideas/">Contribution Ideas</a></td>
-<td>Larger ideas we would love to collaborate on.</td>
+<td><a href="Baremetal-Development/">Bare-metal development</a></td>
+<td>Run Copper on microcontrollers.</td>
 </tr>
 </tbody>
 </table>
-<h2 id="visual-overview">Visual Overview<a class="headerlink" href="#visual-overview" title="Permanent link">&para;</a></h2>
+<h2 id="runtime-and-configuration">Runtime and Configuration<a class="headerlink" href="#runtime-and-configuration" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Topic</th>
+<th>What it covers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="Copper-Runtime-Overview/">Runtime overview</a></td>
+<td>Execution model and SDK capabilities.</td>
+</tr>
+<tr>
+<td><a href="Task-Lifecycle/">Task lifecycle</a></td>
+<td>Task execution, lifecycle hooks, and state.</td>
+</tr>
+<tr>
+<td><a href="CuBridge-Concept/">Bridges</a></td>
+<td>Connect Copper to external systems and protocols.</td>
+</tr>
+<tr>
+<td><a href="Resources/">Resources</a></td>
+<td>Wire hardware and shared services into tasks and bridges.</td>
+</tr>
+<tr>
+<td><a href="SDK-Features/">SDK features</a></td>
+<td>Crate features and how to enable them.</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Configuration</th>
+<th>What it covers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="Copper-RON-Configuration-Reference/">RON reference</a></td>
+<td>Configuration fields for tasks, messages, and connections.</td>
+</tr>
+<tr>
+<td><a href="Modular-Configuration/">Modular configuration</a></td>
+<td>Split configurations into reusable files.</td>
+</tr>
+<tr>
+<td><a href="Config-and-Missions-Visualization/">Graph and mission visualization</a></td>
+<td>Render task graphs and mission definitions.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="development-and-debugging">Development and Debugging<a class="headerlink" href="#development-and-debugging" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Topic</th>
+<th>What it covers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="Task-Automation-with-Just/">Task automation with just</a></td>
+<td>Build and development helpers.</td>
+</tr>
+<tr>
+<td><a href="Reading-Unified-Logs/">Reading unified logs</a></td>
+<td>Inspect recorded messages and runtime logs.</td>
+</tr>
+<tr>
+<td><a href="Self-Describing-Logs/">Self-describing logs</a></td>
+<td>Startup catalogs, metadata rollover, and offline decoding.</td>
+</tr>
+<tr>
+<td><a href="Remote-Debugging/">Remote debugging</a></td>
+<td>Inspect recorded runs through the debug API.</td>
+</tr>
+<tr>
+<td><a href="Python-Support/">Python support</a></td>
+<td>Work with Copper from Python.</td>
+</tr>
+<tr>
+<td><a href="Benchmarks/">Benchmarks</a></td>
+<td>Performance measurements and comparisons.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="visual-guides">Visual Guides<a class="headerlink" href="#visual-guides" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
@@ -1459,23 +1581,59 @@
 </tr>
 </tbody>
 </table>
-<hr />
-<h2 id="whats-new">What's New<a class="headerlink" href="#whats-new" title="Permanent link">&para;</a></h2>
-<ul>
-<li>📝 <a href="Copper-Release-Notes/">Copper Release Notes</a></li>
-</ul>
-<h2 id="resources">Resources<a class="headerlink" href="#resources" title="Permanent link">&para;</a></h2>
-<ul>
-<li>🧱 <a href="https://cdn.copper-robotics.com/catalog/index.html">Copper Component Catalog</a></li>
-<li><a href="SDK-Features/">SDK Features</a></li>
-<li><a href="FAQ/">FAQ</a></li>
-<li>📚 <a href="https://docs.rs/cu29">API Documentation on docs.rs</a></li>
-<li>🧪 <a href="api/">API</a></li>
-<li>📦 <a href="https://crates.io/crates/cu29">Main crate on crates.io</a></li>
-<li>💻 <a href="https://github.com/copper-project/copper-rs">Source code on GitHub</a></li>
-<li>🛠️ <a href="https://github.com/copper-project/copper-rs/blob/master/CONTRIBUTING.md">Contributing guide</a></li>
-</ul>
-<hr />
+<h2 id="reference-and-project-links">Reference and Project Links<a class="headerlink" href="#reference-and-project-links" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Resource</th>
+<th>What it provides</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://cdn.copper-robotics.com/catalog/index.html">Component catalog</a></td>
+<td>Browse available components.</td>
+</tr>
+<tr>
+<td><a href="https://docs.rs/cu29">API documentation</a></td>
+<td>Published Rust API reference.</td>
+</tr>
+<tr>
+<td><a href="https://copper-project.github.io/copper-rs/">Development API documentation</a></td>
+<td>Documentation built from the master branch.</td>
+</tr>
+<tr>
+<td><a href="https://crates.io/crates/cu29">cu29 on crates.io</a></td>
+<td>Published crate versions.</td>
+</tr>
+<tr>
+<td><a href="FAQ/">FAQ</a></td>
+<td>Answers to common questions.</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Project</th>
+<th>Where to go</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://github.com/copper-project/copper-rs">Source code</a></td>
+<td>The Copper repository.</td>
+</tr>
+<tr>
+<td><a href="https://github.com/copper-project/copper-rs/blob/master/CONTRIBUTING.md">Contributing guide</a></td>
+<td>How to contribute changes.</td>
+</tr>
+<tr>
+<td><a href="Ideas/">Contribution ideas</a></td>
+<td>Larger projects to collaborate on.</td>
+</tr>
+</tbody>
+</table>
 
 
 

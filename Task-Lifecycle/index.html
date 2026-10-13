@@ -321,6 +321,62 @@
   
   
     <li class="md-nav__item">
+      <a href="https://copper-project.github.io/copper-rs-book/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Copper Book
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Copper-Release-Notes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../Project-Templates/" class="md-nav__link">
         
   
@@ -667,6 +723,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#stateless-transform-tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stateless transform tasks
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -959,6 +1026,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../Self-Describing-Logs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Self-describing logs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../Remote-Debugging/" class="md-nav__link">
         
   
@@ -1051,34 +1146,6 @@
     
   
     FAQ
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../Copper-Release-Notes/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Copper Release Notes
   
 
     
@@ -1328,6 +1395,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#stateless-transform-tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stateless transform tasks
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1405,6 +1483,17 @@ fn process(&amp;mut self, _clock: &amp;RobotClock, input: &amp;Self::Input&lt;'_
 </code></pre>
 <p>This is useful for calibration bundles, static transforms, map updates, and other state that is usually unchanged but must still be deterministic in logs and replay. Because the updates are part of the message stream, replay and resimulation see the same state transitions as the live run.</p>
 <p>Note on freeze / thaw: Copper periodically serializes component state so replay can seek from a nearby keyframe instead of replaying from the beginning. Keyframe capture does not stop or drain the graph, including background and <code>parallel-rt</code> work, but remains deterministic on replay. Because <code>freeze()</code> runs at the component's normal point in the execution wave, implementations should be side-effect-free and must not allocate on the real-time path.</p>
+<h2 id="stateless-transform-tasks">Stateless transform tasks<a class="headerlink" href="#stateless-transform-tasks" title="Permanent link">&para;</a></h2>
+<p><code>CuStatelessTask</code> requires <code>Reflect + Send + Sync</code> and does not require
+<code>Freezable</code>. Its per-cycle <code>preprocess</code>, <code>process</code>, and <code>postprocess</code> callbacks
+receive <code>&amp;self</code>, so the runtime can invoke them concurrently for different
+CopperLists. Construction, <code>start</code>, and <code>stop</code> remain exclusive lifecycle
+operations.</p>
+<p>The runtime records an empty keyframe component for a stateless task and leaves
+its instance unchanged when restoring a keyframe. State that affects later
+outputs belongs in a <code>CuTask</code> implementation with <code>freeze</code> and <code>thaw</code> preserving
+that state. <code>CuSrcTask</code>, <code>CuTask</code>, and <code>CuSinkTask</code> still require <code>Freezable</code>; an
+empty implementation is sufficient when they have no state to snapshot.</p>
 
 
 

@@ -14,7 +14,7 @@
         <link rel="prev" href="../Supported-Platforms/">
       
       
-        <link rel="next" href="../Remote-Debugging/">
+        <link rel="next" href="../Self-Describing-Logs/">
       
       
         
@@ -301,6 +301,62 @@
     
   
     Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://copper-project.github.io/copper-rs-book/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Copper Book
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Copper-Release-Notes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Notes
   
 
     
@@ -909,10 +965,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#experimental-native-payload-descriptions" class="md-nav__link">
+  <a href="#experimental-self-describing-logs" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Experimental native payload descriptions
+        Experimental self-describing logs
       
     </span>
   </a>
@@ -923,6 +979,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Self-Describing-Logs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Self-describing logs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -1027,34 +1111,6 @@
     
   
     FAQ
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../Copper-Release-Notes/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Copper Release Notes
   
 
     
@@ -1268,10 +1324,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#experimental-native-payload-descriptions" class="md-nav__link">
+  <a href="#experimental-self-describing-logs" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Experimental native payload descriptions
+        Experimental self-describing logs
       
     </span>
   </a>
@@ -1330,26 +1386,14 @@ application version that produced the selected instance.</p>
 <p><code>fsck</code> checks CopperList IDs within the selected instance, reports decoding errors,
 and returns an error for repeated or decreasing IDs and an unclean final log close.
 An ID reset at the next <code>Instantiated</code> belongs to that next instance.</p>
-<h2 id="experimental-native-payload-descriptions">Experimental native payload descriptions<a class="headerlink" href="#experimental-native-payload-descriptions" title="Permanent link">&para;</a></h2>
-<p>This API is proposed in <a href="https://github.com/copper-project/copper-rs/pull/1443">PR #1443</a>.
-The following commands and examples apply to its <code>gbin/self-describing-logs-api</code>
-feature branch while the PR is under review.</p>
-<p>With <code>cu29/self-describing-logs</code> enabled, the usual <code>Encode</code> and <code>Reflect</code> derives
-provide a description of a payload's native encoded bytes. Build it once with
-<code>ValueDecodeDescription::from_type::&lt;Payload&gt;()</code>, serialize the description using
-native bincode, and transport it with payload bytes to offline tooling.</p>
-<p><code>description.decode(bytes, producer_config, ValueDecodeLimits::default())</code>
-returns a <code>Value</code> tree and the exact number of consumed bytes. It retains scalar
-widths, field names, original type identities, and coherent quantity storage
-units. For a handwritten encoder, implement <code>ValueDecode::DECODE</code> by delegating
-to the representation it writes; an opaque wrapper encoding four floats can
-reuse <code>&lt;[f32; 4] as ValueDecode&gt;::DECODE</code>.</p>
-<p>The feature enables <code>std</code> and reflection. Description construction and tree
-allocation run offline; native message encoding keeps its existing byte layout
-and encoding pass. The first PR supplies the API and byte-agreement tests;
-packaging, catalogue embedding, and unified-log reader integration follow in
-later PRs. Run <code>just self-describing-logs-check</code> in the Copper workspace to verify the
-prototype.</p>
+<h2 id="experimental-self-describing-logs">Experimental self-describing logs<a class="headerlink" href="#experimental-self-describing-logs" title="Permanent link">&para;</a></h2>
+<p>Enable <code>cu29/self-describing-logs</code> to record a compressed native payload catalog
+at application startup. The producer supports <code>no_std</code> with bounded startup memory;
+host readers enable <code>cu29/decode-catalog</code> to decode payloads into allocated value
+trees. Native payload recording keeps its ordinary encoding pass.</p>
+<p>See <a href="../Self-Describing-Logs/">Self-describing logs</a> for feature setup, typed quantity
+metadata, catalog retention across rollover, and standalone CLI and Python examples.
+The standalone reader uses <code>list-runs</code> and <code>--run N</code> to select a recorded run.</p>
 
 
 

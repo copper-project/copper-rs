@@ -323,6 +323,62 @@
   
   
     <li class="md-nav__item">
+      <a href="https://copper-project.github.io/copper-rs-book/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Copper Book
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Copper-Release-Notes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../Project-Templates/" class="md-nav__link">
         
   
@@ -656,6 +712,34 @@
       
     </span>
   </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#optional-logstream-receiver-feedback" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Optional logstream receiver feedback
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Optional logstream receiver feedback">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tui-bandwidth-panel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TUI bandwidth panel
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1117,6 +1201,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../Self-Describing-Logs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Self-describing logs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../Remote-Debugging/" class="md-nav__link">
         
   
@@ -1209,34 +1321,6 @@
     
   
     FAQ
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../Copper-Release-Notes/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Copper Release Notes
   
 
     
@@ -1642,6 +1726,34 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#optional-logstream-receiver-feedback" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Optional logstream receiver feedback
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Optional logstream receiver feedback">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tui-bandwidth-panel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TUI bandwidth panel
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1755,7 +1867,6 @@ produces a warning and does not replace the baked value.</p>
 <ul>
 <li><code>id</code> – bundle id used by task and bridge <code>resources</code> maps.</li>
 <li><code>provider</code> – Rust type that provides the bundle.</li>
-<li><code>resources</code> <em>(optional)</em> – provider input bindings to other <code>bundle.resource</code> slots, resolved at compile time per mission. See <a href="../Resources/#composing-resource-bundles">Resources</a>.</li>
 <li><code>resources</code> <em>(optional)</em> – provider input bindings to other <code>bundle.resource</code> slots. Dependencies are resolved and ordered at compile time per mission; see <a href="../Resources/#composing-resource-bundles">Resources</a>.</li>
 <li><code>config</code> <em>(optional)</em> – provider-specific configuration map.</li>
 <li><code>missions</code> <em>(optional)</em> – mission ids in which the bundle is available.</li>
@@ -2030,6 +2141,46 @@ Reconstructing the detector itself requires captured camera images. Validation
 checks every incoming connection in each mission graph.</p>
 <h2 id="further-reading">Further Reading<a class="headerlink" href="#further-reading" title="Permanent link">&para;</a></h2>
 <p>For advanced composition rules and best practices see the <a href="../Modular-Configuration/">Modular Configuration guide</a>.</p>
+<h2 id="optional-logstream-receiver-feedback">Optional logstream receiver feedback<a class="headerlink" href="#optional-logstream-receiver-feedback" title="Permanent link">&para;</a></h2>
+<p>Log streaming remains one-way by default. To receive health reports and optionally adapt continuous FEC,
+add an explicit reverse resource to a <code>log_streaming.destinations</code> entry:</p>
+<pre><code class="language-ron">feedback: (
+    transport: (type: &quot;cu29_logstream_udp::CuUdpLogStreamRx&quot;, resource: &quot;network.rx&quot;),
+    report_interval_ms: 500,
+    timeout_ms: 2000,
+    adaptation: (
+        min_repair_every_source_symbols: 1,
+        max_repair_every_source_symbols: 16,
+    ),
+),
+</code></pre>
+<p>The resource bundle sets socket addresses. On the ground, explicitly configure a TX endpoint targeting
+the sender and call <code>Twin::twin(rx).with_feedback(tx)</code>. Each logical receiver has one owner; shared sockets
+do not enable feedback implicitly. The manifest advertises feedback capability and cadence.</p>
+<p>Omit <code>adaptation</code> for reports only. The configured <code>repair_every_source_symbols</code> is the startup/fallback
+baseline and must lie inside the bounds; smaller intervals mean more redundancy. The sender increases
+protection promptly under loss and reduces it cautiously after healthier reports. It may reduce redundancy
+below baseline. After feedback timeout, it marks reports stale and gradually returns to baseline.</p>
+<p>Reports carry receiver identity/sequence, throughput counters, finalized received/recovered/missing source
+symbols, buffer pressure, latest delivered CopperList, and an optional request for retained recovery data.
+Loss excludes the active coding window and unseen history/tails. Reports are advisory, never per-record ACKs.
+Bitrate, burst, latency, memory, FEC window/field/density, and object FEC remain fixed. Capture never waits
+for feedback; both directions use bounded nonblocking packets on background workers.</p>
+<p>Manifests carry optional feedback requirements without a wire-version field. <code>SenderMonitor::snapshot()</code>
+exposes live TX and feedback state, including stale reports and failures. <code>CuTwinStatus</code> counts feedback
+submissions/drops separately from archive progress. Run the root <code>just logstream-feedback-check</code> target.</p>
+<h3 id="tui-bandwidth-panel">TUI bandwidth panel<a class="headerlink" href="#tui-bandwidth-panel" title="Permanent link">&para;</a></h3>
+<p>The console monitor's BW tab includes <code>Telemetry / TX</code> panels for each configured destination.
+One-way panels show actual submitted Copper bytes/packets, the configured budget, drops by cause,
+recovery activity, and baseline FEC. These are local submissions, not delivery acknowledgements.</p>
+<p>Two-way panels additionally show feedback state/age, receiver throughput, finalized source loss and
+FEC recovery, receiver buffer/progress counters, and the effective repair interval. Waiting, stale,
+and failed feedback show <code>n/a</code> for receiver measurements. Arrow keys or <code>hjkl</code> scroll the BW content
+horizontally and vertically on small terminals or when several destinations are configured.</p>
+<p>Generated apps attach read-only worker handles through <code>CuMonitoringRuntime</code>. Console and Bevy monitors
+pass those handles to the shared TUI model; custom monitor frontends can use <code>runtime.log_streams()</code>.
+Snapshots are published on sender workers and sampled by the presentation thread. The task path gains
+no monitoring callbacks, serialization, or synchronization. Run <code>just logstream-monitor-check</code>.</p>
 
 
 
