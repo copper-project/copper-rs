@@ -299,6 +299,7 @@ sim = [
   "dep:winit",
 ]
 vitfly-cuda = ["sim", "cu-vitfly/cuda"]
+vitfly-mkl = ["sim", "cu-vitfly/mkl"]
 sim-debug = ["sim", "cu29/reflect", "cu29/remote-debug"]
 bevymon = [
   "sim_core",

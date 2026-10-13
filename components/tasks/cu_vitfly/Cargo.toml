@@ -17,6 +17,7 @@ environments = ["host"]
 [features]
 default = []
 cuda = ["candle-core/cuda", "candle-nn/cuda"]
+mkl = ["candle-core/mkl", "candle-nn/mkl"]
 
 [dependencies]
 candle-core = { workspace = true }
