@@ -1376,8 +1376,11 @@ mod tests {
         let before = clock.now();
         let raw_before = clock.raw_now();
         let rtc = Arc::new(AtomicU64::new(0));
-        let custom =
-            RobotClock::new_with_rtc(move || rtc.fetch_add(10_000_000, Ordering::Relaxed), |_| {});
+        // The RTC is synthetic, but calibration still samples the hardware counter.
+        let custom = RobotClock::new_with_rtc(
+            move || rtc.fetch_add(10_000_000, Ordering::Relaxed),
+            sleep_ns,
+        );
         assert!(clock.now() >= before);
         assert!(clone.raw_now() >= raw_before);
         assert!(clone.now().0 - before.0 < 1_000_000_000);
