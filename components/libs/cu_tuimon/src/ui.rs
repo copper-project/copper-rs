@@ -1021,8 +1021,8 @@ impl MonitorUi {
         }
 
         let mut selected = Vec::new();
-        for row in start.row..=end.row {
-            let line = &self.log_pane.lines[row];
+        for (offset, line) in self.log_pane.lines[start.row..=end.row].iter().enumerate() {
+            let row = start.row + offset;
             let line_len = line.text.chars().count();
             let Some((start_col, end_col)) = line_selection_bounds(row, line_len, start, end)
             else {

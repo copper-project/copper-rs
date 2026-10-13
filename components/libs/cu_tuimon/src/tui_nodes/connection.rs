@@ -849,9 +849,9 @@ impl<T: Default> Betweens<T> {
     #[allow(unused)]
     fn print_with(&self, width: usize, f: impl Fn(&T)) {
         for y in 0..(self.height + 1) {
-            for x in 0..self.width {
+            for vertical in &self.vertical[y][..self.width] {
                 print!("{} ", "-".repeat(width));
-                f(&self.vertical[y][x]);
+                f(vertical);
             }
             println!("{}", "-".repeat(width));
             if y < self.height {
