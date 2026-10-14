@@ -6217,10 +6217,15 @@ fn build_lane_executor_tokens(
             });
             quote! { #offset => true #(#checks)*, }
         });
+    let copperlist_offset = if copperlists_per_cycle == 1 {
+        quote! { 0usize }
+    } else {
+        quote! { ((next_commit_clid - lanes.first_clid()) % #copperlists_per_cycle) as usize }
+    };
     let completion_ready = quote! {
         {
             let cycle = lanes.cycle_of(next_commit_clid);
-            match ((next_commit_clid - lanes.first_clid()) % #copperlists_per_cycle) as usize {
+            match #copperlist_offset {
                 #(#completion_arms)*
                 _ => unreachable!("CopperList offset outside exact schedule cycle"),
             }

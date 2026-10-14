@@ -718,14 +718,14 @@ fn candidate_index(name: &str) -> Option<usize> {
 }
 
 fn prediction_report(candidates: &[cu29::planner::CuCandidate], mission_id: &str) -> String {
-    let mut report = String::from("Predicted schedule ranking\n");
+    let mut report = String::from("Predictions\n");
     for (index, candidate) in candidates.iter().enumerate() {
         let mission = candidate.plan.missions.get(mission_id);
         let shape = mission.map_or_else(
             || "unknown".to_string(),
             |mission| {
                 format!(
-                    "{} CopperList(s)/cycle, {} in flight, {} worker(s)",
+                    "{} CL/cycle · {} CL max · {} workers",
                     mission.copperlists_per_cycle,
                     mission.max_in_flight,
                     mission.workers.len()
