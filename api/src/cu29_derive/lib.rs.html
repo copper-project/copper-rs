@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29_derive/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-203241e4.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_derive" data-themes="" data-resource-suffix="" data-rustdoc-version="1.101.0-nightly (e9bbadf68 2026-10-12)" data-channel="nightly" data-search-js="search-b167f383.js" data-stringdex-js="stringdex-b5109af9.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-1814ead3.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-9f56287d.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">cu29_derive/</div>lib.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="attr">#[cfg(feature = <span class="string">"clock-sync"</span>)]
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29_derive/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-203241e4.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_derive" data-themes="" data-resource-suffix="" data-rustdoc-version="1.101.0-nightly (822182db4 2026-10-13)" data-channel="nightly" data-search-js="search-b167f383.js" data-stringdex-js="stringdex-b5109af9.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-1814ead3.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-9f56287d.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">cu29_derive/</div>lib.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="attr">#[cfg(feature = <span class="string">"clock-sync"</span>)]
 <a href=#2 id=2 data-nosnippet>2</a></span><span class="kw">mod </span>clock_sync;
 <a href=#3 id=3 data-nosnippet>3</a><span class="kw">mod </span>live_twin;
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>proc_macro::TokenStream;
@@ -6217,173 +6217,178 @@
 <a href=#6217 id=6217 data-nosnippet>6217</a>            });
 <a href=#6218 id=6218 data-nosnippet>6218</a>            <span class="macro">quote!</span> { #offset =&gt; <span class="bool-val">true </span>#(#checks)<span class="kw-2">*</span>, }
 <a href=#6219 id=6219 data-nosnippet>6219</a>        });
-<a href=#6220 id=6220 data-nosnippet>6220</a>    <span class="kw">let </span>completion_ready = <span class="macro">quote!</span> {
-<a href=#6221 id=6221 data-nosnippet>6221</a>        {
-<a href=#6222 id=6222 data-nosnippet>6222</a>            <span class="kw">let </span>cycle = lanes.cycle_of(next_commit_clid);
-<a href=#6223 id=6223 data-nosnippet>6223</a>            <span class="kw">match </span>((next_commit_clid - lanes.first_clid()) % #copperlists_per_cycle) <span class="kw">as </span>usize {
-<a href=#6224 id=6224 data-nosnippet>6224</a>                #(#completion_arms)*
-<a href=#6225 id=6225 data-nosnippet>6225</a>                <span class="kw">_ </span>=&gt; <span class="macro">unreachable!</span>(<span class="string">"CopperList offset outside exact schedule cycle"</span>),
-<a href=#6226 id=6226 data-nosnippet>6226</a>            }
-<a href=#6227 id=6227 data-nosnippet>6227</a>        }
-<a href=#6228 id=6228 data-nosnippet>6228</a>    };
-<a href=#6229 id=6229 data-nosnippet>6229</a>    <span class="kw">let </span>dispatcher_scheduling = <span class="kw">match </span><span class="kw-2">&amp;</span>lane_plan.dispatcher {
-<a href=#6230 id=6230 data-nosnippet>6230</a>        <span class="prelude-val">Some</span>(CuPlanThread { cpu, policy }) =&gt; {
-<a href=#6231 id=6231 data-nosnippet>6231</a>            <span class="kw">let </span>spec = plan_thread_spec_tokens(<span class="string">"dispatcher"</span>, <span class="kw-2">*</span>cpu, <span class="kw-2">*</span>policy);
-<a href=#6232 id=6232 data-nosnippet>6232</a>            <span class="macro">quote!</span> {
-<a href=#6233 id=6233 data-nosnippet>6233</a>                {
-<a href=#6234 id=6234 data-nosnippet>6234</a>                    <span class="kw">let </span>spec = #spec;
-<a href=#6235 id=6235 data-nosnippet>6235</a>                    cu29::thread_pool::apply_current_thread_scheduling(<span class="kw-2">&amp;</span>spec, <span class="number">0</span>)<span class="question-mark">?</span>;
-<a href=#6236 id=6236 data-nosnippet>6236</a>                }
-<a href=#6237 id=6237 data-nosnippet>6237</a>            }
-<a href=#6238 id=6238 data-nosnippet>6238</a>        }
-<a href=#6239 id=6239 data-nosnippet>6239</a>        <span class="prelude-val">None </span>=&gt; <span class="macro">quote!</span> {},
-<a href=#6240 id=6240 data-nosnippet>6240</a>    };
-<a href=#6241 id=6241 data-nosnippet>6241</a>
-<a href=#6242 id=6242 data-nosnippet>6242</a>    <span class="prelude-val">Ok</span>(LaneExecutorTokens {
-<a href=#6243 id=6243 data-nosnippet>6243</a>        worker_spawns,
-<a href=#6244 id=6244 data-nosnippet>6244</a>        dispatcher_scheduling,
-<a href=#6245 id=6245 data-nosnippet>6245</a>        completion_ready,
-<a href=#6246 id=6246 data-nosnippet>6246</a>        copperlists_per_cycle: proc_macro2::Literal::u64_unsuffixed(copperlists_per_cycle),
-<a href=#6247 id=6247 data-nosnippet>6247</a>        max_in_flight: proc_macro2::Literal::usize_unsuffixed(lane_plan.max_in_flight <span class="kw">as </span>usize),
-<a href=#6248 id=6248 data-nosnippet>6248</a>        workers: proc_macro2::Literal::usize_unsuffixed(lane_plan.workers.len()),
-<a href=#6249 id=6249 data-nosnippet>6249</a>    })
-<a href=#6250 id=6250 data-nosnippet>6250</a>}
-<a href=#6251 id=6251 data-nosnippet>6251</a>
-<a href=#6252 id=6252 data-nosnippet>6252</a><span class="kw">fn </span>sim_bridge_channel_set_idents(bridge_tuple_index: usize) -&gt; (Ident, Ident, Ident, Ident) {
-<a href=#6253 id=6253 data-nosnippet>6253</a>    (
-<a href=#6254 id=6254 data-nosnippet>6254</a>        <span class="macro">format_ident!</span>(<span class="string">"__CuSimBridge{}TxChannels"</span>, bridge_tuple_index),
-<a href=#6255 id=6255 data-nosnippet>6255</a>        <span class="macro">format_ident!</span>(<span class="string">"__CuSimBridge{}TxId"</span>, bridge_tuple_index),
-<a href=#6256 id=6256 data-nosnippet>6256</a>        <span class="macro">format_ident!</span>(<span class="string">"__CuSimBridge{}RxChannels"</span>, bridge_tuple_index),
-<a href=#6257 id=6257 data-nosnippet>6257</a>        <span class="macro">format_ident!</span>(<span class="string">"__CuSimBridge{}RxId"</span>, bridge_tuple_index),
-<a href=#6258 id=6258 data-nosnippet>6258</a>    )
-<a href=#6259 id=6259 data-nosnippet>6259</a>}
-<a href=#6260 id=6260 data-nosnippet>6260</a>
-<a href=#6261 id=6261 data-nosnippet>6261</a><span class="kw">fn </span>runtime_bridge_type_for_spec(bridge_spec: <span class="kw-2">&amp;</span>BridgeSpec, sim_mode: bool) -&gt; Type {
-<a href=#6262 id=6262 data-nosnippet>6262</a>    <span class="kw">if </span>sim_mode &amp;&amp; !bridge_spec.run_in_sim {
-<a href=#6263 id=6263 data-nosnippet>6263</a>        <span class="kw">let </span>(tx_set_ident, _tx_id_ident, rx_set_ident, _rx_id_ident) =
-<a href=#6264 id=6264 data-nosnippet>6264</a>            sim_bridge_channel_set_idents(bridge_spec.tuple_index);
-<a href=#6265 id=6265 data-nosnippet>6265</a>        <span class="kw">let </span>tx_type: Type = <span class="kw">if </span>bridge_spec.tx_channels.is_empty() {
-<a href=#6266 id=6266 data-nosnippet>6266</a>            <span class="macro">parse_quote!</span>(cu29::simulation::CuNoBridgeChannels)
-<a href=#6267 id=6267 data-nosnippet>6267</a>        } <span class="kw">else </span>{
-<a href=#6268 id=6268 data-nosnippet>6268</a>            <span class="macro">parse_quote!</span>(#tx_set_ident)
-<a href=#6269 id=6269 data-nosnippet>6269</a>        };
-<a href=#6270 id=6270 data-nosnippet>6270</a>        <span class="kw">let </span>rx_type: Type = <span class="kw">if </span>bridge_spec.rx_channels.is_empty() {
+<a href=#6220 id=6220 data-nosnippet>6220</a>    <span class="kw">let </span>copperlist_offset = <span class="kw">if </span>copperlists_per_cycle == <span class="number">1 </span>{
+<a href=#6221 id=6221 data-nosnippet>6221</a>        <span class="macro">quote!</span> { <span class="number">0usize </span>}
+<a href=#6222 id=6222 data-nosnippet>6222</a>    } <span class="kw">else </span>{
+<a href=#6223 id=6223 data-nosnippet>6223</a>        <span class="macro">quote!</span> { ((next_commit_clid - lanes.first_clid()) % #copperlists_per_cycle) <span class="kw">as </span>usize }
+<a href=#6224 id=6224 data-nosnippet>6224</a>    };
+<a href=#6225 id=6225 data-nosnippet>6225</a>    <span class="kw">let </span>completion_ready = <span class="macro">quote!</span> {
+<a href=#6226 id=6226 data-nosnippet>6226</a>        {
+<a href=#6227 id=6227 data-nosnippet>6227</a>            <span class="kw">let </span>cycle = lanes.cycle_of(next_commit_clid);
+<a href=#6228 id=6228 data-nosnippet>6228</a>            <span class="kw">match </span>#copperlist_offset {
+<a href=#6229 id=6229 data-nosnippet>6229</a>                #(#completion_arms)*
+<a href=#6230 id=6230 data-nosnippet>6230</a>                <span class="kw">_ </span>=&gt; <span class="macro">unreachable!</span>(<span class="string">"CopperList offset outside exact schedule cycle"</span>),
+<a href=#6231 id=6231 data-nosnippet>6231</a>            }
+<a href=#6232 id=6232 data-nosnippet>6232</a>        }
+<a href=#6233 id=6233 data-nosnippet>6233</a>    };
+<a href=#6234 id=6234 data-nosnippet>6234</a>    <span class="kw">let </span>dispatcher_scheduling = <span class="kw">match </span><span class="kw-2">&amp;</span>lane_plan.dispatcher {
+<a href=#6235 id=6235 data-nosnippet>6235</a>        <span class="prelude-val">Some</span>(CuPlanThread { cpu, policy }) =&gt; {
+<a href=#6236 id=6236 data-nosnippet>6236</a>            <span class="kw">let </span>spec = plan_thread_spec_tokens(<span class="string">"dispatcher"</span>, <span class="kw-2">*</span>cpu, <span class="kw-2">*</span>policy);
+<a href=#6237 id=6237 data-nosnippet>6237</a>            <span class="macro">quote!</span> {
+<a href=#6238 id=6238 data-nosnippet>6238</a>                {
+<a href=#6239 id=6239 data-nosnippet>6239</a>                    <span class="kw">let </span>spec = #spec;
+<a href=#6240 id=6240 data-nosnippet>6240</a>                    cu29::thread_pool::apply_current_thread_scheduling(<span class="kw-2">&amp;</span>spec, <span class="number">0</span>)<span class="question-mark">?</span>;
+<a href=#6241 id=6241 data-nosnippet>6241</a>                }
+<a href=#6242 id=6242 data-nosnippet>6242</a>            }
+<a href=#6243 id=6243 data-nosnippet>6243</a>        }
+<a href=#6244 id=6244 data-nosnippet>6244</a>        <span class="prelude-val">None </span>=&gt; <span class="macro">quote!</span> {},
+<a href=#6245 id=6245 data-nosnippet>6245</a>    };
+<a href=#6246 id=6246 data-nosnippet>6246</a>
+<a href=#6247 id=6247 data-nosnippet>6247</a>    <span class="prelude-val">Ok</span>(LaneExecutorTokens {
+<a href=#6248 id=6248 data-nosnippet>6248</a>        worker_spawns,
+<a href=#6249 id=6249 data-nosnippet>6249</a>        dispatcher_scheduling,
+<a href=#6250 id=6250 data-nosnippet>6250</a>        completion_ready,
+<a href=#6251 id=6251 data-nosnippet>6251</a>        copperlists_per_cycle: proc_macro2::Literal::u64_unsuffixed(copperlists_per_cycle),
+<a href=#6252 id=6252 data-nosnippet>6252</a>        max_in_flight: proc_macro2::Literal::usize_unsuffixed(lane_plan.max_in_flight <span class="kw">as </span>usize),
+<a href=#6253 id=6253 data-nosnippet>6253</a>        workers: proc_macro2::Literal::usize_unsuffixed(lane_plan.workers.len()),
+<a href=#6254 id=6254 data-nosnippet>6254</a>    })
+<a href=#6255 id=6255 data-nosnippet>6255</a>}
+<a href=#6256 id=6256 data-nosnippet>6256</a>
+<a href=#6257 id=6257 data-nosnippet>6257</a><span class="kw">fn </span>sim_bridge_channel_set_idents(bridge_tuple_index: usize) -&gt; (Ident, Ident, Ident, Ident) {
+<a href=#6258 id=6258 data-nosnippet>6258</a>    (
+<a href=#6259 id=6259 data-nosnippet>6259</a>        <span class="macro">format_ident!</span>(<span class="string">"__CuSimBridge{}TxChannels"</span>, bridge_tuple_index),
+<a href=#6260 id=6260 data-nosnippet>6260</a>        <span class="macro">format_ident!</span>(<span class="string">"__CuSimBridge{}TxId"</span>, bridge_tuple_index),
+<a href=#6261 id=6261 data-nosnippet>6261</a>        <span class="macro">format_ident!</span>(<span class="string">"__CuSimBridge{}RxChannels"</span>, bridge_tuple_index),
+<a href=#6262 id=6262 data-nosnippet>6262</a>        <span class="macro">format_ident!</span>(<span class="string">"__CuSimBridge{}RxId"</span>, bridge_tuple_index),
+<a href=#6263 id=6263 data-nosnippet>6263</a>    )
+<a href=#6264 id=6264 data-nosnippet>6264</a>}
+<a href=#6265 id=6265 data-nosnippet>6265</a>
+<a href=#6266 id=6266 data-nosnippet>6266</a><span class="kw">fn </span>runtime_bridge_type_for_spec(bridge_spec: <span class="kw-2">&amp;</span>BridgeSpec, sim_mode: bool) -&gt; Type {
+<a href=#6267 id=6267 data-nosnippet>6267</a>    <span class="kw">if </span>sim_mode &amp;&amp; !bridge_spec.run_in_sim {
+<a href=#6268 id=6268 data-nosnippet>6268</a>        <span class="kw">let </span>(tx_set_ident, _tx_id_ident, rx_set_ident, _rx_id_ident) =
+<a href=#6269 id=6269 data-nosnippet>6269</a>            sim_bridge_channel_set_idents(bridge_spec.tuple_index);
+<a href=#6270 id=6270 data-nosnippet>6270</a>        <span class="kw">let </span>tx_type: Type = <span class="kw">if </span>bridge_spec.tx_channels.is_empty() {
 <a href=#6271 id=6271 data-nosnippet>6271</a>            <span class="macro">parse_quote!</span>(cu29::simulation::CuNoBridgeChannels)
 <a href=#6272 id=6272 data-nosnippet>6272</a>        } <span class="kw">else </span>{
-<a href=#6273 id=6273 data-nosnippet>6273</a>            <span class="macro">parse_quote!</span>(#rx_set_ident)
+<a href=#6273 id=6273 data-nosnippet>6273</a>            <span class="macro">parse_quote!</span>(#tx_set_ident)
 <a href=#6274 id=6274 data-nosnippet>6274</a>        };
-<a href=#6275 id=6275 data-nosnippet>6275</a>        <span class="macro">parse_quote!</span>(cu29::simulation::CuSimBridge&lt;#tx_type, #rx_type&gt;)
-<a href=#6276 id=6276 data-nosnippet>6276</a>    } <span class="kw">else </span>{
-<a href=#6277 id=6277 data-nosnippet>6277</a>        bridge_spec.type_path.clone()
-<a href=#6278 id=6278 data-nosnippet>6278</a>    }
-<a href=#6279 id=6279 data-nosnippet>6279</a>}
-<a href=#6280 id=6280 data-nosnippet>6280</a>
-<a href=#6281 id=6281 data-nosnippet>6281</a><span class="kw">fn </span>runtime_task_type_for_index(
-<a href=#6282 id=6282 data-nosnippet>6282</a>    task_specs: <span class="kw-2">&amp;</span>CuTaskSpecSet,
-<a href=#6283 id=6283 data-nosnippet>6283</a>    graph: <span class="kw-2">&amp;</span>CuGraph,
-<a href=#6284 id=6284 data-nosnippet>6284</a>    index: usize,
-<a href=#6285 id=6285 data-nosnippet>6285</a>    sim_mode: bool,
-<a href=#6286 id=6286 data-nosnippet>6286</a>) -&gt; Type {
-<a href=#6287 id=6287 data-nosnippet>6287</a>    <span class="kw">let </span>task_id = <span class="kw-2">&amp;</span>task_specs.ids[index];
-<a href=#6288 id=6288 data-nosnippet>6288</a>    <span class="kw">let </span>declared_task_type = <span class="kw-2">&amp;</span>task_specs.sim_task_types[index];
-<a href=#6289 id=6289 data-nosnippet>6289</a>    <span class="kw">let </span>background = task_specs.background_flags[index];
-<a href=#6290 id=6290 data-nosnippet>6290</a>    <span class="kw">let </span>run_in_sim = task_specs.run_in_sim_flags[index];
-<a href=#6291 id=6291 data-nosnippet>6291</a>    <span class="kw">let </span>output_type = <span class="kw-2">&amp;</span>task_specs.output_types[index];
-<a href=#6292 id=6292 data-nosnippet>6292</a>
-<a href=#6293 id=6293 data-nosnippet>6293</a>    <span class="kw">match </span>task_specs.cutypes[index] {
-<a href=#6294 id=6294 data-nosnippet>6294</a>        CuTaskType::Source =&gt; {
-<a href=#6295 id=6295 data-nosnippet>6295</a>            <span class="kw">if </span>sim_mode &amp;&amp; !run_in_sim {
-<a href=#6296 id=6296 data-nosnippet>6296</a>                <span class="kw">let </span>msg_types = graph
-<a href=#6297 id=6297 data-nosnippet>6297</a>                    .get_node_output_msg_types(task_id.as_str())
-<a href=#6298 id=6298 data-nosnippet>6298</a>                    .unwrap_or_else(|| {
-<a href=#6299 id=6299 data-nosnippet>6299</a>                        <span class="macro">panic!</span>(
-<a href=#6300 id=6300 data-nosnippet>6300</a>                            <span class="string">"CuSrcTask {task_id} should have an outgoing connection with a valid output msg type"
-<a href=#6301 id=6301 data-nosnippet>6301</a>                        </span>)
-<a href=#6302 id=6302 data-nosnippet>6302</a>                    });
-<a href=#6303 id=6303 data-nosnippet>6303</a>                <span class="kw">let </span>sim_task_name = <span class="kw">if </span>msg_types.len() == <span class="number">1 </span>{
-<a href=#6304 id=6304 data-nosnippet>6304</a>                    <span class="macro">format!</span>(<span class="string">"CuSimSrcTask&lt;{}&gt;"</span>, msg_types[<span class="number">0</span>])
-<a href=#6305 id=6305 data-nosnippet>6305</a>                } <span class="kw">else </span>{
-<a href=#6306 id=6306 data-nosnippet>6306</a>                    <span class="kw">let </span>messages = msg_types
-<a href=#6307 id=6307 data-nosnippet>6307</a>                        .iter()
-<a href=#6308 id=6308 data-nosnippet>6308</a>                        .map(|msg_type| <span class="macro">format!</span>(<span class="string">"cu29::prelude::CuMsg&lt;{msg_type}&gt;"</span>))
-<a href=#6309 id=6309 data-nosnippet>6309</a>                        .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;()
-<a href=#6310 id=6310 data-nosnippet>6310</a>                        .join(<span class="string">", "</span>);
-<a href=#6311 id=6311 data-nosnippet>6311</a>                    <span class="macro">format!</span>(<span class="string">"CuSimSrcTaskPack&lt;({messages})&gt;"</span>)
-<a href=#6312 id=6312 data-nosnippet>6312</a>                };
-<a href=#6313 id=6313 data-nosnippet>6313</a>                parse_str(sim_task_name.as_str()).unwrap_or_else(|<span class="kw">_</span>| {
-<a href=#6314 id=6314 data-nosnippet>6314</a>                    <span class="macro">panic!</span>(<span class="string">"Could not build the placeholder for simulation: {sim_task_name}"</span>)
-<a href=#6315 id=6315 data-nosnippet>6315</a>                })
-<a href=#6316 id=6316 data-nosnippet>6316</a>            } <span class="kw">else if </span>background {
-<a href=#6317 id=6317 data-nosnippet>6317</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(out_ty) = output_type {
-<a href=#6318 id=6318 data-nosnippet>6318</a>                    <span class="macro">parse_quote!</span>(CuAsyncSrcTask&lt;#declared_task_type, #out_ty&gt;)
-<a href=#6319 id=6319 data-nosnippet>6319</a>                } <span class="kw">else </span>{
-<a href=#6320 id=6320 data-nosnippet>6320</a>                    <span class="macro">panic!</span>(<span class="string">"{task_id}: If a source is background, it has to have an output"</span>);
-<a href=#6321 id=6321 data-nosnippet>6321</a>                }
-<a href=#6322 id=6322 data-nosnippet>6322</a>            } <span class="kw">else </span>{
-<a href=#6323 id=6323 data-nosnippet>6323</a>                declared_task_type.clone()
-<a href=#6324 id=6324 data-nosnippet>6324</a>            }
-<a href=#6325 id=6325 data-nosnippet>6325</a>        }
-<a href=#6326 id=6326 data-nosnippet>6326</a>        CuTaskType::Regular =&gt; {
-<a href=#6327 id=6327 data-nosnippet>6327</a>            <span class="kw">if </span>background {
-<a href=#6328 id=6328 data-nosnippet>6328</a>                <span class="kw">if </span>output_type.is_some() {
-<a href=#6329 id=6329 data-nosnippet>6329</a>                    task_specs.task_types[index].clone()
-<a href=#6330 id=6330 data-nosnippet>6330</a>                } <span class="kw">else </span>{
-<a href=#6331 id=6331 data-nosnippet>6331</a>                    <span class="macro">panic!</span>(<span class="string">"{task_id}: If a task is background, it has to have an output"</span>);
-<a href=#6332 id=6332 data-nosnippet>6332</a>                }
-<a href=#6333 id=6333 data-nosnippet>6333</a>            } <span class="kw">else </span>{
-<a href=#6334 id=6334 data-nosnippet>6334</a>                <span class="comment">// run_in_sim has no effect for regular tasks; they always run as themselves in sim.
-<a href=#6335 id=6335 data-nosnippet>6335</a>                </span>declared_task_type.clone()
-<a href=#6336 id=6336 data-nosnippet>6336</a>            }
-<a href=#6337 id=6337 data-nosnippet>6337</a>        }
-<a href=#6338 id=6338 data-nosnippet>6338</a>        CuTaskType::Sink =&gt; {
-<a href=#6339 id=6339 data-nosnippet>6339</a>            <span class="kw">if </span>background {
-<a href=#6340 id=6340 data-nosnippet>6340</a>                <span class="macro">panic!</span>(
-<a href=#6341 id=6341 data-nosnippet>6341</a>                    <span class="string">"CuSinkTask {task_id} cannot be a background task, it should be a regular task."
-<a href=#6342 id=6342 data-nosnippet>6342</a>                </span>);
-<a href=#6343 id=6343 data-nosnippet>6343</a>            }
-<a href=#6344 id=6344 data-nosnippet>6344</a>
-<a href=#6345 id=6345 data-nosnippet>6345</a>            <span class="kw">if </span>sim_mode &amp;&amp; !run_in_sim {
-<a href=#6346 id=6346 data-nosnippet>6346</a>                <span class="kw">let </span>msg_types = graph.get_node_input_msg_types(task_id.as_str()).unwrap_or_else(|| {
-<a href=#6347 id=6347 data-nosnippet>6347</a>                    <span class="macro">panic!</span>(
-<a href=#6348 id=6348 data-nosnippet>6348</a>                        <span class="string">"CuSinkTask {task_id} should have an incoming connection with a valid input msg type"
-<a href=#6349 id=6349 data-nosnippet>6349</a>                    </span>)
-<a href=#6350 id=6350 data-nosnippet>6350</a>                });
-<a href=#6351 id=6351 data-nosnippet>6351</a>                <span class="kw">let </span>msg_type = <span class="kw">if </span>msg_types.len() == <span class="number">1 </span>{
-<a href=#6352 id=6352 data-nosnippet>6352</a>                    <span class="macro">format!</span>(<span class="string">"({},)"</span>, msg_types[<span class="number">0</span>])
-<a href=#6353 id=6353 data-nosnippet>6353</a>                } <span class="kw">else </span>{
-<a href=#6354 id=6354 data-nosnippet>6354</a>                    <span class="macro">format!</span>(<span class="string">"({})"</span>, msg_types.join(<span class="string">", "</span>))
-<a href=#6355 id=6355 data-nosnippet>6355</a>                };
-<a href=#6356 id=6356 data-nosnippet>6356</a>                <span class="kw">let </span>sim_task_name = <span class="macro">format!</span>(<span class="string">"CuSimSinkTask&lt;{msg_type}&gt;"</span>);
-<a href=#6357 id=6357 data-nosnippet>6357</a>                parse_str(sim_task_name.as_str()).unwrap_or_else(|<span class="kw">_</span>| {
-<a href=#6358 id=6358 data-nosnippet>6358</a>                    <span class="macro">panic!</span>(<span class="string">"Could not build the placeholder for simulation: {sim_task_name}"</span>)
-<a href=#6359 id=6359 data-nosnippet>6359</a>                })
-<a href=#6360 id=6360 data-nosnippet>6360</a>            } <span class="kw">else </span>{
-<a href=#6361 id=6361 data-nosnippet>6361</a>                declared_task_type.clone()
-<a href=#6362 id=6362 data-nosnippet>6362</a>            }
-<a href=#6363 id=6363 data-nosnippet>6363</a>        }
-<a href=#6364 id=6364 data-nosnippet>6364</a>    }
-<a href=#6365 id=6365 data-nosnippet>6365</a>}
-<a href=#6366 id=6366 data-nosnippet>6366</a>
-<a href=#6367 id=6367 data-nosnippet>6367</a><span class="attr">#[derive(Clone)]
-<a href=#6368 id=6368 data-nosnippet>6368</a></span><span class="kw">struct </span>ExecutionEntity {
-<a href=#6369 id=6369 data-nosnippet>6369</a>    kind: ExecutionEntityKind,
+<a href=#6275 id=6275 data-nosnippet>6275</a>        <span class="kw">let </span>rx_type: Type = <span class="kw">if </span>bridge_spec.rx_channels.is_empty() {
+<a href=#6276 id=6276 data-nosnippet>6276</a>            <span class="macro">parse_quote!</span>(cu29::simulation::CuNoBridgeChannels)
+<a href=#6277 id=6277 data-nosnippet>6277</a>        } <span class="kw">else </span>{
+<a href=#6278 id=6278 data-nosnippet>6278</a>            <span class="macro">parse_quote!</span>(#rx_set_ident)
+<a href=#6279 id=6279 data-nosnippet>6279</a>        };
+<a href=#6280 id=6280 data-nosnippet>6280</a>        <span class="macro">parse_quote!</span>(cu29::simulation::CuSimBridge&lt;#tx_type, #rx_type&gt;)
+<a href=#6281 id=6281 data-nosnippet>6281</a>    } <span class="kw">else </span>{
+<a href=#6282 id=6282 data-nosnippet>6282</a>        bridge_spec.type_path.clone()
+<a href=#6283 id=6283 data-nosnippet>6283</a>    }
+<a href=#6284 id=6284 data-nosnippet>6284</a>}
+<a href=#6285 id=6285 data-nosnippet>6285</a>
+<a href=#6286 id=6286 data-nosnippet>6286</a><span class="kw">fn </span>runtime_task_type_for_index(
+<a href=#6287 id=6287 data-nosnippet>6287</a>    task_specs: <span class="kw-2">&amp;</span>CuTaskSpecSet,
+<a href=#6288 id=6288 data-nosnippet>6288</a>    graph: <span class="kw-2">&amp;</span>CuGraph,
+<a href=#6289 id=6289 data-nosnippet>6289</a>    index: usize,
+<a href=#6290 id=6290 data-nosnippet>6290</a>    sim_mode: bool,
+<a href=#6291 id=6291 data-nosnippet>6291</a>) -&gt; Type {
+<a href=#6292 id=6292 data-nosnippet>6292</a>    <span class="kw">let </span>task_id = <span class="kw-2">&amp;</span>task_specs.ids[index];
+<a href=#6293 id=6293 data-nosnippet>6293</a>    <span class="kw">let </span>declared_task_type = <span class="kw-2">&amp;</span>task_specs.sim_task_types[index];
+<a href=#6294 id=6294 data-nosnippet>6294</a>    <span class="kw">let </span>background = task_specs.background_flags[index];
+<a href=#6295 id=6295 data-nosnippet>6295</a>    <span class="kw">let </span>run_in_sim = task_specs.run_in_sim_flags[index];
+<a href=#6296 id=6296 data-nosnippet>6296</a>    <span class="kw">let </span>output_type = <span class="kw-2">&amp;</span>task_specs.output_types[index];
+<a href=#6297 id=6297 data-nosnippet>6297</a>
+<a href=#6298 id=6298 data-nosnippet>6298</a>    <span class="kw">match </span>task_specs.cutypes[index] {
+<a href=#6299 id=6299 data-nosnippet>6299</a>        CuTaskType::Source =&gt; {
+<a href=#6300 id=6300 data-nosnippet>6300</a>            <span class="kw">if </span>sim_mode &amp;&amp; !run_in_sim {
+<a href=#6301 id=6301 data-nosnippet>6301</a>                <span class="kw">let </span>msg_types = graph
+<a href=#6302 id=6302 data-nosnippet>6302</a>                    .get_node_output_msg_types(task_id.as_str())
+<a href=#6303 id=6303 data-nosnippet>6303</a>                    .unwrap_or_else(|| {
+<a href=#6304 id=6304 data-nosnippet>6304</a>                        <span class="macro">panic!</span>(
+<a href=#6305 id=6305 data-nosnippet>6305</a>                            <span class="string">"CuSrcTask {task_id} should have an outgoing connection with a valid output msg type"
+<a href=#6306 id=6306 data-nosnippet>6306</a>                        </span>)
+<a href=#6307 id=6307 data-nosnippet>6307</a>                    });
+<a href=#6308 id=6308 data-nosnippet>6308</a>                <span class="kw">let </span>sim_task_name = <span class="kw">if </span>msg_types.len() == <span class="number">1 </span>{
+<a href=#6309 id=6309 data-nosnippet>6309</a>                    <span class="macro">format!</span>(<span class="string">"CuSimSrcTask&lt;{}&gt;"</span>, msg_types[<span class="number">0</span>])
+<a href=#6310 id=6310 data-nosnippet>6310</a>                } <span class="kw">else </span>{
+<a href=#6311 id=6311 data-nosnippet>6311</a>                    <span class="kw">let </span>messages = msg_types
+<a href=#6312 id=6312 data-nosnippet>6312</a>                        .iter()
+<a href=#6313 id=6313 data-nosnippet>6313</a>                        .map(|msg_type| <span class="macro">format!</span>(<span class="string">"cu29::prelude::CuMsg&lt;{msg_type}&gt;"</span>))
+<a href=#6314 id=6314 data-nosnippet>6314</a>                        .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;()
+<a href=#6315 id=6315 data-nosnippet>6315</a>                        .join(<span class="string">", "</span>);
+<a href=#6316 id=6316 data-nosnippet>6316</a>                    <span class="macro">format!</span>(<span class="string">"CuSimSrcTaskPack&lt;({messages})&gt;"</span>)
+<a href=#6317 id=6317 data-nosnippet>6317</a>                };
+<a href=#6318 id=6318 data-nosnippet>6318</a>                parse_str(sim_task_name.as_str()).unwrap_or_else(|<span class="kw">_</span>| {
+<a href=#6319 id=6319 data-nosnippet>6319</a>                    <span class="macro">panic!</span>(<span class="string">"Could not build the placeholder for simulation: {sim_task_name}"</span>)
+<a href=#6320 id=6320 data-nosnippet>6320</a>                })
+<a href=#6321 id=6321 data-nosnippet>6321</a>            } <span class="kw">else if </span>background {
+<a href=#6322 id=6322 data-nosnippet>6322</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(out_ty) = output_type {
+<a href=#6323 id=6323 data-nosnippet>6323</a>                    <span class="macro">parse_quote!</span>(CuAsyncSrcTask&lt;#declared_task_type, #out_ty&gt;)
+<a href=#6324 id=6324 data-nosnippet>6324</a>                } <span class="kw">else </span>{
+<a href=#6325 id=6325 data-nosnippet>6325</a>                    <span class="macro">panic!</span>(<span class="string">"{task_id}: If a source is background, it has to have an output"</span>);
+<a href=#6326 id=6326 data-nosnippet>6326</a>                }
+<a href=#6327 id=6327 data-nosnippet>6327</a>            } <span class="kw">else </span>{
+<a href=#6328 id=6328 data-nosnippet>6328</a>                declared_task_type.clone()
+<a href=#6329 id=6329 data-nosnippet>6329</a>            }
+<a href=#6330 id=6330 data-nosnippet>6330</a>        }
+<a href=#6331 id=6331 data-nosnippet>6331</a>        CuTaskType::Regular =&gt; {
+<a href=#6332 id=6332 data-nosnippet>6332</a>            <span class="kw">if </span>background {
+<a href=#6333 id=6333 data-nosnippet>6333</a>                <span class="kw">if </span>output_type.is_some() {
+<a href=#6334 id=6334 data-nosnippet>6334</a>                    task_specs.task_types[index].clone()
+<a href=#6335 id=6335 data-nosnippet>6335</a>                } <span class="kw">else </span>{
+<a href=#6336 id=6336 data-nosnippet>6336</a>                    <span class="macro">panic!</span>(<span class="string">"{task_id}: If a task is background, it has to have an output"</span>);
+<a href=#6337 id=6337 data-nosnippet>6337</a>                }
+<a href=#6338 id=6338 data-nosnippet>6338</a>            } <span class="kw">else </span>{
+<a href=#6339 id=6339 data-nosnippet>6339</a>                <span class="comment">// run_in_sim has no effect for regular tasks; they always run as themselves in sim.
+<a href=#6340 id=6340 data-nosnippet>6340</a>                </span>declared_task_type.clone()
+<a href=#6341 id=6341 data-nosnippet>6341</a>            }
+<a href=#6342 id=6342 data-nosnippet>6342</a>        }
+<a href=#6343 id=6343 data-nosnippet>6343</a>        CuTaskType::Sink =&gt; {
+<a href=#6344 id=6344 data-nosnippet>6344</a>            <span class="kw">if </span>background {
+<a href=#6345 id=6345 data-nosnippet>6345</a>                <span class="macro">panic!</span>(
+<a href=#6346 id=6346 data-nosnippet>6346</a>                    <span class="string">"CuSinkTask {task_id} cannot be a background task, it should be a regular task."
+<a href=#6347 id=6347 data-nosnippet>6347</a>                </span>);
+<a href=#6348 id=6348 data-nosnippet>6348</a>            }
+<a href=#6349 id=6349 data-nosnippet>6349</a>
+<a href=#6350 id=6350 data-nosnippet>6350</a>            <span class="kw">if </span>sim_mode &amp;&amp; !run_in_sim {
+<a href=#6351 id=6351 data-nosnippet>6351</a>                <span class="kw">let </span>msg_types = graph.get_node_input_msg_types(task_id.as_str()).unwrap_or_else(|| {
+<a href=#6352 id=6352 data-nosnippet>6352</a>                    <span class="macro">panic!</span>(
+<a href=#6353 id=6353 data-nosnippet>6353</a>                        <span class="string">"CuSinkTask {task_id} should have an incoming connection with a valid input msg type"
+<a href=#6354 id=6354 data-nosnippet>6354</a>                    </span>)
+<a href=#6355 id=6355 data-nosnippet>6355</a>                });
+<a href=#6356 id=6356 data-nosnippet>6356</a>                <span class="kw">let </span>msg_type = <span class="kw">if </span>msg_types.len() == <span class="number">1 </span>{
+<a href=#6357 id=6357 data-nosnippet>6357</a>                    <span class="macro">format!</span>(<span class="string">"({},)"</span>, msg_types[<span class="number">0</span>])
+<a href=#6358 id=6358 data-nosnippet>6358</a>                } <span class="kw">else </span>{
+<a href=#6359 id=6359 data-nosnippet>6359</a>                    <span class="macro">format!</span>(<span class="string">"({})"</span>, msg_types.join(<span class="string">", "</span>))
+<a href=#6360 id=6360 data-nosnippet>6360</a>                };
+<a href=#6361 id=6361 data-nosnippet>6361</a>                <span class="kw">let </span>sim_task_name = <span class="macro">format!</span>(<span class="string">"CuSimSinkTask&lt;{msg_type}&gt;"</span>);
+<a href=#6362 id=6362 data-nosnippet>6362</a>                parse_str(sim_task_name.as_str()).unwrap_or_else(|<span class="kw">_</span>| {
+<a href=#6363 id=6363 data-nosnippet>6363</a>                    <span class="macro">panic!</span>(<span class="string">"Could not build the placeholder for simulation: {sim_task_name}"</span>)
+<a href=#6364 id=6364 data-nosnippet>6364</a>                })
+<a href=#6365 id=6365 data-nosnippet>6365</a>            } <span class="kw">else </span>{
+<a href=#6366 id=6366 data-nosnippet>6366</a>                declared_task_type.clone()
+<a href=#6367 id=6367 data-nosnippet>6367</a>            }
+<a href=#6368 id=6368 data-nosnippet>6368</a>        }
+<a href=#6369 id=6369 data-nosnippet>6369</a>    }
 <a href=#6370 id=6370 data-nosnippet>6370</a>}
 <a href=#6371 id=6371 data-nosnippet>6371</a>
 <a href=#6372 id=6372 data-nosnippet>6372</a><span class="attr">#[derive(Clone)]
-<a href=#6373 id=6373 data-nosnippet>6373</a></span><span class="kw">enum </span>ExecutionEntityKind {
-<a href=#6374 id=6374 data-nosnippet>6374</a>    Task {
-<a href=#6375 id=6375 data-nosnippet>6375</a>        task_index: usize,
-<a href=#6376 id=6376 data-nosnippet>6376</a>    },
-<a href=#6377 id=6377 data-nosnippet>6377</a>    BridgeRx {
-<a href=#6378 id=6378 data-nosnippet>6378</a>        bridge_index: usize,
-<a href=#6379 id=6379 data-nosnippet>6379</a>        channel_index: usize,
-<a href=#6380 id=6380 data-nosnippet>6380</a>    },
-<a href=#6381 id=6381 data-nosnippet>6381</a>    BridgeTx {
-<a href=#6382 id=6382 data-nosnippet>6382</a>        bridge_index: usize,
-<a href=#6383 id=6383 data-nosnippet>6383</a>        channel_index: usize,
-<a href=#6384 id=6384 data-nosnippet>6384</a>    },
-<a href=#6385 id=6385 data-nosnippet>6385</a>}
-<a href=#6386 id=6386 data-nosnippet>6386</a>
-<a href=#6387 id=6387 data-nosnippet>6387</a><span class="attr">#[cfg(test)]
-<a href=#6388 id=6388 data-nosnippet>6388</a></span><span class="kw">mod </span>tests;
+<a href=#6373 id=6373 data-nosnippet>6373</a></span><span class="kw">struct </span>ExecutionEntity {
+<a href=#6374 id=6374 data-nosnippet>6374</a>    kind: ExecutionEntityKind,
+<a href=#6375 id=6375 data-nosnippet>6375</a>}
+<a href=#6376 id=6376 data-nosnippet>6376</a>
+<a href=#6377 id=6377 data-nosnippet>6377</a><span class="attr">#[derive(Clone)]
+<a href=#6378 id=6378 data-nosnippet>6378</a></span><span class="kw">enum </span>ExecutionEntityKind {
+<a href=#6379 id=6379 data-nosnippet>6379</a>    Task {
+<a href=#6380 id=6380 data-nosnippet>6380</a>        task_index: usize,
+<a href=#6381 id=6381 data-nosnippet>6381</a>    },
+<a href=#6382 id=6382 data-nosnippet>6382</a>    BridgeRx {
+<a href=#6383 id=6383 data-nosnippet>6383</a>        bridge_index: usize,
+<a href=#6384 id=6384 data-nosnippet>6384</a>        channel_index: usize,
+<a href=#6385 id=6385 data-nosnippet>6385</a>    },
+<a href=#6386 id=6386 data-nosnippet>6386</a>    BridgeTx {
+<a href=#6387 id=6387 data-nosnippet>6387</a>        bridge_index: usize,
+<a href=#6388 id=6388 data-nosnippet>6388</a>        channel_index: usize,
+<a href=#6389 id=6389 data-nosnippet>6389</a>    },
+<a href=#6390 id=6390 data-nosnippet>6390</a>}
+<a href=#6391 id=6391 data-nosnippet>6391</a>
+<a href=#6392 id=6392 data-nosnippet>6392</a><span class="attr">#[cfg(test)]
+<a href=#6393 id=6393 data-nosnippet>6393</a></span><span class="kw">mod </span>tests;
 </code></pre></div></section></main></body></html>
