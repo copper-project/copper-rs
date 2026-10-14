@@ -10,7 +10,7 @@ publish = false
 path = "lib.rs"
 
 [dependencies]
-bincode = { package = "cu-bincode", path = "../../../cu_bincode", version = "=2.2.0", default-features = false, features = [
+bincode = { package = "cu-bincode", path = "../../../cu_bincode", version = "~2.2.0", default-features = false, features = [
   "derive",
   "alloc",
   "self-describing",

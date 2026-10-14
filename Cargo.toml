@@ -319,7 +319,7 @@ cu-ros2-payloads = { path = "components/payloads/cu_ros2_payloads", version = "~
 cu-pid = { path = "components/tasks/cu_pid", version = "~1.3.0" }
 
 # Serialization
-bincode = { package = "cu-bincode", path = "core/cu_bincode", version = "=2.2.0", default-features = false, features = [
+bincode = { package = "cu-bincode", path = "core/cu_bincode", version = "~2.2.0", default-features = false, features = [
   "derive",
   "alloc",
 ] }
