@@ -44,6 +44,24 @@ supported release branch.
 The 1.1 precedent is PR #1264, targeting `release/1.1`, followed by PR #1267,
 targeting `master`.
 
+## Independent patch releases
+
+All first-party registry dependencies use minor-line requirements (`~1.3.0`
+for Copper and `~2.2.0` for the independently versioned codec crates), including
+optional, build, target-specific, and standalone-manifest dependencies. Keep
+package versions exact. Generated projects follow the same dependency policy.
+
+For a patch release, bump only the packages that changed. Override
+`version.workspace = true` with the changed package's exact patch version when
+necessary; leave the workspace version and unchanged packages alone. Retain each
+dependency's existing minimum unless the change actually requires a newer API or
+fix. Raise that minimum only for the affected dependency, keeping its `~` range.
+
+Run the release checks, then `just publish` to publish only versions absent from
+the registry. Do not globally bump dependencies or republish unchanged crates to
+release one package's patch. The codec and derive crates can also receive patches
+independently under their `~2.2.0` requirements.
+
 ## GitHub release checklist
 
 Complete this checklist for every stable minor or patch release, including

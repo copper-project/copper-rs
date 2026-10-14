@@ -13,7 +13,7 @@ repository.workspace = true
 readme = "README.md"
 
 [dependencies]
-cu29 = { path = "../../../core/cu29", version = "1.4.0-dev", default-features = false, features = [
+cu29 = { path = "../../../core/cu29", version = "~1.4.0-dev", default-features = false, features = [
   "clock-sync",
 ] }
 

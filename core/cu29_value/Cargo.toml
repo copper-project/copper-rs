@@ -31,7 +31,7 @@ ordered-float = { version = "5.1", default-features = false }
 pyo3 = { workspace = true, optional = true }
 
 [dev-dependencies]
-cu-gnss-payloads = { path = "../../components/payloads/cu_gnss_payloads", default-features = false }
+cu-gnss-payloads = { version = "~1.4.0-dev", path = "../../components/payloads/cu_gnss_payloads", default-features = false }
 ui_test = { version = "0.30.7", default-features = false, features = ["rustc"] }
 serde_derive = { workspace = true }
 
