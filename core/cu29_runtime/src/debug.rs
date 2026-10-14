@@ -158,11 +158,66 @@ where
         clock_mock: RobotClockMock,
         build_callback: CB,
         time_of: TF,
+        progress: impl FnMut(LogIndexProgress),
+    ) -> CuResult<Self> {
+        Self::from_log_run_with_progress(
+            log_base,
+            None,
+            app,
+            robot_clock,
+            clock_mock,
+            build_callback,
+            time_of,
+            progress,
+        )
+    }
+
+    /// Build a session from one recorded run of a unified log.
+    ///
+    /// `run` is the zero-based index shown by `cu29-logreader list-runs`. `None` is only
+    /// accepted when the log holds a single run; a log with several runs (after a mission
+    /// change or a restart that appended to the same log) needs an explicit selection.
+    /// Only the selected run's CopperLists and keyframes are indexed.
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_log_run(
+        log_base: &Path,
+        run: Option<usize>,
+        app: App,
+        robot_clock: RobotClock,
+        clock_mock: RobotClockMock,
+        build_callback: CB,
+        time_of: TF,
+    ) -> CuResult<Self> {
+        Self::from_log_run_with_progress(
+            log_base,
+            run,
+            app,
+            robot_clock,
+            clock_mock,
+            build_callback,
+            time_of,
+            |_| {},
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn from_log_run_with_progress(
+        log_base: &Path,
+        run: Option<usize>,
+        app: App,
+        robot_clock: RobotClock,
+        clock_mock: RobotClockMock,
+        build_callback: CB,
+        time_of: TF,
         mut progress: impl FnMut(LogIndexProgress),
     ) -> CuResult<Self> {
         let _ = crate::logcodec::seed_effective_config_from_log::<P>(log_base)?;
-        let (sections, keyframes, total_entries) =
-            index_log_with_progress::<P, _, _>(log_base, &time_of, &mut progress)?;
+        let (sections, keyframes, total_entries) = index_log_with_progress::<P, _, _>(
+            log_base,
+            &time_of,
+            RunSelection::Index(run),
+            &mut progress,
+        )?;
         let log_reader = build_read_logger(log_base)?;
         #[allow(unused_mut)]
         let mut session = Self::new(
@@ -219,8 +274,12 @@ where
         mut progress: impl FnMut(LogIndexProgress),
     ) -> CuResult<Self> {
         let _ = crate::logcodec::seed_effective_config_from_log::<P>(log_base)?;
-        let (sections, keyframes, total_entries) =
-            index_log_with_progress::<P, _, _>(log_base, &time_of, &mut progress)?;
+        let (sections, keyframes, total_entries) = index_log_with_progress::<P, _, _>(
+            log_base,
+            &time_of,
+            RunSelection::Index(None),
+            &mut progress,
+        )?;
         let log_reader = build_read_logger(log_base)?;
         #[allow(unused_mut)]
         let mut session = Self::new_with_cache_cap(
@@ -1061,12 +1120,43 @@ where
     P: CopperListTuple,
     TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime>,
 {
-    index_log_with_progress(log_base, time_of, |_| {})
+    index_log_with_progress(log_base, time_of, RunSelection::All, |_| {})
 }
 
+/// Which recorded run of a unified log to index.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum RunSelection {
+    /// Index every section regardless of run (no run scoping).
+    All,
+    /// Zero-based index of a recorded run. `None` is only valid for single-run logs.
+    Index(Option<usize>),
+}
+
+/// Pick a run id from the run ids found in a log, in order of first appearance.
+fn select_run_id(run_ids: &[u64], requested: Option<usize>) -> CuResult<u64> {
+    let index = match requested {
+        Some(index) => index,
+        None if run_ids.len() <= 1 => 0,
+        None => {
+            return Err(CuError::from(format!(
+                "Log contains {} recorded runs; select one with a run index",
+                run_ids.len()
+            )));
+        }
+    };
+    run_ids.get(index).copied().ok_or_else(|| {
+        CuError::from(format!(
+            "Recorded run {index} does not exist; the log has {} run(s)",
+            run_ids.len()
+        ))
+    })
+}
+
+/// Index a log, optionally scoped to one recorded run.
 fn index_log_with_progress<P, TF, PF>(
     log_base: &Path,
     time_of: &TF,
+    selection: RunSelection,
     mut progress: PF,
 ) -> CuResult<(Vec<SectionIndexEntry>, Vec<KeyFrame>, usize)>
 where
@@ -1082,13 +1172,28 @@ where
         return Err(CuError::from("Expected read-only unified logger"));
     };
     let mut total_bytes = 0u64;
+    // Run ids in order of first appearance; the same order `cu29-logreader list-runs` uses.
+    let mut run_ids = Vec::<u64>::new();
     loop {
         let header = sizing_reader.raw_skip_section()?;
         if header.entry_type == UnifiedLogType::LastEntry {
             break;
         }
         total_bytes = total_bytes.saturating_add(header.used as u64);
+        if !matches!(
+            header.entry_type,
+            UnifiedLogType::ApplicationMetadata | UnifiedLogType::ValueDecodeCatalog
+        ) && !run_ids.contains(&header.context.run_id)
+        {
+            run_ids.push(header.context.run_id);
+        }
     }
+    let run_id = match selection {
+        RunSelection::All => None,
+        // A log with no recorded sections has nothing to scope.
+        RunSelection::Index(None) if run_ids.is_empty() => None,
+        RunSelection::Index(requested) => Some(select_run_id(&run_ids, requested)?),
+    };
 
     let logger = UnifiedLoggerBuilder::new()
         .file_base_name(log_base)
@@ -1115,8 +1220,9 @@ where
             break;
         }
 
+        let in_selected_run = run_id.is_none_or(|id| header.context.run_id == id);
         match header.entry_type {
-            UnifiedLogType::CopperList => {
+            UnifiedLogType::CopperList if in_selected_run => {
                 let (len, first_id, last_id, first_ts, last_ts) =
                     scan_copperlist_section::<P, _>(&data, time_of)?;
                 if len > 0 {
@@ -1132,7 +1238,7 @@ where
                     total_entries += len;
                 }
             }
-            UnifiedLogType::FrozenTasks => {
+            UnifiedLogType::FrozenTasks if in_selected_run => {
                 // Read all keyframes in this section
                 let mut cursor = std::io::Cursor::new(&data);
                 loop {
@@ -1197,6 +1303,162 @@ mod tests {
 
     fn keyframe(culistid: u64) -> KeyFrame {
         KeyFrame::from_serialized(culistid, CuTime::from_nanos(culistid), Vec::new())
+    }
+
+    #[derive(
+        bincode::Encode, bincode::Decode, serde::Serialize, Default, Debug, Clone, PartialEq,
+    )]
+    struct RunTestList(u32);
+
+    impl cu29_traits::ErasedCuStampedDataSet for RunTestList {
+        fn cumsgs(&self) -> Vec<&dyn cu29_traits::ErasedCuStampedData> {
+            Vec::new()
+        }
+    }
+
+    impl cu29_traits::MatchingTasks for RunTestList {
+        fn get_all_task_ids() -> &'static [&'static str] {
+            &[]
+        }
+
+        fn get_output_specs() -> &'static [cu29_traits::TaskOutputSpec] {
+            &[]
+        }
+    }
+
+    /// Write two runs into one log. Each run restarts CopperList ids at 0 and has its own
+    /// keyframe, and run `n` carries payloads `100 * (n + 1) + id`.
+    fn two_run_log(dir: &Path) -> std::path::PathBuf {
+        use cu29_traits::WriteStream;
+        use cu29_unifiedlog::{ApplicationMetadata, stream_write_context};
+        use std::sync::Mutex;
+
+        let base = dir.join("two_runs.copper");
+        let UnifiedLogger::Write(mut logger) = UnifiedLoggerBuilder::new()
+            .file_base_name(&base)
+            .preallocated_size(64 * 1024)
+            .write(true)
+            .create(true)
+            .build()
+            .unwrap()
+        else {
+            unreachable!()
+        };
+        logger
+            .seal_metadata(
+                &ApplicationMetadata {
+                    app_type: "App".into(),
+                    app_name: "test".into(),
+                    app_version: "1".into(),
+                    git_commit: None,
+                    git_dirty: None,
+                    subsystem_id: None,
+                    subsystem_code: 0,
+                    effective_config_ron: "(tasks:[])".into(),
+                    missions: vec!["alpha".into()],
+                    catalog_offset: 0,
+                },
+                None::<&u8>,
+            )
+            .unwrap();
+        let contexts = [
+            logger.construction_context(1, 0).unwrap(),
+            logger.construction_context(2, 0).unwrap(),
+        ];
+        let logger = Arc::new(Mutex::new(logger));
+        for (run, context) in contexts.into_iter().enumerate() {
+            let mut copperlists =
+                stream_write_context::<
+                    crate::copperlist::CopperList<RunTestList>,
+                    cu29_unifiedlog::memmap::MmapSectionStorage,
+                >(logger.clone(), UnifiedLogType::CopperList, 4096, context)
+                .unwrap();
+            for id in 0..3u64 {
+                let payload = RunTestList(100 * (run as u32 + 1) + id as u32);
+                copperlists
+                    .log(&crate::copperlist::CopperList::new(id, payload))
+                    .unwrap();
+            }
+            let mut keyframes = stream_write_context::<
+                KeyFrame,
+                cu29_unifiedlog::memmap::MmapSectionStorage,
+            >(
+                logger.clone(), UnifiedLogType::FrozenTasks, 4096, context
+            )
+            .unwrap();
+            keyframes
+                .log(&KeyFrame::from_serialized(
+                    0,
+                    CuTime::from_nanos(run as u64),
+                    vec![run as u8],
+                ))
+                .unwrap();
+        }
+        drop(logger);
+        base
+    }
+
+    #[test]
+    fn index_scopes_copperlists_and_keyframes_to_the_selected_run() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = two_run_log(dir.path());
+        let time_of = |_: &crate::copperlist::CopperList<RunTestList>| None;
+
+        for run in 0..2usize {
+            let (sections, keyframes, total) = index_log_with_progress::<RunTestList, _, _>(
+                &base,
+                &time_of,
+                RunSelection::Index(Some(run)),
+                |_| {},
+            )
+            .unwrap();
+            assert_eq!(total, 3, "run {run} CopperList count");
+            assert_eq!(sections.iter().map(|s| s.len).sum::<usize>(), 3);
+            assert!(sections.iter().all(|s| s.first_id == 0 && s.last_id == 2));
+            assert_eq!(keyframes.len(), 1, "run {run} keyframes");
+            assert_eq!(keyframes[0].culistid, 0);
+            assert_eq!(keyframes[0].timestamp, CuTime::from_nanos(run as u64));
+        }
+
+        // Without scoping, both runs are merged into one index (the old behavior).
+        let (_, keyframes, total) = index_log_with_progress::<RunTestList, _, _>(
+            &base,
+            &time_of,
+            RunSelection::All,
+            |_| {},
+        )
+        .unwrap();
+        assert_eq!(total, 6);
+        assert_eq!(keyframes.len(), 2);
+    }
+
+    #[test]
+    fn index_requires_a_run_selection_when_the_log_has_several_runs() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = two_run_log(dir.path());
+        let time_of = |_: &crate::copperlist::CopperList<RunTestList>| None;
+
+        let error = index_log_with_progress::<RunTestList, _, _>(
+            &base,
+            &time_of,
+            RunSelection::Index(None),
+            |_| {},
+        )
+        .err()
+        .expect("selection error")
+        .to_string();
+        assert!(error.contains("2 recorded runs"), "{error}");
+
+        let error = index_log_with_progress::<RunTestList, _, _>(
+            &base,
+            &time_of,
+            RunSelection::Index(Some(2)),
+            |_| {},
+        )
+        .err()
+        .expect("selection error")
+        .to_string();
+        assert!(error.contains("Recorded run 2 does not exist"), "{error}");
     }
 
     #[test]
