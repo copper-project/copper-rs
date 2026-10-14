@@ -27,7 +27,7 @@ Run `just cuda-test` in `components/tasks/cu_vitfly` to test CUDA inference.
 Camera demos require the native Stereolabs SDK; the crate READMEs describe
 installation and demo commands.
 
-The codec crates retain their independent `2.2.0-beta` versions and MIT licenses.
+The codec crates retain their independent `2.2.0` versions and MIT licenses.
 Their Cargo Workspaces metadata keeps their versions independent during Copper
 version bumps. The ZED crates inherit the Copper workspace version.
 

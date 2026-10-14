@@ -38,10 +38,10 @@ bevy = { workspace = true, features = [
   "keyboard",
   "mouse",
 ] }
-cu29 = { path = "../../../core/cu29", version = "1.3.0-dev", default-features = false, features = [
+cu29 = { path = "../../../core/cu29", version = "1.4.0-dev", default-features = false, features = [
   "std",
 ] }
-cu-tuimon = { path = "../../libs/cu_tuimon", version = "1.3.0-dev", default-features = false, features = [
+cu-tuimon = { path = "../../libs/cu_tuimon", version = "1.4.0-dev", default-features = false, features = [
   "log_pane",
 ] }
 # Constrain Bevy's transitive derive implementation to its syn 2-compatible release.
