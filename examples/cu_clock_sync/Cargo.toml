@@ -10,12 +10,14 @@ default-run = "cu-clock-sync"
 [dependencies]
 cu29 = { workspace = true, features = ["clock-sync"] }
 cu29-export = { workspace = true }
-cu-consolemon = { path = "../../components/monitors/cu_consolemon", features = [
+cu-consolemon = { version = "~1.3.0", path = "../../components/monitors/cu_consolemon", features = [
   "clock-sync",
 ] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-cu-ptp = { path = "../../components/res/cu_ptp", features = ["linux-phc"] }
+cu-ptp = { version = "~1.3.0", path = "../../components/res/cu_ptp", features = [
+  "linux-phc",
+] }
 
 [build-dependencies]
 cu29-build = { workspace = true }
