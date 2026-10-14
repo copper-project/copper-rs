@@ -1,3 +1,5 @@
+mod exact;
+
 use clap::Parser;
 use cu29_runtime::config::{
     CuConfig, CuGraph, OnError, PlannerKind, RT_POOL, SchedulingPolicy, ThreadPoolConfig,
@@ -5,8 +7,8 @@ use cu29_runtime::config::{
 };
 use cu29_runtime::curuntime::{CuExecutionStep, CuExecutionUnit, CuStepPhase, CuTaskType};
 use cu29_runtime::planner::{
-    AssembledPlan, CuPrediction, CuScoreTable, DEFAULT_COPPERLIST_COUNT, PlanEntity,
-    PlanEntityKind, assemble_runtime_plan_for_mission, mission_graphs, step_key,
+    AssembledPlan, CuPlan, CuPrediction, CuScoreTable, PlanEntity, PlanEntityKind,
+    assemble_runtime_plan_for_mission, mission_graphs, step_key,
 };
 use cu29_traits::{CuError, CuResult};
 use serde::Deserialize;
@@ -319,7 +321,9 @@ text { font-family: 'Noto Sans', sans-serif; fill: #cdd6f4; }
 .title { font-size: 21px; font-weight: 700; }
 .subtitle { font-size: 14px; font-weight: 700; }
 .meta { font-size: 11px; fill: #a6adc8; }
-.ordinal { font-size: 10px; font-weight: 700; fill: #6c7086; }
+.ordinal { font-size: 10px; font-weight: 700; fill: #bac2de; }
+.light-card text, .observed-segment text { fill: #1e1e2e; }
+.dark-card text { fill: #cdd6f4; }
 .card-title { font-size: 12px; font-weight: 700; }
 .card-line { font-size: 9px; }
 .lane { font-size: 10px; font-weight: 700; fill: #a6adc8; }
@@ -335,7 +339,7 @@ text { font-family: 'Noto Sans', sans-serif; fill: #cdd6f4; }
 .bg-trigger { fill: none; stroke: #cba6f7; stroke-width: 2; stroke-dasharray: 4 3; opacity: 0.55; marker-end: url(#arrow); }
 .observed-segment { cursor: help; }
 </style>
-<rect width="100%" height="100%" fill="#1e1e2e"/>
+<rect width="100%" height="100%" fill="#000000"/>
 "##,
     );
     if let Some(context) = pgs {
@@ -463,7 +467,7 @@ fn load_pgs_context(
         }
     }
     Ok(Some(PgsContext {
-        title: format!("Profile-guided scheduling · {candidate}"),
+        title: format!("PGS · {candidate}"),
         lines,
     }))
 }
@@ -677,20 +681,14 @@ fn render_mission(
         .map(|pack| pack.culist_index as usize + 1)
         .max()
         .unwrap_or(0);
-    let copperlist_count = config
-        .logging
-        .as_ref()
-        .and_then(|logging| logging.copperlist_count)
-        .unwrap_or(DEFAULT_COPPERLIST_COUNT);
+    let schedule = CuPlan::from_config(config)?;
+    let mission_schedule = schedule
+        .missions
+        .get(mission)
+        .ok_or_else(|| CuError::from(format!("Schedule has no mission '{mission}'")))?;
     let pipeline_selected = config.planner_kind() == PlannerKind::Pipeline;
-    let in_flight_limit = if pipeline_selected {
-        config
-            .planner_config()
-            .expect("Pipeline selection must have planner config")
-            .max_in_flight(copperlist_count)?
-    } else {
-        1
-    };
+    let explicit_selected = config.planner_kind() == PlannerKind::ExplicitSchedule;
+    let in_flight_limit = mission_schedule.max_in_flight as usize;
     let refine_totals = refine_totals(&steps);
 
     let runtime = config.runtime.as_ref();
@@ -711,9 +709,9 @@ fn render_mission(
     .unwrap();
     writeln!(
         svg,
-        r#"<text class="meta" x="0" y="43">{} serial steps · {} pipeline lanes · {} message slots per CopperList · {} CopperLists max in flight · rate target: {}</text>"#,
+        r#"<text class="meta" x="0" y="43">{} steps · {} workers · {} slots/CL · {} CL max · {}</text>"#,
         steps.len(),
-        if pipeline_selected { stages.len() } else { 0 },
+        mission_schedule.workers.len(),
         message_slots,
         in_flight_limit,
         xml(&rate)
@@ -721,25 +719,25 @@ fn render_mission(
     .unwrap();
 
     let mut y = 61.0;
-    if pools.is_empty() {
-        svg.push_str(r#"<text class="meta" x="0" y="61">Pools: none configured</text>"#);
-        y += 18.0;
-    } else {
-        for pool in pools {
-            writeln!(
-                svg,
-                r#"<text class="meta mono" x="0" y="{y}">pool {}</text>"#,
-                xml(&format_pool(pool))
-            )
-            .unwrap();
-            y += 16.0;
-        }
+    for pool in pools {
+        writeln!(
+            svg,
+            r#"<text class="meta mono" x="0" y="{y}">{}</text>"#,
+            xml(&format_pool(pool))
+        )
+        .unwrap();
+        y += 16.0;
     }
 
     y += 14.0;
+    let projection_label = if explicit_selected {
+        "Operations"
+    } else {
+        "Serial"
+    };
     writeln!(
         svg,
-        r#"<text class="subtitle" x="0" y="{y}">Serial projection · main CopperList executor · 1 worker</text>"#
+        r#"<text class="subtitle" x="0" y="{y}">{projection_label}</text>"#
     )
     .unwrap();
     y += 17.0;
@@ -750,7 +748,7 @@ fn render_mission(
         y += 26.0;
         writeln!(
             svg,
-            r#"<text class="subtitle" x="0" y="{y}">Pipeline lanes · generated stage workers + background pools</text>"#
+            r#"<text class="subtitle" x="0" y="{y}">Pipeline</text>"#
         )
         .unwrap();
         y += 17.0;
@@ -764,6 +762,32 @@ fn render_mission(
         );
         svg.push_str(&pipeline.svg);
         y += pipeline.height;
+    }
+
+    if explicit_selected {
+        y += 26.0;
+        let labels = steps
+            .iter()
+            .enumerate()
+            .map(|(index, step)| {
+                let entity = &plan.entities[step.node_id as usize];
+                let refine = (step.phase == CuStepPhase::AnytimeRefine).then(|| {
+                    steps[..=index]
+                        .iter()
+                        .filter(|other| {
+                            other.node_id == step.node_id
+                                && other.phase == CuStepPhase::AnytimeRefine
+                        })
+                        .count() as u32
+                });
+                let key = step_key(mission, entity, step.phase, refine);
+                let (_, fill) = entity_style(entity, step);
+                (key, (entity.label.clone(), fill.to_string()))
+            })
+            .collect();
+        let exact = exact::render(mission_schedule, &labels, y)?;
+        svg.push_str(&exact.svg);
+        y += exact.height;
     }
 
     if let Some(observed) = observed {
@@ -881,10 +905,11 @@ fn render_serial(
             );
             writeln!(
                 svg,
-                r##"<text class="ordinal mono" x="{x}" y="{}">{} · S{:02}</text><g data-step-key="{}" data-serial-column="{}"{}><title>{}</title><rect x="{x}" y="{row_y}" width="{WAVE_CELL_WIDTH}" height="{WAVE_CELL_HEIGHT}" rx="6" fill="{fill}" stroke="{}"{}/><text class="ordinal mono" x="{}" y="{}">MAIN w1 · {}</text><text class="card-title" x="{}" y="{}">{}</text><text class="card-line" x="{}" y="{}">{}</text><text class="card-line mono" x="{}" y="{}">{}</text></g>"##,
+                r##"<text class="ordinal mono" x="{x}" y="{}">{} · S{:02}</text><g class="{}" data-step-key="{}" data-serial-column="{}"{}><title>{}</title><rect x="{x}" y="{row_y}" width="{WAVE_CELL_WIDTH}" height="{WAVE_CELL_HEIGHT}" rx="6" fill="{fill}" stroke="{}"{}/><text class="ordinal mono" x="{}" y="{}">MAIN w1 · {}</text><text class="card-title" x="{}" y="{}">{}</text><text class="card-line" x="{}" y="{}">{}</text><text class="card-line mono" x="{}" y="{}">{}</text></g>"##,
                 row_y - 7.0,
                 xml(&cl_label),
                 step_index + 1,
+                if is_background { "dark-card" } else { "light-card" },
                 xml_attr(&key),
                 column + 1,
                 if is_background { r#" data-background-gateway="true""# } else { "" },
@@ -1024,22 +1049,15 @@ fn render_observed(
 
     writeln!(
         svg,
-        r#"<text class="subtitle" x="0" y="{}">Observed execution · proportional recorded process intervals</text>"#,
+        r#"<text class="subtitle" x="0" y="{}">Execution</text>"#,
         top + 14.0
     )
     .unwrap();
-    writeln!(
-        svg,
-        r#"<text class="meta" x="0" y="{}">Recorded task durations are packed back-to-back; hover any segment for its task and timing details.</text>"#,
-        top + 33.0
-    )
-    .unwrap();
-
-    let mut y = top + 55.0;
+    let mut y = top + 35.0;
     if observed.traces.is_empty() {
         writeln!(
             svg,
-            r##"<rect x="0" y="{y}" width="{PARALLEL_WIDTH}" height="44" rx="8" fill="#313244" stroke="#f5c2e7"/><text class="blocking" x="12" y="{}">No complete process intervals were found in the CopperList log.</text>"##,
+            r##"<rect x="0" y="{y}" width="{PARALLEL_WIDTH}" height="44" rx="8" fill="#313244" stroke="#f5c2e7"/><text class="blocking" x="12" y="{}">No Execution Data</text>"##,
             y + 27.0
         )
         .unwrap();
@@ -1074,15 +1092,12 @@ fn render_observed(
         let excluded_note = if trace.excluded_intervals == 0 {
             String::new()
         } else {
-            format!(
-                " · {} carried-forward slot(s) excluded",
-                trace.excluded_intervals
-            )
+            format!(" · {} skipped slots", trace.excluded_intervals)
         };
 
         writeln!(
             svg,
-            r#"<text class="card-title" x="0" y="{y}">{} · CL #{} · {} active · {} wall{}</text>"#,
+            r#"<text class="card-title" x="0" y="{y}">{} · CL #{} · active {} · wall {}{}</text>"#,
             xml(&trace.kind.to_uppercase()),
             trace.culist_id,
             xml(&format_duration_ns(active_ns as f64)),
@@ -1163,7 +1178,7 @@ fn render_observed(
                 view.filter(|view| !view.resources.is_empty())
                     .map_or_else(|| "—".to_string(), |view| view.resources.join(", ")),
                 collision_resources.map_or_else(String::new, |resources| format!(
-                    "\nobserved overlap risk: {}",
+                    "\nResource overlap: {}",
                     resources.join(", ")
                 )),
             );
@@ -1192,7 +1207,7 @@ fn render_observed(
         if let Some(residual) = trace.residual_before_ns {
             writeln!(
                 svg,
-                r##"<text class="lane mono" x="0" y="{}">between CLs</text><rect x="{LABEL_WIDTH}" y="{y}" width="120" height="13" rx="3" fill="#45475a"/><text class="meta mono" x="{}" y="{}">{} before this CL · unclassified, not on the process scale</text>"##,
+                r##"<text class="lane mono" x="0" y="{}">between CLs</text><rect x="{LABEL_WIDTH}" y="{y}" width="120" height="13" rx="3" fill="#45475a"/><text class="meta mono" x="{}" y="{}">Gap {}</text>"##,
                 y + 11.0,
                 LABEL_WIDTH + 127.0,
                 y + 11.0,
@@ -1206,31 +1221,30 @@ fn render_observed(
 
     writeln!(
         svg,
-        r#"<text class="subtitle" x="0" y="{y}">Observed declared-resource overlap across the full log</text>"#
+        r#"<text class="subtitle" x="0" y="{y}">Resource Overlaps</text>"#
     )
     .unwrap();
     y += 14.0;
     if observed.resource_overlaps.is_empty() {
         writeln!(
             svg,
-            r##"<rect x="0" y="{y}" width="{PARALLEL_WIDTH}" height="38" rx="8" fill="#313244" stroke="#a6e3a1"/><text class="blocking" x="12" y="{}">No simultaneous recorded process intervals shared a declared resource target.</text>"##,
+            r##"<rect x="0" y="{y}" width="{PARALLEL_WIDTH}" height="38" rx="8" fill="#313244" stroke="#a6e3a1"/><text class="blocking" x="12" y="{}">No Resource Conflicts</text>"##,
             y + 24.0
         )
         .unwrap();
         y += 38.0;
     } else {
-        let panel_height = 34.0 + observed.resource_overlaps.len() as f64 * 18.0;
+        let panel_height = 14.0 + observed.resource_overlaps.len() as f64 * 18.0;
         writeln!(
             svg,
-            r##"<rect x="0" y="{y}" width="{PARALLEL_WIDTH}" height="{panel_height}" rx="8" fill="#313244" stroke="#f38ba8"/><text class="blocking" x="12" y="{}">Overlap is a contention risk signal, not proof that either task waited.</text>"##,
-            y + 20.0
+            r##"<rect x="0" y="{y}" width="{PARALLEL_WIDTH}" height="{panel_height}" rx="8" fill="#313244" stroke="#f38ba8"/>"##,
         )
         .unwrap();
         for (index, overlap) in observed.resource_overlaps.iter().enumerate() {
             writeln!(
                 svg,
                 r#"<text class="card-line mono" x="12" y="{}">⚠ {}: {} ↔ {} · {} overlap(s)</text>"#,
-                y + 40.0 + index as f64 * 18.0,
+                y + 20.0 + index as f64 * 18.0,
                 xml(&truncate(&overlap.resource, 28)),
                 xml(&truncate(&overlap.left, 28)),
                 xml(&truncate(&overlap.right, 28)),
@@ -1252,14 +1266,12 @@ fn render_observed(
     );
     writeln!(
         svg,
-        r##"<rect x="0" y="{y}" width="{PARALLEL_WIDTH}" height="58" rx="8" fill="#313244" stroke="#6c7086"/><text class="blocking" x="12" y="{}">Recorded process intervals exclude queueing, keyframes, logging overhead, and serialization.</text><text class="meta" x="12" y="{}">Residual gaps may include serialization, rate limiting, scheduling, and I/O; est. p50 {}, est. p95 {}. Anytime bars span base through final refine.</text>"##,
-        y + 22.0,
-        y + 43.0,
+        r#"<text class="meta" x="0" y="{y}">Gaps · p50 {} · p95 {}</text>"#,
         xml(&residual_p50),
         xml(&residual_p95),
     )
     .unwrap();
-    y += 58.0;
+    y += 20.0;
 
     RenderedSection {
         svg,
@@ -1335,40 +1347,18 @@ fn render_staggered_wavefront(
 
     writeln!(
         svg,
-        r#"<text class="subtitle" x="0" y="{}">Staggered concurrency formations · cards in one column can run together</text>"#,
+        r#"<text class="subtitle" x="0" y="{}">Staggered</text>"#,
         top + 14.0
     )
     .unwrap();
     writeln!(
         svg,
-        r#"<text class="meta" x="0" y="{}">Columns can run together. Purple cells are RT poll/dispatch gateways; arrows feed the aligned background-pool worker lanes.</text>"#,
-        top + 33.0
+        r#"<text class="meta mono" x="0" y="{}">CL n–n+{} · {visible_lanes}/{active_lanes} lanes · {in_flight_limit} CL max</text>"#,
+        top + 33.0,
+        visible_lanes - 1,
     )
     .unwrap();
-    let depth_note = if active_lanes > visible_lanes {
-        format!(
-            "Configured in-flight depth: {in_flight_limit}. Showing CL n through CL n+{} ({} of {active_lanes} active pipeline positions); the overlap audit still covers every stage.",
-            visible_lanes - 1,
-            visible_lanes,
-        )
-    } else if in_flight_limit < MAX_VISIBLE_COPPERLISTS {
-        format!(
-            "Configured in-flight depth: {in_flight_limit}. CL n+{in_flight_limit} cannot be admitted until an older CopperList is committed and recycled."
-        )
-    } else {
-        format!(
-            "Configured in-flight depth: {in_flight_limit}. The matrix shows every concurrently active worker lane allowed by that bound."
-        )
-    };
-    writeln!(
-        svg,
-        r#"<text class="meta mono" x="0" y="{}">{}</text>"#,
-        top + 51.0,
-        xml(&depth_note)
-    )
-    .unwrap();
-
-    let mut y = top + 76.0;
+    let mut y = top + 58.0;
     for block_start in (0..formation_count).step_by(WAVE_COLUMNS) {
         let block_end = (block_start + WAVE_COLUMNS).min(formation_count);
         for formation in block_start..block_end {
@@ -1487,10 +1477,7 @@ fn render_staggered_wavefront(
                     "whole".to_string()
                 };
                 let background_detail = if is_background {
-                    format!(
-                        "\nRT GATEWAY ONLY: the task work does not execute in this cell\nidle/ready: emit buffered output + FIFO-enqueue current input\nbusy/not ready: emit empty output; do not enqueue another job\nbackground pool: {}",
-                        step.node.background_pool()
-                    )
+                    format!("\npool: {}", step.node.background_pool())
                 } else {
                     String::new()
                 };
@@ -1511,10 +1498,7 @@ fn render_staggered_wavefront(
                     if collision_targets.is_empty() {
                         String::new()
                     } else {
-                        format!(
-                            "\nPOTENTIAL CONTENTION in this formation: {}",
-                            collision_targets.join(", ")
-                        )
+                        format!("\nResource conflict: {}", collision_targets.join(", "))
                     }
                 );
                 let placement_label = if is_background {
@@ -1535,7 +1519,8 @@ fn render_staggered_wavefront(
                 };
                 writeln!(
                     svg,
-                    r##"<g data-formation="{}" data-cl-offset="{lane}" data-stage="{}"{}><title>{}</title><rect x="{x}" y="{row_y}" width="{WAVE_CELL_WIDTH}" height="{WAVE_CELL_HEIGHT}" rx="6" fill="{fill}" stroke="{stroke}" stroke-width="{stroke_width}"{}/><text class="ordinal mono" x="{}" y="{}">S{:02} · {}</text><text class="card-title" x="{}" y="{}">{}</text><text class="card-line" x="{}" y="{}">{}</text><text class="card-line mono" x="{}" y="{}">{}</text></g>"##,
+                    r##"<g class="{}" data-formation="{}" data-cl-offset="{lane}" data-stage="{}"{}><title>{}</title><rect x="{x}" y="{row_y}" width="{WAVE_CELL_WIDTH}" height="{WAVE_CELL_HEIGHT}" rx="6" fill="{fill}" stroke="{stroke}" stroke-width="{stroke_width}"{}/><text class="ordinal mono" x="{}" y="{}">S{:02} · {}</text><text class="card-title" x="{}" y="{}">{}</text><text class="card-line" x="{}" y="{}">{}</text><text class="card-line mono" x="{}" y="{}">{}</text></g>"##,
+                    if is_background { "dark-card" } else { "light-card" },
                     formation + 1,
                     stage_index + 1,
                     if is_background { r#" data-background-gateway="true""# } else { "" },
@@ -1601,44 +1586,32 @@ fn render_staggered_wavefront(
     }
 
     let overlap_groups = resource_overlap_groups(config, stages, entities, in_flight_limit);
-    let has_background = stages.iter().any(|step| step.node.is_background());
     writeln!(
         svg,
-        r#"<text class="subtitle" x="0" y="{y}">Potential configured-resource overlap across skewed formations and background jobs</text>"#
+        r#"<text class="subtitle" x="0" y="{y}">Resource Overlaps</text>"#
     )
     .unwrap();
     y += 13.0;
-    if in_flight_limit < 2 && !has_background {
+    if overlap_groups.is_empty() {
         writeln!(
             svg,
-            r##"<rect x="0" y="{y}" width="{PARALLEL_WIDTH}" height="50" rx="8" fill="#313244" stroke="#a6e3a1"/><text class="blocking" x="12" y="{}">Configured depth is 1, so foreground stages cannot overlap across CopperLists.</text><text class="meta" x="12" y="{}">Repeated bindings still execute serially inside that single CopperList.</text>"##,
-            y + 21.0,
-            y + 39.0,
+            r##"<rect x="0" y="{y}" width="{PARALLEL_WIDTH}" height="34" rx="8" fill="#313244" stroke="#a6e3a1"/><text class="blocking" x="12" y="{}">No Resource Conflicts</text>"##,
+            y + 22.0,
         )
         .unwrap();
-        y += 50.0;
-    } else if overlap_groups.is_empty() {
-        writeln!(
-            svg,
-            r##"<rect x="0" y="{y}" width="{PARALLEL_WIDTH}" height="50" rx="8" fill="#313244" stroke="#a6e3a1"/><text class="blocking" x="12" y="{}">No resource target is bound by more than one potentially overlapping stage or background job.</text><text class="meta" x="12" y="{}">This cannot detect GPU/device use that tasks do not declare as a Copper resource binding.</text>"##,
-            y + 21.0,
-            y + 39.0,
-        )
-        .unwrap();
-        y += 50.0;
+        y += 34.0;
     } else {
-        let panel_height = 42.0 + overlap_groups.len() as f64 * 20.0;
+        let panel_height = 14.0 + overlap_groups.len() as f64 * 20.0;
         writeln!(
             svg,
-            r##"<rect x="0" y="{y}" width="{PARALLEL_WIDTH}" height="{panel_height}" rx="8" fill="#313244" stroke="#f38ba8"/><text class="blocking" x="12" y="{}">These executions can overlap across CopperLists or while a background job remains active; bindings are not scheduler reservations.</text>"##,
-            y + 20.0,
+            r##"<rect x="0" y="{y}" width="{PARALLEL_WIDTH}" height="{panel_height}" rx="8" fill="#313244" stroke="#f38ba8"/>"##,
         )
         .unwrap();
         for (index, (target, stage_labels)) in overlap_groups.iter().enumerate() {
             writeln!(
                 svg,
                 r#"<text class="card-line mono" x="12" y="{}">⚠ {}: {}</text>"#,
-                y + 42.0 + index as f64 * 20.0,
+                y + 20.0 + index as f64 * 20.0,
                 xml(&truncate(target, 36)),
                 xml(&truncate(&stage_labels.join(" ↔ "), 118)),
             )
@@ -1727,7 +1700,7 @@ fn render_background_lanes(
     let mut svg = String::new();
     writeln!(
         svg,
-        r#"<text class="ordinal mono" x="0" y="{}">BACKGROUND POOL WORKER THREADS · DASHED BARS MAY CONTINUE</text>"#,
+        r#"<text class="ordinal mono" x="0" y="{}">Background Workers</text>"#,
         top + 17.0
     )
     .unwrap();
@@ -1786,9 +1759,9 @@ fn render_background_lanes(
                 let bar_width = LABEL_WIDTH + block_width - bar_x;
                 let carry_in = earliest_dispatch < block_start;
                 let label = if task_labels.len() == 1 {
-                    format!("{} job · running ?", task_labels[0])
+                    format!("{} job", task_labels[0])
                 } else {
-                    format!("{} jobs · running ?", task_labels.join(" / "))
+                    format!("{} jobs", task_labels.join(" / "))
                 };
                 writeln!(
                     svg,
@@ -1811,7 +1784,7 @@ fn render_background_lanes(
             let queue_y = pool_y + 20.0 + threads as f64 * 39.0;
             writeln!(
                 svg,
-                r##"<text class="lane mono" x="0" y="{}" fill="#f38ba8">FIFO queue</text><rect x="{LABEL_WIDTH}" y="{queue_y}" width="{block_width}" height="31" rx="5" fill="#313244" stroke="#f38ba8"/><text class="card-line mono" x="{}" y="{}">⚠ {} task jobs share {} workers · excess jobs can wait here</text>"##,
+                r##"<text class="lane mono" x="0" y="{}" fill="#f38ba8">FIFO queue</text><rect x="{LABEL_WIDTH}" y="{queue_y}" width="{block_width}" height="31" rx="5" fill="#313244" stroke="#f38ba8"/><text class="card-line mono" x="{}" y="{}">⚠ {} jobs · {} workers</text>"##,
                 queue_y + 20.0,
                 LABEL_WIDTH + 7.0,
                 queue_y + 20.0,
@@ -1836,7 +1809,7 @@ fn render_background_lanes(
         let source_y = trigger.source_y;
         let target_y = pool_y + 36.0;
         let tooltip = format!(
-            "{} {} gateway → pool {}\nDispatch occurs only if this background task is idle/ready\nIf already busy: empty output, no second job",
+            "{} {} → {}",
             trigger.cl_label, trigger.entity.label, pool_id,
         );
         writeln!(
@@ -2096,6 +2069,50 @@ mod tests {
     }
 
     #[test]
+    fn explicit_schedule_renders_assigned_workers_and_real_depth() {
+        let mut config = config(
+            r#"(
+            runtime: (planner: (kind: Pipeline, config: {"max_in_flight": 2})),
+            logging: (copperlist_count: 2),
+            tasks: [(id: "src", type: "demo::Source"), (id: "sink", type: "demo::Sink")],
+            cnx: [(src: "src", dst: "sink", msg: "u32")],
+        )"#,
+        );
+        let plan = CuPlan::from_config(&config).unwrap();
+        cu29_runtime::planner::ExplicitSchedule::new(plan)
+            .apply(&mut config)
+            .unwrap();
+        let sections = selected_graphs(&config, None).unwrap();
+        let svg = render_document(&config, &sections, None, None).unwrap();
+        assert!(svg.contains("2 CL max"));
+        assert!(svg.contains("Schedule"));
+        assert!(svg.contains("data-worker=\"stage_0\""));
+        assert!(svg.contains("data-worker=\"stage_1\""));
+        assert!(svg.contains("CL n+1"));
+        assert!(!svg.contains("main CopperList executor · 1 worker"));
+    }
+
+    #[test]
+    fn explicit_multi_copperlist_cycle_keeps_list_offsets() {
+        let mut config = config(
+            r#"(
+            logging: (copperlist_count: 4),
+            tasks: [(id: "src", type: "demo::Source"), (id: "sink", type: "demo::Sink")],
+            cnx: [(src: "src", dst: "sink", msg: "u32")],
+        )"#,
+        );
+        let plan = CuPlan::from_config_cyclic(&config, 2).unwrap();
+        cu29_runtime::planner::ExplicitSchedule::new(plan)
+            .apply(&mut config)
+            .unwrap();
+        let sections = selected_graphs(&config, None).unwrap();
+        let svg = render_document(&config, &sections, None, None).unwrap();
+        assert!(svg.contains("2 CL/cycle"));
+        assert!(svg.contains("CL n+1"));
+        assert!(svg.contains("data-worker=\"w0\""));
+    }
+
+    #[test]
     fn deterministic_svg_contains_schedule_details_and_stable_keys() {
         let config = config(
             r#"(
@@ -2122,8 +2139,8 @@ mod tests {
         let first = render_document(&config, &sections, None, None).unwrap();
         let second = render_document(&config, &sections, None, None).unwrap();
         assert_eq!(first, second);
-        assert!(first.contains("Serial projection"));
-        assert!(first.contains("Pipeline lanes"));
+        assert!(first.contains("Serial"));
+        assert!(first.contains("Pipeline"));
         assert!(first.contains("CPU 2"));
         assert!(first.contains("CPU 4"));
         assert!(first.contains("bus→board.spi"));
@@ -2293,18 +2310,18 @@ mod tests {
         )
         .unwrap();
         assert!(svg.contains("POLL / DISPATCH?"));
-        assert!(svg.contains("BACKGROUND POOL WORKER THREADS"));
-        assert!(svg.contains("RT GATEWAY ONLY"));
+        assert!(svg.contains("Background Workers"));
+        assert!(svg.contains("pool: vision"));
         assert!(svg.contains("POOL vision"));
-        assert!(svg.contains("vision job · running ?"));
+        assert!(svg.contains("vision job"));
         assert!(svg.contains(r#"data-background-gateway="true""#));
         assert!(svg.contains(r#"data-background-pool="vision""#));
         assert!(svg.contains(r#"data-background-trigger="2""#));
         assert!(svg.contains("OS scheduled"));
         assert!(svg.contains("policy=Nice(10)"));
         assert!(svg.contains("Stage 2: vision"));
-        assert!(svg.contains("2 CopperLists max in flight"));
-        assert!(svg.contains("Configured in-flight depth: 2"));
+        assert!(svg.contains("2 CL max"));
+        assert!(svg.contains("2 CL max"));
         assert!(svg.contains("CL n+1"));
         assert!(!svg.contains("Queue and blocking detail"));
     }
@@ -2341,10 +2358,10 @@ mod tests {
         )
         .unwrap();
         assert!(svg.contains("FIFO queue"));
-        assert!(svg.contains("2 task jobs share 1 workers"));
-        assert!(svg.contains("excess jobs can wait here"));
+        assert!(svg.contains("2 jobs · 1 workers"));
+        assert!(!svg.contains("excess jobs can wait here"));
         assert!(svg.contains("S02 detect (background job) ↔ S03 refine (background job)"));
-        assert!(!svg.contains("POTENTIAL CONTENTION in this formation: gpu0"));
+        assert!(!svg.contains("Resource conflict: gpu0"));
     }
 
     #[test]
@@ -2378,7 +2395,7 @@ mod tests {
             None,
         )
         .unwrap();
-        assert!(svg.contains("Configured in-flight depth: 6"));
+        assert!(svg.contains("6 CL max"));
         assert!(svg.contains("CL n+5"));
         assert!(svg.contains(r#"data-cl-offset="5""#));
     }
@@ -2416,7 +2433,7 @@ mod tests {
             None,
         )
         .unwrap();
-        assert!(svg.contains("Showing CL n through CL n+5 (6 of 7 active pipeline positions)"));
+        assert!(svg.contains("CL n–n+5 · 6/7 lanes"));
         assert!(svg.contains(r#"data-cl-offset="5""#));
         assert!(!svg.contains(r#"data-cl-offset="6""#));
     }
@@ -2447,8 +2464,8 @@ mod tests {
             None,
         )
         .unwrap();
-        assert!(svg.contains("Staggered concurrency formations"));
-        assert!(svg.contains("POTENTIAL CONTENTION in this formation: gpu0"));
+        assert!(svg.contains("Staggered"));
+        assert!(svg.contains("Resource conflict: gpu0"));
         assert!(svg.contains("⚠ gpu0: S02 detect ↔ S03 refine"));
         assert!(svg.contains(r##"stroke="#f38ba8" stroke-width="3""##));
     }
@@ -2522,14 +2539,14 @@ mod tests {
             None,
         )
         .unwrap();
-        assert!(svg.contains("Observed execution"));
-        assert!(svg.contains("packed back-to-back"));
+        assert!(svg.contains("Execution"));
+        assert!(!svg.contains("packed back-to-back"));
         assert!(svg.contains("CL #7"));
-        assert!(svg.contains("1 carried-forward slot(s) excluded"));
+        assert!(svg.contains("1 skipped slots"));
         assert!(svg.contains("max: 250 ns"));
-        assert!(svg.contains("observed overlap risk: gpu0"));
+        assert!(svg.contains("Resource overlap: gpu0"));
         assert!(svg.contains("3 overlap(s)"));
-        assert!(svg.contains("Residual gaps may include serialization"));
+        assert!(svg.contains("Gaps · p50"));
         assert!(svg.contains(r#"data-observed-origin="left""#));
     }
 
