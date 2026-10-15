@@ -231,7 +231,7 @@ soft_ratatui = { path = "vendor/soft_ratatui" }
 version = "1.4.0-dev"
 authors = ["Guillaume Binet <gbin@gootz.net>"]
 edition = "2024"
-rust-version = "1.95"
+rust-version = "1.96"
 license = "Apache-2.0"
 keywords = ["robotics", "middleware", "copper", "real-time"]
 categories = ["science::robotics"]
@@ -387,7 +387,7 @@ tempfile = { version = "3.23", default-features = false }
 spin = { version = "0.12" } # should be removed when std is on, but cargo is bad at negative features
 
 # rerun
-rerun = { version = "0.34", default-features = false, features = [
+rerun = { version = "0.38.1", default-features = false, features = [
   "sdk",
   "server",
   "log",
