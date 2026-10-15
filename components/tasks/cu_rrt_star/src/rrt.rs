@@ -637,8 +637,8 @@ impl<S: RrtSpace> RrtStar<S> {
             .distances_squared(new_pos, &mut self.scratch_d2);
         let mut near = core::mem::take(&mut self.scratch_near);
         near.clear();
-        for index in 0..n {
-            if self.scratch_d2[index] <= radius_sq {
+        for (index, &distance) in self.scratch_d2[..n].iter().enumerate() {
+            if distance <= radius_sq {
                 near.push(index as u32);
             }
         }
@@ -716,8 +716,7 @@ impl<S: RrtSpace> RrtStar<S> {
             .distances_squared(point, &mut self.scratch_d2);
         let mut best = 0u32;
         let mut best_distance = Area::new::<square_meter>(f32::INFINITY);
-        for index in 0..n {
-            let distance = self.scratch_d2[index];
+        for (index, &distance) in self.scratch_d2[..n].iter().enumerate() {
             if distance < best_distance {
                 best_distance = distance;
                 best = index as u32;
@@ -767,8 +766,8 @@ impl<S: RrtSpace> RrtStar<S> {
         stack.push(node);
         while let Some(index) = stack.pop() {
             self.tree[index as usize].cost += delta;
-            for i in 0..self.tree[index as usize].children.len() {
-                stack.push(self.tree[index as usize].children[i]);
+            for &child in &self.tree[index as usize].children {
+                stack.push(child);
             }
         }
         self.scratch_stack = stack;
