@@ -248,7 +248,16 @@ cu-vitfly = { path = "components/tasks/cu_vitfly", version = "~1.4.0-dev", defau
 zed-sdk = { path = "components/libs/zed_sdk", version = "~1.4.0-dev" }
 zed-sdk-sys = { path = "components/libs/zed_sdk_sys", version = "~1.4.0-dev" }
 cc = "1.2"
-eframe = "0.37"
+eframe = { version = "0.37", default-features = false, features = [
+  "accesskit",
+  "clipboard",
+  "default_fonts",
+  "glow",
+  "links",
+  "wayland",
+  "web_screen_reader",
+  "x11",
+] }
 candle-core = "0.11.0"
 candle-nn = "0.11.0"
 
