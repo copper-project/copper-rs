@@ -121,11 +121,11 @@ runtime, then records messages, timing, and state into one replayable log.
 - <img src="doc/static/version-1.2.svg" alt="v1.2" align="absmiddle" />&nbsp;&nbsp;&nbsp;**[Live Twinning Telemetry Over Lossy Links](https://copper-project.github.io/copper-rs-book/logstream-telemetry.html)**<br>
   Run selected robot tasks on the ground to reconstruct outputs you never transmitted, while keeping a replayable archive.
 
-- <img src="doc/static/version-1.3.svg" alt="v1.3" align="absmiddle" />&nbsp;&nbsp;&nbsp;**[Profile Guided Scheduling (PGS)](https://copper-project.github.io/copper-rs-book/profile-guided-scheduling.html)**<br>
-  Profile-Guided Scheduling turns measured timings, sensor rates, and deadlines into candidate schedules. Measure, select, and compile one into your runtime.
-
 - <img src="doc/static/version-1.3.svg" alt="v1.3" align="absmiddle" />&nbsp;&nbsp;&nbsp;**[First Class Clock Sync With Replay](https://copper-project.github.io/copper-rs-book/clock-sync.html)**<br>
   Synchronize `RobotClock` to PTP or custom references, track uncertainty, and replay clock corrections.
+
+- <img src="doc/static/version-1.3.svg" alt="v1.3" align="absmiddle" />&nbsp;&nbsp;&nbsp;**[Profile Guided Scheduling (PGS)](https://copper-project.github.io/copper-rs-book/profile-guided-scheduling.html)**<br>
+  Profile-Guided Scheduling turns measured timings, sensor rates, and deadlines into candidate schedules. Measure, select, and compile one into your runtime.
 
 ## Explore Copper
 
