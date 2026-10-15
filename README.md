@@ -105,11 +105,18 @@ and omits PGS scaffolding for that choice.
 
 The robot is a static thing: Copper turns its declared graph into a purpose-built
 runtime, then records messages, timing, and state into one replayable log.
+`RobotClock` makes time explicit across hardware, simulation, and replay.
 
-**Live telemetry:** stream robot data and structured logs to a ground station over
-UDP, view live task outputs, and save a replayable `.copper` archive. A live Copper
-twin can reconstruct selected deterministic task outputs locally to reduce
-bandwidth. Try the [telemetry demo](examples/cu_logstream_demo#native-telemetry-screen).
+## What Sets Copper Apart
+
+| Feature | What you get |
+| --- | --- |
+| <img src="doc/static/version-0.13.svg" alt="v0.13" align="absmiddle" /> &ensp;**[Time travel debugging](https://copper-project.github.io/copper-rs-book/logging-replay.html#remote-debug-and-time-traveler)** | Seek through a recording, restore task state, and re-execute your code with recorded inputs and robot time. |
+| <img src="doc/static/version-1.0.svg" alt="v1.0" align="absmiddle" /> &ensp;**[Typed log codecs](https://copper-project.github.io/copper-rs-book/logging-replay.html#typed-logging-codecs)** | Choose lossless compression per payload type in the task graph; Copper handles encoding and decoding for recording and replay. |
+| <img src="doc/static/version-1.1.svg" alt="v1.1" align="absmiddle" /> &ensp;**[Anytime computation](examples/cu_anytime_rrt_star)** | Produce a base result, then refine it within time or quality budgets, with refinement steps in the deterministic execution plan. |
+| <img src="doc/static/version-1.2.svg" alt="v1.2" align="absmiddle" /> &ensp;**[Live twinning](https://copper-project.github.io/copper-rs-book/logstream-telemetry.html)** | Run selected robot tasks on the ground to reconstruct outputs you never transmitted, while keeping a replayable archive. |
+| <img src="doc/static/version-1.3.svg" alt="v1.3" align="absmiddle" /> &ensp;**[Profile-Guided Scheduling (PGS)](https://copper-project.github.io/copper-rs-book/profile-guided-scheduling.html)** | Turn measured timings, sensor rates, and deadlines into candidate schedules. Measure, select, and compile one into your runtime. |
+| <img src="doc/static/version-1.3.svg" alt="v1.3" align="absmiddle" /> &ensp;**[Replayable clock synchronization](https://copper-project.github.io/copper-rs-book/clock-sync.html)** | Synchronize `RobotClock` to PTP or custom references, track uncertainty, and replay clock corrections. Experimental; Serial plan. |
 
 ## Explore Copper
 
