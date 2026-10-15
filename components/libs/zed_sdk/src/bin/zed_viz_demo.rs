@@ -231,8 +231,8 @@ impl ZedVizDemoApp {
         ctx.request_repaint_after(FRAME_INTERVAL);
     }
 
-    fn draw_header(&mut self, ctx: &egui::Context) {
-        egui::TopBottomPanel::top("zed_viz_demo_header").show(ctx, |ui| {
+    fn draw_header(&mut self, ui: &mut egui::Ui) {
+        egui::Panel::top("zed_viz_demo_header").show(ui, |ui| {
             ui.horizontal(|ui| {
                 if let Some(info) = self.info {
                     ui.label(format!("serial {}", info.serial_number));
@@ -297,11 +297,11 @@ impl ZedVizDemoApp {
 }
 
 impl eframe::App for ZedVizDemoApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        self.update_frame(ctx);
-        self.draw_header(ctx);
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.update_frame(ui.ctx());
+        self.draw_header(ui);
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             ui.centered_and_justified(|ui| self.draw_image(ui));
         });
     }
