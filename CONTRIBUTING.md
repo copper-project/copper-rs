@@ -181,22 +181,9 @@ workspace or changes a shared Copper interface.
 <details>
 <summary><strong>Dependency changes</strong></summary>
 
-Keep dependencies minimal and explain why each new dependency is required. Run
-`cargo shear` when changing manifests:
-
-```bash
-cargo install --locked cargo-shear
-cargo shear
-```
-
-If `cargo-shear` flags a feature-gated or build-time dependency incorrectly, document
-the exception next to the affected package:
-
-```toml
-[package.metadata.cargo-shear]
-# Required by build.rs for generated bindings.
-ignored = ["some-crate"]
-```
+Keep dependencies minimal and explain why each new dependency is required. Review
+changed manifests for unused dependencies, including feature-gated and build-time
+dependencies.
 
 </details>
 

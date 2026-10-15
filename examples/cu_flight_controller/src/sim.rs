@@ -1,8 +1,6 @@
 // Simulation engine: drives the raw (app-deprecated) lifecycle API on purpose.
 // It needs mid-flight runtime access that the lifecycle typestate
 // deliberately does not expose.
-#![allow(deprecated)]
-
 #[cfg(feature = "sim")]
 extern crate alloc;
 
@@ -120,6 +118,7 @@ where
     Ok(())
 }
 
+#[allow(deprecated)]
 mod mcu_copper {
     use super::*;
 
@@ -334,6 +333,7 @@ mod mcu_copper {
     }
 }
 
+#[allow(deprecated)]
 mod compute_copper {
     use super::*;
 
