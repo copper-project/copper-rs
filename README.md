@@ -109,14 +109,23 @@ runtime, then records messages, timing, and state into one replayable log.
 
 ## What Sets Copper Apart
 
-| Feature | What you get |
-| --- | --- |
-| <img src="doc/static/version-0.13.svg" alt="v0.13" align="absmiddle" />&nbsp;&nbsp;&nbsp;**[Time&nbsp;travel&nbsp;debugging](https://copper-project.github.io/copper-rs-book/logging-replay.html#remote-debug-and-time-traveler)** | Seek through a recording, restore task state, and re-execute your code with recorded inputs and robot time. |
-| <img src="doc/static/version-1.0.svg" alt="v1.0" align="absmiddle" />&nbsp;&nbsp;&nbsp;**[Typed&nbsp;log&nbsp;codecs](https://copper-project.github.io/copper-rs-book/logging-replay.html#typed-logging-codecs)** | Choose lossless compression per payload type in the task graph; Copper handles encoding and decoding for recording and replay. |
-| <img src="doc/static/version-1.1.svg" alt="v1.1" align="absmiddle" />&nbsp;&nbsp;&nbsp;**[Anytime&nbsp;computation](examples/cu_anytime_rrt_star)** | Produce a base result, then refine it within time or quality budgets, with refinement steps in the deterministic execution plan. |
-| <img src="doc/static/version-1.2.svg" alt="v1.2" align="absmiddle" />&nbsp;&nbsp;&nbsp;**[Live&nbsp;twinning](https://copper-project.github.io/copper-rs-book/logstream-telemetry.html)** | Run selected robot tasks on the ground to reconstruct outputs you never transmitted, while keeping a replayable archive. |
-| <img src="doc/static/version-1.3.svg" alt="v1.3" align="absmiddle" />&nbsp;&nbsp;&nbsp;**[PGS&nbsp;scheduling](https://copper-project.github.io/copper-rs-book/profile-guided-scheduling.html)** | Profile-Guided Scheduling turns measured timings, sensor rates, and deadlines into candidate schedules. Measure, select, and compile one into your runtime. |
-| <img src="doc/static/version-1.3.svg" alt="v1.3" align="absmiddle" />&nbsp;&nbsp;&nbsp;**[Clock&nbsp;sync&nbsp;replay](https://copper-project.github.io/copper-rs-book/clock-sync.html)** | Synchronize `RobotClock` to PTP or custom references, track uncertainty, and replay clock corrections. |
+- <img src="doc/static/version-0.13.svg" alt="v0.13" align="absmiddle" />&nbsp;&nbsp;&nbsp;**[Time&nbsp;travel&nbsp;debugging](https://copper-project.github.io/copper-rs-book/logging-replay.html#remote-debug-and-time-traveler)**<br>
+  Seek through a recording, restore task state, and re-execute your code with recorded inputs and robot time.
+
+- <img src="doc/static/version-1.0.svg" alt="v1.0" align="absmiddle" />&nbsp;&nbsp;&nbsp;**[Typed&nbsp;log&nbsp;codecs](https://copper-project.github.io/copper-rs-book/logging-replay.html#typed-logging-codecs)**<br>
+  Choose lossless compression per payload type in the task graph; Copper handles encoding and decoding for recording and replay.
+
+- <img src="doc/static/version-1.1.svg" alt="v1.1" align="absmiddle" />&nbsp;&nbsp;&nbsp;**[Anytime&nbsp;computation](examples/cu_anytime_rrt_star)**<br>
+  Produce a base result, then refine it within time or quality budgets, with refinement steps in the deterministic execution plan.
+
+- <img src="doc/static/version-1.2.svg" alt="v1.2" align="absmiddle" />&nbsp;&nbsp;&nbsp;**[Live&nbsp;twinning](https://copper-project.github.io/copper-rs-book/logstream-telemetry.html)**<br>
+  Run selected robot tasks on the ground to reconstruct outputs you never transmitted, while keeping a replayable archive.
+
+- <img src="doc/static/version-1.3.svg" alt="v1.3" align="absmiddle" />&nbsp;&nbsp;&nbsp;**[PGS&nbsp;scheduling](https://copper-project.github.io/copper-rs-book/profile-guided-scheduling.html)**<br>
+  Profile-Guided Scheduling turns measured timings, sensor rates, and deadlines into candidate schedules. Measure, select, and compile one into your runtime.
+
+- <img src="doc/static/version-1.3.svg" alt="v1.3" align="absmiddle" />&nbsp;&nbsp;&nbsp;**[Clock&nbsp;sync&nbsp;replay](https://copper-project.github.io/copper-rs-book/clock-sync.html)**<br>
+  Synchronize `RobotClock` to PTP or custom references, track uncertainty, and replay clock corrections.
 
 ## Explore Copper
 
