@@ -150,7 +150,12 @@ fn configured_runtime_bootstraps_over_udp_in_actual_arrival_order() -> CuResult<
         // Drive the clean fixture by observable wire progress, not assumptions
         // about debug-build FEC speed or an unenforced link budget. This wait is
         // entirely in the test harness; the production sender remains one-way.
-        let deadline = Instant::now() + Duration::from_secs(2);
+        // The cap is the failure bound for a cold dev-profile worker on a shared
+        // runner. Those runners can take more than five seconds before
+        // asynchronous logstream progress shows up; fifteen seconds covers the
+        // cold first accept_record (manifest plus CopperList 0) and the later
+        // recovery-bundle waits without turning the poll into a sleep.
+        let deadline = Instant::now() + Duration::from_secs(15);
         let mut source_received = false;
         // At the late-join and outage boundaries, also wait for a fresh receiver
         // to bootstrap. Manifest repetition is periodic, so source progress alone
