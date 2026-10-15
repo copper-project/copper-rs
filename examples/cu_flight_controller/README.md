@@ -208,7 +208,8 @@ appended runs. Select a run with
 
 ### Python GNSS Extraction
 
-You can use the PyO3 bindings to iterate CopperLists directly from Python and
+The PyO3 bindings require Python 3.9 or newer.
+You can use them to iterate CopperLists directly from Python and
 extract GNSS fields without going through JSON.
 
 This is an offline log-analysis workflow, not a runtime Python task. Python only

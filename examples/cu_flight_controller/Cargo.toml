@@ -70,7 +70,7 @@ cu-ratelimit = { path = "../../components/tasks/cu_ratelimit", version = "~1.4.0
 
 ## Log reader depencies
 cu29-export = { workspace = true, optional = true }
-pyo3 = { version = "0.29", optional = true, default-features = false, features = [
+pyo3 = { version = "0.30", optional = true, default-features = false, features = [
   "extension-module",
   "macros",
 ] }
