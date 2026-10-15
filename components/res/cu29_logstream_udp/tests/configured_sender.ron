@@ -10,10 +10,10 @@
             id: "network",
             provider: "cu29_logstream_udp::CuUdpLogStreamResources",
             config: {
+                // Loopback integration fixtures leave TTL at the OS default so Windows local delivery is not a single hop.
                 "bind_addr": "127.0.0.1:0",
                 "remote_addr": "127.0.0.1:7447",
                 "send_buffer_bytes": 262144,
-                "ttl": 1,
             },
         ),
     ],

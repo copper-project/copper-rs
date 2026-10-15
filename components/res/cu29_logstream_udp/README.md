@@ -93,7 +93,10 @@ out-of-range values are rejected during setup. IPv6 sockets use IPv6-only mode.
 IPv6 DSCP is supported on Linux, macOS, and Android; explicitly requesting it on
 other targets fails during setup. Explicit DSCP configuration is rejected on
 Windows for both address families: [Winsock requires its separate QoS API](https://learn.microsoft.com/en-us/windows/win32/winsock/ipproto-ip-socket-options)
-to set the traffic class. Omit `dscp` for the basic Windows carrier.
+to set the traffic class. Omit `dscp` for the basic Windows carrier. `ttl: 1`
+toward a loopback `remote_addr` is a single hop, and Windows may expire it before
+local delivery, so local fixtures should omit `ttl` or use a hop limit of at
+least 2.
 
 Reception writes directly into the supplied slice without an internal packet
 allocation or an extra payload copy. `Ok(None)` means no data, and `Ok(Some(0))`
