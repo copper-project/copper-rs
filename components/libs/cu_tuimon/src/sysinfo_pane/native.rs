@@ -96,7 +96,7 @@ pub(crate) fn default_system_info() -> SystemInfo {
         PfetchInfo::De,
     ];
 
-    let logo = pfetch::logo(&os);
+    let logo = pfetch::logo(&os, None);
     let gathered_pfetch_info: Vec<(Color, String, String)> = all_infos
         .iter()
         .filter_map(|info| match info {
