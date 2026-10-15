@@ -1,7 +1,7 @@
 [package]
 name = "cargo-cunew"
 description = "Bootstrap Copper projects from bundled templates."
-version.workspace = true
+version = "1.3.1"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
