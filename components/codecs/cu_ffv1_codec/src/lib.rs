@@ -233,7 +233,7 @@ impl CuLogCodec<CuImage<Vec<u8>>> for CuFfv1Codec {
     ) -> Result<(), EncodeError> {
         #[cfg(feature = "ffmpeg")]
         {
-            return self.encode_payload_ffmpeg(payload, encoder);
+            self.encode_payload_ffmpeg(payload, encoder)
         }
 
         #[cfg(not(feature = "ffmpeg"))]
@@ -252,7 +252,7 @@ impl CuLogCodec<CuImage<Vec<u8>>> for CuFfv1Codec {
     ) -> Result<CuImage<Vec<u8>>, DecodeError> {
         #[cfg(feature = "ffmpeg")]
         {
-            return self.decode_payload_ffmpeg(decoder);
+            self.decode_payload_ffmpeg(decoder)
         }
 
         #[cfg(not(feature = "ffmpeg"))]
