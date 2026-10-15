@@ -463,6 +463,27 @@ where
 mod tests {
     use super::*;
     use std::fs;
+    use std::process::Command;
+
+    #[test]
+    fn packages_workspace_viewer_helper() {
+        let output = Command::new(env!("CARGO"))
+            .args(["package", "--list", "--allow-dirty", "--quiet"])
+            .current_dir(env!("CARGO_MANIFEST_DIR"))
+            .output()
+            .expect("package file list");
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let files = String::from_utf8(output.stdout).expect("UTF-8 package file list");
+        // Cargo excludes nested packages, even with templates/** in package.include.
+        for file in ["Cargo.toml.template", "src/main.rs"] {
+            let path = format!("templates/cu_full/tools/cu29_view_helper/{file}");
+            assert!(files.lines().any(|line| line == path), "missing {path}");
+        }
+    }
 
     #[test]
     fn strips_cargo_subcommand_marker() {
@@ -620,6 +641,7 @@ mod tests {
         assert!(manifest.contains("cu29-build = {  version = \"~1.2.1\""));
         assert!(manifest.contains("cu29-export = {  version = \"~1.2.1\""));
         assert!(project.join("apps/cu_example_app/logs/.keep").is_file());
+        assert!(project.join("tools/cu29_view_helper/Cargo.toml").is_file());
     }
 
     #[test]
