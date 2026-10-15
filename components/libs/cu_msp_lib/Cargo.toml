@@ -23,7 +23,7 @@ bincode = { workspace = true, features = ["alloc"], optional = true }
 serde = { workspace = true }
 heapless = { workspace = true }
 crc-any = { version = "3.0.1", default-features = false }
-packed_struct = { version = "0.10.1", default-features = false }
+packed_struct = { version = "0.12.0", default-features = false }
 
 [features]
 reflect = ["dep:bevy_reflect"]
