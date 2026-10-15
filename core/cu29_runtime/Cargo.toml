@@ -31,7 +31,7 @@ serde_derive = { workspace = true }
 serde = { workspace = true }
 smallvec = { workspace = true }
 arrayvec = { workspace = true, default-features = false, features = ["serde"] }
-html-escape = { version = "0.2", default-features = false }
+html-escape = { version = "0.3", default-features = false }
 petgraph = { workspace = true, default-features = false, features = [
   "serde",
   "serde-1",
