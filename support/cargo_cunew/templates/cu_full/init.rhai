@@ -7,6 +7,10 @@ file::rename(
     "components/bridges/cu_example_shared_bridge/Cargo.toml.template",
     "components/bridges/cu_example_shared_bridge/Cargo.toml",
 );
+file::rename(
+    "tools/cu29_view_helper/Cargo.toml.template",
+    "tools/cu29_view_helper/Cargo.toml",
+);
 if !variable::get("pgs_enabled") {
     file::delete("apps/cu_example_app/schedule.ron");
     file::delete("apps/cu_example_app/src/pgs_candidate.rs");
