@@ -2,6 +2,8 @@
 
 Copper log export helpers and Python-facing log readers.
 
+The optional Python bindings require Python 3.9 or newer.
+
 This crate is for offline analysis of `.copper` logs. That distinction matters:
 using Python here is fine because it does not put Python on the runtime hot path.
 

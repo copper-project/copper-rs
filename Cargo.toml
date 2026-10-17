@@ -231,7 +231,7 @@ soft_ratatui = { path = "vendor/soft_ratatui" }
 version = "1.4.0-dev"
 authors = ["Guillaume Binet <gbin@gootz.net>"]
 edition = "2024"
-rust-version = "1.95"
+rust-version = "1.96"
 license = "Apache-2.0"
 keywords = ["robotics", "middleware", "copper", "real-time"]
 categories = ["science::robotics"]
@@ -347,7 +347,7 @@ erased-serde = { version = "0.4", default-features = false, features = [
   "alloc",
 ] }
 serde_derive = { version = "1.0", features = ["default"] }
-pyo3 = { version = "0.29", default-features = false, features = ["macros"] }
+pyo3 = { version = "0.30", default-features = false, features = ["macros"] }
 inventory = "0.3"
 
 # External CLI
@@ -385,10 +385,10 @@ compact_str = { version = "0.10", default-features = false, features = [
   "serde",
 ] }
 paste = { version = "1.0.15", default-features = false }
-bevy_reflect = { version = "0.19.0", default-features = false, features = [
+bevy_reflect = { version = "0.19.1", default-features = false, features = [
   "auto_register_static",
 ] }
-bevy_reflect_derive = "0.19.0"
+bevy_reflect_derive = "0.19.1"
 
 # used across testing
 tempfile = { version = "3.23", default-features = false }
@@ -396,7 +396,7 @@ tempfile = { version = "3.23", default-features = false }
 spin = { version = "0.12" } # should be removed when std is on, but cargo is bad at negative features
 
 # rerun
-rerun = { version = "0.34", default-features = false, features = [
+rerun = { version = "0.38.1", default-features = false, features = [
   "sdk",
   "server",
   "log",
@@ -422,7 +422,7 @@ hashbrown = { version = "0.17", features = ["serde"] }
 anyhow = { version = "1.0", default-features = false }
 arrayvec = { version = "0.7", default-features = false }
 avian3d = { version = "0.7.0", default-features = false }
-bevy = { version = "0.19.0", default-features = false }
+bevy = { version = "0.19.1", default-features = false }
 bevy_ratatui = { version = "0.11.1", default-features = false }
 buddy_system_allocator = { version = "0.13", default-features = false }
 bytemuck = "1.23.0"
@@ -438,7 +438,7 @@ defmt-rtt = "1.1"
 embedded-alloc = { version = "0.7", default-features = false }
 # Bevy 0.19.1 passes syn 2 types into this crate, but 0.12.2 switched to syn 3.
 encase_derive_impl = "=0.12.1"
-ffmpeg-next = { version = "8.1.0", default-features = false, features = [
+ffmpeg-next = { version = "9.0.0", default-features = false, features = [
   "codec",
   "format",
 ] }

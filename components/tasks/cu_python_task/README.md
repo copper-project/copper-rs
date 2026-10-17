@@ -1,6 +1,6 @@
 # `cu-python-task`
 
-Python-backed Copper tasks for algorithm prototyping.
+Python-backed Copper tasks for algorithm prototyping. Requires Python 3.9 or newer.
 
 ## Read This First
 
