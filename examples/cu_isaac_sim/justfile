@@ -1,0 +1,69 @@
+import "../../justfile"
+
+isaac_image := "nvcr.io/nvidia/isaac-sim:6.1.0"
+export ISAAC_EXAMPLE := justfile_directory()
+export ISAAC_STATE := justfile_directory() / "state"
+
+# Shared Docker flags; each recipe below supplies its command directly.
+isaac_container := replace('''
+    docker run --rm --init --gpus all --network host --shm-size 2g
+        --user "$(id -u):$(id -g)"
+        --group-add 1234
+        --env HOME=/home/copper
+        --env ACCEPT_EULA=Y --env PRIVACY_CONSENT=N
+        --env NVIDIA_DRIVER_CAPABILITIES=all
+        --env HUB__ARGS__DETECT_ONLY=false
+        --entrypoint /bin/bash --workdir /isaac-sim
+        --mount "type=bind,src=$ISAAC_EXAMPLE/isaac,dst=/workspace/isaac,readonly"
+        --mount "type=bind,src=$ISAAC_STATE/output,dst=/output"
+        --mount "type=bind,src=$ISAAC_STATE/home,dst=/home/copper"
+        --mount "type=bind,src=$ISAAC_STATE/cache/main,dst=/home/copper/.cache"
+        --mount "type=bind,src=$ISAAC_STATE/cache/computecache,dst=/home/copper/.nv/ComputeCache"
+        --mount "type=bind,src=$ISAAC_STATE/cache/kit,dst=/isaac-sim/kit/cache"
+        --mount "type=bind,src=$ISAAC_STATE/cache/hub,dst=/var/cache/hub"
+        --mount "type=bind,src=$ISAAC_STATE/config,dst=/home/copper/.nvidia-omniverse/config"
+        --mount "type=bind,src=$ISAAC_STATE/data,dst=/home/copper/.local/share/ov/data"
+        --mount "type=bind,src=$ISAAC_STATE/logs,dst=/home/copper/.nvidia-omniverse/logs"
+        --mount "type=bind,src=$ISAAC_STATE/pkg,dst=/home/copper/.local/share/ov/pkg"
+        --mount "type=bind,src=$ISAAC_STATE/kit/data,dst=/isaac-sim/kit/data"
+        --mount "type=bind,src=$ISAAC_STATE/kit/logs,dst=/isaac-sim/kit/logs"
+''', "\n", " ")
+
+[private]
+_state:
+    mkdir -p "$ISAAC_STATE"/home "$ISAAC_STATE"/kit/data "$ISAAC_STATE"/kit/logs "$ISAAC_STATE"/cache/main "$ISAAC_STATE"/cache/computecache "$ISAAC_STATE"/cache/kit "$ISAAC_STATE"/cache/hub "$ISAAC_STATE"/config "$ISAAC_STATE"/data "$ISAAC_STATE"/logs "$ISAAC_STATE"/pkg "$ISAAC_STATE"/output
+    mkdir -p "$ISAAC_STATE"/home/.cache "$ISAAC_STATE"/home/.nv/ComputeCache "$ISAAC_STATE"/home/.nvidia-omniverse/config "$ISAAC_STATE"/home/.nvidia-omniverse/logs "$ISAAC_STATE"/home/.local/share/ov/data "$ISAAC_STATE"/home/.local/share/ov/pkg
+
+# Check host driver, Docker access, and local XWayland prerequisites.
+[default]
+doctor:
+    docker info
+    nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv
+    test -n "$DISPLAY" && test -d /tmp/.X11-unix
+    test -r "${XAUTHORITY:-$HOME/.Xauthority}"
+
+# Download the pinned NVIDIA image.
+pull:
+    docker pull {{isaac_image}}
+
+# Run NVIDIA's headless compatibility checker with GPU passthrough.
+compatibility: _state
+    {{isaac_container}} {{isaac_image}} ./isaac-sim.compatibility_check.sh --/app/quitAfter=10 --no-window
+
+# Validate the approach and sensors, then pause in the overview for inspection.
+gui: _state
+    test -n "$DISPLAY" && test -d /tmp/.X11-unix
+    test -r "${XAUTHORITY:-$HOME/.Xauthority}"
+    {{isaac_container}} \
+        --hostname "$(hostname)" --env DISPLAY --env XAUTHORITY=/tmp/isaac.Xauthority \
+        --mount type=bind,src=/tmp/.X11-unix,dst=/tmp/.X11-unix,readonly \
+        --mount "type=bind,src=${XAUTHORITY:-$HOME/.Xauthority},dst=/tmp/isaac.Xauthority,readonly" \
+        {{isaac_image}} ./python.sh /workspace/isaac/smoke.py --mode gui --output /output/gui
+
+# Check settling, floor, clearance, onboard RGB, and complete RTX lidar scans.
+headless: _state
+    {{isaac_container}} {{isaac_image}} ./python.sh /workspace/isaac/smoke.py --mode headless --output /output/headless
+
+# Open a shell in the same GPU container with persistent caches.
+shell: _state
+    {{isaac_container}} -it {{isaac_image}}
