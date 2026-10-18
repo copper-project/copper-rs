@@ -1,14 +1,38 @@
 {
   "target": "/World/warehouse/Forklift/S_ForkliftBody",
-  "spawn_position_m": [7.5, -1.5, 0.04],
+  "spawn_position_m": [
+    7.5,
+    -1.5,
+    0.04
+  ],
   "spawn_yaw_deg": 180.0,
-  "overview_eye_m": [8.0, -5.0, 2.5],
-  "overview_target_m": [5.6, -1.6, 0.75],
+  "overview_eye_m": [
+    8.0,
+    -5.0,
+    2.5
+  ],
+  "overview_target_m": [
+    5.6,
+    -1.6,
+    0.75
+  ],
   "chassis": "/World/jetbot/chassis",
-  "camera_translation_m": [0.075, 0.0, 0.18],
-  "lidar_translation_m": [0.0, 0.0, 0.30],
+  "camera_translation_m": [
+    0.075,
+    0.0,
+    0.18
+  ],
+  "lidar_translation_m": [
+    0.0,
+    0.0,
+    0.3
+  ],
   "lidar_config": "Example_Rotary",
   "physics_hz": 60,
   "sensor_hz": 10,
-  "camera_resolution_hw": [240, 320]
+  "camera_resolution_hw": [
+    240,
+    320
+  ],
+  "lidar_near_range_m": 0.3
 }

@@ -4,8 +4,9 @@ Status: implementation started. The [environment scaffold](../examples/cu_isaac_
 provides container, UI, asset-loading, and render checks. Docker GPU/Vulkan access,
 the compatibility checker, headless rendering, and the local XWayland window have
 been validated on the RTX 3090. The fixed approach, onboard RGB, and complete RTX
-lidar scans also pass the headless scene/sensor check. Copper integration and
-the demo commands below are still planned.
+lidar scans also pass the headless scene/sensor check. Shared-memory transport, the native Copper graph, simulation-clock stepping,
+and both ordinary and forced-stop control pass headless checks. Full sensor-log
+recovery and deterministic replay remain planned.
 
 ## Goal
 
@@ -78,6 +79,8 @@ The camera and lidar mount translations relative to the chassis are
 `[0.075, 0, 0.18]` and `[0, 0, 0.30]`. Both run at 10 Hz; physics runs at 60 Hz.
 The onboard camera looks along chassis +X and produces 320 × 240 RGB. The RTX
 `Example_Rotary` profile accumulates complete Cartesian scans in world coordinates.
+Override its 1 m minimum range to 0.3 m so the 0.65 m controller threshold remains
+observable during the approach.
 
 `just headless` verifies settling, floor and corridor raycasts, nonuniform camera
 pixels, and three complete scans with distinct timestamps 100 ms apart. On the
@@ -86,6 +89,16 @@ local RTX 3090, the lidar reports approximately 461,000 valid points per scan an
 at 2.25 m. Outputs include `overview.png`, `camera.png`, `lidar.npz`, and
 `report.json` under the example's `state/output/headless/`. `just gui` runs the
 same checks, then pauses with the overview selected for visual inspection.
+
+`just run` now launches the native graph and local window for 130 observations;
+`just run headless 130` runs the same exchange without a window. Every observation
+produces one control iteration, approximately 100 ms apart in simulation time.
+The validated run travels 1.59 m, stops when lidar clearance crosses 0.65 m, and
+ends with 0.68 m of PhysX collider clearance. The forced-stop callback produces
+30 zero wheel commands while both sensor branches continue processing; measured
+chassis movement is about 0.04 mm of settling. `control.json` and
+`observations.jsonl` record commands and publication metadata beside the scene
+report. Native full-payload logs and scenario JSON live in the example's `logs/`.
 
 NVIDIA also provides office, hospital, and larger warehouse environments. The small
 warehouse with forklifts is the default to keep integration and rendering demands
@@ -111,7 +124,7 @@ Isaac container                           Native Copper process
 The Copper graph has two branches:
 
 ```text
-camera source → image statistics
+camera source → image statistics → telemetry sink
 lidar source  → forward clearance → stop controller → motor sink
 ```
 
@@ -121,8 +134,8 @@ decision.
 
 ### Isaac adapter and timing
 
-Use a small mounted Isaac extension for the local GUI. Share scene creation and
-adapter code with the headless entrypoint. Load the premade warehouse and Jetbot
+Use mounted Python code for the local GUI and headless entrypoint. Share scene
+creation and adapter code between both modes. Load the premade warehouse and Jetbot
 assets, attach the sensors, and persist shader and asset caches across launches.
 
 Isaac owns simulation advancement. At each control boundary:
@@ -166,6 +179,22 @@ acknowledgements. Large sensor arrays stay in shared memory.
 Shared memory avoids bulk socket transfers; GPU readback, the lidar conversion,
 and recording still have costs. Measure them separately from task execution.
 
+The implementation uses a versioned, newline-delimited JSON protocol bounded to
+64 KiB per metadata message. The native process grants one camera buffer and one
+lidar buffer for each observation sequence. Python maps Copper's descriptors and
+publishes packed RGB plus 20-byte little-endian lidar records: XYZ float32,
+intensity float32, and acquisition offset uint32. Bulk sensor bytes never pass
+through the socket. The next command carries the same sequence and simulation
+time; no further physics advances while Isaac waits for it.
+
+Pools are created before the loop, with eight image/cloud slots and four
+CopperLists. The adapter converts world points into the lidar frame at the
+observation boundary, preserving per-point acquisition times. It does not deskew
+each point using a historical robot pose. Sensor capacity is 524,288 points per
+complete scan. Overflow or exhausted leases aborts the run. The launcher sets
+`TMPDIR` to its temporary session directory so existing Copper pool files appear
+under the Docker bind mount, without changing the core pool API.
+
 ### Task overrides
 
 Build the generated runtime with `sim_mode = true`. In its generated `SimStep`
@@ -206,7 +235,7 @@ Proposed example-local commands:
 | Command | Purpose |
 | --- | --- |
 | `just run` | Launch the local Isaac window and Copper demo |
-| `just headless` | Record the same scenario without a window |
+| `just run headless 130` | Record the same scenario without a window |
 | `just replay` | Recompute processing and control from a recorded log |
 | `just inspect` | Inspect recorded sensors and derived outputs |
 
@@ -218,9 +247,10 @@ Proposed example-local commands:
 - [x] Load the premade warehouse and Jetbot; select and document the existing
       forklift target, collision geometry, fixed spawn pose, and overview camera.
 - [x] Render valid camera frames and complete lidar scans in the warehouse.
-- [ ] Implement shared-memory leases and the Unix socket exchange.
-- [ ] Connect the Copper graph, simulation clock, and hardware overrides.
-- [ ] Demonstrate stopping before collision and `--override-controller=stop`.
+- [x] Implement shared-memory leases and the Unix socket exchange.
+- [x] Connect the Copper graph, simulation clock, and hardware overrides.
+- [x] Demonstrate stopping before collision and `--override-controller=stop`
+      in headless runs; visually confirm the driven approach in the local window.
 - [ ] Record and recover full sensor contents after process shutdown.
 - [ ] Implement replay, threshold comparison, and inspection.
 - [ ] Document launch, recording, replay, and first-run cache behavior.

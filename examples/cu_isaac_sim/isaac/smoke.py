@@ -11,7 +11,11 @@ def main():
     parser.add_argument("--mode", choices=("gui", "headless"), required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--timeout", type=float, default=600.0)
+    parser.add_argument("--session", type=Path)
+    parser.add_argument("--observations", type=int, default=30)
     args = parser.parse_args()
+    if not 1 <= args.observations <= 10_000:
+        parser.error("--observations must be between 1 and 10000")
     args.output.mkdir(parents=True, exist_ok=True)
     report_path = args.output / "report.json"
     report = {"status": "starting", "mode": args.mode}
@@ -22,6 +26,7 @@ def main():
     app = SimulationApp(
         {
             "headless": args.mode == "headless",
+            "enable_motion_bvh": args.session is not None,
             "width": 1280,
             "height": 720,
             "extra_args": ["--/persistent/app/usd/muteUsdDiagnostics=false"],
@@ -142,6 +147,15 @@ def main():
                 break
         if camera_frame is None or len(scans) < 3:
             raise RuntimeError(f"Sensor validation incomplete: camera={camera_frame is not None}, complete_scans={len(scans)}")
+        if args.session is not None:
+            from transport import exchange
+
+            report.update(status="running_copper")
+            report_path.write_text(json.dumps(report, indent=2) + "\n")
+            report["copper"] = exchange(
+                app, sim, stage, config, camera, lidar,
+                args.session, args.observations, args.output,
+            )
         sim.pause()
         rep.orchestrator.step(rt_subframes=4, delta_time=0.0)
         overview = np.asarray(overview_rgb.get_data())[:, :, :3]
@@ -159,7 +173,8 @@ def main():
             lidar={"path": config["chassis"] + "/Lidar", "config": config["lidar_config"], "tick_hz": config["sensor_hz"], "points_frame": "world", "scans": scans},
         )
         report_path.write_text(json.dumps(report, indent=2) + "\n")
-        print(f"Scene/sensor check passed: {args.output}", flush=True)
+        label = f"Copper run passed ({args.observations} observations)" if args.session else "Scene/sensor check passed"
+        print(f"{label}: {args.output}", flush=True)
         if args.mode == "gui":
             viewport.camera_path = "/World/Overview"
             while app.is_running():

@@ -140,6 +140,7 @@ members = [
   "examples/cu_rate_target",
   "examples/cu_reflect_demo",
   "examples/cu_pointclouds",
+  "examples/cu_isaac_sim",
   "examples/cu_peer_triangulation",
   "examples/cu_python_task_demo",
   "examples/cu_run_in_sim",

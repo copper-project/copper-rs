@@ -1,0 +1,37 @@
+(
+    tasks: [
+        (
+            id: "camera",
+            type: "cu29::simulation::CuSimSrcTask<tasks::CameraFrame>",
+            logging: (handle_content: all),
+        ),
+        (id: "image_stats", type: "tasks::ImageStatistics"),
+        (id: "telemetry", type: "cu29::simulation::CuSimSinkTask<(tasks::ImageStats,)>"),
+        (
+            id: "lidar",
+            type: "cu29::simulation::CuSimSrcTask<tasks::LidarFrame>",
+            logging: (handle_content: all),
+        ),
+        (id: "clearance", type: "tasks::ForwardClearance"),
+        (
+            id: "controller",
+            type: "tasks::StopController",
+            config: {"stop_distance_m": 0.65, "wheel_speed_rad_s": 5.0},
+        ),
+        (id: "motor", type: "cu29::simulation::CuSimSinkTask<(tasks::MotorCommand,)>"),
+    ],
+    cnx: [
+        (src: "camera", dst: "image_stats", msg: "tasks::CameraFrame"),
+        (src: "image_stats", dst: "telemetry", msg: "tasks::ImageStats"),
+        (src: "lidar", dst: "clearance", msg: "tasks::LidarFrame"),
+        (src: "clearance", dst: "controller", msg: "tasks::Clearance"),
+        (src: "controller", dst: "motor", msg: "tasks::MotorCommand"),
+    ],
+    logging: (
+        enable_task_logging: true,
+        copperlist_count: 4,
+        keyframe_interval: 10,
+        slab_size_mib: 256,
+        section_size_mib: 32,
+    ),
+)
