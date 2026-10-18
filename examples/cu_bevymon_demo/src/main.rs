@@ -76,7 +76,7 @@ enum CopperState {
     Stopped,
 }
 
-#[derive(Resource)]
+// Async queue endpoints are not Sync; keep the runtime on Bevy's main thread.
 struct CopperDriver {
     state: CopperState,
     iteration_timer: Timer,
@@ -118,7 +118,7 @@ fn main() {
             }),
     )
     .insert_resource(ClearColor(Color::srgb(0.04, 0.05, 0.07)))
-    .insert_resource(copper)
+    .insert_non_send(copper)
     .init_resource::<LayoutSpawned>()
     .init_resource::<DemoCameraRig>()
     .add_systems(
@@ -167,7 +167,7 @@ fn build_copper_driver() -> (CopperDriver, MonitorModel) {
     (driver, monitor_model)
 }
 
-fn start_copper_runtime(mut copper: ResMut<CopperDriver>) {
+fn start_copper_runtime(mut copper: NonSendMut<CopperDriver>) {
     let CopperState::Initialized(app) = std::mem::replace(&mut copper.state, CopperState::Stopped)
     else {
         return;
@@ -516,7 +516,7 @@ fn update_demo_hud(focus: Res<CuBevyMonFocus>, mut texts: Query<&mut Text, With<
 
 fn run_copper_iteration(
     time: Res<Time>,
-    mut copper: ResMut<CopperDriver>,
+    mut copper: NonSendMut<CopperDriver>,
     mut exit_writer: MessageWriter<AppExit>,
 ) {
     let CopperDriver {
@@ -542,7 +542,10 @@ fn run_copper_iteration(
     }
 }
 
-fn stop_copper_on_exit(mut exit_events: MessageReader<AppExit>, mut copper: ResMut<CopperDriver>) {
+fn stop_copper_on_exit(
+    mut exit_events: MessageReader<AppExit>,
+    mut copper: NonSendMut<CopperDriver>,
+) {
     if exit_events.read().next().is_some() {
         let CopperState::Running(app) = std::mem::replace(&mut copper.state, CopperState::Stopped)
         else {
