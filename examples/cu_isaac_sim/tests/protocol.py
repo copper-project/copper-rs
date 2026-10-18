@@ -29,11 +29,11 @@ class ProtocolTest(unittest.TestCase):
         return process, connection
 
     def test_layout_clock_graph_and_override(self):
-        for override in (False, True):
-            with self.subTest(override=override), tempfile.TemporaryDirectory(prefix="cu-isaac-test-") as directory:
+        for override, count, requested in ((False, 24, 24), (True, 24, 24), (False, 140, 0), (True, 0, 0)):
+            with self.subTest(override=override, requested=requested, count=count), tempfile.TemporaryDirectory(prefix="cu-isaac-test-") as directory:
                 process, connection = self.start_server(directory, override)
-                count = 24  # Recycles all four CopperLists repeatedly and crosses two keyframes.
-                connection.send({"type": "hello", "version": 1, "observations": count, "scenario": {"test": True}})
+                # Recycle CopperLists and cross keyframes, including past the old demo limit.
+                connection.send({"type": "hello", "version": 1, "observations": requested, "scenario": {"test": True}})
                 for sequence in range(count):
                     lease = connection.receive("lease")
                     self.assertEqual(lease["sequence"], sequence)
@@ -61,13 +61,25 @@ class ProtocolTest(unittest.TestCase):
                     self.assertEqual(command["mean_rgb"], [sequence, 20.0, 40.0])
                     self.assertEqual(command["left_rad_s"], 0.0 if override or distance < 0.65 else 5.0)
                     self.assertEqual(command["right_rad_s"], command["left_rad_s"])
+                if requested == 0:
+                    self.assertEqual(connection.receive("lease")["sequence"], count)
                 connection.send({"type": "finish"})
-                finished = connection.receive("finished")
+                try:
+                    finished = connection.receive("finished")
+                except RuntimeError:
+                    stdout, stderr = process.communicate(timeout=15)
+                    self.fail((stdout + stderr).decode())
                 self.assertEqual(finished["observations"], count)
                 self.assertEqual(finished["log"], str(Path(directory).resolve() / "test.copper"))
                 stdout, stderr = process.communicate(timeout=15)
                 self.assertEqual(process.returncode, 0, (stdout + stderr).decode())
                 self.assertTrue(list(Path(directory).glob("test_*.copper")))
+                performance = json.loads((Path(directory) / "test.performance.json").read_text())
+                self.assertEqual(performance["observations"], count)
+                self.assertGreaterEqual(performance["conversion_s"], 0.0)
+                self.assertGreaterEqual(performance["iteration_s"], 0.0)
+                self.assertEqual(performance["dropped_copperlists"], 0)
+                self.assertEqual(performance["dropped_keyframes"], 0)
 
     def test_disconnect_and_invalid_publication_abort(self):
         for invalid in (False, True):

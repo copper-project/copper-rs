@@ -12,8 +12,9 @@ ci_exclude_workspace_os = ["windows"]
 
 [dependencies]
 bincode = { workspace = true }
-cu29 = { workspace = true, features = ["reflect"] }
+cu29 = { workspace = true, features = ["reflect", "async-cl-io"] }
 cu-sensor-payloads = { workspace = true }
+cu-consolemon = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 clap = { workspace = true }

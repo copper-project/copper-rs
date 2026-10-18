@@ -54,6 +54,7 @@ impl CuTask for ImageStatistics {
         output.tov = input.tov;
         let Some(image) = input.payload() else {
             output.clear_payload();
+            output.metadata.set_status("No image");
             return Ok(());
         };
         if image.format.pixel_format != *b"RGB3"
@@ -75,6 +76,10 @@ impl CuTask for ImageStatistics {
             let count = (image.format.width * image.format.height) as f32;
             sums.map(|sum| sum as f32 / count)
         })?;
+        output.metadata.set_status(format_args!(
+            "RGB {:.0}/{:.0}/{:.0}",
+            mean_rgb[0], mean_rgb[1], mean_rgb[2]
+        ));
         output.set_payload(ImageStats { mean_rgb });
         Ok(())
     }
@@ -120,6 +125,17 @@ impl CuTask for ForwardClearance {
                 nearest.is_finite().then(|| Length::new::<meter>(nearest))
             })
         });
+        if let Some(distance) = distance {
+            let meters = distance.get::<meter>();
+            // Keep status formatting within the metadata string's inline capacity.
+            if meters < 1000.0 {
+                output.metadata.set_status(format_args!("{meters:.2} m"));
+            } else {
+                output.metadata.set_status(format_args!("{meters:.2e} m"));
+            }
+        } else {
+            output.metadata.set_status("No forward return");
+        }
         output.set_payload(Clearance { distance });
         Ok(())
     }
@@ -164,12 +180,17 @@ impl CuTask for StopController {
         output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
         output.tov = input.tov;
-        let clear = input
-            .payload()
-            .and_then(|reading| reading.distance)
-            .is_some_and(|distance| {
-                distance.get::<meter>().is_finite() && distance > self.stop_distance
-            });
+        let distance = input.payload().and_then(|reading| reading.distance);
+        let clear = distance.is_some_and(|distance| {
+            distance.get::<meter>().is_finite() && distance > self.stop_distance
+        });
+        output.metadata.set_status(if clear {
+            "DRIVE"
+        } else if distance.is_some_and(|distance| distance.get::<meter>().is_finite()) {
+            "STOP obstacle"
+        } else {
+            "STOP no clearance"
+        });
         let speed = if clear {
             self.wheel_speed
         } else {
@@ -186,6 +207,37 @@ impl CuTask for StopController {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cu_sensor_payloads::PointCloud;
+    use cu_sensor_payloads::PointCloudSoa;
+
+    #[test]
+    fn test_clearance_status_updates_without_heap_storage() {
+        let mut task = ForwardClearance::new(None, ()).unwrap();
+        let (ctx, _) = CuContext::new_mock_clock();
+        let mut cloud = LidarFrame::from_box(PointCloudSoa::boxed_zeroed());
+        let mut output = CuMsg::default();
+        for (distance, status) in [
+            (Some(2.25), "2.25 m"),
+            (None, "No forward return"),
+            (Some(1.0e30), "1.00e30 m"),
+        ] {
+            cloud.with_inner_mut(|cloud| {
+                cloud.len = 0;
+                if let Some(x) = distance {
+                    cloud.push(PointCloud::new(CuTime::default(), x, 0.0, 0.0, 1.0, None));
+                }
+            });
+            let mut input = CuMsg::default();
+            input.set_payload(cloud.clone());
+            task.process(&ctx, &input, &mut output).unwrap();
+            assert_eq!(output.metadata.status_txt.0.as_str(), status);
+            assert!(!output.metadata.status_txt.0.is_heap_allocated());
+            assert_eq!(
+                output.payload().unwrap().distance.is_some(),
+                distance.is_some()
+            );
+        }
+    }
 
     #[test]
     fn test_controller_stops_for_missing_near_and_invalid_clearance() {
@@ -194,12 +246,13 @@ mod tests {
         config.set("wheel_speed_rad_s", 5.0f32);
         let mut task = StopController::new(Some(&config), ()).unwrap();
         let (ctx, _) = CuContext::new_mock_clock();
-        for (distance, expected) in [
-            (None, 0.0),
-            (Some(0.5), 0.0),
-            (Some(f32::NAN), 0.0),
-            (Some(f32::INFINITY), 0.0),
-            (Some(2.0), 5.0),
+        for (distance, expected, status) in [
+            (None, 0.0, "STOP no clearance"),
+            (Some(0.5), 0.0, "STOP obstacle"),
+            (Some(0.65), 0.0, "STOP obstacle"),
+            (Some(f32::NAN), 0.0, "STOP no clearance"),
+            (Some(f32::INFINITY), 0.0, "STOP no clearance"),
+            (Some(2.0), 5.0, "DRIVE"),
         ] {
             let mut input = CuMsg::default();
             input.tov = Tov::Time(CuTime::from_nanos(123));
@@ -213,6 +266,8 @@ mod tests {
                 expected
             );
             assert_eq!(output.tov, input.tov);
+            assert_eq!(output.metadata.status_txt.0.as_str(), status);
+            assert!(!output.metadata.status_txt.0.is_heap_allocated());
         }
     }
 }

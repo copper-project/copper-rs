@@ -27,6 +27,7 @@
         (src: "clearance", dst: "controller", msg: "tasks::Clearance"),
         (src: "controller", dst: "motor", msg: "tasks::MotorCommand"),
     ],
+    monitor: (type: "cu_consolemon::CuConsoleMon"),
     logging: (
         enable_task_logging: true,
         copperlist_count: 4,

@@ -14,8 +14,10 @@ def main():
     parser.add_argument("--session", type=Path)
     parser.add_argument("--observations", type=int, default=30)
     args = parser.parse_args()
-    if not 1 <= args.observations <= 10_000:
-        parser.error("--observations must be between 1 and 10000")
+    if not 0 <= args.observations <= 10_000:
+        parser.error("--observations must be between 0 (continuous) and 10000")
+    if args.observations == 0 and (args.mode != "gui" or args.session is None):
+        parser.error("Continuous observations require a GUI Copper session")
     args.output.mkdir(parents=True, exist_ok=True)
     report_path = args.output / "report.json"
     report = {"status": "starting", "mode": args.mode}
@@ -26,10 +28,14 @@ def main():
     app = SimulationApp(
         {
             "headless": args.mode == "headless",
+            "disable_viewport_updates": args.mode == "headless",
             "enable_motion_bvh": args.session is not None,
             "width": 1280,
             "height": 720,
-            "extra_args": ["--/persistent/app/usd/muteUsdDiagnostics=false"],
+            "extra_args": [
+                "--/persistent/app/usd/muteUsdDiagnostics=false",
+                "--/app/file/ignoreUnsavedStage=true",
+            ],
         },
         experience="/isaac-sim/apps/isaacsim.exp.full.kit",
     )
@@ -47,9 +53,6 @@ def main():
         report.update(status="warming_up", scenario=config, assets=assets)
         report_path.write_text(json.dumps(report, indent=2) + "\n")
         camera, lidar = create_sensors(stage, config)
-        overview_product = rep.create.render_product("/World/Overview", (1280, 720))
-        overview_rgb = rep.AnnotatorRegistry.get_annotator("rgb", device="cpu")
-        overview_rgb.attach([overview_product])
         if args.mode == "gui":
             viewport = get_active_viewport()
             if viewport is None:
@@ -63,6 +66,12 @@ def main():
             backend="numpy",
         )
         sim.initialize_physics()
+        if args.session is not None:
+            import carb.settings
+
+            # Set this after initialization, which can restore the full app's wall-clock cap.
+            # Physics and sensor timestamps still use fixed simulation steps.
+            carb.settings.get_settings().set_bool("/app/runLoops/main/rateLimitEnabled", False)
         initial = world_transform(stage, config["chassis"]).ExtractTranslation()
         sim.play()
         for _ in range(config["physics_hz"]):
@@ -147,6 +156,15 @@ def main():
                 break
         if camera_frame is None or len(scans) < 3:
             raise RuntimeError(f"Sensor validation incomplete: camera={camera_frame is not None}, complete_scans={len(scans)}")
+        Image.fromarray(camera_frame).save(args.output / "camera.png")
+        np.savez(
+            args.output / "lidar.npz", points_world_m=points, time_offset_ns=offsets,
+            timestamp_ns=last_timestamp,
+        )
+        report.update(
+            camera={"path": config["chassis"] + "/Camera", "resolution_hw": config["camera_resolution_hw"], "tick_hz": config["sensor_hz"]},
+            lidar={"path": config["chassis"] + "/Lidar", "config": config["lidar_config"], "tick_hz": config["sensor_hz"], "points_frame": "world", "scans": scans},
+        )
         if args.session is not None:
             from transport import exchange
 
@@ -156,21 +174,22 @@ def main():
                 app, sim, stage, config, camera, lidar,
                 args.session, args.observations, args.output,
             )
+            if args.observations == 0:
+                report.update(status="stopped", elapsed_seconds=round(time.monotonic() - started, 3))
+                report_path.write_text(json.dumps(report, indent=2) + "\n")
+                return
         sim.pause()
+        # The evidence image is needed once, after control; the GUI has its own viewport.
+        overview_product = rep.create.render_product("/World/Overview", (1280, 720))
+        overview_rgb = rep.AnnotatorRegistry.get_annotator("rgb", device="cpu")
+        overview_rgb.attach([overview_product])
         rep.orchestrator.step(rt_subframes=4, delta_time=0.0)
         overview = np.asarray(overview_rgb.get_data())[:, :, :3]
         if overview.shape != (720, 1280, 3) or not np.ptp(overview):
             raise RuntimeError("Overview camera produced no valid RGB frame.")
         Image.fromarray(overview).save(args.output / "overview.png")
-        Image.fromarray(camera_frame).save(args.output / "camera.png")
-        np.savez(
-            args.output / "lidar.npz", points_world_m=points, time_offset_ns=offsets,
-            timestamp_ns=last_timestamp,
-        )
         report.update(
             status="passed", elapsed_seconds=round(time.monotonic() - started, 3),
-            camera={"path": config["chassis"] + "/Camera", "resolution_hw": config["camera_resolution_hw"], "tick_hz": config["sensor_hz"]},
-            lidar={"path": config["chassis"] + "/Lidar", "config": config["lidar_config"], "tick_hz": config["sensor_hz"], "points_frame": "world", "scans": scans},
         )
         report_path.write_text(json.dumps(report, indent=2) + "\n")
         label = f"Copper run passed ({args.observations} observations)" if args.session else "Scene/sensor check passed"

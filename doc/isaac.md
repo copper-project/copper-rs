@@ -26,9 +26,20 @@ just run headless 130
 just run headless 30 --override-controller=stop
 ```
 
-The normal run produces 130 observations and control iterations, drives about
-1.59 m, and stops with about 0.68 m of collider clearance. The local window pauses
-for inspection afterward. The user has confirmed this GUI demonstration works.
+The default GUI run continues until its window closes, keeping sensors and
+ConsoleMon live after Jetbot stops at the forklift. `just run gui 130` and the
+default `just run headless` produce 130 observations and control iterations, drive
+about 1.59 m, and stop with about 0.68 m of collider clearance. Bounded GUI runs
+pause the local window for inspection afterward.
+ConsoleMon shows the native graph in the terminal; Docker and Isaac output is
+redirected to the example's `logs/isaac.log`, replaced on each `just run`.
+Use `tail -f logs/isaac.log` from another terminal to inspect simulator startup
+and warnings.
+The launcher uses the optimized debug profile and background CopperList recording.
+Graph statuses show the frame, point count, RGB summary, clearance, and drive/stop
+decision. Per-run `performance.json` files split simulator and native costs;
+the overview evidence capture runs after control, and the wall-clock frame cap is
+disabled without changing the fixed simulation rates.
 Keep `state/` caches and the example's `logs/` when resuming. A completed run's
 `state/output/{gui,headless}/report.json` identifies its native log base under
 `copper.log`; retain that base, its numbered slabs, and matching scenario JSON.
@@ -136,14 +147,15 @@ at 2.25 m. Outputs include `overview.png`, `camera.png`, `lidar.npz`, and
 `report.json` under the example's `state/output/headless/`. `just gui` runs the
 same checks, then pauses with the overview selected for visual inspection.
 
-`just run` now launches the native graph and local window for 130 observations;
-`just run headless 130` runs the same exchange without a window. Every observation
+`just run` launches the native graph and local window until the window closes;
+`just run gui 130` and `just run headless 130` bound the exchange to 130
+observations. Every observation
 produces one control iteration, approximately 100 ms apart in simulation time.
 The validated run travels 1.59 m, stops when lidar clearance crosses 0.65 m, and
 ends with 0.68 m of PhysX collider clearance. The forced-stop callback produces
 30 zero wheel commands while both sensor branches continue processing; measured
-chassis movement is about 0.04 mm of settling. `control.json` and
-`observations.jsonl` record commands and publication metadata beside the scene
+chassis movement is about 0.04 mm of settling. `commands.jsonl` and
+`observations.jsonl` stream commands and publication metadata beside the scene
 report. Native full-payload logs and scenario JSON live in the example's `logs/`.
 
 NVIDIA also provides office, hospital, and larger warehouse environments. The small

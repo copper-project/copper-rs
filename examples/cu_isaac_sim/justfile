@@ -62,11 +62,13 @@ shell: _state
 
 # Run the native Copper graph with Isaac; use `just run headless` without a window.
 [default]
-run mode="gui" observations="130" *args: _state
+run mode="gui" observations=(if mode == "gui" { "0" } else { "130" }) *args: _state
     #!/usr/bin/env bash
     set -euo pipefail
     test "{{mode}}" = gui || test "{{mode}}" = headless
-    cargo build --manifest-path "$ISAAC_EXAMPLE/Cargo.toml"
+    cargo build --profile debug-optimized --manifest-path "$ISAAC_EXAMPLE/Cargo.toml"
+    mkdir -p "$ISAAC_EXAMPLE/logs"
+    echo "Isaac output: $ISAAC_EXAMPLE/logs/isaac.log"
     session="$(mktemp -d /tmp/cu-isaac-XXXXXX)"
     native_pid=""
     cleanup() {
@@ -77,11 +79,12 @@ run mode="gui" observations="130" *args: _state
         rm -rf "$session"
     }
     trap cleanup EXIT
-    TMPDIR="$session" "$ROOT/target/debug/cu-isaac-sim" --session "$session" --log "$ISAAC_EXAMPLE/logs/$(basename "$session").copper" {{args}} &
+    # Preserve terminal input for ConsoleMon in this background process.
+    TMPDIR="$session" "$ROOT/target/debug-optimized/cu-isaac-sim" --session "$session" --log "$ISAAC_EXAMPLE/logs/$(basename "$session").copper" {{args}} <&0 &
     native_pid=$!
     {{isaac_container}} \
         --mount "type=bind,src=$session,dst=$session" \
         {{if mode == "gui" { '--hostname "$(hostname)" --env DISPLAY --env XAUTHORITY=/tmp/isaac.Xauthority --mount type=bind,src=/tmp/.X11-unix,dst=/tmp/.X11-unix,readonly --mount "type=bind,src=${XAUTHORITY:-$HOME/.Xauthority},dst=/tmp/isaac.Xauthority,readonly"' } else { '' } }} \
-        {{isaac_image}} ./python.sh /workspace/isaac/smoke.py --mode {{mode}} --output /output/{{mode}} --session "$session" --observations {{observations}}
+        {{isaac_image}} ./python.sh /workspace/isaac/smoke.py --mode {{mode}} --output /output/{{mode}} --session "$session" --observations {{observations}} >"$ISAAC_EXAMPLE/logs/isaac.log" 2>&1
     wait "$native_pid"
     native_pid=""
