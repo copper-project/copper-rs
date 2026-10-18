@@ -163,7 +163,7 @@ impl CuImageBufferFormat {
     }
 }
 
-#[derive(Debug, Default, Clone, Encode, Reflect)]
+#[derive(Debug, Encode, Reflect)]
 #[reflect(from_reflect = false, no_field_bounds, type_path = false)]
 #[bincode(describe)]
 pub struct CuImage<A>
@@ -173,6 +173,34 @@ where
     pub seq: u64,
     pub format: CuImageBufferFormat,
     pub buffer_handle: CuHandle<A>,
+}
+
+// Cloning an image clones its handle, never the storage behind it. Shared-memory
+// buffers deliberately do not implement Clone or Default.
+impl<A> Clone for CuImage<A>
+where
+    A: ArrayLike<Element = u8> + Send + Sync + 'static,
+{
+    fn clone(&self) -> Self {
+        Self {
+            seq: self.seq,
+            format: self.format,
+            buffer_handle: self.buffer_handle.clone(),
+        }
+    }
+}
+
+impl<A> Default for CuImage<A>
+where
+    A: ArrayLike<Element = u8> + Send + Sync + 'static,
+{
+    fn default() -> Self {
+        Self {
+            seq: 0,
+            format: CuImageBufferFormat::default(),
+            buffer_handle: CuHandle::default(),
+        }
+    }
 }
 
 impl<A> TypePath for CuImage<A>
@@ -434,6 +462,63 @@ where
 mod tests {
     use super::{CuImageBufferFormat, CuImagePlaneLayout};
     use cu29_value::decode::{ValueDecodeDescription, ValueDecodeLimits};
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_shared_memory_image_clones_its_handle_and_satisfies_payload_contract() {
+        use super::CuImage;
+        use cu29::pool::CuPool;
+        use cu29::pool::CuSharedMemoryBuffer;
+        use cu29::pool::CuSharedMemoryPool;
+        use cu29::prelude::*;
+
+        fn assert_payload<T: CuMsgPayload>() {}
+        assert_payload::<CuImage<CuSharedMemoryBuffer<u8>>>();
+
+        let pool = CuSharedMemoryPool::new("image-clone-test", 1, 3).unwrap();
+        let handle = pool.acquire().unwrap();
+        handle.with_inner_mut(|bytes| bytes.copy_from_slice(&[12, 34, 56]));
+        let mut image = CuImage::new(
+            CuImageBufferFormat {
+                width: 1,
+                height: 1,
+                stride: 3,
+                pixel_format: *b"RGB3",
+            },
+            handle,
+        );
+        image.seq = 42;
+        let cloned = image.clone();
+        assert_eq!(cloned.seq, 42);
+        assert_eq!(cloned.format.pixel_format, *b"RGB3");
+        assert_eq!(
+            cloned.buffer_handle.storage_id(),
+            image.buffer_handle.storage_id()
+        );
+        drop(image);
+        assert!(pool.acquire().is_none());
+        assert_eq!(
+            cloned
+                .with_plane_bytes(0, |bytes, _| bytes.to_vec())
+                .unwrap(),
+            [12, 34, 56]
+        );
+
+        let config = bincode::config::standard();
+        let encoded = bincode::encode_to_vec(&cloned, config).unwrap();
+        drop(cloned);
+        assert!(pool.acquire().is_some());
+        let (decoded, used): (CuImage<CuSharedMemoryBuffer<u8>>, usize) =
+            bincode::decode_from_slice(&encoded, config).unwrap();
+        assert_eq!(used, encoded.len());
+        assert_eq!(decoded.seq, 42);
+        assert_eq!(
+            decoded
+                .with_plane_bytes(0, |bytes, _| bytes.to_vec())
+                .unwrap(),
+            [12, 34, 56]
+        );
+    }
 
     #[test]
     fn test_catalog_decodes_native_image() {
