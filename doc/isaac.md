@@ -1,12 +1,58 @@
 # Isaac Sim integration: Jetbot, sensors, and replay
 
-Status: implementation started. The [environment scaffold](../examples/cu_isaac_sim/README.md)
-provides container, UI, asset-loading, and render checks. Docker GPU/Vulkan access,
-the compatibility checker, headless rendering, and the local XWayland window have
-been validated on the RTX 3090. The fixed approach, onboard RGB, and complete RTX
-lidar scans also pass the headless scene/sensor check. Shared-memory transport, the native Copper graph, simulation-clock stepping,
-and both ordinary and forced-stop control pass headless checks. Full sensor-log
-recovery and deterministic replay remain planned.
+Status (2026-10-18): the live demo works. The user confirmed the driven GUI
+approach and stop. Docker GPU/Vulkan access, local XWayland rendering, warehouse
+assets, onboard RGB, complete RTX lidar scans, shared-memory transport, and the
+native Copper graph are validated on the RTX 3090. Headless checks also verify
+simulation-clock stepping and the forced-stop controller override. Full sensor-log
+recovery and deterministic replay are the next milestone.
+
+## Resume here
+
+Continue on `gbin/isaac-integration`. The PR stack is:
+
+1. [#1525: CuImage shared-memory payload fix](https://github.com/copper-project/copper-rs/pull/1525)
+   — `gbin/fix-cuimage-shared-memory`, based on `master`.
+2. [#1524: container, scene, and sensors](https://github.com/copper-project/copper-rs/pull/1524)
+   — `gbin/base-isaac-setup-scene`, based on the CuImage branch.
+3. [#1526: native graph and shared-memory transport](https://github.com/copper-project/copper-rs/pull/1526)
+   — `gbin/isaac-integration`, based on the scene branch.
+
+Run these commands from `examples/cu_isaac_sim`:
+
+```bash
+just run
+just run headless 130
+just run headless 30 --override-controller=stop
+```
+
+The normal run produces 130 observations and control iterations, drives about
+1.59 m, and stops with about 0.68 m of collider clearance. The local window pauses
+for inspection afterward. The user has confirmed this GUI demonstration works.
+Keep `state/` caches and the example's `logs/` when resuming. A completed run's
+`state/output/{gui,headless}/report.json` identifies its native log base under
+`copper.log`; retain that base, its numbered slabs, and matching scenario JSON.
+
+Next work, in order:
+
+1. Add an offline log reader and a regression test that recovers actual RGB
+   pixels, lidar points, acquisition times, and calibration after both processes
+   have exited and the session's shared-memory directory has been removed.
+   Full handle logging is enabled already; recovery has not yet been verified.
+2. Replay recorded sensor inputs through the real image-statistics, clearance,
+   and controller tasks without Isaac, a GPU, or actuator side effects. Restore
+   simulation time and keyframes; verify derived values and commands across a
+   keyframe boundary and when resuming from a nonzero keyframe.
+3. Add a replay stop-threshold override and compare decisions on identical
+   observations. Provide the planned `just replay` and `just inspect` commands,
+   then finish their documentation.
+
+Implementation entry points are the example's
+[`src/main.rs`](../examples/cu_isaac_sim/src/main.rs) (runtime and callbacks),
+[`src/transport.rs`](../examples/cu_isaac_sim/src/transport.rs) (leases and conversion),
+[`src/tasks.rs`](../examples/cu_isaac_sim/src/tasks.rs) (ordinary tasks), and
+[`isaac/transport.py`](../examples/cu_isaac_sim/isaac/transport.py) (simulator stepping).
+The Python/Rust protocol suite in `tests/` runs without Isaac or a GPU.
 
 ## Goal
 
@@ -250,7 +296,7 @@ Proposed example-local commands:
 - [x] Implement shared-memory leases and the Unix socket exchange.
 - [x] Connect the Copper graph, simulation clock, and hardware overrides.
 - [x] Demonstrate stopping before collision and `--override-controller=stop`
-      in headless runs; visually confirm the driven approach in the local window.
+      in headless runs; the user also confirmed the driven GUI demonstration.
 - [ ] Record and recover full sensor contents after process shutdown.
 - [ ] Implement replay, threshold comparison, and inspection.
 - [ ] Document launch, recording, replay, and first-run cache behavior.
