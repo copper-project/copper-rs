@@ -2063,7 +2063,9 @@ mod tests {
 
     #[test]
     fn run_stops_on_task_error_without_publishing_partial_copperlists() {
-        const COMPLETED_LISTS: u64 = 12;
+        // Fit within the nine output handoff slots even if the async worker
+        // does not run before the source fails on the next iteration.
+        const COMPLETED_LISTS: u64 = 9;
 
         let _guard = TEST_MUTEX
             .lock()

@@ -3598,6 +3598,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             #run_one_iteration {
                 let result: CuResult<()> = (|| { #clock_maintain #iteration_body })();
                 if let Err(error) = &result {
+                    self.copper_runtime.copperlists_manager.discard_current();
                     let _ = self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::LifecycleFailed {
                         operation: cu29::curuntime::RuntimeLifecycleOperation::Iteration, error: error.to_string(),
                     });
