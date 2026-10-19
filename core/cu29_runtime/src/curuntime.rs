@@ -676,6 +676,22 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         Ok(())
     }
 
+    /// Recycles the current serial iteration without publishing its partial output.
+    #[doc(hidden)]
+    pub fn discard_current(&mut self) {
+        if let Some(inner) = &mut self.inner
+            && inner.peek().is_some_and(|culist| {
+                matches!(
+                    culist.get_state(),
+                    CopperListState::Initialized | CopperListState::Processing
+                )
+            })
+            && let Some(culist) = inner.pop()
+        {
+            culist.change_state(CopperListState::Free);
+        }
+    }
+
     pub fn finish_pending(&mut self) -> CuResult<()> {
         Ok(())
     }
@@ -1135,6 +1151,15 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
         }
 
         Ok(())
+    }
+
+    /// Recycles the current serial iteration without publishing its partial output.
+    #[doc(hidden)]
+    pub fn discard_current(&mut self) {
+        if let Some(mut culist) = self.current.take() {
+            culist.change_state(CopperListState::Free);
+            self.free_pool.push(culist);
+        }
     }
 
     pub fn finish_pending(&mut self) -> CuResult<()> {
@@ -4444,6 +4469,40 @@ mod tests {
         release_tx.send(()).unwrap();
         keyframes.finish_pending().unwrap();
         assert_eq!(*ids.lock().unwrap(), vec![0, 1]);
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_discard_current_preserves_completed_output_and_reuses_slot() {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let mut copperlists =
+            CopperListsManager::<Msgs, 3>::new(Some(Box::new(OrderedCopperListSink {
+                events: events.clone(),
+            })))
+            .unwrap();
+
+        let culist = copperlists.create().unwrap();
+        culist.change_state(CopperListState::Processing);
+        copperlists.end_of_processing(0).unwrap();
+
+        let culist = copperlists.create().unwrap();
+        assert_eq!(culist.id, 1);
+        culist.change_state(CopperListState::Processing);
+        copperlists.discard_current();
+        copperlists.discard_current();
+        copperlists.finish_pending().unwrap();
+        assert!(copperlists.peek().is_none());
+        assert_eq!(copperlists.available_copper_lists().unwrap(), 3);
+        assert_eq!(*events.lock().unwrap(), vec!["copperlist"]);
+
+        // Failed iterations retain their IDs; the next completed list has a gap.
+        let culist = copperlists.create().unwrap();
+        assert_eq!(culist.id, 2);
+        culist.change_state(CopperListState::Processing);
+        copperlists.end_of_processing(2).unwrap();
+        copperlists.finish_pending().unwrap();
+        assert_eq!(copperlists.available_copper_lists().unwrap(), 3);
+        assert_eq!(*events.lock().unwrap(), vec!["copperlist", "copperlist"]);
     }
 
     #[cfg(all(feature = "std", feature = "async-cl-io"))]
