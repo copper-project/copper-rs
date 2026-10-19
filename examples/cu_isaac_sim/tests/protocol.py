@@ -16,6 +16,12 @@ BINARY = sys.argv.pop(1)
 
 
 class ProtocolTest(unittest.TestCase):
+    @staticmethod
+    def stop_server(process):
+        if process.poll() is None:
+            process.kill()
+        process.communicate(timeout=15)
+
     def start_server(self, directory, override=False):
         session = Path(directory).resolve()
         log = session / "test.copper"
@@ -23,7 +29,7 @@ class ProtocolTest(unittest.TestCase):
         if override:
             args += ["--override-controller=stop"]
         process = subprocess.Popen(args, env=dict(os.environ, TMPDIR=str(session)), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        self.addCleanup(lambda: process.poll() is None and process.kill())
+        self.addCleanup(self.stop_server, process)
         connection = Connection(session, timeout=15.0)
         self.addCleanup(connection.close)
         return process, connection

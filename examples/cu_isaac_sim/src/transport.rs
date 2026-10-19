@@ -37,6 +37,9 @@ pub struct Channel {
 
 impl Channel {
     pub fn new(stream: UnixStream) -> CuResult<Self> {
+        // Accepted sockets can inherit the listener's nonblocking mode on macOS.
+        // Metadata exchange waits for the simulator, bounded by the timeouts below.
+        stream.set_nonblocking(false).map_err(io_error)?;
         stream
             .set_read_timeout(Some(Duration::from_secs(60)))
             .map_err(io_error)?;
@@ -363,6 +366,25 @@ mod tests {
         assert!(pool.acquire().is_none());
         drop(retained);
         assert!(pool.acquire().is_some());
+    }
+
+    #[test]
+    fn test_nonblocking_stream_waits_for_complete_metadata() {
+        let (server, mut client) = UnixStream::pair().unwrap();
+        server.set_nonblocking(true).unwrap();
+        let mut channel = Channel::new(server).unwrap();
+        let peer = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(50));
+            client.write_all(b"{\"type\":").unwrap();
+            std::thread::sleep(Duration::from_millis(50));
+            client.write_all(b"\"finish\"}\n").unwrap();
+            let mut reply = String::new();
+            BufReader::new(client).read_line(&mut reply).unwrap();
+            assert_eq!(reply, "{\"ok\":true}\n");
+        });
+        assert!(matches!(channel.receive().unwrap(), Request::Finish));
+        channel.send(&serde_json::json!({ "ok": true })).unwrap();
+        peer.join().unwrap();
     }
 
     #[test]
