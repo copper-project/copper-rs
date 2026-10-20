@@ -393,16 +393,25 @@ mod tests {
         client
             .set_write_timeout(Some(Duration::from_secs(5)))
             .unwrap();
+        let mut channel = Channel::new(server).unwrap();
         // Drain concurrently: the metadata can exceed macOS's socket buffer.
         let peer = std::thread::spawn(move || {
             client
                 .write_all(&vec![b'x'; MAX_METADATA as usize + 1])
                 .unwrap();
         });
-        assert!(Channel::new(server).unwrap().receive::<Request>().is_err());
+        assert!(matches!(
+            channel.receive::<Request>(),
+            Err(error) if error.message() == "Metadata overflow or simulator disconnected"
+        ));
         peer.join().unwrap();
         let (server, client) = UnixStream::pair().unwrap();
+        // Configure the channel while connected, then test EOF during receive.
+        let mut channel = Channel::new(server).unwrap();
         drop(client);
-        assert!(Channel::new(server).unwrap().receive::<Request>().is_err());
+        assert!(matches!(
+            channel.receive::<Request>(),
+            Err(error) if error.message() == "Metadata overflow or simulator disconnected"
+        ));
     }
 }
