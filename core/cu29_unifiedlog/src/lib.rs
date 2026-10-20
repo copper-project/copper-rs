@@ -168,6 +168,13 @@ pub enum AllocatedSection<S: SectionStorage> {
     Section(SectionHandle<S>),
 }
 
+/// Internal append outcome; rebinding happens before any entry bytes are written.
+#[doc(hidden)]
+pub enum SectionAppendOutcome {
+    Appended(usize),
+    Rebind,
+}
+
 /// A Storage is an append-only structure that can update a header section.
 pub trait SectionStorage: Send + Sync {
     /// This rewinds the storage, serialize the header and jumps to the beginning of the user data storage.
@@ -176,6 +183,19 @@ pub trait SectionStorage: Send + Sync {
     fn post_update_header<E: Encode>(&mut self, header: &E) -> Result<usize, EncodeError>;
     /// Appends the entry to the user data storage.
     fn append<E: Encode>(&mut self, entry: &E) -> Result<usize, EncodeError>;
+    /// Acquire and append, distinguishing revoked access from encoding failure.
+    /// Reclaimable storage overrides this with one authoritative acquisition.
+    #[doc(hidden)]
+    fn append_or_rebind<E: Encode>(
+        &mut self,
+        entry: &E,
+    ) -> Result<SectionAppendOutcome, EncodeError> {
+        if self.is_sealed() {
+            Ok(SectionAppendOutcome::Rebind)
+        } else {
+            self.append(entry).map(SectionAppendOutcome::Appended)
+        }
+    }
     /// Whether this handle was sealed by section reclamation.
     fn is_sealed(&self) -> bool {
         false
@@ -401,14 +421,10 @@ impl<S: SectionStorage, L: UnifiedLogWrite<S>> Debug for LogStream<S, L> {
 
 impl<E: Encode, S: SectionStorage, L: UnifiedLogWrite<S>> WriteStream<E> for LogStream<S, L> {
     fn log(&mut self, obj: &E) -> CuResult<()> {
-        let sealed = self.current_section.storage.is_sealed();
-        let result = if sealed {
-            Err(EncodeError::UnexpectedEnd)
-        } else {
-            self.current_section.append(obj)
-        };
+        let result = self.current_section.storage.append_or_rebind(obj);
+        let rebind = matches!(&result, Ok(SectionAppendOutcome::Rebind));
         match result {
-            Ok(nb_bytes) => {
+            Ok(SectionAppendOutcome::Appended(nb_bytes)) => {
                 self.current_position += nb_bytes;
                 self.current_section.header.used += nb_bytes as u32;
                 self.last_log_bytes = nb_bytes;
@@ -418,59 +434,54 @@ impl<E: Encode, S: SectionStorage, L: UnifiedLogWrite<S>> WriteStream<E> for Log
                 }
                 Ok(())
             }
-            Err(e) => match e {
-                EncodeError::UnexpectedEnd => {
-                    if !sealed && self.current_section.header.used == 0 {
-                        return Err(CuError::from("Entry exceeds an empty section"));
-                    }
-                    #[cfg(feature = "std")]
-                    let logger_guard = self.parent_logger.lock();
-
-                    #[cfg(not(feature = "std"))]
-                    let mut logger_guard = self.parent_logger.lock();
-
-                    #[cfg(feature = "std")]
-                    let mut logger_guard =
-                        match logger_guard {
-                            Ok(g) => g,
-                            Err(_) => return Err(
-                                "Logger mutex poisoned while reporting EncodeError::UnexpectedEnd"
-                                    .into(),
-                            ), // It will retry but at least not completely crash.
-                        };
-
-                    logger_guard.try_flush_section(&mut self.current_section)?;
-                    self.current_section = logger_guard.add_section_with_context(
-                        self.entry_type,
-                        self.minimum_allocation_amount,
-                        self.context,
-                    )?;
-
-                    let result = self
-                        .current_section
-                        .append(obj)
-                        .map_err(|e| {
-                            CuError::from(
-                                "Failed to encode object in a newly minted section. Unrecoverable failure.",
-                            )
-                            .add_cause(e.to_string().as_str())
-                        })?; // If we fail just after creating a section, there is not much we can do.
-
-                    self.current_position += result;
-                    self.current_section.header.used += result as u32;
-                    self.last_log_bytes = result;
-                    if self.entry_type == UnifiedLogType::RuntimeLifecycle {
-                        self.current_section.storage.flush()?;
-                    }
-                    Ok(())
+            Ok(SectionAppendOutcome::Rebind) | Err(EncodeError::UnexpectedEnd) => {
+                if !rebind && self.current_section.header.used == 0 {
+                    return Err(CuError::from("Entry exceeds an empty section"));
                 }
-                _ => {
-                    let err =
-                        <&str as Into<CuError>>::into("Unexpected error while encoding object.")
-                            .add_cause(e.to_string().as_str());
-                    Err(err)
+                #[cfg(feature = "std")]
+                let logger_guard = self.parent_logger.lock();
+
+                #[cfg(not(feature = "std"))]
+                let mut logger_guard = self.parent_logger.lock();
+
+                #[cfg(feature = "std")]
+                let mut logger_guard = match logger_guard {
+                    Ok(g) => g,
+                    Err(_) => {
+                        return Err(
+                            "Logger mutex poisoned while reporting EncodeError::UnexpectedEnd"
+                                .into(),
+                        );
+                    } // It will retry but at least not completely crash.
+                };
+
+                logger_guard.try_flush_section(&mut self.current_section)?;
+                self.current_section = logger_guard.add_section_with_context(
+                    self.entry_type,
+                    self.minimum_allocation_amount,
+                    self.context,
+                )?;
+
+                let result = self.current_section.append(obj).map_err(|e| {
+                    CuError::from(
+                        "Failed to encode object in a newly minted section. Unrecoverable failure.",
+                    )
+                    .add_cause(e.to_string().as_str())
+                })?; // If we fail just after creating a section, there is not much we can do.
+
+                self.current_position += result;
+                self.current_section.header.used += result as u32;
+                self.last_log_bytes = result;
+                if self.entry_type == UnifiedLogType::RuntimeLifecycle {
+                    self.current_section.storage.flush()?;
                 }
-            },
+                Ok(())
+            }
+            Err(e) => {
+                let err = <&str as Into<CuError>>::into("Unexpected error while encoding object.")
+                    .add_cause(e.to_string().as_str());
+                Err(err)
+            }
         }
     }
 

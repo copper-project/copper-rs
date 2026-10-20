@@ -2,8 +2,8 @@
 
 use crate::{
     ApplicationMetadata, CapacityPolicy, MAIN_MAGIC, MainHeader, SECTION_HEADER_COMPACT_SIZE,
-    SECTION_MAGIC, SectionContext, SectionHandle, SectionHeader, SectionStorage,
-    UNIFIED_LOG_FORMAT_VERSION, UnifiedLogStatus, UnifiedLogWrite,
+    SECTION_MAGIC, SectionAppendOutcome, SectionContext, SectionHandle, SectionHeader,
+    SectionStorage, UNIFIED_LOG_FORMAT_VERSION, UnifiedLogStatus, UnifiedLogWrite,
 };
 use alloc::string::ToString;
 use alloc::sync::Arc;
@@ -37,7 +37,10 @@ struct Lease {
 unsafe impl Sync for Lease {}
 impl Lease {
     fn load(&self, ordering: Ordering) -> usize {
-        self.state.load(ordering)
+        let state = self.state.load(ordering);
+        #[cfg(all(test, feature = "std"))]
+        tests::lease_event(self, tests::LeaseEvent::Loaded(state));
+        state
     }
     fn store(&self, state: usize, ordering: Ordering) {
         self.state.store(state, ordering);
@@ -49,7 +52,12 @@ impl Lease {
         success: Ordering,
         failure: Ordering,
     ) -> Result<usize, usize> {
-        self.state.compare_exchange(current, new, success, failure)
+        #[cfg(all(test, feature = "std"))]
+        tests::lease_event(self, tests::LeaseEvent::BeforeCompareExchange);
+        let result = self.state.compare_exchange(current, new, success, failure);
+        #[cfg(all(test, feature = "std"))]
+        tests::lease_event(self, tests::LeaseEvent::AfterCompareExchange);
+        result
     }
     fn offset(&self) -> u64 {
         // SAFETY: Only the owning allocator accesses this field; it serializes allocation.
@@ -358,17 +366,31 @@ impl<R: ByteRegion> SectionStorage for ByteSection<R> {
         self.leases[self.slot].load(Ordering::Acquire) != self.token(IDLE)
     }
     fn append<E: Encode>(&mut self, entry: &E) -> Result<usize, EncodeError> {
+        match self.append_or_rebind(entry)? {
+            SectionAppendOutcome::Appended(count) => Ok(count),
+            SectionAppendOutcome::Rebind => {
+                Err(EncodeError::Other("Section lease is sealed or busy"))
+            }
+        }
+    }
+    fn append_or_rebind<E: Encode>(
+        &mut self,
+        entry: &E,
+    ) -> Result<SectionAppendOutcome, EncodeError> {
         if self.leases.poisoned.load(Ordering::Acquire) {
             return Err(EncodeError::Other("Logger faulted after a storage failure"));
         }
-        self.leases[self.slot]
+        if self.leases[self.slot]
             .compare_exchange(
                 self.token(IDLE),
                 self.token(BUSY),
                 Ordering::AcqRel,
                 Ordering::Acquire,
             )
-            .map_err(|_| EncodeError::Other("Section lease is sealed or busy"))?;
+            .is_err()
+        {
+            return Ok(SectionAppendOutcome::Rebind);
+        }
         let guard = SectionWrite {
             section: self,
             released: false,
@@ -409,7 +431,7 @@ impl<R: ByteRegion> SectionStorage for ByteSection<R> {
             }
         }
         let release = guard.finish(IDLE).map_err(encode_error);
-        result.and_then(|count| release.map(|()| count))
+        result.and_then(|count| release.map(|()| SectionAppendOutcome::Appended(count)))
     }
     fn flush(&mut self) -> CuResult<usize> {
         if self.leases[self.slot]
@@ -1024,9 +1046,9 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
         let slot = self
             .leases
             .iter()
-            .position(|s| {
-                s.load(Ordering::Acquire) % 4 != IDLE && s.load(Ordering::Acquire) % 4 != BUSY
-            })
+            // A writer may finish between loads. Classify one snapshot and reuse
+            // only unassigned or sealed slots; idle streams retain their generation.
+            .position(|s| matches!(s.load(Ordering::Acquire) % 4, 0 | SEALED))
             .ok_or_else(|| CuError::from("Too many concurrent section writes"))?;
         self.generation = self
             .generation
@@ -1120,5 +1142,256 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
 impl<B: ByteStorage> Drop for ByteLogger<B> {
     fn drop(&mut self) {
         let _ = self.close();
+    }
+}
+
+#[cfg(all(test, feature = "std"))]
+mod tests {
+    use super::*;
+    use crate::{
+        LogStream, UnifiedLogRead, UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerRead,
+    };
+    use cu29_traits::WriteStream;
+    use std::cell::{Cell, RefCell};
+    use std::sync::Mutex;
+
+    pub(super) enum LeaseEvent {
+        Loaded(usize),
+        BeforeCompareExchange,
+        AfterCompareExchange,
+    }
+
+    type LeaseHook = Box<dyn FnMut(&Lease, LeaseEvent)>;
+    std::thread_local! {
+        static LEASE_HOOK: RefCell<Option<LeaseHook>> = RefCell::new(None);
+    }
+
+    pub(super) fn lease_event(lease: &Lease, event: LeaseEvent) {
+        LEASE_HOOK.with(|cell| {
+            let mut hook = cell.borrow_mut().take();
+            if let Some(hook) = hook.as_mut() {
+                hook(lease, event);
+            }
+            *cell.borrow_mut() = hook;
+        });
+    }
+
+    fn saved_values(path: &std::path::Path) -> Vec<u32> {
+        let mut reader = UnifiedLoggerRead::new(path).unwrap();
+        let mut saved = Vec::new();
+        while let Some(bytes) = reader
+            .read_next_section_type(UnifiedLogType::CopperList)
+            .unwrap()
+        {
+            let mut bytes = bytes.as_slice();
+            while !bytes.is_empty() {
+                let (value, used) = decode_from_slice::<u32, _>(bytes, standard()).unwrap();
+                saved.push(value);
+                bytes = &bytes[used..];
+            }
+        }
+        saved
+    }
+
+    fn logger(path: &std::path::Path, policy: CapacityPolicy) -> crate::UnifiedLoggerWrite {
+        match UnifiedLoggerBuilder::new()
+            .file_base_name(path)
+            .preallocated_size(8192)
+            .capacity(8192, policy)
+            .write(true)
+            .create(true)
+            .build()
+            .unwrap()
+        {
+            UnifiedLogger::Write(logger) => logger,
+            _ => unreachable!(),
+        }
+    }
+
+    #[test]
+    fn test_writer_finishing_during_slot_selection_keeps_its_generation() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("selection.copper");
+        let mut logger = logger(&path, CapacityPolicy::Grow);
+        let mut first = logger
+            .add_section(UnifiedLogType::CopperList, 1024)
+            .unwrap();
+        first.append(41u32).unwrap();
+        let section = first.get_storage();
+        let leases = section.leases.clone();
+        let slot = section.slot;
+        let idle = section.token(IDLE);
+        leases[slot].store(section.token(BUSY), Ordering::Release);
+        let loads = Arc::new(AtomicUsize::new(0));
+        let observed = loads.clone();
+        LEASE_HOOK.with(|cell| {
+            *cell.borrow_mut() = Some(Box::new(move |lease, event| {
+                if core::ptr::eq(lease, &leases[slot])
+                    && let LeaseEvent::Loaded(state) = event
+                    && state % 4 == BUSY
+                    && observed.fetch_add(1, Ordering::Relaxed) == 1
+                {
+                    // Finish after the final slot-selection load has observed BUSY.
+                    lease.store(idle, Ordering::Release);
+                }
+            }));
+        });
+        let mut next = logger
+            .add_section(UnifiedLogType::CopperList, 1024)
+            .unwrap();
+        LEASE_HOOK.with(|cell| cell.borrow_mut().take());
+        assert_eq!(loads.load(Ordering::Relaxed), 2);
+        assert_ne!(
+            next.get_storage().slot,
+            slot,
+            "an idle live lease cannot be reused"
+        );
+        first.append(42u32).unwrap();
+        next.append(43u32).unwrap();
+        logger.try_flush_section(&mut first).unwrap();
+        logger.try_flush_section(&mut next).unwrap();
+        drop(logger);
+        assert_eq!(saved_values(&path), [41, 42, 43]);
+    }
+
+    #[test]
+    fn test_link_publication_between_stream_precheck_and_acquisition_rebinds() {
+        struct Counted<'a>(&'a Cell<usize>);
+        impl Encode for Counted<'_> {
+            fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+                self.0.set(self.0.get() + 1);
+                42u32.encode(encoder)
+            }
+        }
+        let dir = tempfile::tempdir().unwrap();
+        for policy in [
+            CapacityPolicy::Grow,
+            CapacityPolicy::StopWhenFull,
+            CapacityPolicy::OverwriteOldest,
+        ] {
+            for empty in [false, true] {
+                let path = dir
+                    .path()
+                    .join(format!("acquisition-{policy:?}-{empty}.copper"));
+                let logger = Arc::new(Mutex::new(logger(&path, policy)));
+                let mut stream =
+                    LogStream::new(UnifiedLogType::CopperList, logger.clone(), 1024).unwrap();
+                if !empty {
+                    stream.log(&41u32).unwrap();
+                }
+                let section = &stream.current_section.storage;
+                let leases = section.leases.clone();
+                let slot = section.slot;
+                let idle = section.token(IDLE);
+                let injected = Arc::new(AtomicBool::new(false));
+                let observed = injected.clone();
+                let mut pending = false;
+                LEASE_HOOK.with(|cell| {
+                    *cell.borrow_mut() = Some(Box::new(move |lease, event| {
+                        if !core::ptr::eq(lease, &leases[slot]) {
+                            return;
+                        }
+                        match event {
+                            LeaseEvent::BeforeCompareExchange
+                                if !observed.load(Ordering::Relaxed) =>
+                            {
+                                // Allocation temporarily owns the idle tail's header.
+                                lease.store(idle | LINK_PENDING, Ordering::Release);
+                                pending = true;
+                                observed.store(true, Ordering::Relaxed);
+                            }
+                            LeaseEvent::AfterCompareExchange if pending => {
+                                // Publication completes before the stream handles the failed CAS.
+                                lease.store(idle, Ordering::Release);
+                                pending = false;
+                            }
+                            _ => {}
+                        }
+                    }));
+                });
+                let encodes = Cell::new(0);
+                let result = stream.log(&Counted(&encodes));
+                LEASE_HOOK.with(|cell| cell.borrow_mut().take());
+                assert!(injected.load(Ordering::Relaxed));
+                result.unwrap();
+                assert_eq!(encodes.get(), 1, "rebinding must precede encoding");
+                drop(stream);
+                drop(logger);
+                assert_eq!(
+                    saved_values(&path),
+                    if empty { vec![42] } else { vec![41, 42] }
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_reclamation_before_acquisition_rebinds_a_stale_stream() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("revocation.copper");
+        let logger = Arc::new(Mutex::new(logger(&path, CapacityPolicy::OverwriteOldest)));
+        let mut stream = LogStream::new(UnifiedLogType::CopperList, logger.clone(), 1024).unwrap();
+        stream.log(&41u32).unwrap();
+        // Leave the next allocation to wrap and reclaim the idle first stream.
+        for value in 0..6u32 {
+            let mut logger = logger.lock().unwrap();
+            let mut section = logger
+                .add_section(UnifiedLogType::CopperList, 1024)
+                .unwrap();
+            section.append(value).unwrap();
+            logger.try_flush_section(&mut section).unwrap();
+        }
+        let first = &stream.current_section.storage;
+        let leases = first.leases.clone();
+        let slot = first.slot;
+        let parent = logger.clone();
+        let mut injected = false;
+        LEASE_HOOK.with(|cell| {
+            *cell.borrow_mut() = Some(Box::new(move |lease, event| {
+                if core::ptr::eq(lease, &leases[slot])
+                    && matches!(event, LeaseEvent::BeforeCompareExchange)
+                    && !injected
+                {
+                    injected = true;
+                    let mut logger = parent.lock().unwrap();
+                    let mut section = logger
+                        .add_section(UnifiedLogType::CopperList, 1024)
+                        .unwrap();
+                    section.append(43u32).unwrap();
+                    logger.try_flush_section(&mut section).unwrap();
+                }
+            }));
+        });
+        let result = stream.log(&42u32);
+        LEASE_HOOK.with(|cell| cell.borrow_mut().take());
+        result.unwrap();
+        drop(stream);
+        drop(logger);
+        assert_eq!(saved_values(&path), [1, 2, 3, 4, 5, 43, 42]);
+    }
+
+    #[test]
+    fn test_stream_encoding_error_keeps_its_section_and_committed_prefix() {
+        struct Failing;
+        impl Encode for Failing {
+            fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+                99u32.encode(encoder)?;
+                Err(EncodeError::Other("injected encode failure"))
+            }
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("failure.copper");
+        let logger = Arc::new(Mutex::new(logger(&path, CapacityPolicy::Grow)));
+        let mut stream = LogStream::new(UnifiedLogType::CopperList, logger.clone(), 1024).unwrap();
+        stream.log(&41u32).unwrap();
+        let slot = stream.current_section.storage.slot;
+        let generation = stream.current_section.storage.generation;
+        assert!(stream.log(&Failing).is_err());
+        assert_eq!(stream.current_section.storage.slot, slot);
+        assert_eq!(stream.current_section.storage.generation, generation);
+        stream.log(&42u32).unwrap();
+        drop(stream);
+        drop(logger);
+        assert_eq!(saved_values(&path), [41, 42]);
     }
 }
