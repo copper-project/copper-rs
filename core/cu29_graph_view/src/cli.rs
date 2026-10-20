@@ -140,7 +140,7 @@ pub(super) fn run() -> std::io::Result<()> {
             }
 
             match render_multi_config_svg(&config, mission.as_deref()) {
-                Ok(svg) => svg,
+                Ok(svg) => svg.into_bytes(),
                 Err(err) => {
                     eprintln!("{err}");
                     std::process::exit(1);

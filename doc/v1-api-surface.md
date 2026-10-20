@@ -130,7 +130,7 @@ converts those errors to `CuError`.
 
 ## Experimental
 
-- `cu29_graph_view::render_config_svg(&CuConfig, Option<&str>)`: host-side,
+- `cu29_graph_view::{render_config_svg, render_multi_config_svg}`: host-side,
   in-memory SVG rendering. The SVG markup and layout are presentation output, not
   a stable serialization format.
 

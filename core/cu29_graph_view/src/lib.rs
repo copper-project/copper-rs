@@ -274,10 +274,22 @@ fn render_config_svg_with_stats(
     render_sections_to_svg(&layouts, &[])
 }
 
-fn render_multi_config_svg(
+/// Render a resolved multi-Copper deployment, including subsystem interconnects.
+///
+/// `mission_id` selects a mission in every mission-based subsystem. Simple
+/// subsystems are always included. With `None`, each mission-based subsystem
+/// must have a single mission; otherwise pass an explicit mission identifier.
+///
+/// Like [`render_config_svg`], this returns an in-memory SVG document and is
+/// intended for setup or UI work outside the real-time loop.
+///
+/// # Errors
+///
+/// Returns an error if a subsystem mission cannot be selected or rendered.
+pub fn render_multi_config_svg(
     config: &config::MultiCopperConfig,
     mission_id: Option<&str>,
-) -> CuResult<Vec<u8>> {
+) -> CuResult<String> {
     let mut layouts = Vec::new();
 
     for subsystem in &config.subsystems {
@@ -327,7 +339,7 @@ fn render_multi_config_svg(
         })
         .collect::<Vec<_>>();
 
-    Ok(render_sections_to_svg(&layouts, &interconnects)?.into_bytes())
+    render_sections_to_svg(&layouts, &interconnects)
 }
 
 /// Select one local graph for a subsystem while treating simple graphs as mission-agnostic.
@@ -4964,8 +4976,7 @@ mod tests {
             RenderInput::Single(_) => panic!("expected multi-Copper config"),
         };
 
-        let svg = String::from_utf8(render_multi_config_svg(&multi, None).expect("render svg"))
-            .expect("svg should be utf8");
+        let svg = render_multi_config_svg(&multi, None).expect("render svg");
 
         assert!(svg.contains("Subsystem: alpha"));
         assert!(svg.contains("Subsystem: beta"));
@@ -5016,10 +5027,7 @@ mod tests {
             RenderInput::Single(_) => panic!("expected multi-Copper config"),
         };
 
-        let svg = String::from_utf8(
-            render_multi_config_svg(&multi, Some("default")).expect("render svg"),
-        )
-        .expect("svg should be utf8");
+        let svg = render_multi_config_svg(&multi, Some("default")).expect("render svg");
 
         assert!(svg.contains("Subsystem: mission"));
         assert!(svg.contains("Subsystem: simple"));

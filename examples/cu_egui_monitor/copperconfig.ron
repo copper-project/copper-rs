@@ -1,0 +1,11 @@
+(
+    tasks: [
+        (id: "tick", type: "tasks::Tick"),
+        (id: "scale", type: "tasks::Scale", config: {"gain": 2.0}),
+        (id: "output", type: "tasks::Output"),
+    ],
+    cnx: [(src: "tick", dst: "scale", msg: "f64"), (src: "scale", dst: "output", msg: "f64")],
+    monitors: [(type: "monitor::GraphMonitor")],
+    logging: (enable_task_logging: false),
+    runtime: (rate_target_hz: 100),
+)
