@@ -18,54 +18,9 @@ PREK_FMT_CI_HOOKS := "trailing-whitespace check-merge-conflict detect-private-ke
 default:
 	just pr-check
 
-# Verify native descriptions, shared startup catalogs and embedded compilation.
-self-describing-logs-check:
-	cargo test -p cu29-value-types --all-features
-	cargo test -p cu-bincode --test describe
-	cargo test -p cu-bincode --test describe --features self-describing
-	cargo check -p cu29 --no-default-features --features self-describing-logs --target thumbv7em-none-eabihf
-	cargo test -p cu29-value --features decode-catalog,self-describing-logs
-	cargo test -p cu29 --features decode-catalog --test value_decode
-	cargo test -p cu-self-describing-logs --features self-describing-logs
-	cargo test -p cu-self-describing-logs --features self-describing-logs,flat-copperlist-encoding
-	cargo test -p cu29-export --lib
-	cargo test -p cu29-export --features self-describing-logs
-	cargo test -p cu29-export --features self-describing-logs,cu29/flat-copperlist-encoding
-	cargo test -p cu-logstream-demo --features self-describing-logs --test twin
-	cargo clippy -p cu29-value -p cu29-value-types -p cu29-units -p cu29-build --all-targets --features cu29-value/decode-catalog,cu29-value/self-describing-logs -- --deny warnings
-	cargo clippy -p cu29 --lib --test value_decode --features decode-catalog -- --deny warnings
-	cargo clippy -p cu-self-describing-logs --all-targets --features self-describing-logs -- --deny warnings
-	cargo clippy -p cu29-export --all-targets --features self-describing-logs -- --deny warnings
-	cargo check -p cu29 -p cu29-value -p cu29-value-types --no-default-features
-	cargo check -p cu29 -p cu29-value -p cu29-value-types -p cu29-units --no-default-features --target thumbv7em-none-eabihf
-
-# Verify sensor and protocol descriptions against their native encoders.
-self-describing-payloads-check:
-	cargo test -p cu-bincode --test describe
-	cargo test -p cu-bincode --test describe --features self-describing
-	cargo clippy -p cu-bincode -p cu-bincode-derive --all-targets --all-features -- --deny warnings
-	cargo test -p cu-crsf -p cu-msp-bridge -p cu-sensor-payloads --lib
-	cargo test -p cu-sensor-payloads --test pointcloud_soa_handle_export
-	cargo test -p cu-msp-lib --features reflect
-	cargo clippy -p cu-crsf -p cu-msp-bridge -p cu-msp-lib -p cu-sensor-payloads --all-targets --features cu-msp-bridge/reflect -- --deny warnings
-	cargo check -p cu-crsf -p cu-msp-bridge -p cu-msp-lib -p cu-sensor-payloads --no-default-features --features cu-crsf/alloc,cu-msp-bridge/alloc,cu-msp-lib/bincode
-	cargo check -p cu29 -p cu-crsf -p cu-msp-bridge -p cu-msp-lib -p cu-sensor-payloads --target thumbv7em-none-eabihf --no-default-features --features cu-crsf/alloc,cu-msp-bridge/alloc,cu-msp-lib/bincode
-	cargo clippy -p cu-zed --all-targets --features cu29/self-describing-logs -- --deny warnings
-	cargo test -p cu-zed --features cu29/self-describing-logs
-
 # Run standalone catalog-backed log tools from the workspace root.
 logextract *args:
     cargo run --quiet -p cu29-export --features self-describing-logs --bin cu29-logextract -- {{args}}
-
-# Verify native Python values, corruption errors and the loadable extension.
-self-describing-logs-python-check:
-    cargo test -p cu29-export --lib --features self-describing-logs,python
-    cargo clippy -p cu29-export --all-targets --features self-describing-logs,python -- --deny warnings
-    cargo build -p cu29-export --lib --features self-describing-logs,python-extension-module
-
-# Verify workspace CI exclusions across runner operating systems.
-workspace-excludes-check:
-	python3 -m unittest discover -s support/ci -p test_workspace_excludes.py
 
 # Generate and build both app templates against this checkout's codec and runtime.
 template-check toolchain="stable":
@@ -97,7 +52,8 @@ pr-check:
 	just lint
 	just api-check
 	just test
-	just logstream-udp-check
+	cargo +stable clippy -p cu29-logstream-udp --all-targets --features runtime-integration -- --deny warnings
+	cargo +stable test -p cu29-logstream-udp --features runtime-integration
 	cargo +stable clippy -p cu29-logstream --all-targets -- --deny warnings
 	cargo +stable test -p cu29-logstream
 	cargo +stable check -p cu29-logstream --no-default-features
@@ -142,7 +98,7 @@ ci-config-check:
 lint:
 	just fmt-check
 	just typos
-	just workspace-excludes-check
+	python3 -m unittest discover -s support/ci -p test_workspace_excludes.py
 	just clippy-std
 	just clippy-nostd
 
@@ -252,11 +208,6 @@ test:
 	export CARGO_NAME="Copper Tests"
 	cargo +stable nextest run --all-targets --workspace {{WORKSPACE_EXCLUDES}}
 	cargo +stable nextest run --no-default-features
-
-# UDP carrier contracts and generated sender/session-router localhost integration.
-logstream-udp-check:
-	cargo +stable clippy -p cu29-logstream-udp --all-targets --features runtime-integration -- --deny warnings
-	cargo +stable test -p cu29-logstream-udp --features runtime-integration
 
 # Check the large examples from the former extra-examples repo.
 check-extra-examples: check-extra-examples-host check-extra-examples-embedded
@@ -579,21 +530,3 @@ wt branch:
     zellij action write-chars "cd ${dir};reset"
     zellij action write 13
   fi
-
-# Byte section rings, mmap/SD agreement, construction/lifecycle and native replay.
-metadata-rollover-check:
-    cargo check -p cu-autoware --bin kpi
-    cargo run -p cu-logging-size
-    cargo test -p cu29-unifiedlog
-    cargo test -p cu29-unifiedlog --features mmap-fsync
-    cargo test -p cu-sdlogger
-    cargo test -p cu-sdlogger --no-default-features --features eh1
-    cargo test -p cu29-export --lib
-    cargo test -p cu29-logstream --test session_router
-    cargo test -p cu29-runtime --lib
-    cargo test -p cu29 --test metadata_lifecycle --test stateless_task --test resource_stack
-    cargo clippy -p cu29-unifiedlog -p cu29-export -p cu-sdlogger --all-targets -- --deny warnings
-    cargo clippy -p cu29 --test metadata_lifecycle -- --deny warnings
-    cargo check -p cu29 --no-default-features --target thumbv7em-none-eabihf
-    cargo check -p cu-sdlogger --no-default-features --features eh1 --target thumbv7em-none-eabihf
-    RAYON_NUM_THREADS=1 COPPER_DETERMINISM_ITERS=256 COPPER_DETERMINISM_DT_TICKS=1000 cargo test -p cu-caterpillar --features determinism_ci -- determinism_record_and_resim --test-threads=1

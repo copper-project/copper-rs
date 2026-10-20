@@ -102,7 +102,6 @@ section beside application metadata and contains ordered slot maps for every
 compiled mission. Native recipes and names are borrowed from the application
 image; sizing and compression use bounded working memory. See
 `examples/cu_self_describing_logs` and `doc/self-describing-logs.md`.
-Run `just self-describing-logs-check` at the Copper workspace root to verify this API.
 
 ## Python Feature
 
