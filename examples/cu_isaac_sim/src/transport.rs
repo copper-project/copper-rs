@@ -391,9 +391,16 @@ mod tests {
     fn test_disconnect_and_metadata_limit() {
         let (server, mut client) = UnixStream::pair().unwrap();
         client
-            .write_all(&vec![b'x'; MAX_METADATA as usize + 1])
+            .set_write_timeout(Some(Duration::from_secs(5)))
             .unwrap();
+        // Drain concurrently: the metadata can exceed macOS's socket buffer.
+        let peer = std::thread::spawn(move || {
+            client
+                .write_all(&vec![b'x'; MAX_METADATA as usize + 1])
+                .unwrap();
+        });
         assert!(Channel::new(server).unwrap().receive::<Request>().is_err());
+        peer.join().unwrap();
         let (server, client) = UnixStream::pair().unwrap();
         drop(client);
         assert!(Channel::new(server).unwrap().receive::<Request>().is_err());
