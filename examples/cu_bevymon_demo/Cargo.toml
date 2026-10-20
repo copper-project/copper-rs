@@ -1,7 +1,7 @@
 [package]
 name = "cu-bevymon-demo"
 description = "Minimal side-by-side Bevy sim and Copper monitor demo."
-version.workspace = true
+version = "1.3.1"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -2,7 +2,7 @@
 name = "cu29-logstream-udp"
 description = "Nonblocking UDP packet resources for Copper log streaming"
 documentation = "https://docs.rs/cu29-logstream-udp"
-version.workspace = true
+version = "1.3.1"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true

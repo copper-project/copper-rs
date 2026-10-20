@@ -1,7 +1,7 @@
 [package]
 name = "cu-runtime-matrix"
 description = "Deterministic scheduler/runtime matrix coverage for async-cl-io, parallel-rt, background tasks, and bridge topologies."
-version.workspace = true
+version = "1.3.1"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
