@@ -50,6 +50,3 @@ Choose backing allocation sizes appropriate to the largest section.
 Native entries retain one encoding pass. Failed entries leave committed `used`
 and the writer cursor unchanged. Inspection reads committed bytes of incomplete
 logs; an open section or unclean main header prevents append.
-
-Run `just metadata-rollover-check` from the workspace root to check both adapters,
-reader discovery, generated lifecycle behavior, embedded compilation and replay.

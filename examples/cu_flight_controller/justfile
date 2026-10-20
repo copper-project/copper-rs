@@ -194,22 +194,6 @@ logtool-catalog log="logs/flight_controller_sim.copper" *args:
   cd "{{ROOT}}"
   cargo run --quiet -p cu29-export --features self-describing-logs --bin cu29-logextract -- "$log" {{args}}
 
-# Check catalog generation and both simulation runtimes.
-catalog-check:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  cd "{{ROOT}}"
-  cargo test -p cu-crsf -p cu-msp-bridge -p cu-sensor-payloads --lib catalog_decodes_native
-  cargo check -p cu-flight-controller --no-default-features --features sim,forest-world --bin quad-sim
-
-# Record and catalog-decode both subsystem logs without opening a window.
-catalog-smoke:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  cd "{{ROOT}}"
-  mkdir -p target/flight-catalog-smoke
-  TMPDIR="{{ROOT}}/target/flight-catalog-smoke" cargo test -p cu-flight-controller --no-default-features --features sim,forest-world --bin quad-sim subsystem_logs_record_predictions_and_complete_distributed_replay
-
 # Decode MCU CopperLists using compiled Rust types (JSON export).
 logextract-native log="logs/flight_controller_sim.copper":
   #!/usr/bin/env bash

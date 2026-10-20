@@ -39,3 +39,18 @@ do not silently install skills.
   otherwise; do not remove them as final cleanup.
 - Run `just fmt` after each edit pass. Before pushing, run the narrowest relevant
   root verification target (default `just pr-check`; details in `copper-workflow`).
+
+## Justfiles are user-facing
+
+- Treat every justfile, including examples, components, imports, and generated
+  templates, as a user-facing command menu. Keep recipes few, readable, and
+  organized around operations users will repeat.
+- Add a recipe only when you can name its intended user and recurring use.
+  Prefer extending or parameterizing an existing workflow over adding another
+  command. Keep workspace workflows at the root and app workflows with the app.
+- Never commit one-shot patch validation, debugging checklists, or aliases for
+  individual regression tests (for example, `metadata-rollover-check`). Run
+  focused Cargo commands directly; keep maintained checks in existing test/lint
+  suites or CI. Hiding a one-shot recipe does not make it appropriate.
+- Keep recipe names and help comments concise. Review `just --list` for clutter
+  when changing recipes, and update callers and documentation when removing one.

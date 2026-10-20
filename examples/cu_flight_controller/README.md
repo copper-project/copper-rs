@@ -189,7 +189,6 @@ For example, `just logextract-catalog logs/flight_controller_sim.copper csv > lo
 Use `just logtool-catalog <log> <subcommand> [flags]` for the full catalog-backed CLI.
 
 Run these commands from this directory. `demo` exits cleanly and finalizes both logs.
-Use `just catalog-smoke` for a headless recording and catalog-decoding check.
 
 ```bash
 just demo
