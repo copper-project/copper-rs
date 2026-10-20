@@ -24,13 +24,16 @@ const LEASES: usize = 64;
 const IDLE: usize = 1;
 const BUSY: usize = 2;
 const SEALED: usize = 3;
+const LINK_PENDING: usize = 4;
+const GENERATION_STRIDE: usize = 8;
 
 struct Lease {
     state: AtomicUsize,
-    next: UnsafeCell<u64>,
+    next: portable_atomic::AtomicU64,
+    allocated: UnsafeCell<u64>,
     offset: UnsafeCell<u64>,
 }
-// SAFETY: `next` is accessed only while the corresponding state is exclusively BUSY.
+// SAFETY: Only the serialized allocator accesses `offset` and `allocated`.
 unsafe impl Sync for Lease {}
 impl Lease {
     fn load(&self, ordering: Ordering) -> usize {
@@ -59,13 +62,19 @@ impl Lease {
         }
     }
     fn next(&self) -> u64 {
-        // SAFETY: The caller owns this lease in BUSY state.
-        unsafe { *self.next.get() }
+        self.next.load(Ordering::Acquire)
     }
     fn set_next(&self, offset: u64) {
-        // SAFETY: The caller owns BUSY, or initializes a generation before publishing IDLE.
+        self.next.store(offset, Ordering::Release);
+    }
+    fn allocated(&self) -> u64 {
+        // SAFETY: Only the serialized allocator accesses this field.
+        unsafe { *self.allocated.get() }
+    }
+    fn set_allocated(&self, allocated: u64) {
+        // SAFETY: Only the serialized allocator accesses this field.
         unsafe {
-            *self.next.get() = offset;
+            *self.allocated.get() = allocated;
         }
     }
 }
@@ -287,9 +296,56 @@ pub struct ByteSection<R: ByteRegion> {
 }
 impl<R: ByteRegion> ByteSection<R> {
     fn token(&self, state: usize) -> usize {
-        self.generation * 4 + state
+        self.generation * GENERATION_STRIDE + state
+    }
+    fn release_write(&mut self, state: usize) -> CuResult<()> {
+        match self.leases[self.slot].compare_exchange(
+            self.token(BUSY),
+            self.token(state),
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        ) {
+            Ok(_) => return Ok(()),
+            Err(actual) if actual == self.token(BUSY) | LINK_PENDING => {}
+            Err(_) => {
+                self.leases.poisoned.store(true, Ordering::Release);
+                return Err(CuError::from("Section lease changed during write"));
+            }
+        }
+        // The allocator handed this encoder the previous tail's link update.
+        // It never touches a header while an encoder owns BUSY.
+        self.header.next_section = self.leases[self.slot].next();
+        let result = write_header(&mut self.region, &self.header);
+        if result.is_err() {
+            self.leases.poisoned.store(true, Ordering::Release);
+        }
+        self.leases[self.slot].store(self.token(state), Ordering::Release);
+        result
     }
 }
+struct SectionWrite<'a, R: ByteRegion> {
+    section: &'a mut ByteSection<R>,
+    released: bool,
+    observing: bool,
+}
+impl<R: ByteRegion> SectionWrite<'_, R> {
+    fn finish(mut self, state: usize) -> CuResult<()> {
+        self.released = true;
+        self.section.release_write(state)
+    }
+}
+impl<R: ByteRegion> Drop for SectionWrite<'_, R> {
+    fn drop(&mut self) {
+        if !self.released {
+            if self.observing {
+                abort_observed_encode();
+            }
+            self.section.region.abort();
+            let _ = self.section.release_write(IDLE);
+        }
+    }
+}
+
 impl<R: ByteRegion> SectionStorage for ByteSection<R> {
     fn initialize<E: Encode>(&mut self, _: &E) -> Result<usize, EncodeError> {
         Ok(HEADER as usize)
@@ -313,40 +369,47 @@ impl<R: ByteRegion> SectionStorage for ByteSection<R> {
                 Ordering::Acquire,
             )
             .map_err(|_| EncodeError::Other("Section lease is sealed or busy"))?;
+        let guard = SectionWrite {
+            section: self,
+            released: false,
+            observing: true,
+        };
+        let section = &mut *guard.section;
         begin_observed_encode();
-        let old_position = self.position;
+        let old_position = section.position;
         let result = (|| {
             let writer = RegionWriter {
-                region: &mut self.region,
+                region: &mut section.region,
                 position: old_position,
-                limit: self.header.allocated,
+                limit: section.header.allocated,
             };
             let mut encoder = EncoderImpl::new(ObservedWriter::new(writer), standard());
             entry.encode(&mut encoder)?;
             let end = encoder.into_writer().into_inner().position;
-            self.region.commit().map_err(encode_error)?;
-            let mut committed = self.header.clone();
-            committed.next_section = self.leases[self.slot].next();
+            section.region.commit().map_err(encode_error)?;
+            let mut committed = section.header.clone();
+            committed.next_section = section.leases[section.slot].next();
             committed.used = u32::try_from(end - HEADER).map_err(|_| EncodeError::UnexpectedEnd)?;
-            if let Err(error) = write_header(&mut self.region, &committed) {
-                self.leases.poisoned.store(true, Ordering::Release);
+            if let Err(error) = write_header(&mut section.region, &committed) {
+                section.leases.poisoned.store(true, Ordering::Release);
                 return Err(encode_error(error));
             }
-            self.header = committed;
-            self.position = end;
+            section.header = committed;
+            section.position = end;
             Ok((end - old_position) as usize)
         })();
         match &result {
             Ok(count) => {
-                debug_assert_eq!(*count, finish_observed_encode());
+                let observed = finish_observed_encode();
+                debug_assert_eq!(*count, observed);
             }
             Err(_) => {
                 abort_observed_encode();
-                self.region.abort();
+                section.region.abort();
             }
         }
-        self.leases[self.slot].store(self.token(IDLE), Ordering::Release);
-        result
+        let release = guard.finish(IDLE).map_err(encode_error);
+        result.and_then(|count| release.map(|()| count))
     }
     fn flush(&mut self) -> CuResult<usize> {
         if self.leases[self.slot]
@@ -358,18 +421,26 @@ impl<R: ByteRegion> SectionStorage for ByteSection<R> {
             )
             .is_ok()
         {
-            let mut header = self.header.clone();
-            header.next_section = self.leases[self.slot].next();
+            let guard = SectionWrite {
+                section: self,
+                released: false,
+                observing: false,
+            };
+            let section = &mut *guard.section;
+            let mut header = section.header.clone();
+            header.next_section = section.leases[section.slot].next();
             header.is_open = false;
-            let result = write_header(&mut self.region, &header).and_then(|()| self.region.flush());
-            if result.is_ok() {
-                self.header = header;
-                self.leases[self.slot].store(self.token(SEALED), Ordering::Release);
+            let result =
+                write_header(&mut section.region, &header).and_then(|()| section.region.flush());
+            let state = if result.is_ok() {
+                section.header = header;
+                SEALED
             } else {
-                self.leases.poisoned.store(true, Ordering::Release);
-                self.leases[self.slot].store(self.token(IDLE), Ordering::Release);
-                result?;
-            }
+                section.leases.poisoned.store(true, Ordering::Release);
+                IDLE
+            };
+            let release = guard.finish(state);
+            result.and(release)?;
         }
         Ok(self.position as usize)
     }
@@ -435,7 +506,8 @@ impl<B: ByteStorage> ByteLogger<B> {
             leases: Arc::new(LeaseTable {
                 slots: core::array::from_fn(|_| Lease {
                     state: AtomicUsize::new(0),
-                    next: UnsafeCell::new(0),
+                    next: portable_atomic::AtomicU64::new(0),
+                    allocated: UnsafeCell::new(0),
                     offset: UnsafeCell::new(0),
                 }),
                 poisoned: AtomicBool::new(false),
@@ -527,6 +599,13 @@ impl<B: ByteStorage> ByteLogger<B> {
             return Err(CuError::from("Invalid metadata bounds"));
         }
         Ok(())
+    }
+    fn section_extent(&self, offset: u64) -> CuResult<(u64, u64)> {
+        if let Some(lease) = self.leases.iter().find(|lease| lease.offset() == offset) {
+            return Ok((lease.allocated(), lease.next()));
+        }
+        let header = self.data_header_unlocked(offset)?;
+        Ok((header.allocated, header.next_section))
     }
     fn data_header(&self, offset: u64) -> CuResult<SectionHeader> {
         let mut claims = Claims::new(self.leases.clone());
@@ -840,7 +919,7 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
         let mut position = if tail == 0 {
             self.header.sections_begin
         } else {
-            tail + self.data_header(tail)?.allocated
+            tail + self.section_extent(tail)?.0
         };
         if self.policy == CapacityPolicy::OverwriteOldest
             && position
@@ -849,9 +928,8 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
         {
             position = self.header.sections_begin;
         }
-        let overlaps = |offset: u64, header: &SectionHeader| {
-            position < offset + header.allocated && offset < position + size
-        };
+        let overlaps =
+            |offset: u64, allocated: u64| position < offset + allocated && offset < position + size;
         let mut last_overlap = 0;
         let mut cursor = self.header.head_section;
         let mut remaining = capacity / HEADER;
@@ -860,11 +938,11 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
                 return Err(CuError::from("Cyclic section links"));
             }
             remaining -= 1;
-            let h = self.data_header(cursor)?;
-            if overlaps(cursor, &h) {
+            let (allocated, next) = self.section_extent(cursor)?;
+            if overlaps(cursor, allocated) {
                 last_overlap = cursor;
             }
-            cursor = h.next_section;
+            cursor = next;
         }
         if self.policy == CapacityPolicy::Grow
             && (last_overlap != 0 || position + size > self.header.sections_end)
@@ -879,9 +957,6 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
         }
         // Claim every affected encoder before any write. A failed preflight restores all leases.
         let mut claims = Claims::new(self.leases.clone());
-        if let Some(slot) = self.leases.iter().position(|lease| lease.offset() == tail) {
-            claims.claim(slot)?;
-        }
         let mut cursor = self.header.head_section;
         if last_overlap != 0 {
             loop {
@@ -956,7 +1031,7 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
         self.generation = self
             .generation
             .checked_add(1)
-            .filter(|g| *g < usize::MAX / 4)
+            .filter(|g| *g < usize::MAX / GENERATION_STRIDE)
             .ok_or_else(|| CuError::from("Section generation exhausted"))?;
         let header = SectionHeader {
             entry_type: kind,
@@ -967,22 +1042,24 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
         let mut region = self.storage.region(position, size)?;
         write_header(&mut region, &header)?;
         if self.header.tail_section != 0 {
-            let mut previous = self.data_header_unlocked(self.header.tail_section)?;
-            previous.next_section = position;
-            if let Some(slot) = self
-                .leases
-                .iter()
-                .position(|lease| lease.offset() == self.header.tail_section)
-            {
-                // This lease was claimed before allocation, so its link can be updated.
-                if self.leases[slot].load(Ordering::Acquire) % 4 == BUSY {
-                    self.leases[slot].set_next(position);
+            let tail = self.header.tail_section;
+            if let Some(slot) = self.leases.iter().position(|lease| lease.offset() == tail) {
+                let lease = &self.leases[slot];
+                lease.set_next(position);
+                let state = lease.state.fetch_or(LINK_PENDING, Ordering::AcqRel);
+                if state % 4 != BUSY {
+                    // An idle/sealed encoder cannot start while LINK_PENDING is set.
+                    let mut previous = self.data_header_unlocked(tail)?;
+                    previous.next_section = position;
+                    write_header(&mut self.storage.region(tail, HEADER)?, &previous)?;
+                    lease.store(state, Ordering::Release);
                 }
+                // A busy encoder publishes the link before releasing its lease.
+            } else {
+                let mut previous = self.data_header_unlocked(tail)?;
+                previous.next_section = position;
+                write_header(&mut self.storage.region(tail, HEADER)?, &previous)?;
             }
-            write_header(
-                &mut self.storage.region(self.header.tail_section, HEADER)?,
-                &previous,
-            )?;
         }
         if self.header.head_section == 0 {
             self.header.head_section = position;
@@ -997,8 +1074,12 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
             }
         }
         self.leases[slot].set_offset(position);
+        self.leases[slot].set_allocated(size);
         self.leases[slot].set_next(0);
-        self.leases[slot].store(self.generation * 4 + IDLE, Ordering::Release);
+        self.leases[slot].store(
+            self.generation * GENERATION_STRIDE + IDLE,
+            Ordering::Release,
+        );
         let storage = ByteSection {
             region,
             position: HEADER,
