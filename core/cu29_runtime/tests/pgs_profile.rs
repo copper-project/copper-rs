@@ -87,6 +87,7 @@ impl CuSinkTask for Sink {
 struct App {}
 
 #[test]
+#[allow(deprecated)] // Raw access lets this recording fixture drain async output between iterations.
 fn profile_reports_operations_chains_and_source_rates() {
     let dir = tempfile::tempdir().unwrap();
     let log_base = dir.path().join("profile.copper");
@@ -95,11 +96,18 @@ fn profile_reports_operations_chains_and_source_rates() {
         .unwrap()
         .build()
         .unwrap();
-    let mut running = app.start().unwrap();
+    let mut running = app.start().unwrap().into_inner();
     for _ in 0..ITERATIONS {
         running.run_one_iteration().unwrap();
+        // Profiling needs every sample; the live async queue may drop under load.
+        running
+            .copper_runtime_mut()
+            .copperlists_manager
+            .finish_pending()
+            .unwrap();
     }
-    running.stop().unwrap();
+    running.stop_all_tasks().unwrap();
+    drop(running);
 
     let config = cu29::config::read_configuration("tests/pgs_profile_config.ron").unwrap();
     let contract = CuContract::deserialize_ron(
