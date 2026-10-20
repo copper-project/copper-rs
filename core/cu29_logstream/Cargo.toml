@@ -2,7 +2,7 @@
 name = "cu29-logstream"
 description = "Bounded semantic log streaming protocol and FEC for Copper"
 documentation = "https://docs.rs/cu29-logstream"
-version.workspace = true
+version = "1.2.5"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -1,7 +1,7 @@
 [package]
 name = "cu-bevymon"
 description = "A Bevy-backed Ratatui monitor for Copper."
-version.workspace = true
+version = "1.2.5"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true

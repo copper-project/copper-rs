@@ -2,7 +2,7 @@
 name = "cu29-log-runtime"
 description = "This is part the runtime part of the text logger for Copper. It cannot be used independently from the Copper project."
 documentation = "https://docs.rs/cu29-log-runtime"
-version.workspace = true
+version = "1.2.5"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true

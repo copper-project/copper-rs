@@ -2,7 +2,7 @@
 name = "cu29"
 description = "Copper Runtime prelude crate. Copper is a Rust engine for robotics."
 documentation = "https://docs.rs/cu29"
-version = "1.2.3"
+version = "1.2.5"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -118,6 +118,7 @@ rtsan = ["dep:rtsan-standalone", "cu29-derive/rtsan"]
 safety-ids = ["std", "dep:inventory", "dep:serde_json"]
 
 [dev-dependencies]
+tempfile = { workspace = true }
 cu29-logstream = { workspace = true, features = ["test-utils"] }
 heapless = { workspace = true }
 

@@ -1,6 +1,6 @@
 [package]
 name = "cu-transform"
-version.workspace = true
+version = "1.2.5"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
