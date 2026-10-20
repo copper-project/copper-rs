@@ -127,12 +127,19 @@ fn runtime_acquires_before_consumers_and_stops_reference() {
         .build()
         .unwrap()
         .start()
-        .unwrap();
+        .unwrap()
+        .into_inner();
     assert_eq!(observer.sync_status().unwrap().state, SyncState::Locked);
     for _ in 0..5 {
         app.run_one_iteration().unwrap();
+        // Replay comparisons require a complete recording even with async I/O enabled.
+        app.copper_runtime_mut()
+            .copperlists_manager
+            .finish_pending()
+            .unwrap();
     }
-    drop(app.stop().unwrap());
+    app.stop_all_tasks().unwrap();
+    drop(app);
     assert_eq!(STARTS.load(Ordering::SeqCst), 1);
     assert_eq!(STOPS.load(Ordering::SeqCst), 1);
     use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader};
