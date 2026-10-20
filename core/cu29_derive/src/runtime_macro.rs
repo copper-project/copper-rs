@@ -3533,6 +3533,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         } else { quote! { fn stop_components(&mut self) -> CuResult<()> } };
         let stop_components = quote! {
             #stop_components_sig {
+                // A panicking iteration can leave an unpublished CopperList active.
+                // Recycle it before draining completed output during shutdown.
+                self.copper_runtime.copperlists_manager.discard_current();
                 let result: CuResult<()> = (|| {
                 let lifecycle_clid = self.copper_runtime.copperlists_manager.last_cl_id();
                 let mut ctx = cu29::context::CuContext::from_runtime_metadata(
