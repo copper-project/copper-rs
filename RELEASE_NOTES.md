@@ -6,6 +6,7 @@ This patch backports fixes to Copper 1.2 while preserving its public APIs, confi
 
 ### Fixes
 
+- The flight controller simulator keeps `cu-zed` and `cu-vitfly` on their compatible 1.1 release line, preventing their registry dependencies from selecting Copper 1.3 alongside the local 1.2 runtime.
 - Failed or panicking iterations release their unfinished CopperList before shutdown. Completed output still drains, partial output stays unpublished, and the application can restart. ([#1531](https://github.com/copper-project/copper-rs/pull/1531), [#1533](https://github.com/copper-project/copper-rs/pull/1533))
 - Shared-memory images implement `Clone` and `Default` without requiring the underlying storage to implement those traits; cloning retains the buffer handle. ([#1525](https://github.com/copper-project/copper-rs/pull/1525))
 - Bevy's demo keeps the runtime on the main thread, including when asynchronous CopperList I/O is enabled. Bevy's derive dependency and Kornia's 0.1 image/tensor dependencies are pinned to compatible releases. ([#1528](https://github.com/copper-project/copper-rs/pull/1528), [#1411](https://github.com/copper-project/copper-rs/pull/1411), [#1427](https://github.com/copper-project/copper-rs/pull/1427))
