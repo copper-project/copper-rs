@@ -328,6 +328,125 @@ fn allocation_during_an_encode_is_rejected_without_mutation() {
 }
 
 #[test]
+fn allocation_with_free_capacity_does_not_wait_for_an_encoder() {
+    struct Paused {
+        entered: std::sync::mpsc::Sender<()>,
+        resume: std::sync::mpsc::Receiver<()>,
+        outcome: u8,
+    }
+    impl bincode::Encode for Paused {
+        fn encode<E: bincode::enc::Encoder>(
+            &self,
+            encoder: &mut E,
+        ) -> Result<(), bincode::error::EncodeError> {
+            self.entered.send(()).unwrap();
+            self.resume
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .unwrap();
+            match self.outcome {
+                0 => 42u32.encode(encoder),
+                1 => Err(bincode::error::EncodeError::Other(
+                    "injected encode failure",
+                )),
+                _ => panic!("injected encode panic"),
+            }
+        }
+    }
+    let dir = test_dir();
+    for policy in [
+        CapacityPolicy::Grow,
+        CapacityPolicy::StopWhenFull,
+        CapacityPolicy::OverwriteOldest,
+    ] {
+        for outcome in 0..3 {
+            let path = dir.path().join(format!("free-{policy:?}-{outcome}.copper"));
+            let mut logger = writer(&path, 8192, 8192, false, policy);
+            logger.seal_metadata::<()>(&metadata(), None).unwrap();
+            let mut first = logger
+                .add_section(UnifiedLogType::CopperList, 1024)
+                .unwrap();
+            first.append(41u32).unwrap();
+            let (entered, entering) = std::sync::mpsc::channel();
+            let (resume, resuming) = std::sync::mpsc::channel();
+            let worker = std::thread::spawn(move || {
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    first.append(Paused {
+                        entered,
+                        resume: resuming,
+                        outcome,
+                    })
+                }));
+                match outcome {
+                    0 => assert!(result.unwrap().is_ok()),
+                    1 => assert!(result.unwrap().is_err()),
+                    _ => assert!(result.is_err()),
+                }
+                if outcome != 0 {
+                    first.append(42u32).unwrap();
+                }
+                first
+            });
+            entering
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .unwrap();
+            // The first allocation links the active tail; the next traverses it.
+            // Both finish before the paused encoder is allowed to resume.
+            for value in [43u32, 44] {
+                let mut next = logger
+                    .add_section(UnifiedLogType::CopperList, 1024)
+                    .unwrap();
+                next.append(value).unwrap();
+                logger.try_flush_section(&mut next).unwrap();
+            }
+            resume.send(()).unwrap();
+            let mut first = worker.join().unwrap();
+            logger.try_flush_section(&mut first).unwrap();
+            drop(logger);
+            assert_eq!(
+                values(&path)
+                    .iter()
+                    .map(|(_, value)| *value)
+                    .collect::<Vec<_>>(),
+                [41, 42, 43, 44]
+            );
+            // Deferred links must also survive reopening for append.
+            drop(writer(&path, 8192, 8192, true, policy));
+        }
+    }
+}
+
+#[test]
+fn concurrent_stream_rollover_preserves_every_record() {
+    let dir = test_dir();
+    let path = dir.path().join("concurrent.copper");
+    let logger = Arc::new(Mutex::new(writer(
+        &path,
+        8192,
+        8192,
+        false,
+        CapacityPolicy::Grow,
+    )));
+    let mut first = LogStream::new(UnifiedLogType::CopperList, logger.clone(), 1024).unwrap();
+    let worker = std::thread::spawn(move || {
+        for value in 0..2000u32 {
+            first.log(&value).unwrap();
+        }
+    });
+    for value in 2000..2200u32 {
+        let mut stream = LogStream::new(UnifiedLogType::CopperList, logger.clone(), 1024).unwrap();
+        stream.log(&value).unwrap();
+    }
+    worker.join().unwrap();
+    drop(logger);
+    let mut saved = values(&path)
+        .iter()
+        .map(|(_, value)| *value)
+        .collect::<Vec<_>>();
+    saved.sort_unstable();
+    assert_eq!(saved, (0..2200).collect::<Vec<_>>());
+}
+
+#[test]
 fn invalid_links_are_rejected_before_append_mutates_the_log() {
     let dir = test_dir();
     for corrupt in [0, 1, 2] {

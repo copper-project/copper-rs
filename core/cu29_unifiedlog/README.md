@@ -47,6 +47,11 @@ next write. A write in progress blocks reclamation. The allocator preallocates
 64 concurrent section leases; one mmap section can span up to 64 backing files.
 Choose backing allocation sizes appropriate to the largest section.
 
+Allocations into free capacity do not wait for other streams to finish encoding.
+An active encoder commits its section's successor link before releasing its lease.
+Streams rebind when allocation revokes section access before encoding begins;
+this does not report an encoding failure.
+
 Native entries retain one encoding pass. Failed entries leave committed `used`
 and the writer cursor unchanged. Inspection reads committed bytes of incomplete
 logs; an open section or unclean main header prevents append.
