@@ -5318,7 +5318,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let run_methods: proc_macro2::TokenStream = quote! {
 
             #run_one_iteration {
-
+                let result: CuResult<()> = (|| {
                 // Pre-explode the runtime to avoid complexity with partial borrowing in the generated code.
                 let runtime = &mut self.copper_runtime;
                 let clock_handle = runtime.clock();
@@ -5402,6 +5402,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 };
                 monitor.observe_copperlist_io(stats);
                 Ok(())
+                })();
+                if result.is_err() {
+                    self.copper_runtime.copperlists_manager.discard_current();
+                }
+                result
             }
 
             fn restore_keyframe(&mut self, keyframe: &KeyFrame) -> CuResult<()> {
@@ -5437,6 +5442,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             #stop_all_tasks {
+                // Recycle an unpublished iteration before draining completed output.
+                self.copper_runtime.copperlists_manager.discard_current();
                 let lifecycle_clid = self.copper_runtime.copperlists_manager.last_cl_id();
                 let mut ctx = cu29::context::CuContext::from_runtime_metadata(
                     self.copper_runtime.clock(),
