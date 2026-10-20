@@ -203,37 +203,71 @@ fn successful_restart_and_failed_transitions_record_exact_lifecycle() {
             }
         );
     }
-    let path = dir.path().join("panic.copper");
-    let panic_logger = logger(&path);
-    FAILURE.store(5, Ordering::Relaxed);
-    assert!(
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let mut app = App::builder()
+    for mode in ["unwind", "stop", "run"] {
+        let path = dir.path().join(format!("panic-{mode}.copper"));
+        let panic_logger = logger(&path);
+        let build = || {
+            App::builder()
                 .with_logger::<memmap::MmapSectionStorage, UnifiedLoggerWrite>(panic_logger.clone())
                 .build()
                 .unwrap()
-                .start()
-                .unwrap();
-            app.run_one_iteration().unwrap();
-        }))
-        .is_err()
-    );
-    FAILURE.store(0, Ordering::Relaxed);
-    drop(panic_logger);
-    let saved = events(&path);
-    assert!(
-        saved
-            .iter()
-            .any(|(_, event)| matches!(event, RuntimeLifecycleEvent::Panic { .. }))
-    );
-    assert!(saved.iter().any(|(_, event)| *event
-        == RuntimeLifecycleEvent::MissionStopped {
-            reason: RuntimeStopReason::Panic
-        }));
-    assert!(matches!(
-        saved.last().unwrap().1,
-        RuntimeLifecycleEvent::ShutdownCompleted
-    ));
+        };
+        FAILURE.store(5, Ordering::Relaxed);
+        match mode {
+            "unwind" => assert!(
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let mut app = build().start().unwrap();
+                    app.run_one_iteration().unwrap();
+                }))
+                .is_err()
+            ),
+            "stop" => {
+                let mut app = build().start().unwrap();
+                assert!(
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        app.run_one_iteration().unwrap();
+                    }))
+                    .is_err()
+                );
+                let mut app = app.into_inner();
+                app.set_stop_reason(RuntimeStopReason::Panic);
+                #[allow(deprecated)]
+                app.stop_all_tasks().unwrap();
+            }
+            "run" => {
+                let failure = match build().run_until_shutdown() {
+                    Ok(_) => panic!("run should fail"),
+                    Err(failure) => failure,
+                };
+                assert!(
+                    failure
+                        .error
+                        .to_string()
+                        .contains("Panic while running one iteration")
+                );
+                drop(failure);
+            }
+            _ => unreachable!(),
+        }
+        FAILURE.store(0, Ordering::Relaxed);
+        drop(panic_logger);
+        let saved = events(&path);
+        if mode != "stop" {
+            assert!(
+                saved
+                    .iter()
+                    .any(|(_, event)| matches!(event, RuntimeLifecycleEvent::Panic { .. }))
+            );
+        }
+        assert!(saved.iter().any(|(_, event)| *event
+            == RuntimeLifecycleEvent::MissionStopped {
+                reason: RuntimeStopReason::Panic
+            }));
+        assert!(matches!(
+            saved.last().unwrap().1,
+            RuntimeLifecycleEvent::ShutdownCompleted
+        ));
+    }
 
     let path = dir.path().join("interleaved.copper");
     let shared = logger(&path);
