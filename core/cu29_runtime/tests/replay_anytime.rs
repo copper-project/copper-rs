@@ -349,23 +349,28 @@ fn smoother_stop_causes(copperlists: &[RecordedCl]) -> BTreeSet<&str> {
         .collect()
 }
 
+// Drive the raw lifecycle so this offline harness can drain the bounded
+// keyframe writer between iterations, independently of worker scheduling.
+#[allow(deprecated)]
 fn record_run(log_path: &Path) -> CuResult<()> {
     let (clock, clock_mock) = RobotClock::mock();
     let mut noop = |_step: default::SimStep<'_>| SimOverride::ExecuteByRuntime;
 
-    let app = AnytimeReplayApp::builder()
+    let mut app = AnytimeReplayApp::builder()
         .with_clock(clock)
         .with_log_path(log_path, LOG_SLAB_SIZE)?
         .with_sim_callback(&mut noop)
         .build()?;
 
-    let mut app = app.start(&mut noop)?;
+    app.start_all_tasks(&mut noop)?;
     for index in 0..ITERATIONS {
         clock_mock.set_value(index * DT_NANOS);
         app.run_one_iteration(&mut noop)?;
+        app.copper_runtime_mut()
+            .keyframes_manager
+            .finish_pending()?;
     }
-    // stop consumes the handle; the returned Stopped app drops here, flushing the logger.
-    app.stop(&mut noop)?;
+    app.stop_all_tasks(&mut noop)?;
     Ok(())
 }
 
@@ -373,8 +378,9 @@ fn record_run(log_path: &Path) -> CuResult<()> {
 /// injects the recorded source output and suppresses the sink, but leaves the
 /// two anytime nodes to the runtime, so their base and refine quanta execute for
 /// real against the recorded input.
+#[allow(deprecated)]
 fn resim_one(
-    app: &mut CuStdSimAppLifecycle<AnytimeReplayApp, Running>,
+    app: &mut CuStdSimAppLifecycle<AnytimeReplayApp>,
     clock_mock: &RobotClockMock,
     recorded: &RecordedCl,
 ) -> CuResult<()> {
@@ -387,27 +393,28 @@ fn resim_one(
     clock_mock.set_value(timestamp.as_nanos());
     let mut callback =
         |step: default::SimStep<'_>| default::recorded_debug_replay_step(step, recorded);
-    app.run_one_iteration(&mut callback)
+    app.run_one_iteration(&mut callback)?;
+    app.copper_runtime_mut().keyframes_manager.finish_pending()
 }
 
 /// Resims `recorded` on a fresh application: the tasks start from `new()` and
 /// the resim covers the whole recording.
+#[allow(deprecated)] // Drain keyframe output through the raw lifecycle, as in record_run.
 fn resim_run(recorded: &[RecordedCl], log_path: &Path) -> CuResult<()> {
     let (clock, clock_mock) = RobotClock::mock();
     let mut noop = |_step: default::SimStep<'_>| SimOverride::ExecuteByRuntime;
 
-    let app = AnytimeReplayApp::builder()
+    let mut app = AnytimeReplayApp::builder()
         .with_clock(clock)
         .with_log_path(log_path, LOG_SLAB_SIZE)?
         .with_sim_callback(&mut noop)
         .build()?;
 
-    let mut app = app.start(&mut noop)?;
+    app.start_all_tasks(&mut noop)?;
     for copperlist in recorded {
         resim_one(&mut app, &clock_mock, copperlist)?;
     }
-    // stop consumes the handle; the returned Stopped app drops here, flushing the logger.
-    app.stop(&mut noop)?;
+    app.stop_all_tasks(&mut noop)?;
     Ok(())
 }
 
@@ -433,9 +440,10 @@ fn anytime_nodes_record_and_resim_deterministically() -> CuResult<()> {
         ITERATIONS as usize,
         "the recording lost copperlists"
     );
-    assert!(
-        !a_keyframes.is_empty(),
-        "the recording captured no keyframe"
+    assert_eq!(
+        a_keyframes.iter().map(|kf| kf.culistid).collect::<Vec<_>>(),
+        (0..ITERATIONS).step_by(8).collect::<Vec<_>>(),
+        "the recording lost scheduled keyframes"
     );
 
     // The recording has to exercise the anytime schedule, not one path through
