@@ -34,14 +34,6 @@ _state:
     mkdir -p "$ISAAC_STATE"/home "$ISAAC_STATE"/kit/data "$ISAAC_STATE"/kit/logs "$ISAAC_STATE"/cache/main "$ISAAC_STATE"/cache/computecache "$ISAAC_STATE"/cache/kit "$ISAAC_STATE"/cache/hub "$ISAAC_STATE"/config "$ISAAC_STATE"/data "$ISAAC_STATE"/logs "$ISAAC_STATE"/pkg "$ISAAC_STATE"/output
     mkdir -p "$ISAAC_STATE"/home/.cache "$ISAAC_STATE"/home/.nv/ComputeCache "$ISAAC_STATE"/home/.nvidia-omniverse/config "$ISAAC_STATE"/home/.nvidia-omniverse/logs "$ISAAC_STATE"/home/.local/share/ov/data "$ISAAC_STATE"/home/.local/share/ov/pkg
 
-# Check host driver, Docker access, and local XWayland prerequisites.
-[default]
-doctor:
-    docker info
-    nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv
-    test -n "$DISPLAY" && test -d /tmp/.X11-unix
-    test -r "${XAUTHORITY:-$HOME/.Xauthority}"
-
 # Download the pinned NVIDIA image.
 pull:
     docker pull {{isaac_image}}
@@ -67,3 +59,32 @@ headless: _state
 # Open a shell in the same GPU container with persistent caches.
 shell: _state
     {{isaac_container}} -it {{isaac_image}}
+
+# Run the native Copper graph with Isaac; use `just run headless` without a window.
+[default]
+run mode="gui" observations=(if mode == "gui" { "0" } else { "130" }) *args: _state
+    #!/usr/bin/env bash
+    set -euo pipefail
+    test "{{mode}}" = gui || test "{{mode}}" = headless
+    cargo build --profile debug-optimized --manifest-path "$ISAAC_EXAMPLE/Cargo.toml"
+    mkdir -p "$ISAAC_EXAMPLE/logs"
+    echo "Isaac output: $ISAAC_EXAMPLE/logs/isaac.log"
+    session="$(mktemp -d /tmp/cu-isaac-XXXXXX)"
+    native_pid=""
+    cleanup() {
+        if test -n "$native_pid"; then
+            kill "$native_pid" 2>/dev/null || true
+            wait "$native_pid" 2>/dev/null || true
+        fi
+        rm -rf "$session"
+    }
+    trap cleanup EXIT
+    # Preserve terminal input for ConsoleMon in this background process.
+    TMPDIR="$session" "$ROOT/target/debug-optimized/cu-isaac-sim" --session "$session" --log "$ISAAC_EXAMPLE/logs/$(basename "$session").copper" {{args}} <&0 &
+    native_pid=$!
+    {{isaac_container}} \
+        --mount "type=bind,src=$session,dst=$session" \
+        {{if mode == "gui" { '--hostname "$(hostname)" --env DISPLAY --env XAUTHORITY=/tmp/isaac.Xauthority --mount type=bind,src=/tmp/.X11-unix,dst=/tmp/.X11-unix,readonly --mount "type=bind,src=${XAUTHORITY:-$HOME/.Xauthority},dst=/tmp/isaac.Xauthority,readonly"' } else { '' } }} \
+        {{isaac_image}} ./python.sh /workspace/isaac/smoke.py --mode {{mode}} --output /output/{{mode}} --session "$session" --observations {{observations}} >"$ISAAC_EXAMPLE/logs/isaac.log" 2>&1
+    wait "$native_pid"
+    native_pid=""

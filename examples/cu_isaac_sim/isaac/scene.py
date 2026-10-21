@@ -79,6 +79,7 @@ def create_sensors(stage, config):
         aux_output_level="FULL",
         attributes={
             "omni:sensor:Core:scanRateBaseHz": float(config["sensor_hz"]),
+            "omni:sensor:Core:nearRangeM": config["lidar_near_range_m"],
             "omni:sensor:Core:elementsCoordsType": "CARTESIAN",
             "omni:sensor:Core:outputFrameOfReference": "WORLD",
         },

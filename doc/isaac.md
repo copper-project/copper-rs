@@ -1,11 +1,69 @@
 # Isaac Sim integration: Jetbot, sensors, and replay
 
-Status: implementation started. The [environment scaffold](../examples/cu_isaac_sim/README.md)
-provides container, UI, asset-loading, and render checks. Docker GPU/Vulkan access,
-the compatibility checker, headless rendering, and the local XWayland window have
-been validated on the RTX 3090. The fixed approach, onboard RGB, and complete RTX
-lidar scans also pass the headless scene/sensor check. Copper integration and
-the demo commands below are still planned.
+Status (2026-10-18): the live demo works. The user confirmed the driven GUI
+approach and stop. Docker GPU/Vulkan access, local XWayland rendering, warehouse
+assets, onboard RGB, complete RTX lidar scans, shared-memory transport, and the
+native Copper graph are validated on the RTX 3090. Headless checks also verify
+simulation-clock stepping and the forced-stop controller override. Full sensor-log
+recovery and deterministic replay are the next milestone.
+
+## Resume here
+
+Continue on `gbin/isaac-integration`. The PR stack is:
+
+1. [#1525: CuImage shared-memory payload fix](https://github.com/copper-project/copper-rs/pull/1525)
+   — `gbin/fix-cuimage-shared-memory`, based on `master`.
+2. [#1524: container, scene, and sensors](https://github.com/copper-project/copper-rs/pull/1524)
+   — `gbin/base-isaac-setup-scene`, based on the CuImage branch.
+3. [#1526: native graph and shared-memory transport](https://github.com/copper-project/copper-rs/pull/1526)
+   — `gbin/isaac-integration`, based on the scene branch.
+
+Run these commands from `examples/cu_isaac_sim`:
+
+```bash
+just run
+just run headless 130
+just run headless 30 --override-controller=stop
+```
+
+The default GUI run continues until its window closes, keeping sensors and
+ConsoleMon live after Jetbot stops at the forklift. `just run gui 130` and the
+default `just run headless` produce 130 observations and control iterations, drive
+about 1.59 m, and stop with about 0.68 m of collider clearance. Bounded GUI runs
+pause the local window for inspection afterward.
+ConsoleMon shows the native graph in the terminal; Docker and Isaac output is
+redirected to the example's `logs/isaac.log`, replaced on each `just run`.
+Use `tail -f logs/isaac.log` from another terminal to inspect simulator startup
+and warnings.
+The launcher uses the optimized debug profile and background CopperList recording.
+Graph statuses show the frame, point count, RGB summary, clearance, and drive/stop
+decision. Per-run `performance.json` files split simulator and native costs;
+the overview evidence capture runs after control, and the wall-clock frame cap is
+disabled without changing the fixed simulation rates.
+Keep `state/` caches and the example's `logs/` when resuming. A completed run's
+`state/output/{gui,headless}/report.json` identifies its native log base under
+`copper.log`; retain that base, its numbered slabs, and matching scenario JSON.
+
+Next work, in order:
+
+1. Add an offline log reader and a regression test that recovers actual RGB
+   pixels, lidar points, acquisition times, and calibration after both processes
+   have exited and the session's shared-memory directory has been removed.
+   Full handle logging is enabled already; recovery has not yet been verified.
+2. Replay recorded sensor inputs through the real image-statistics, clearance,
+   and controller tasks without Isaac, a GPU, or actuator side effects. Restore
+   simulation time and keyframes; verify derived values and commands across a
+   keyframe boundary and when resuming from a nonzero keyframe.
+3. Add a replay stop-threshold override and compare decisions on identical
+   observations. Provide the planned `just replay` and `just inspect` commands,
+   then finish their documentation.
+
+Implementation entry points are the example's
+[`src/main.rs`](../examples/cu_isaac_sim/src/main.rs) (runtime and callbacks),
+[`src/transport.rs`](../examples/cu_isaac_sim/src/transport.rs) (leases and conversion),
+[`src/tasks.rs`](../examples/cu_isaac_sim/src/tasks.rs) (ordinary tasks), and
+[`isaac/transport.py`](../examples/cu_isaac_sim/isaac/transport.py) (simulator stepping).
+The Python/Rust protocol suite in `tests/` runs without Isaac or a GPU.
 
 ## Goal
 
@@ -78,6 +136,8 @@ The camera and lidar mount translations relative to the chassis are
 `[0.075, 0, 0.18]` and `[0, 0, 0.30]`. Both run at 10 Hz; physics runs at 60 Hz.
 The onboard camera looks along chassis +X and produces 320 × 240 RGB. The RTX
 `Example_Rotary` profile accumulates complete Cartesian scans in world coordinates.
+Override its 1 m minimum range to 0.3 m so the 0.65 m controller threshold remains
+observable during the approach.
 
 `just headless` verifies settling, floor and corridor raycasts, nonuniform camera
 pixels, and three complete scans with distinct timestamps 100 ms apart. On the
@@ -86,6 +146,17 @@ local RTX 3090, the lidar reports approximately 461,000 valid points per scan an
 at 2.25 m. Outputs include `overview.png`, `camera.png`, `lidar.npz`, and
 `report.json` under the example's `state/output/headless/`. `just gui` runs the
 same checks, then pauses with the overview selected for visual inspection.
+
+`just run` launches the native graph and local window until the window closes;
+`just run gui 130` and `just run headless 130` bound the exchange to 130
+observations. Every observation
+produces one control iteration, approximately 100 ms apart in simulation time.
+The validated run travels 1.59 m, stops when lidar clearance crosses 0.65 m, and
+ends with 0.68 m of PhysX collider clearance. The forced-stop callback produces
+30 zero wheel commands while both sensor branches continue processing; measured
+chassis movement is about 0.04 mm of settling. `commands.jsonl` and
+`observations.jsonl` stream commands and publication metadata beside the scene
+report. Native full-payload logs and scenario JSON live in the example's `logs/`.
 
 NVIDIA also provides office, hospital, and larger warehouse environments. The small
 warehouse with forklifts is the default to keep integration and rendering demands
@@ -111,7 +182,7 @@ Isaac container                           Native Copper process
 The Copper graph has two branches:
 
 ```text
-camera source → image statistics
+camera source → image statistics → telemetry sink
 lidar source  → forward clearance → stop controller → motor sink
 ```
 
@@ -121,8 +192,8 @@ decision.
 
 ### Isaac adapter and timing
 
-Use a small mounted Isaac extension for the local GUI. Share scene creation and
-adapter code with the headless entrypoint. Load the premade warehouse and Jetbot
+Use mounted Python code for the local GUI and headless entrypoint. Share scene
+creation and adapter code between both modes. Load the premade warehouse and Jetbot
 assets, attach the sensors, and persist shader and asset caches across launches.
 
 Isaac owns simulation advancement. At each control boundary:
@@ -166,6 +237,22 @@ acknowledgements. Large sensor arrays stay in shared memory.
 Shared memory avoids bulk socket transfers; GPU readback, the lidar conversion,
 and recording still have costs. Measure them separately from task execution.
 
+The implementation uses a versioned, newline-delimited JSON protocol bounded to
+64 KiB per metadata message. The native process grants one camera buffer and one
+lidar buffer for each observation sequence. Python maps Copper's descriptors and
+publishes packed RGB plus 20-byte little-endian lidar records: XYZ float32,
+intensity float32, and acquisition offset uint32. Bulk sensor bytes never pass
+through the socket. The next command carries the same sequence and simulation
+time; no further physics advances while Isaac waits for it.
+
+Pools are created before the loop, with eight image/cloud slots and four
+CopperLists. The adapter converts world points into the lidar frame at the
+observation boundary, preserving per-point acquisition times. It does not deskew
+each point using a historical robot pose. Sensor capacity is 524,288 points per
+complete scan. Overflow or exhausted leases aborts the run. The launcher sets
+`TMPDIR` to its temporary session directory so existing Copper pool files appear
+under the Docker bind mount, without changing the core pool API.
+
 ### Task overrides
 
 Build the generated runtime with `sim_mode = true`. In its generated `SimStep`
@@ -206,7 +293,7 @@ Proposed example-local commands:
 | Command | Purpose |
 | --- | --- |
 | `just run` | Launch the local Isaac window and Copper demo |
-| `just headless` | Record the same scenario without a window |
+| `just run headless 130` | Record the same scenario without a window |
 | `just replay` | Recompute processing and control from a recorded log |
 | `just inspect` | Inspect recorded sensors and derived outputs |
 
@@ -218,9 +305,10 @@ Proposed example-local commands:
 - [x] Load the premade warehouse and Jetbot; select and document the existing
       forklift target, collision geometry, fixed spawn pose, and overview camera.
 - [x] Render valid camera frames and complete lidar scans in the warehouse.
-- [ ] Implement shared-memory leases and the Unix socket exchange.
-- [ ] Connect the Copper graph, simulation clock, and hardware overrides.
-- [ ] Demonstrate stopping before collision and `--override-controller=stop`.
+- [x] Implement shared-memory leases and the Unix socket exchange.
+- [x] Connect the Copper graph, simulation clock, and hardware overrides.
+- [x] Demonstrate stopping before collision and `--override-controller=stop`
+      in headless runs; the user also confirmed the driven GUI demonstration.
 - [ ] Record and recover full sensor contents after process shutdown.
 - [ ] Implement replay, threshold comparison, and inspection.
 - [ ] Document launch, recording, replay, and first-run cache behavior.

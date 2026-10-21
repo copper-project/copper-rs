@@ -1,0 +1,23 @@
+[package]
+name = "cu-isaac-sim"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+exclude = ["state/", "logs/"]
+
+[package.metadata.copper]
+ci_exclude_workspace_os = ["windows"]
+
+[dependencies]
+bincode = { workspace = true }
+cu29 = { workspace = true, features = ["reflect", "async-cl-io"] }
+cu-sensor-payloads = { workspace = true }
+cu-consolemon = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+clap = { workspace = true }
+
+[build-dependencies]
+cu29-build = { workspace = true }
