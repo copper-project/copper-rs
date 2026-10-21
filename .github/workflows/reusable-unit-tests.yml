@@ -73,7 +73,7 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      BASE_FEATURES: cu29/reflect,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      BASE_FEATURES: cu29/reflect,cu29/async-cl-io,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: workspace
 
     strategy:
@@ -181,7 +181,7 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      BASE_FEATURES: cu29/reflect,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      BASE_FEATURES: cu29/reflect,cu29/async-cl-io,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: workspace
 
     strategy:
@@ -386,7 +386,7 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      BASE_FEATURES: cu29/reflect,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      BASE_FEATURES: cu29/reflect,cu29/async-cl-io,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: workspace
 
     steps:
@@ -447,7 +447,7 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      BASE_FEATURES: cu29/reflect,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      BASE_FEATURES: cu29/reflect,cu29/async-cl-io,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: ${{ matrix.target_os == 'windows' && 'core' || 'workspace' }}
 
     strategy:
@@ -617,7 +617,7 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      BASE_FEATURES: cu29/reflect,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      BASE_FEATURES: cu29/reflect,cu29/async-cl-io,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: workspace
 
     steps:
@@ -683,7 +683,7 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      BASE_FEATURES: cu29/reflect,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      BASE_FEATURES: cu29/reflect,cu29/async-cl-io,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: workspace
 
     steps:
@@ -737,7 +737,7 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      BASE_FEATURES: cu29/reflect,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      BASE_FEATURES: cu29/reflect,cu29/async-cl-io,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: workspace
 
     steps:
@@ -805,7 +805,7 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      BASE_FEATURES: cu29/reflect,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      BASE_FEATURES: cu29/reflect,cu29/async-cl-io,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: ${{ matrix.target_os == 'windows' && 'core' || 'workspace' }}
 
     strategy:
@@ -845,7 +845,7 @@ jobs:
       - name: Set features (Windows)
         if: runner.os == 'Windows'
         run: |
-          echo "FEATURES_FLAG=" >> $GITHUB_ENV
+          echo "FEATURES_FLAG=--features cu29/async-cl-io" >> $GITHUB_ENV
       - name: Detect default workspace exclusions
         if: env.WORKSPACE_SCOPE == 'workspace'
         run: |

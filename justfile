@@ -2,8 +2,8 @@
 import "support/just/viewers.just"
 
 # Keep first-party messages checked against the reflect-enabled CuMsgPayload contract.
-BASE_FEATURES := "cu29/reflect,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug"
-WINDOWS_BASE_FEATURES := "cu29/reflect,mock,cu-sensor-payloads/image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode"
+BASE_FEATURES := "cu29/reflect,cu29/async-cl-io,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug"
+WINDOWS_BASE_FEATURES := "cu29/reflect,cu29/async-cl-io,mock,cu-sensor-payloads/image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode"
 MSRV := "1.96.0"
 PUBLIC_API_VERSION := "0.51.0"
 PUBLIC_API_TOOLCHAIN := "nightly-2026-06-25"
