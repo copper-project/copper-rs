@@ -130,6 +130,10 @@ converts those errors to `CuError`.
 
 ## Experimental
 
+- `cu29_graph_view::{render_config_svg, render_multi_config_svg}`: host-side,
+  in-memory SVG rendering. The SVG markup and layout are presentation output, not
+  a stable serialization format.
+
 - `cu29::logstream::CuTwinBuilder`: `with_slab_size`, `with_section_size`,
   `with_receiver_limits`, `with_replay_capacity`, and `with_log_capacity` configure
   receiver-side archive and buffering budgets. `SessionRouterLimits::default()`
@@ -192,6 +196,8 @@ converts those errors to `CuError`.
   use `RuntimeStopReason` and `RuntimeLifecycleOperation`.
 
 ## Internal
+
+- `cu29_graph_view::run_cli`: executable entry point; hidden from rustdoc.
 
 - Direct fields on `CuRuntime`.
 - `CuRuntimeParts`.

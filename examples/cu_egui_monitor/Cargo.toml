@@ -1,0 +1,19 @@
+[package]
+name = "cu-egui-monitor"
+description = "An egui monitor with live Copper timings and a tiled SVG task graph."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+cu29 = { workspace = true }
+cu29-graph-view = { path = "../../core/cu29_graph_view", version = "~1.4.0-dev" }
+clap = { workspace = true }
+eframe = { workspace = true }
+resvg = "0.47"
+
+[build-dependencies]
+cu29-build = { workspace = true }

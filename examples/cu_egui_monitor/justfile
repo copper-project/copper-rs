@@ -1,0 +1,7 @@
+# Run the small live Copper monitor demo.
+default:
+    cargo run --release -p cu-egui-monitor
+
+# Preview the complete flight-controller graph with the same viewer.
+fc:
+    cargo run --release -p cu-egui-monitor -- --config ../cu_flight_controller/flight_controller.ron --features sim --mission default
