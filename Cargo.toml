@@ -249,7 +249,6 @@ zed-sdk = { path = "components/libs/zed_sdk", version = "~1.4.0-dev" }
 zed-sdk-sys = { path = "components/libs/zed_sdk_sys", version = "~1.4.0-dev" }
 cc = "1.2"
 eframe = { version = "0.37", default-features = false, features = [
-  "accesskit",
   "clipboard",
   "default_fonts",
   "glow",
