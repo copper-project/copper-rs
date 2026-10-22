@@ -195,6 +195,13 @@ and generation protection. Select this behavior from the existing capacity
 policy; do not add a user-facing concurrency setting. CAS removal is required
 within the first delivery, not a benchmark-dependent follow-up.
 
+For append-only policies, the section handle owns its commit block until explicit
+flush or drop. Ordinary appends use that exclusive ownership directly and perform
+no reclamation atomic transitions. Explicit logger close rejects live unflushed
+append-only handles; owners must flush or drop them first. Dropping such a handle
+best-effort seals and flushes it, with storage failures poisoning clean close.
+Overwrite retains per-entry acquisition and allocator revocation of idle handles.
+
 ## Runtime output
 
 Keep preallocated CopperList slots and bounded SPSC handoff. Move ownership of a
