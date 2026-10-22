@@ -52,10 +52,11 @@ pub const SECTION_MAGIC: [u8; 2] = [0xFA, 0x57]; // FAST
 /// to CopperLists, payload types, keyframes, or their serialization must not bump
 /// this value. Decode content with the logreader built for the exact application
 /// version that produced it; this header cannot establish content compatibility.
-/// Unreleased version 2 uses byte links, static metadata and construction contexts.
-pub const UNIFIED_LOG_FORMAT_VERSION: u8 = 2;
+/// Version 3 separates allocator descriptors and encoder commits into physical blocks.
+pub const UNIFIED_LOG_FORMAT_VERSION: u8 = 3;
 
-pub const SECTION_HEADER_COMPACT_SIZE: u16 = 512; // Usual minimum size for a disk sector.
+/// Reservation for the descriptor and commit blocks (512 bytes each).
+pub const SECTION_HEADER_COMPACT_SIZE: u16 = 1024;
 
 /// Header of the byte-addressed log. All offsets are relative to the log origin.
 #[derive(Encode, Decode, Debug, Clone)]
@@ -96,7 +97,8 @@ pub struct SectionContext {
     pub mission_index: u32,
 }
 
-/// One linked section. The allocation includes its 512-byte header reservation.
+/// Decoded view of a linked section. Allocation includes two 512-byte metadata blocks.
+/// The view is assembled by readers; its encoding is not the on-disk layout.
 #[derive(Encode, Decode, Debug, Clone)]
 pub struct SectionHeader {
     pub magic: [u8; 2],

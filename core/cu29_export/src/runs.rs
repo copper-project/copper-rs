@@ -367,7 +367,7 @@ mod tests {
                 stream_write_context::<RuntimeLifecycleRecord, memmap::MmapSectionStorage>(
                     logger.clone(),
                     UnifiedLogType::RuntimeLifecycle,
-                    1024,
+                    1536,
                     context,
                 )
                 .unwrap();
@@ -389,7 +389,7 @@ mod tests {
             let mut stream = stream_write_context::<u32, memmap::MmapSectionStorage>(
                 logger.clone(),
                 UnifiedLogType::CopperList,
-                1024,
+                1536,
                 context,
             )
             .unwrap();
@@ -454,7 +454,7 @@ mod tests {
                 unreachable!()
             };
             let mut handle = logger
-                .add_section(UnifiedLogType::CopperList, 1024)
+                .add_section(UnifiedLogType::CopperList, 1536)
                 .unwrap();
             handle.append(42u32).unwrap();
             logger.flush_section(&mut handle);

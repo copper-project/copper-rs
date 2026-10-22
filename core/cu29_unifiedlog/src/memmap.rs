@@ -438,7 +438,10 @@ impl MmapUnifiedLoggerRead {
         }
         let mut data = vec![0; h.used as usize];
         self.storage
-            .region(self.main_header.metadata_offset + 512, h.used as u64)?
+            .region(
+                self.main_header.metadata_offset + SECTION_HEADER_COMPACT_SIZE as u64,
+                h.used as u64,
+            )?
             .read(0, &mut data)?;
         let (metadata, used) = decode_from_slice::<ApplicationMetadata, _>(&data, standard())
             .map_err(|e| CuError::new_with_cause("Invalid application metadata", e))?;

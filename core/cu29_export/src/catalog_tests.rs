@@ -286,7 +286,7 @@ fn cropped_startup_uses_retained_mission_identity_and_shared_catalog() {
         let mut lifecycle = LogStream::with_context(
             UnifiedLogType::RuntimeLifecycle,
             logger.clone(),
-            1024,
+            1536,
             context,
         )
         .unwrap();

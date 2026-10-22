@@ -11,7 +11,7 @@ use bincode::config::standard;
 use bincode::enc::EncoderImpl;
 use bincode::enc::write::{SizeWriter, Writer};
 use bincode::error::EncodeError;
-use bincode::{Encode, decode_from_slice, encode_into_slice};
+use bincode::{Decode, Encode, decode_from_slice, encode_into_slice};
 use core::cell::UnsafeCell;
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use cu29_traits::{
@@ -19,17 +19,17 @@ use cu29_traits::{
     begin_observed_encode, finish_observed_encode,
 };
 
+const BLOCK: u64 = 512;
 const HEADER: u64 = SECTION_HEADER_COMPACT_SIZE as u64;
 const LEASES: usize = 64;
 const IDLE: usize = 1;
 const BUSY: usize = 2;
 const SEALED: usize = 3;
-const LINK_PENDING: usize = 4;
 const GENERATION_STRIDE: usize = 8;
 
 struct Lease {
     state: AtomicUsize,
-    next: portable_atomic::AtomicU64,
+    next: UnsafeCell<u64>,
     allocated: UnsafeCell<u64>,
     offset: UnsafeCell<u64>,
 }
@@ -70,10 +70,14 @@ impl Lease {
         }
     }
     fn next(&self) -> u64 {
-        self.next.load(Ordering::Acquire)
+        // SAFETY: Only the serialized allocator accesses chain geometry.
+        unsafe { *self.next.get() }
     }
     fn set_next(&self, offset: u64) {
-        self.next.store(offset, Ordering::Release);
+        // SAFETY: Only the serialized allocator accesses chain geometry.
+        unsafe {
+            *self.next.get() = offset;
+        }
     }
     fn allocated(&self) -> u64 {
         // SAFETY: Only the serialized allocator accesses this field.
@@ -253,36 +257,140 @@ fn write_header<R: ByteRegion, E: Encode>(region: &mut R, value: &E) -> CuResult
     region.commit()
 }
 
-pub fn read_header<B: ByteStorage>(storage: &B, offset: u64) -> CuResult<SectionHeader> {
-    let mut bytes = [0u8; 512];
-    storage.region(offset, HEADER)?.read(0, &mut bytes)?;
-    let (header, _) = decode_from_slice::<SectionHeader, _>(&bytes, standard())
-        .map_err(|e| CuError::from("Invalid section header").add_cause(&e.to_string()))?;
-    if header.magic != SECTION_MAGIC
-        || header.block_size != SECTION_HEADER_COMPACT_SIZE
-        || header.allocated < HEADER
-        || header.used as u64 > header.allocated - HEADER
-        || !header.allocated.is_multiple_of(HEADER)
-    {
-        return Err(CuError::from("Invalid section size or committed length"));
+// Each owner writes a whole independent 512-byte block, including on SD adapters.
+#[derive(Encode, Decode)]
+struct SectionDescriptor {
+    magic: [u8; 2],
+    block_size: u16,
+    entry_type: UnifiedLogType,
+    allocated: u64,
+    next_section: u64,
+    context: SectionContext,
+    position: u64,
+    generation: u64,
+    next_generation: u64,
+}
+#[derive(Encode, Decode)]
+struct SectionCommit {
+    position: u64,
+    generation: u64,
+    used: u32,
+    is_open: bool,
+}
+impl SectionDescriptor {
+    fn new(header: &SectionHeader, position: u64, generation: u64) -> Self {
+        Self {
+            magic: header.magic,
+            block_size: header.block_size,
+            entry_type: header.entry_type,
+            allocated: header.allocated,
+            next_section: header.next_section,
+            context: header.context,
+            position,
+            generation,
+            next_generation: 0,
+        }
     }
-    Ok(header)
+}
+fn read_descriptor<B: ByteStorage>(storage: &B, offset: u64) -> CuResult<SectionDescriptor> {
+    let mut bytes = [0u8; 512];
+    storage.region(offset, BLOCK)?.read(0, &mut bytes)?;
+    let (descriptor, _) = decode_from_slice::<SectionDescriptor, _>(&bytes, standard())
+        .map_err(|e| CuError::from("Invalid section descriptor").add_cause(&e.to_string()))?;
+    if descriptor.magic != SECTION_MAGIC
+        || descriptor.block_size != SECTION_HEADER_COMPACT_SIZE
+        || descriptor.position != offset
+        || descriptor.allocated < HEADER
+        || !descriptor.allocated.is_multiple_of(BLOCK)
+        || offset
+            .checked_add(descriptor.allocated)
+            .is_none_or(|end| end > storage.len())
+    {
+        return Err(CuError::from(
+            "Invalid section descriptor bounds or identity",
+        ));
+    }
+    Ok(descriptor)
+}
+fn write_commit<R: ByteRegion>(
+    region: &mut R,
+    header: &SectionHeader,
+    position: u64,
+    generation: u64,
+) -> CuResult<()> {
+    let mut bytes = [0u8; 512];
+    let count = encode_into_slice(
+        SectionCommit {
+            position,
+            generation,
+            used: header.used,
+            is_open: header.is_open,
+        },
+        &mut bytes,
+        standard(),
+    )
+    .map_err(|e| CuError::from("Cannot encode section commit").add_cause(&e.to_string()))?;
+    region.write(BLOCK, &bytes[..count])?;
+    region.commit()
+}
+fn initialize_section<R: ByteRegion>(
+    region: &mut R,
+    header: &SectionHeader,
+    position: u64,
+    generation: u64,
+) -> CuResult<()> {
+    write_commit(region, header, position, generation)?;
+    write_header(
+        region,
+        &SectionDescriptor::new(header, position, generation),
+    )
+}
+pub fn read_header<B: ByteStorage>(storage: &B, offset: u64) -> CuResult<SectionHeader> {
+    let descriptor = read_descriptor(storage, offset)?;
+    let mut bytes = [0u8; 512];
+    storage.region(offset + BLOCK, BLOCK)?.read(0, &mut bytes)?;
+    let (commit, _) = decode_from_slice::<SectionCommit, _>(&bytes, standard())
+        .map_err(|e| CuError::from("Invalid section commit").add_cause(&e.to_string()))?;
+    if commit.position != offset
+        || commit.generation != descriptor.generation
+        || commit.used as u64 > descriptor.allocated - HEADER
+    {
+        return Err(CuError::from(
+            "Invalid committed length or section generation",
+        ));
+    }
+    if descriptor.next_section != 0 {
+        let next = read_descriptor(storage, descriptor.next_section)?;
+        if next.generation != descriptor.next_generation {
+            return Err(CuError::from("Stale section link generation"));
+        }
+    }
+    Ok(SectionHeader {
+        magic: descriptor.magic,
+        block_size: descriptor.block_size,
+        entry_type: descriptor.entry_type,
+        allocated: descriptor.allocated,
+        next_section: descriptor.next_section,
+        context: descriptor.context,
+        used: commit.used,
+        is_open: commit.is_open,
+    })
 }
 
 pub fn read_main<B: ByteStorage>(storage: &B) -> CuResult<MainHeader> {
     let mut bytes = [0u8; 512];
-    storage.region(0, HEADER)?.read(0, &mut bytes)?;
+    storage.region(0, BLOCK)?.read(0, &mut bytes)?;
     let (header, _) = decode_from_slice::<MainHeader, _>(&bytes, standard())
         .map_err(|e| CuError::from("Invalid main header").add_cause(&e.to_string()))?;
     if header.magic != MAIN_MAGIC
         || header.format_version != UNIFIED_LOG_FORMAT_VERSION
         || header.page_size == 0
-        || !(header.page_size as u64).is_multiple_of(HEADER)
+        || !(header.page_size as u64).is_multiple_of(BLOCK)
         || header.sections_begin < header.page_size as u64
         || header.sections_begin > header.sections_end
         || header.sections_end > storage.len()
-        || !header.sections_begin.is_multiple_of(HEADER)
-        || !header.sections_end.is_multiple_of(HEADER)
+        || !header.sections_begin.is_multiple_of(BLOCK)
+        || !header.sections_end.is_multiple_of(BLOCK)
         || (header.head_section == 0) != (header.tail_section == 0)
     {
         return Err(CuError::from(
@@ -301,34 +409,25 @@ pub struct ByteSection<R: ByteRegion> {
     leases: Arc<LeaseTable>,
     slot: usize,
     generation: usize,
+    offset: u64,
 }
 impl<R: ByteRegion> ByteSection<R> {
     fn token(&self, state: usize) -> usize {
         self.generation * GENERATION_STRIDE + state
     }
     fn release_write(&mut self, state: usize) -> CuResult<()> {
-        match self.leases[self.slot].compare_exchange(
-            self.token(BUSY),
-            self.token(state),
-            Ordering::AcqRel,
-            Ordering::Acquire,
-        ) {
-            Ok(_) => return Ok(()),
-            Err(actual) if actual == self.token(BUSY) | LINK_PENDING => {}
-            Err(_) => {
+        self.leases[self.slot]
+            .compare_exchange(
+                self.token(BUSY),
+                self.token(state),
+                Ordering::Release,
+                Ordering::Relaxed,
+            )
+            .map(|_| ())
+            .map_err(|_| {
                 self.leases.poisoned.store(true, Ordering::Release);
-                return Err(CuError::from("Section lease changed during write"));
-            }
-        }
-        // The allocator handed this encoder the previous tail's link update.
-        // It never touches a header while an encoder owns BUSY.
-        self.header.next_section = self.leases[self.slot].next();
-        let result = write_header(&mut self.region, &self.header);
-        if result.is_err() {
-            self.leases.poisoned.store(true, Ordering::Release);
-        }
-        self.leases[self.slot].store(self.token(state), Ordering::Release);
-        result
+                CuError::from("Section lease changed during write")
+            })
     }
 }
 struct SectionWrite<'a, R: ByteRegion> {
@@ -410,9 +509,13 @@ impl<R: ByteRegion> SectionStorage for ByteSection<R> {
             let end = encoder.into_writer().into_inner().position;
             section.region.commit().map_err(encode_error)?;
             let mut committed = section.header.clone();
-            committed.next_section = section.leases[section.slot].next();
             committed.used = u32::try_from(end - HEADER).map_err(|_| EncodeError::UnexpectedEnd)?;
-            if let Err(error) = write_header(&mut section.region, &committed) {
+            if let Err(error) = write_commit(
+                &mut section.region,
+                &committed,
+                section.offset,
+                section.generation as u64,
+            ) {
                 section.leases.poisoned.store(true, Ordering::Release);
                 return Err(encode_error(error));
             }
@@ -450,10 +553,14 @@ impl<R: ByteRegion> SectionStorage for ByteSection<R> {
             };
             let section = &mut *guard.section;
             let mut header = section.header.clone();
-            header.next_section = section.leases[section.slot].next();
             header.is_open = false;
-            let result =
-                write_header(&mut section.region, &header).and_then(|()| section.region.flush());
+            let result = write_commit(
+                &mut section.region,
+                &header,
+                section.offset,
+                section.generation as u64,
+            )
+            .and_then(|()| section.region.flush());
             let state = if result.is_ok() {
                 section.header = header;
                 SEALED
@@ -493,9 +600,9 @@ impl<B: ByteStorage> ByteLogger<B> {
         capacity: u64,
     ) -> CuResult<Self> {
         if alignment == 0
-            || !(alignment as u64).is_multiple_of(HEADER)
+            || !(alignment as u64).is_multiple_of(BLOCK)
             || capacity <= alignment as u64
-            || !capacity.is_multiple_of(HEADER)
+            || !capacity.is_multiple_of(BLOCK)
         {
             return Err(CuError::from(
                 "Invalid log capacity or allocation alignment",
@@ -533,7 +640,7 @@ impl<B: ByteStorage> ByteLogger<B> {
             leases: Arc::new(LeaseTable {
                 slots: core::array::from_fn(|_| Lease {
                     state: AtomicUsize::new(0),
-                    next: portable_atomic::AtomicU64::new(0),
+                    next: UnsafeCell::new(0),
                     allocated: UnsafeCell::new(0),
                     offset: UnsafeCell::new(0),
                 }),
@@ -555,7 +662,7 @@ impl<B: ByteStorage> ByteLogger<B> {
         if !header.clean_close {
             return Err(CuError::from("Cannot append: log was not cleanly closed"));
         }
-        if !capacity.is_multiple_of(HEADER) || capacity <= header.sections_begin {
+        if !capacity.is_multiple_of(BLOCK) || capacity <= header.sections_begin {
             return Err(CuError::from("Invalid append capacity"));
         }
         let mut logger = Self::from_parts(storage, header, policy, capacity, true);
@@ -575,6 +682,10 @@ impl<B: ByteStorage> ByteLogger<B> {
             if section.is_open {
                 return Err(CuError::from("Cannot append: retained section is open"));
             }
+            logger.generation = logger.generation.max(
+                usize::try_from(read_descriptor(&logger.storage, cursor)?.generation)
+                    .map_err(|_| CuError::from("Section generation exceeds platform limits"))?,
+            );
             logger.allocation_end = logger.allocation_end.max(cursor + section.allocated);
             logger.retained_space = logger
                 .retained_space
@@ -654,7 +765,7 @@ impl<B: ByteStorage> ByteLogger<B> {
     fn data_header_unlocked(&self, offset: u64) -> CuResult<SectionHeader> {
         if offset < self.header.sections_begin
             || offset >= self.header.sections_end
-            || !offset.is_multiple_of(HEADER)
+            || !offset.is_multiple_of(BLOCK)
         {
             return Err(CuError::from("Section offset is outside the data region"));
         }
@@ -665,7 +776,7 @@ impl<B: ByteStorage> ByteLogger<B> {
             || (h.next_section != 0
                 && (h.next_section < self.header.sections_begin
                     || h.next_section >= self.header.sections_end
-                    || !h.next_section.is_multiple_of(HEADER)))
+                    || !h.next_section.is_multiple_of(BLOCK)))
         {
             return Err(CuError::from("Invalid section bounds or next link"));
         }
@@ -673,7 +784,7 @@ impl<B: ByteStorage> ByteLogger<B> {
     }
     fn publish(&mut self) -> CuResult<()> {
         let result = (|| {
-            let mut region = self.storage.region(0, HEADER)?;
+            let mut region = self.storage.region(0, BLOCK)?;
             write_header(&mut region, &self.header)?;
             region.flush()
         })();
@@ -716,7 +827,13 @@ impl<B: ByteStorage> ByteLogger<B> {
                     .map_err(|_| CuError::from("Space is blocked by a write in progress"))?;
                 let mut h = self.data_header(offset)?;
                 h.is_open = false;
-                write_header(&mut self.storage.region(offset, HEADER)?, &h)?;
+                let generation = read_descriptor(&self.storage, offset)?.generation;
+                write_commit(
+                    &mut self.storage.region(offset, HEADER)?,
+                    &h,
+                    offset,
+                    generation,
+                )?;
                 self.storage.region(offset, h.allocated)?.flush()?;
             }
         }
@@ -765,7 +882,7 @@ impl<B: ByteStorage> ByteLogger<B> {
         })?;
         let used = encoder.into_writer().position - HEADER;
         region.flush()?;
-        write_header(
+        initialize_section(
             &mut region,
             &SectionHeader {
                 entry_type: kind,
@@ -776,6 +893,8 @@ impl<B: ByteStorage> ByteLogger<B> {
                 is_open: false,
                 ..SectionHeader::default()
             },
+            offset,
+            0,
         )
     }
     pub fn close(&mut self) -> CuResult<()> {
@@ -803,8 +922,8 @@ impl<B: ByteStorage> ByteLogger<B> {
     }
 }
 fn aligned(size: u64) -> CuResult<u64> {
-    size.checked_add(HEADER - 1)
-        .map(|s| s / HEADER * HEADER)
+    size.checked_add(BLOCK - 1)
+        .map(|s| s / BLOCK * BLOCK)
         .ok_or_else(|| CuError::from("Section size overflow"))
 }
 impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
@@ -1035,7 +1154,13 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
             loop {
                 let mut h = self.data_header_unlocked(cursor)?;
                 h.is_open = false;
-                write_header(&mut self.storage.region(cursor, HEADER)?, &h)?;
+                let generation = read_descriptor(&self.storage, cursor)?.generation;
+                write_commit(
+                    &mut self.storage.region(cursor, HEADER)?,
+                    &h,
+                    cursor,
+                    generation,
+                )?;
                 self.storage.region(cursor, h.allocated)?.flush()?;
                 if let Some(slot) = self
                     .leases
@@ -1076,25 +1201,15 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
             ..SectionHeader::default()
         };
         let mut region = self.storage.region(position, size)?;
-        write_header(&mut region, &header)?;
+        initialize_section(&mut region, &header, position, self.generation as u64)?;
         if self.header.tail_section != 0 {
             let tail = self.header.tail_section;
+            let mut previous = read_descriptor(&self.storage, tail)?;
+            previous.next_section = position;
+            previous.next_generation = self.generation as u64;
+            write_header(&mut self.storage.region(tail, BLOCK)?, &previous)?;
             if let Some(slot) = self.leases.iter().position(|lease| lease.offset() == tail) {
-                let lease = &self.leases[slot];
-                lease.set_next(position);
-                let state = lease.state.fetch_or(LINK_PENDING, Ordering::AcqRel);
-                if state % 4 != BUSY {
-                    // An idle/sealed encoder cannot start while LINK_PENDING is set.
-                    let mut previous = self.data_header_unlocked(tail)?;
-                    previous.next_section = position;
-                    write_header(&mut self.storage.region(tail, HEADER)?, &previous)?;
-                    lease.store(state, Ordering::Release);
-                }
-                // A busy encoder publishes the link before releasing its lease.
-            } else {
-                let mut previous = self.data_header_unlocked(tail)?;
-                previous.next_section = position;
-                write_header(&mut self.storage.region(tail, HEADER)?, &previous)?;
+                self.leases[slot].set_next(position);
             }
         }
         if self.header.head_section == 0 {
@@ -1124,6 +1239,7 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
             leases: self.leases.clone(),
             slot,
             generation: self.generation,
+            offset: position,
         };
         let handle = SectionHandle::create(header, storage)?;
         self.faulted = false;
@@ -1211,8 +1327,8 @@ mod tests {
     fn logger(path: &std::path::Path, policy: CapacityPolicy) -> crate::UnifiedLoggerWrite {
         match UnifiedLoggerBuilder::new()
             .file_base_name(path)
-            .preallocated_size(8192)
-            .capacity(8192, policy)
+            .preallocated_size(16384)
+            .capacity(16384, policy)
             .write(true)
             .create(true)
             .build()
@@ -1224,6 +1340,33 @@ mod tests {
     }
 
     #[test]
+    fn test_metadata_owners_fit_independent_physical_blocks() {
+        let header = SectionHeader {
+            entry_type: UnifiedLogType::CopperList,
+            allocated: u64::MAX,
+            next_section: u64::MAX,
+            used: u32::MAX,
+            context: SectionContext {
+                run_id: u64::MAX,
+                instance_id: u32::MAX,
+                mission_index: u32::MAX,
+            },
+            ..SectionHeader::default()
+        };
+        let mut descriptor = SectionDescriptor::new(&header, u64::MAX, u64::MAX);
+        descriptor.next_generation = u64::MAX;
+        let commit = SectionCommit {
+            position: u64::MAX,
+            generation: u64::MAX,
+            used: u32::MAX,
+            is_open: true,
+        };
+        let mut block = [0u8; 512];
+        assert!(encode_into_slice(descriptor, &mut block, standard()).unwrap() < block.len());
+        assert!(encode_into_slice(commit, &mut block, standard()).unwrap() < block.len());
+    }
+
+    #[test]
     fn test_grow_allocation_does_not_visit_retained_extents() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("allocation-visits.copper");
@@ -1231,7 +1374,7 @@ mod tests {
         for value in 0..512u32 {
             let visits = logger.extent_visits.load(Ordering::Relaxed);
             let mut section = logger
-                .add_section(UnifiedLogType::CopperList, 1024)
+                .add_section(UnifiedLogType::CopperList, 2048)
                 .unwrap();
             assert_eq!(
                 logger.extent_visits.load(Ordering::Relaxed),
@@ -1253,16 +1396,16 @@ mod tests {
             let mut logger = logger(&path, CapacityPolicy::OverwriteOldest);
             for value in 0..8u32 {
                 let mut section = logger
-                    .add_section(UnifiedLogType::CopperList, 1024)
+                    .add_section(UnifiedLogType::CopperList, 2048)
                     .unwrap();
                 section.append(value).unwrap();
                 logger.try_flush_section(&mut section).unwrap();
             }
-            assert_eq!(logger.header.tail_section, HEADER, "the log must wrap");
+            assert_eq!(logger.header.tail_section, BLOCK, "the log must wrap");
         }
         let mut logger = match UnifiedLoggerBuilder::new()
             .file_base_name(&path)
-            .preallocated_size(8192)
+            .preallocated_size(16384)
             .write(true)
             .create(true)
             .append(true)
@@ -1273,12 +1416,12 @@ mod tests {
             _ => unreachable!(),
         };
         let mut section = logger
-            .add_section(UnifiedLogType::CopperList, 1024)
+            .add_section(UnifiedLogType::CopperList, 2048)
             .unwrap();
         assert_eq!(logger.extent_visits.load(Ordering::Relaxed), 0);
         assert_eq!(
             logger.header.tail_section,
-            HEADER + 7 * 1024,
+            BLOCK + 7 * 2048,
             "Grow must use the free suffix beyond the highest retained extent"
         );
         section.append(8u32).unwrap();
@@ -1293,7 +1436,7 @@ mod tests {
         let path = dir.path().join("selection.copper");
         let mut logger = logger(&path, CapacityPolicy::Grow);
         let mut first = logger
-            .add_section(UnifiedLogType::CopperList, 1024)
+            .add_section(UnifiedLogType::CopperList, 2048)
             .unwrap();
         first.append(41u32).unwrap();
         let section = first.get_storage();
@@ -1316,7 +1459,7 @@ mod tests {
             }));
         });
         let mut next = logger
-            .add_section(UnifiedLogType::CopperList, 1024)
+            .add_section(UnifiedLogType::CopperList, 2048)
             .unwrap();
         LEASE_HOOK.with(|cell| cell.borrow_mut().take());
         assert_eq!(loads.load(Ordering::Relaxed), 2);
@@ -1334,7 +1477,7 @@ mod tests {
     }
 
     #[test]
-    fn test_link_publication_between_stream_precheck_and_acquisition_rebinds() {
+    fn test_sealing_between_stream_precheck_and_acquisition_rebinds() {
         struct Counted<'a>(&'a Cell<usize>);
         impl Encode for Counted<'_> {
             fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
@@ -1354,7 +1497,7 @@ mod tests {
                     .join(format!("acquisition-{policy:?}-{empty}.copper"));
                 let logger = Arc::new(Mutex::new(logger(&path, policy)));
                 let mut stream =
-                    LogStream::new(UnifiedLogType::CopperList, logger.clone(), 1024).unwrap();
+                    LogStream::new(UnifiedLogType::CopperList, logger.clone(), 2048).unwrap();
                 if !empty {
                     stream.log(&41u32).unwrap();
                 }
@@ -1374,8 +1517,11 @@ mod tests {
                             LeaseEvent::BeforeCompareExchange
                                 if !observed.load(Ordering::Relaxed) =>
                             {
-                                // Allocation temporarily owns the idle tail's header.
-                                lease.store(idle | LINK_PENDING, Ordering::Release);
+                                // Reclamation seals the idle section before acquisition.
+                                lease.store(
+                                    idle / GENERATION_STRIDE * GENERATION_STRIDE + SEALED,
+                                    Ordering::Release,
+                                );
                                 pending = true;
                                 observed.store(true, Ordering::Relaxed);
                             }
@@ -1409,13 +1555,13 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("revocation.copper");
         let logger = Arc::new(Mutex::new(logger(&path, CapacityPolicy::OverwriteOldest)));
-        let mut stream = LogStream::new(UnifiedLogType::CopperList, logger.clone(), 1024).unwrap();
+        let mut stream = LogStream::new(UnifiedLogType::CopperList, logger.clone(), 2048).unwrap();
         stream.log(&41u32).unwrap();
         // Leave the next allocation to wrap and reclaim the idle first stream.
         for value in 0..6u32 {
             let mut logger = logger.lock().unwrap();
             let mut section = logger
-                .add_section(UnifiedLogType::CopperList, 1024)
+                .add_section(UnifiedLogType::CopperList, 2048)
                 .unwrap();
             section.append(value).unwrap();
             logger.try_flush_section(&mut section).unwrap();
@@ -1434,7 +1580,7 @@ mod tests {
                     injected = true;
                     let mut logger = parent.lock().unwrap();
                     let mut section = logger
-                        .add_section(UnifiedLogType::CopperList, 1024)
+                        .add_section(UnifiedLogType::CopperList, 2048)
                         .unwrap();
                     section.append(43u32).unwrap();
                     logger.try_flush_section(&mut section).unwrap();
@@ -1461,7 +1607,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("failure.copper");
         let logger = Arc::new(Mutex::new(logger(&path, CapacityPolicy::Grow)));
-        let mut stream = LogStream::new(UnifiedLogType::CopperList, logger.clone(), 1024).unwrap();
+        let mut stream = LogStream::new(UnifiedLogType::CopperList, logger.clone(), 2048).unwrap();
         stream.log(&41u32).unwrap();
         let slot = stream.current_section.storage.slot;
         let generation = stream.current_section.storage.generation;
