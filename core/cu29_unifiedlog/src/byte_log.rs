@@ -478,6 +478,10 @@ pub struct ByteLogger<B: ByteStorage> {
     generation: usize,
     next_run_id: u64,
     retained_space: u64,
+    // First byte beyond every retained extent. Grow never reuses earlier gaps.
+    allocation_end: u64,
+    #[cfg(test)]
+    extent_visits: AtomicUsize,
     append_pending: bool,
     faulted: bool,
 }
@@ -520,6 +524,7 @@ impl<B: ByteStorage> ByteLogger<B> {
         capacity: u64,
         append_pending: bool,
     ) -> Self {
+        let allocation_end = header.sections_begin;
         Self {
             storage,
             header,
@@ -537,6 +542,9 @@ impl<B: ByteStorage> ByteLogger<B> {
             generation: 0,
             next_run_id: 1,
             retained_space: 0,
+            allocation_end,
+            #[cfg(test)]
+            extent_visits: AtomicUsize::new(0),
             append_pending,
             faulted: false,
         }
@@ -567,6 +575,7 @@ impl<B: ByteStorage> ByteLogger<B> {
             if section.is_open {
                 return Err(CuError::from("Cannot append: retained section is open"));
             }
+            logger.allocation_end = logger.allocation_end.max(cursor + section.allocated);
             logger.retained_space = logger
                 .retained_space
                 .checked_add(section.allocated)
@@ -623,6 +632,8 @@ impl<B: ByteStorage> ByteLogger<B> {
         Ok(())
     }
     fn section_extent(&self, offset: u64) -> CuResult<(u64, u64)> {
+        #[cfg(test)]
+        self.extent_visits.fetch_add(1, Ordering::Relaxed);
         if let Some(lease) = self.leases.iter().find(|lease| lease.offset() == offset) {
             return Ok((lease.allocated(), lease.next()));
         }
@@ -886,6 +897,7 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
         }
         self.header.metadata_offset = base;
         self.header.sections_begin = end;
+        self.allocation_end = end;
         if end + HEADER > self.header.sections_end {
             self.header.sections_end = self.storage.len();
         }
@@ -938,7 +950,9 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
             return Err(CuError::from("Section exceeds log capacity"));
         }
         let tail = self.header.tail_section;
-        let mut position = if tail == 0 {
+        let mut position = if self.policy == CapacityPolicy::Grow {
+            self.allocation_end
+        } else if tail == 0 {
             self.header.sections_begin
         } else {
             tail + self.section_extent(tail)?.0
@@ -950,30 +964,30 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
         {
             position = self.header.sections_begin;
         }
-        let overlaps =
-            |offset: u64, allocated: u64| position < offset + allocated && offset < position + size;
+        let end = position
+            .checked_add(size)
+            .ok_or_else(|| CuError::from("Section extent overflow"))?;
+        let overlaps = |offset: u64, allocated: u64| position < offset + allocated && offset < end;
         let mut last_overlap = 0;
-        let mut cursor = self.header.head_section;
-        let mut remaining = capacity / HEADER;
-        while cursor != 0 {
-            if remaining == 0 {
-                return Err(CuError::from("Cyclic section links"));
+        // Append-only growth starts beyond every occupied extent, including
+        // after reopening a wrapped ring. Only reclamation needs a chain walk.
+        if self.policy != CapacityPolicy::Grow {
+            let mut cursor = self.header.head_section;
+            let mut remaining = capacity / HEADER;
+            while cursor != 0 {
+                if remaining == 0 {
+                    return Err(CuError::from("Cyclic section links"));
+                }
+                remaining -= 1;
+                let (allocated, next) = self.section_extent(cursor)?;
+                if overlaps(cursor, allocated) {
+                    last_overlap = cursor;
+                }
+                cursor = next;
             }
-            remaining -= 1;
-            let (allocated, next) = self.section_extent(cursor)?;
-            if overlaps(cursor, allocated) {
-                last_overlap = cursor;
-            }
-            cursor = next;
-        }
-        if self.policy == CapacityPolicy::Grow
-            && (last_overlap != 0 || position + size > self.header.sections_end)
-        {
-            position = self.header.sections_end;
-            last_overlap = 0;
         }
         if self.policy == CapacityPolicy::StopWhenFull
-            && (last_overlap != 0 || position + size > self.header.sections_end)
+            && (last_overlap != 0 || end > self.header.sections_end)
         {
             return Err(CuError::from("Log is full"));
         }
@@ -1007,13 +1021,13 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
             ));
         }
         // Validate the mapping geometry before reclamation or header changes.
-        if position + size <= self.storage.len() {
+        if end <= self.storage.len() {
             let _ = self.storage.region(position, size)?;
         }
         self.activate()?;
         self.faulted = true;
-        if position + size > self.header.sections_end {
-            self.storage.grow(position + size)?;
+        if end > self.header.sections_end {
+            self.storage.grow(end)?;
             self.header.sections_end = self.storage.len();
         }
         if last_overlap != 0 {
@@ -1090,6 +1104,7 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
         self.header.clean_close = false;
         self.publish()?;
         self.retained_space += size;
+        self.allocation_end = self.allocation_end.max(end);
         for lease in self.leases.iter() {
             if lease.offset() == position {
                 lease.set_offset(0);
@@ -1206,6 +1221,70 @@ mod tests {
             UnifiedLogger::Write(logger) => logger,
             _ => unreachable!(),
         }
+    }
+
+    #[test]
+    fn test_grow_allocation_does_not_visit_retained_extents() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("allocation-visits.copper");
+        let mut logger = logger(&path, CapacityPolicy::Grow);
+        for value in 0..512u32 {
+            let visits = logger.extent_visits.load(Ordering::Relaxed);
+            let mut section = logger
+                .add_section(UnifiedLogType::CopperList, 1024)
+                .unwrap();
+            assert_eq!(
+                logger.extent_visits.load(Ordering::Relaxed),
+                visits,
+                "Grow allocation visited retained geometry after {value} sections"
+            );
+            section.append(value).unwrap();
+            logger.try_flush_section(&mut section).unwrap();
+        }
+        drop(logger);
+        assert_eq!(saved_values(&path), (0..512).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn test_grow_after_wrap_uses_free_suffix_without_visiting_retained_extents() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("wrapped-allocation-visits.copper");
+        {
+            let mut logger = logger(&path, CapacityPolicy::OverwriteOldest);
+            for value in 0..8u32 {
+                let mut section = logger
+                    .add_section(UnifiedLogType::CopperList, 1024)
+                    .unwrap();
+                section.append(value).unwrap();
+                logger.try_flush_section(&mut section).unwrap();
+            }
+            assert_eq!(logger.header.tail_section, HEADER, "the log must wrap");
+        }
+        let mut logger = match UnifiedLoggerBuilder::new()
+            .file_base_name(&path)
+            .preallocated_size(8192)
+            .write(true)
+            .create(true)
+            .append(true)
+            .build()
+            .unwrap()
+        {
+            UnifiedLogger::Write(logger) => logger,
+            _ => unreachable!(),
+        };
+        let mut section = logger
+            .add_section(UnifiedLogType::CopperList, 1024)
+            .unwrap();
+        assert_eq!(logger.extent_visits.load(Ordering::Relaxed), 0);
+        assert_eq!(
+            logger.header.tail_section,
+            HEADER + 7 * 1024,
+            "Grow must use the free suffix beyond the highest retained extent"
+        );
+        section.append(8u32).unwrap();
+        logger.try_flush_section(&mut section).unwrap();
+        drop(logger);
+        assert_eq!(saved_values(&path), (1..9).collect::<Vec<_>>());
     }
 
     #[test]

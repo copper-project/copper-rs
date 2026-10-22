@@ -206,6 +206,59 @@ fn matching_append_changes_policy_and_allocates_new_run_ids() {
     );
     assert_eq!(values(&path).len(), 3);
 }
+
+#[test]
+fn grow_after_wrap_preserves_retained_records_and_reconstructs_geometry() {
+    let dir = test_dir();
+    for capacity in [4096, 8192] {
+        for sections in [8, 9, 15] {
+            let path = dir
+                .path()
+                .join(format!("wrapped-{capacity}-{sections}.copper"));
+            {
+                let mut logger = writer(
+                    &path,
+                    4096,
+                    capacity,
+                    false,
+                    CapacityPolicy::OverwriteOldest,
+                );
+                logger.seal_metadata::<()>(&metadata(), None).unwrap();
+                let context = logger.construction_context(5, 1).unwrap();
+                for value in 0..sections {
+                    let mut section = logger
+                        .add_section_with_context(UnifiedLogType::CopperList, 1024, context)
+                        .unwrap();
+                    section.append(value).unwrap();
+                    logger.try_flush_section(&mut section).unwrap();
+                }
+            }
+            let mut expected = values(&path);
+            assert!(!expected.is_empty());
+            assert!(
+                expected.len() < sections as usize,
+                "the initial log must wrap"
+            );
+            // Reopen twice: the first append follows a low-address tail in a
+            // wrapped chain; the second reconstructs a chain that grew past it.
+            let mut append_capacity = capacity;
+            for value in [100u32, 101] {
+                let mut logger = writer(&path, 4096, append_capacity, true, CapacityPolicy::Grow);
+                logger.seal_metadata::<()>(&metadata(), None).unwrap();
+                let context = logger.construction_context(5, 1).unwrap();
+                let mut section = logger
+                    .add_section_with_context(UnifiedLogType::CopperList, 1536, context)
+                    .unwrap();
+                section.append(value).unwrap();
+                logger.try_flush_section(&mut section).unwrap();
+                append_capacity = logger.status().total_allocated_space;
+                drop(logger);
+                expected.push((context, value));
+                assert_eq!(values(&path), expected);
+            }
+        }
+    }
+}
 #[test]
 fn mismatched_append_makes_no_header_or_payload_changes() {
     let dir = test_dir();
