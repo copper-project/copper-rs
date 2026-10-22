@@ -450,7 +450,49 @@ This stress run supports concurrent logging correctness at the tested load. It
 does not establish a general throughput improvement: normal is effectively flat,
 pressure has a slower median completed time despite a lower logged p99, and the
 rollover median improves with widely overlapping trial ranges. The pressure
-regression remains unexplained; these measurements alone do not satisfy the
-performance acceptance criterion above. The shared keyframe startup issue also
-needs separate follow-up. Existing microbenchmarks remain evidence for their
-specific costs, rather than an application-wide speedup claim.
+difference cannot be isolated to runtime costs from disk-backed measurements
+alone; see the tmpfs control below. The shared keyframe startup issue also needs
+separate follow-up. Existing microbenchmarks remain evidence for their specific
+costs, rather than an application-wide speedup claim.
+
+### tmpfs control (2026-10-22)
+
+Reused the exact before/after binaries, workload, keyframe preparation, timing
+boundaries, verification, and five alternating pairs per scenario above, writing
+the log to tmpfs instead of NVMe. Each revision again received a 16-frame warmup
+per scenario. No rebuild or runtime/configuration change was needed.
+
+A single private directory under `/tmp` held one log family at a time. The runner
+enforced a 4 GiB logical file-size limit, including the preallocated base file,
+and a 4 GiB free-space/memory reserve. Actual peak tmpfs allocation was 2.615 GiB;
+free tmpfs headroom stayed above 27.51 GiB. Each log was removed after decoding
+and `fsck`; only the small result/verification files were retained on NVMe. The
+tmpfs directory was removed at completion, restoring the initial free space.
+
+| Scenario | Completed s before → after | Change | Trial range s before / after | Logged p99 ms before → after | Logged p999 ms before → after |
+| --- | ---: | ---: | --- | ---: | ---: |
+| Normal | 3.164 → 3.161 | −0.1% | 3.128–3.184 / 3.126–3.181 | 36.356 → 35.871 | 46.170 → 46.576 |
+| Pressure | 3.161 → 3.154 | −0.2% | 3.135–3.170 / 3.139–3.191 | 36.104 → 35.870 | 46.492 → 47.703 |
+| Rollover | 3.195 → 3.170 | −0.8% | 3.178–3.204 / 3.150–3.196 | 36.446 → 36.323 | 46.942 → 49.131 |
+
+Median user+system CPU seconds were 71.917 → 71.884, 72.260 → 72.269, and
+72.336 → 72.362 for normal, pressure, and rollover respectively. Median peak RSS
+MiB was 1,287 → 1,287, 2,851 → 2,853, and 2,852 → 2,848.
+
+All 30 tmpfs runs passed decoding, digest/order checks, and matching-reader
+`fsck`, with zero CL/keyframe drops and no orphan keyframes. Every frame digest
+matched the original NVMe runs. Pressure recorded 196 keyframes and 104,640
+structured records in every run on both revisions; normal recorded one keyframe
+and 192 structured records. Rollover recorded 195–196 keyframes and 104,640
+structured records on both sides. Empty shutdown work remained variable, with
+3,314–3,319 total CopperLists across the scenarios; all 3,264 source stripes and
+192 images were persisted in every run.
+
+The +22.6% disk-backed pressure increase did not reproduce on tmpfs: completed
+time and CPU cost are effectively unchanged between revisions, with much tighter
+trial ranges. This strongly implicates storage/flush interaction in the earlier
+result. It does not identify NVMe hardware, filesystem behavior, or the code's
+flush pattern as the specific cause. The disk-backed data remains relevant to
+storage-backed deployments, but it is not evidence of a general 23% runtime
+slowdown. The tmpfs measurements also do not demonstrate an application-wide
+throughput improvement.
