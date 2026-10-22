@@ -381,3 +381,76 @@ crash recovery does not gate acceptance. Require no new hot-path allocations,
 payload copies, or serialization passes, and no unexplained latency or throughput
 regression at equivalent completed work. Any proposed additional real-time cost
 requires explicit approval before implementation.
+
+## One-off Mandelbrot comparison (2026-10-22)
+
+This compares the parent of #1543 (`e7649fc5158`) with the tip of #1549
+(`cce9ff3abf0`), covering the complete stack. A temporary harness exercised
+`cu-parallel-mandelbrot`'s `log_only` mission. Only these results are maintained;
+no benchmark executable, script, recipe, or example configuration change is
+included in the PR.
+
+Both revisions used release builds with `parallel-rt` and `cu29/async-cl-io`,
+identical resolved dependencies, and separate target directories. The host was an
+AMD Ryzen 9 9950X3D2 (16 cores, 32 threads), Linux 7.2.10-1-cachyos, Rust 1.99.0,
+and the same NVMe filesystem. CPU boost remained enabled on the live desktop
+host. Each scenario had one 16-frame warmup per revision and five alternating
+before/after pairs of 192 frames: 1920 × 1080 RGB, 512 iterations, 32 compute
+bands, 64-row stripes, 32 in-flight CopperLists, 64 arena slots, and 64 source
+pool slots. Stdout was redirected; the live viewer was unused.
+
+- **Normal:** existing compact source codec and completed-image logging,
+  keyframe interval 1,000,000, 64 MiB sections, and 512 MiB slabs.
+- **Pressure:** keyframe interval 17 and one structured record per compute-band
+  invocation, with the same section and slab sizes.
+- **Rollover:** pressure settings with 16 MiB sections and 64 MiB slabs.
+
+The temporary harness ran the existing cold-path keyframe sizing and arena
+preparation before entering `run()`. Both revisions otherwise recorded no
+keyframes through this parallel entry point: `run()` takes arena leases before
+startup attempts preparation through the manager's free pool. This shared
+startup issue is not fixed by this report. The workaround enabled actual
+keyframe output in both measured revisions without changing runtime source.
+
+Completed time starts before `run()` and ends after output drain, worker shutdown,
+stream flushes, application drop, and explicit logger close. Logger construction,
+the harness's cold preparation, and offline verification are excluded. Default
+mmap flushing is retained; `mmap-fsync` is disabled on both sides. Logged latency
+runs from source process start to frame-assembler process end for each of the
+3,264 source stripes; it excludes subsequent async output completion. Values
+below are medians of the five trials, with full completed-time ranges shown.
+
+| Scenario | Completed s before → after | Change | Trial range s before / after | Logged p99 ms before → after | Logged p999 ms before → after |
+| --- | ---: | ---: | --- | ---: | ---: |
+| Normal | 4.348 → 4.306 | −1.0% | 4.283–6.375 / 3.838–6.531 | 48.484 → 48.082 | 50.847 → 50.518 |
+| Pressure | 8.433 → 10.342 | +22.6% | 5.345–16.820 / 7.211–19.764 | 218.264 → 148.402 | 229.904 → 227.963 |
+| Rollover | 16.416 → 11.323 | −31.0% | 7.650–19.755 / 9.115–19.853 | 182.644 → 181.957 | 215.209 → 214.995 |
+
+Median user+system CPU seconds were 73.461 → 72.860, 77.650 → 79.329, and
+85.768 → 82.117 for normal, pressure, and rollover respectively. Median peak RSS
+MiB was 1,296 → 1,297, 2,916 → 2,905, and 2,869 → 2,970, including mapped logs.
+
+Every timed run persisted all 192 frames and all 3,264 source stripes in order,
+with identical per-frame digests across all 30 runs; the final frame digest was
+`0x6089b61036d4bcaa`. Both revisions' matching readers decoded every CopperList,
+keyframe, and structured record, and all 30 `fsck` checks passed. No CopperLists
+or keyframes were dropped; CopperList IDs were contiguous and every keyframe had
+its associated CopperList. Normal runs recorded 192 structured records and one
+keyframe; pressure and rollover recorded 104,640 structured records per run.
+
+Shutdown admits a small variable tail of empty work: normal recorded 3,318–3,319
+CopperLists, pressure 3,314–3,326, and rollover 3,317–3,322. Pressure had 195–196
+keyframes before versus 196 after; rollover had 196 on both sides. Thus frame and
+source work match exactly, while one pressure trial has one fewer tail keyframe.
+Used record bytes were approximately 1.204 GB for normal and 2.414–2.420 GB for
+pressure/rollover. Normal used three slabs, pressure seven, and rollover 59 before
+versus 55 after.
+
+This stress run supports concurrent logging correctness at the tested load. It
+does not establish a general throughput improvement: normal is effectively flat,
+pressure has a slower median completed time despite a lower logged p99, and the
+rollover median improves with widely overlapping trial ranges. The pressure
+regression remains unexplained; these measurements alone do not satisfy the
+performance acceptance criterion above. The shared keyframe startup issue also
+needs separate follow-up. Existing microbenchmarks remain evidence for their
+specific costs, rather than an application-wide speedup claim.
