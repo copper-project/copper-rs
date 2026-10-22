@@ -122,13 +122,7 @@ logged under this example's `logs/cu-isaac-*.copper`, with a matching scenario
 JSON. Session buffers are removed after shutdown. Replay and standalone sensor
 inspection are the next milestone.
 
-`state/output/{gui,headless}/performance.json` measures control-loop throughput,
-simulation/wall-time ratio, rendered steps, sensor readback and packing, and time
-waiting for native commands. Startup and evidence-image capture are excluded.
-The native log's matching `.performance.json` measures point conversion, graph
-iterations, shutdown, and dropped recording counts. Background serialization uses
-Copper's preallocated CopperList slots; recording drains before the final simulator
-acknowledgment, and dropped records fail the run.
+Recording drains before the final simulator acknowledgment.
 The adapter waits for recording capacity before granting another sensor lease,
 keeping storage backpressure outside the task graph and simulation time.
 

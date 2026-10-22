@@ -100,17 +100,11 @@ def exchange(app, sim, stage, config, camera, lidar, session, observations, outp
     last_scan = round(sim.current_time * 1e9)
     last_camera = last_scan
     point_dtype = np.dtype([("xyz", "<f4", (3,)), ("intensity", "<f4"), ("offset_ns", "<u4")])
-    performance = dict(render_steps=0, render_s=0.0, sensor_s=0.0, command_wait_s=0.0, lease_wait_s=0.0)
-    started = None
-    initial_simulation_time = sim.current_time
     try:
         connection = Connection(session)
         connection.send({"type": "hello", "version": 1, "observations": observations, "scenario": config})
-        started = time.perf_counter()
         for sequence in range(observations) if observations else itertools.count():
-            tick = time.perf_counter()
             lease = connection.receive("lease")
-            performance["lease_wait_s"] += time.perf_counter() - tick
             if lease["sequence"] != sequence or lease["point_bytes"] != point_dtype.itemsize:
                 raise RuntimeError("Unexpected lease sequence or lidar layout")
             camera_mapping, camera_offset = connection.buffer(lease["camera"], 320 * 240 * 3)
@@ -124,33 +118,25 @@ def exchange(app, sim, stage, config, camera, lidar, session, observations, outp
                     raise RuntimeError("Simulator closed before the requested observations completed")
                 if time.monotonic() > deadline:
                     raise RuntimeError("Simulator closed or sensor acquisition timed out")
-                tick = time.perf_counter()
                 sim.step(render=True)
-                performance["render_s"] += time.perf_counter() - tick
-                performance["render_steps"] += 1
                 if not app.is_running():
                     if observations == 0:
                         closed = True
                         break
                     raise RuntimeError("Simulator closed before the requested observations completed")
-                tick = time.perf_counter()
                 raw, _ = lidar.get_data("generic-model-output")
                 if raw is None or raw.size == 0:
-                    performance["sensor_s"] += time.perf_counter() - tick
                     continue
                 gmo = parse_generic_model_output_data(raw)
                 stamp = int(gmo.timestampNs)
                 if not gmo.scanComplete or not gmo.numElements or stamp <= last_scan:
-                    performance["sensor_s"] += time.perf_counter() - tick
                     continue
                 rgb, _ = camera.get_data("rgb")
                 timing = camera_time.get_data()
                 if rgb is None or not timing or "simulationTime" not in timing:
-                    performance["sensor_s"] += time.perf_counter() - tick
                     continue
                 camera_stamp = round(timing["simulationTime"] * 1e9)
                 if camera_stamp <= last_camera:
-                    performance["sensor_s"] += time.perf_counter() - tick
                     continue
                 xyz = np.column_stack((gmo.x, gmo.y, gmo.z)).astype(np.float32)
                 intensity = np.asarray(gmo.scalar)
@@ -166,7 +152,6 @@ def exchange(app, sim, stage, config, camera, lidar, session, observations, outp
                 # The renderer can expose a scan ahead of the physics boundary while accumulating.
                 # Publish only completed acquisitions whose whole interval is now in the past.
                 if scan_end > now or camera_stamp > now:
-                    performance["sensor_s"] += time.perf_counter() - tick
                     continue
                 image = rgb.numpy()
                 if image.shape != (240, 320, 3) or image.dtype != np.uint8:
@@ -188,12 +173,9 @@ def exchange(app, sim, stage, config, camera, lidar, session, observations, outp
                     "origin_world_m": list(pose.ExtractTranslation()), "axes_world": axes,
                 }
                 observation_trace.write(json.dumps(publication, allow_nan=False) + "\n")
-                performance["sensor_s"] += time.perf_counter() - tick
-                tick = time.perf_counter()
                 connection.send(publication)
                 # All NumPy views have been discarded. No writes until Rust grants another lease.
                 command = connection.receive("command")
-                performance["command_wait_s"] += time.perf_counter() - tick
                 if command["sequence"] != sequence or command["simulation_time_ns"] != now:
                     raise RuntimeError("Stale Copper command")
                 velocities = np.array([command["left_rad_s"], command["right_rad_s"]])
@@ -237,12 +219,6 @@ def exchange(app, sim, stage, config, camera, lidar, session, observations, outp
             "final_collider_distance_m": float(hit["distance"]) if hit["hit"] else None,
         }
     finally:
-        elapsed = time.perf_counter() - started if started is not None else None
-        # Closing the window resets SimulationContext's time; use the last accepted frame.
-        simulation_s = (
-            last_command["simulation_time_ns"] / 1e9 - initial_simulation_time
-            if last_command is not None else 0.0
-        )
         observation_trace.close()
         command_trace.close()
         if app.is_running():
@@ -254,10 +230,3 @@ def exchange(app, sim, stage, config, camera, lidar, session, observations, outp
         (output / "control.json").write_text(json.dumps({
             "observations": command_count, "commands": commands, "last_command": last_command,
         }, indent=2) + "\n")
-        if elapsed is not None:
-            performance.update(
-                observations=command_count, elapsed_s=elapsed, simulation_s=simulation_s,
-                observations_per_second=command_count / elapsed,
-                realtime_factor=simulation_s / elapsed,
-            )
-            (output / "performance.json").write_text(json.dumps(performance, indent=2) + "\n")

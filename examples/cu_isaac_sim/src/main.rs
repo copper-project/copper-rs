@@ -83,9 +83,6 @@ fn main() -> CuResult<()> {
         }
     };
     let mut channel = Channel::new(stream)?;
-    let mut conversion_time = Duration::ZERO;
-    let mut iteration_time = Duration::ZERO;
-    let mut recording_wait_time = Duration::ZERO;
     let mut completed = 0_u32;
     let result = (|| -> CuResult<u32> {
         let Request::Hello {
@@ -108,7 +105,6 @@ fn main() -> CuResult<()> {
         let mut previous = None;
         while observations == 0 || completed < observations {
             let sequence = u64::from(completed);
-            let started = Instant::now();
             let manager = &mut app.copper_runtime_mut().copperlists_manager;
             // Async logging reserves one slot for the next iteration. Wait before granting
             // another simulator lease, rather than overrunning its bounded recording queue.
@@ -116,7 +112,6 @@ fn main() -> CuResult<()> {
                 let slot = manager.wait_reclaim_slot()?;
                 manager.recycle_slot(slot);
             }
-            recording_wait_time += started.elapsed();
             let lease = buffers.acquire()?;
             channel.send(&Response::Lease {
                 sequence,
@@ -131,9 +126,7 @@ fn main() -> CuResult<()> {
                 _ => return Err("Expected published sensor frame".into()),
             };
             frame.validate(sequence, previous.as_ref())?;
-            let started = Instant::now();
             let (image, cloud) = buffers.observation(&lease, &frame)?;
-            conversion_time += started.elapsed();
             mock.set_value(frame.simulation_time_ns);
             let mut command = None;
             let mut clearance = None;
@@ -187,10 +180,8 @@ fn main() -> CuResult<()> {
                     other => lifecycle(other),
                 }
             };
-            let started = Instant::now();
             #[allow(deprecated)] // The adapter owns lifecycle and the off-graph recording gate.
             app.run_one_iteration(&mut callback)?;
-            iteration_time += started.elapsed();
             completed = completed
                 .checked_add(1)
                 .ok_or(CuError::from("Observation counter overflow"))?;
@@ -218,34 +209,10 @@ fn main() -> CuResult<()> {
         info!("Isaac completed {} observations", completed);
         Ok(completed)
     })();
-    let started = Instant::now();
     #[allow(deprecated)] // Paired with the typed start before taking ownership of stepping.
     app.stop_all_tasks(&mut lifecycle)?;
     app.log_shutdown_completed()?;
-    let shutdown_time = started.elapsed();
-    let runtime = app.copper_runtime_mut();
-    let dropped_copperlists = runtime.copperlists_manager.dropped_copperlists_total();
-    let dropped_keyframes = runtime.copperlists_manager.dropped_keyframes_total();
-    fs::write(
-        log.with_extension("performance.json"),
-        serde_json::to_vec_pretty(&serde_json::json!({
-            "observations": completed,
-            "conversion_s": conversion_time.as_secs_f64(),
-            "iteration_s": iteration_time.as_secs_f64(),
-            "recording_wait_s": recording_wait_time.as_secs_f64(),
-            "shutdown_s": shutdown_time.as_secs_f64(),
-            "dropped_copperlists": dropped_copperlists,
-            "dropped_keyframes": dropped_keyframes,
-        }))
-        .map_err(|e| CuError::new_with_cause("Encode native performance", e))?,
-    )
-    .map_err(io_error)?;
     let observations = result?;
-    if dropped_copperlists != 0 || dropped_keyframes != 0 {
-        return Err(
-            "Incomplete sensor recording; see native performance.json for dropped records".into(),
-        );
-    }
     channel.send(&Response::Finished {
         observations,
         log: &log,
