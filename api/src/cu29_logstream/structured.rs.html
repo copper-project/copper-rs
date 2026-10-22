@@ -163,7 +163,7 @@
 <a href=#163 id=163 data-nosnippet>163</a>        <span class="kw">let </span>local = LogStream::&lt;NoopSectionStorage, <span class="kw">_</span>&gt;::new(
 <a href=#164 id=164 data-nosnippet>164</a>            UnifiedLogType::StructuredLogLine,
 <a href=#165 id=165 data-nosnippet>165</a>            Arc::new(Mutex::new(NoopLogger::new())),
-<a href=#166 id=166 data-nosnippet>166</a>            <span class="number">1024</span>,
+<a href=#166 id=166 data-nosnippet>166</a>            usize::from(cu29_unifiedlog::SECTION_HEADER_COMPACT_SIZE) + <span class="number">512</span>,
 <a href=#167 id=167 data-nosnippet>167</a>        )
 <a href=#168 id=168 data-nosnippet>168</a>        .unwrap();
 <a href=#169 id=169 data-nosnippet>169</a>        <span class="kw">let </span><span class="kw-2">mut </span>sink =
@@ -202,7 +202,7 @@
 <a href=#202 id=202 data-nosnippet>202</a>        <span class="kw">let </span>local = LogStream::new(
 <a href=#203 id=203 data-nosnippet>203</a>            UnifiedLogType::StructuredLogLine,
 <a href=#204 id=204 data-nosnippet>204</a>            Arc::new(Mutex::new(logger)),
-<a href=#205 id=205 data-nosnippet>205</a>            <span class="number">1024</span>,
+<a href=#205 id=205 data-nosnippet>205</a>            usize::from(cu29_unifiedlog::SECTION_HEADER_COMPACT_SIZE) + <span class="number">512</span>,
 <a href=#206 id=206 data-nosnippet>206</a>        )
 <a href=#207 id=207 data-nosnippet>207</a>        .unwrap();
 <a href=#208 id=208 data-nosnippet>208</a>        <span class="kw">let </span><span class="kw-2">mut </span>sink = StructuredLogStream::new(local, Probe(seen.clone()));

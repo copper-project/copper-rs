@@ -18,7 +18,7 @@ Both slab and section sizes must be multiples of 512 bytes.</p>
 entries inside a slab. A complete record must fit within one section.
 Choose at least the larger of <code>max_record_bytes</code> and
 <code>finite_objects.max_object_bytes</code> from <a href="struct.CuTwinBuilder.html#method.with_receiver_limits" title="method cu29_logstream::CuTwinBuilder::with_receiver_limits"><code>Self::with_receiver_limits</code></a>,
-plus 512 bytes for the section header and 32 bytes for the archive’s
+plus 1024 bytes for the section header and 32 bytes for the archive’s
 continuity envelope. Round up to a multiple of 512 bytes.</p>
 <p>Increase this alongside receive bounds when captures or task-state
 snapshots grow. The section must fit in <a href="struct.CuTwinBuilder.html#method.with_slab_size" title="method cu29_logstream::CuTwinBuilder::with_slab_size"><code>Self::with_slab_size</code></a>; keeping

@@ -189,32 +189,31 @@
 <a href=#189 id=189 data-nosnippet>189</a>                    .or_else(|| cu29::simulation::recorded_copperlist_timestamp(captured))
 <a href=#190 id=190 data-nosnippet>190</a>                    .ok_or_else(|| CuError::from(<span class="string">"capture has no sender timestamp"</span>))<span class="question-mark">?</span>;
 <a href=#191 id=191 data-nosnippet>191</a>                <span class="self">self</span>.copper_runtime.copperlists_manager.prepare_recorded_replay(captured.id)<span class="question-mark">?</span>;
-<a href=#192 id=192 data-nosnippet>192</a>                <span class="self">self</span>.copper_runtime.keyframes_manager.finish_pending()<span class="question-mark">?</span>;
-<a href=#193 id=193 data-nosnippet>193</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(frame) = keyframe {
-<a href=#194 id=194 data-nosnippet>194</a>                    &lt;<span class="self">Self </span><span class="kw">as </span>CuSimApplication&lt;NoopSectionStorage, NoopLogger&gt;&gt;::restore_keyframe(<span class="self">self</span>, frame)<span class="question-mark">?</span>;
-<a href=#195 id=195 data-nosnippet>195</a>                    <span class="self">self</span>.copper_runtime.set_forced_keyframe_timestamp(timestamp);
-<a href=#196 id=196 data-nosnippet>196</a>                    <span class="self">self</span>.copper_runtime.lock_keyframe(frame);
-<a href=#197 id=197 data-nosnippet>197</a>                }
-<a href=#198 id=198 data-nosnippet>198</a>                clock_mock.set_value(timestamp.as_nanos());
-<a href=#199 id=199 data-nosnippet>199</a>                <span class="kw">let </span><span class="kw-2">mut </span>completed = <span class="bool-val">false</span>;
-<a href=#200 id=200 data-nosnippet>200</a>                <span class="kw">let </span><span class="kw-2">mut </span>callback = |step: #mission::SimStep&lt;<span class="lifetime">'_</span>&gt;| -&gt; SimOverride { <span class="kw">match </span>step {
-<a href=#201 id=201 data-nosnippet>201</a>                    #mission::SimStep::CopperListCompleted(list) =&gt; {
-<a href=#202 id=202 data-nosnippet>202</a>                        list.msgs.restore_sender_metadata(<span class="kw-2">&amp;</span>captured.msgs);
-<a href=#203 id=203 data-nosnippet>203</a>                        core::mem::swap(<span class="kw-2">&amp;mut </span>captured.msgs, <span class="kw-2">&amp;mut </span>list.msgs);
-<a href=#204 id=204 data-nosnippet>204</a>                        completed = <span class="bool-val">true</span>;
-<a href=#205 id=205 data-nosnippet>205</a>                        SimOverride::ExecutedBySim
-<a href=#206 id=206 data-nosnippet>206</a>                    }
-<a href=#207 id=207 data-nosnippet>207</a>                    #(#reconstruct_arms)*
-<a href=#208 id=208 data-nosnippet>208</a>                    other =&gt; {
-<a href=#209 id=209 data-nosnippet>209</a>                        <span class="kw">let </span>result = #mission::recorded_replay_step(other, captured);
-<a href=#210 id=210 data-nosnippet>210</a>                        <span class="kw">if </span>result == SimOverride::ExecuteByRuntime { SimOverride::ExecutedBySim } <span class="kw">else </span>{ result }
-<a href=#211 id=211 data-nosnippet>211</a>                    }
-<a href=#212 id=212 data-nosnippet>212</a>                }};
-<a href=#213 id=213 data-nosnippet>213</a>                &lt;<span class="self">Self </span><span class="kw">as </span>CuSimApplication&lt;NoopSectionStorage, NoopLogger&gt;&gt;::run_one_iteration(<span class="self">self</span>, <span class="kw-2">&amp;mut </span>callback)<span class="question-mark">?</span>;
-<a href=#214 id=214 data-nosnippet>214</a>                <span class="kw">if </span>!completed { <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(<span class="string">"live replay aborted before completing the CopperList"</span>)); }
-<a href=#215 id=215 data-nosnippet>215</a>                <span class="prelude-val">Ok</span>(())
-<a href=#216 id=216 data-nosnippet>216</a>            }
-<a href=#217 id=217 data-nosnippet>217</a>        }
-<a href=#218 id=218 data-nosnippet>218</a>    }
-<a href=#219 id=219 data-nosnippet>219</a>}
+<a href=#192 id=192 data-nosnippet>192</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(frame) = keyframe {
+<a href=#193 id=193 data-nosnippet>193</a>                    &lt;<span class="self">Self </span><span class="kw">as </span>CuSimApplication&lt;NoopSectionStorage, NoopLogger&gt;&gt;::restore_keyframe(<span class="self">self</span>, frame)<span class="question-mark">?</span>;
+<a href=#194 id=194 data-nosnippet>194</a>                    <span class="self">self</span>.copper_runtime.set_forced_keyframe_timestamp(timestamp);
+<a href=#195 id=195 data-nosnippet>195</a>                    <span class="self">self</span>.copper_runtime.lock_keyframe(frame);
+<a href=#196 id=196 data-nosnippet>196</a>                }
+<a href=#197 id=197 data-nosnippet>197</a>                clock_mock.set_value(timestamp.as_nanos());
+<a href=#198 id=198 data-nosnippet>198</a>                <span class="kw">let </span><span class="kw-2">mut </span>completed = <span class="bool-val">false</span>;
+<a href=#199 id=199 data-nosnippet>199</a>                <span class="kw">let </span><span class="kw-2">mut </span>callback = |step: #mission::SimStep&lt;<span class="lifetime">'_</span>&gt;| -&gt; SimOverride { <span class="kw">match </span>step {
+<a href=#200 id=200 data-nosnippet>200</a>                    #mission::SimStep::CopperListCompleted(list) =&gt; {
+<a href=#201 id=201 data-nosnippet>201</a>                        list.msgs.restore_sender_metadata(<span class="kw-2">&amp;</span>captured.msgs);
+<a href=#202 id=202 data-nosnippet>202</a>                        core::mem::swap(<span class="kw-2">&amp;mut </span>captured.msgs, <span class="kw-2">&amp;mut </span>list.msgs);
+<a href=#203 id=203 data-nosnippet>203</a>                        completed = <span class="bool-val">true</span>;
+<a href=#204 id=204 data-nosnippet>204</a>                        SimOverride::ExecutedBySim
+<a href=#205 id=205 data-nosnippet>205</a>                    }
+<a href=#206 id=206 data-nosnippet>206</a>                    #(#reconstruct_arms)*
+<a href=#207 id=207 data-nosnippet>207</a>                    other =&gt; {
+<a href=#208 id=208 data-nosnippet>208</a>                        <span class="kw">let </span>result = #mission::recorded_replay_step(other, captured);
+<a href=#209 id=209 data-nosnippet>209</a>                        <span class="kw">if </span>result == SimOverride::ExecuteByRuntime { SimOverride::ExecutedBySim } <span class="kw">else </span>{ result }
+<a href=#210 id=210 data-nosnippet>210</a>                    }
+<a href=#211 id=211 data-nosnippet>211</a>                }};
+<a href=#212 id=212 data-nosnippet>212</a>                &lt;<span class="self">Self </span><span class="kw">as </span>CuSimApplication&lt;NoopSectionStorage, NoopLogger&gt;&gt;::run_one_iteration(<span class="self">self</span>, <span class="kw-2">&amp;mut </span>callback)<span class="question-mark">?</span>;
+<a href=#213 id=213 data-nosnippet>213</a>                <span class="kw">if </span>!completed { <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(<span class="string">"live replay aborted before completing the CopperList"</span>)); }
+<a href=#214 id=214 data-nosnippet>214</a>                <span class="prelude-val">Ok</span>(())
+<a href=#215 id=215 data-nosnippet>215</a>            }
+<a href=#216 id=216 data-nosnippet>216</a>        }
+<a href=#217 id=217 data-nosnippet>217</a>    }
+<a href=#218 id=218 data-nosnippet>218</a>}
 </code></pre></div></section></main></body></html>

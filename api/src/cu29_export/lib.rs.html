@@ -1830,7 +1830,7 @@
 <a href=#1830 id=1830 data-nosnippet>1830</a>                <span class="macro">panic!</span>(<span class="string">"Failed to create logger"</span>)
 <a href=#1831 id=1831 data-nosnippet>1831</a>            };
 <a href=#1832 id=1832 data-nosnippet>1832</a>            <span class="kw">let </span>data_logger = Arc::new(Mutex::new(logger));
-<a href=#1833 id=1833 data-nosnippet>1833</a>            <span class="kw">let </span>stream = stream_write(data_logger.clone(), UnifiedLogType::StructuredLogLine, <span class="number">1024</span>)
+<a href=#1833 id=1833 data-nosnippet>1833</a>            <span class="kw">let </span>stream = stream_write(data_logger.clone(), UnifiedLogType::StructuredLogLine, <span class="number">1536</span>)
 <a href=#1834 id=1834 data-nosnippet>1834</a>                .expect(<span class="string">"Failed to create stream"</span>);
 <a href=#1835 id=1835 data-nosnippet>1835</a>            <span class="kw">let </span>rt = LoggerRuntime::init(RobotClock::default(), stream, <span class="prelude-val">None</span>::&lt;NullLog&gt;);
 <a href=#1836 id=1836 data-nosnippet>1836</a>

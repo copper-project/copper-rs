@@ -367,7 +367,7 @@
 <a href=#367 id=367 data-nosnippet>367</a>                stream_write_context::&lt;RuntimeLifecycleRecord, memmap::MmapSectionStorage&gt;(
 <a href=#368 id=368 data-nosnippet>368</a>                    logger.clone(),
 <a href=#369 id=369 data-nosnippet>369</a>                    UnifiedLogType::RuntimeLifecycle,
-<a href=#370 id=370 data-nosnippet>370</a>                    <span class="number">1024</span>,
+<a href=#370 id=370 data-nosnippet>370</a>                    <span class="number">1536</span>,
 <a href=#371 id=371 data-nosnippet>371</a>                    context,
 <a href=#372 id=372 data-nosnippet>372</a>                )
 <a href=#373 id=373 data-nosnippet>373</a>                .unwrap();
@@ -389,7 +389,7 @@
 <a href=#389 id=389 data-nosnippet>389</a>            <span class="kw">let </span><span class="kw-2">mut </span>stream = stream_write_context::&lt;u32, memmap::MmapSectionStorage&gt;(
 <a href=#390 id=390 data-nosnippet>390</a>                logger.clone(),
 <a href=#391 id=391 data-nosnippet>391</a>                UnifiedLogType::CopperList,
-<a href=#392 id=392 data-nosnippet>392</a>                <span class="number">1024</span>,
+<a href=#392 id=392 data-nosnippet>392</a>                <span class="number">1536</span>,
 <a href=#393 id=393 data-nosnippet>393</a>                context,
 <a href=#394 id=394 data-nosnippet>394</a>            )
 <a href=#395 id=395 data-nosnippet>395</a>            .unwrap();
@@ -454,7 +454,7 @@
 <a href=#454 id=454 data-nosnippet>454</a>                <span class="macro">unreachable!</span>()
 <a href=#455 id=455 data-nosnippet>455</a>            };
 <a href=#456 id=456 data-nosnippet>456</a>            <span class="kw">let </span><span class="kw-2">mut </span>handle = logger
-<a href=#457 id=457 data-nosnippet>457</a>                .add_section(UnifiedLogType::CopperList, <span class="number">1024</span>)
+<a href=#457 id=457 data-nosnippet>457</a>                .add_section(UnifiedLogType::CopperList, <span class="number">1536</span>)
 <a href=#458 id=458 data-nosnippet>458</a>                .unwrap();
 <a href=#459 id=459 data-nosnippet>459</a>            handle.append(<span class="number">42u32</span>).unwrap();
 <a href=#460 id=460 data-nosnippet>460</a>            logger.flush_section(<span class="kw-2">&amp;mut </span>handle);
