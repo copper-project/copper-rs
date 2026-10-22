@@ -228,3 +228,14 @@ cargo check -p cu-ptp --no-default-features --target thumbv8m.main-none-eabihf
 Run the [clock reference example](examples/cu_clock_sync/README.md) for a local
 software or PHC integration check. Clock-sync remains experimental; default and
 no-default-feature clock checks also protect the existing unsynchronized path.
+
+### Runtime output measurements
+
+`cu-async-cl-io-bench` compares inline output with `--features async-cl-io`.
+Use `--payload-bytes`, `--spin-iters`, `--keyframe-interval`, and
+`--structured-records` to vary payload size, producer work, capture frequency,
+and concurrent structured logging. Its persisted counts and bytes are read back
+after explicit drain, shutdown, and flush; keyframes must have associated
+CopperList IDs. `completed_ms` and `persisted_hz` include warmup output, drain,
+and flush, while producer percentiles cover the measured iterations. Compare
+identical completed record counts and report drops alongside throughput.

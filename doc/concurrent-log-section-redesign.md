@@ -232,6 +232,23 @@ even after an output error, reclaim or release every owned slot, and explicitly
 flush sinks. Preserve the original failure while reporting cleanup failures.
 `Drop` remains best-effort cleanup; explicit close reports success or failure.
 
+The consolidated implementation sends a slot lease and, for serial capture, its
+existing boxed keyframe buffer through one pending/completion pair. Distributed
+captures remain attached to their arena slot. Both placements call the same
+native output function, writing the keyframe before its CopperList. No worker
+owns a second keyframe queue. Serial capture retains its two preallocated spare
+buffers; when these are exhausted, freezing is skipped and the associated CL is
+rejected too. Both counters advance, and the missing CL ID exposes the gap.
+
+On a sink error or unwind, the worker latches the original error, returns every
+pending item without further sink calls, and remains available for shutdown.
+Explicit close drains completions, signals and wakes the worker, joins it, and
+reports sink flush errors while attempting both sinks. Generated stop paths drain
+even after component errors; failed stop cleans up output without publishing a
+successful stop marker. Successful shutdown follows explicit output flushes.
+Structured-log notifications snapshot the listener registry and release both
+registry and sink locks before invoking callbacks.
+
 ## Bounded costs and overload
 
 For `Grow`, allocate from known geometry without scanning retained history,

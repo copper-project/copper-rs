@@ -2971,7 +2971,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         };
         let parallel_keyframe_finish = if keyframe_logging_enabled {
-            quote! { (cl_manager.last_keyframe_bytes, 0u64) }
+            quote! { (cl_manager.last_keyframe_bytes, cl_manager.dropped_keyframes_total()) }
         } else {
             quote! { (0u64, 0u64) }
         };
@@ -3247,26 +3247,27 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     }
                     let cleanup_result = (|| -> CuResult<()> {
                         let cl_manager = &mut self.copper_runtime.copperlists_manager;
-                        cl_manager.finish_pending_with(|slot| {
+                        let drain_result = cl_manager.finish_pending_with(|slot| {
                             let index = slot.index();
                             free_copperlists[index] = Some(slot);
-                        })?;
+                        });
                         returned_copperlists.extend(free_copperlists.into_iter().flatten());
+                        returned_copperlists.extend(cl_manager.take_execution_slots());
                         debug_assert_eq!(returned_copperlists.len(), #copperlist_count_tokens);
                         cl_manager.return_execution_slots(returned_copperlists);
-                        Ok(())
+                        drain_result
                     })();
-                    execution_result.and(cleanup_result)
+                    cu29::curuntime::combine_output_results(execution_result, cleanup_result)
                 });
 
                 if result.is_err() {
                     error!("A task errored out: {}", &result);
                 }
-                if tasks_started {
-                    <Self as #app_trait<S, L>>::stop_all_tasks(self, #sim_callback_arg)?;
-                }
-                let _ = self.log_shutdown_completed();
-                result
+                let stop_result = if tasks_started {
+                    <Self as #app_trait<S, L>>::stop_all_tasks(self, #sim_callback_arg)
+                } else { Ok(()) };
+                let shutdown_result = if stop_result.is_ok() { self.log_shutdown_completed() } else { Ok(()) };
+                cu29::curuntime::combine_output_results(result, cu29::curuntime::combine_output_results(stop_result, shutdown_result))
             }
         } else {
             quote! {
@@ -3280,24 +3281,26 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 if result.is_err() {
                     error!("A task errored out: {}", &result);
                 }
-                <Self as #app_trait<S, L>>::stop_all_tasks(self, #sim_callback_arg)?;
-                let _ = self.log_shutdown_completed();
-                result
+                let stop_result = <Self as #app_trait<S, L>>::stop_all_tasks(self, #sim_callback_arg);
+                let shutdown_result = if stop_result.is_ok() { self.log_shutdown_completed() } else { Ok(()) };
+                cu29::curuntime::combine_output_results(result, cu29::curuntime::combine_output_results(stop_result, shutdown_result))
             }
         };
         let keyframe_manager_binding = keyframe_logging_enabled
             .then(|| quote! { let kf_manager = &mut runtime.keyframes_manager; });
         let keyframe_reset =
             keyframe_logging_enabled.then(|| quote! { kf_manager.try_reset(clid, clock)?; });
-        let keyframe_finish =
-            keyframe_logging_enabled.then(|| quote! { kf_manager.end_of_processing(clid)?; });
+        let keyframe_poll = keyframe_logging_enabled.then(|| quote! { cl_manager.poll_keyframes(kf_manager)?; });
+        let completed_output = if keyframe_logging_enabled {
+            quote! { cl_manager.end_of_processing_with_keyframes(clid, kf_manager)?; }
+        } else { quote! { cl_manager.end_of_processing(clid)?; } };
         let keyframe_bytes = if keyframe_logging_enabled {
-            quote! { kf_manager.last_encoded_bytes }
+            quote! { cl_manager.last_keyframe_bytes }
         } else {
             quote! { 0 }
         };
         let dropped_keyframes_total = if keyframe_logging_enabled {
-            quote! { kf_manager.dropped_keyframes_total() }
+            quote! { cl_manager.dropped_keyframes_total() }
         } else {
             quote! { 0 }
         };
@@ -3315,6 +3318,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     let tasks = &runtime.tasks;
                     let __cu_bridges = &runtime.bridges;
                     let kf_manager = &mut runtime.keyframes_manager;
+                    runtime.copperlists_manager.reclaim_keyframes(kf_manager)?;
                     kf_manager.begin_capture_preallocation();
                     #(#keyframe_preallocation_code)*
                     kf_manager.finish_capture_preallocation()?;
@@ -3322,9 +3326,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 }
             }
         });
-        let keyframe_finish_pending = keyframe_logging_enabled.then(|| {
-            quote! { self.copper_runtime.keyframes_manager.finish_pending()?; }
-        });
+
 
         let live_completed = (sim_mode && logstream_enabled).then(|| {
             quote! {
@@ -3440,7 +3442,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     structured_log_bytes_total: ::cu29::prelude::structured_log_bytes_total(),
                     culistid: clid,
                     dropped_copperlists_total: cl_manager.dropped_copperlists_total(),
-                    dropped_keyframes_total: 0,
+                    dropped_keyframes_total: cl_manager.dropped_keyframes_total(),
                 });
                 Ok(())
             }
@@ -3465,6 +3467,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 );
                 let mut __cu_abort_copperlist = false;
                 #(#preprocess_calls)*
+                #keyframe_poll
                 let culist = cl_manager.create()?;
                 let clid = culist.id;
                 debug_assert_eq!(clid, iteration_clid);
@@ -3510,10 +3513,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 );
                 #(#preprocess_logging_calls)*
                 #live_completed
-                cl_manager.end_of_processing(clid)?;
                 monitor_result?;
                 #(#postprocess_calls)*
-                #keyframe_finish
+                #completed_output
                 monitor.observe_copperlist_io(cu29::monitoring::CopperListIoStats {
                     raw_culist_bytes: core::mem::size_of::<CuList>() as u64
                         + cl_manager.last_handle_bytes,
@@ -3549,12 +3551,18 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 ctx.clear_current_component();
                 ctx.clear_current_task();
                 self.copper_runtime.monitor.stop(&ctx)?;
-                self.copper_runtime.copperlists_manager.finish_pending()?;
-                #keyframe_finish_pending
                 Ok(())
                 })();
+                let drain_result = self.copper_runtime.copperlists_manager.finish_pending();
+                let result = cu29::curuntime::combine_output_results(result, drain_result);
                 let clock_result: CuResult<()> = (|| { #clock_stop Ok(()) })();
-                let result = result.and(clock_result);
+                let result = cu29::curuntime::combine_output_results(result, clock_result);
+                let result = if result.is_err() {
+                    let cl_close = self.copper_runtime.copperlists_manager.close_output();
+                    let kf_close = self.copper_runtime.keyframes_manager.close_output();
+                    let logs_flush = self.logger_runtime.try_flush();
+                    cu29::curuntime::combine_output_results(result, cu29::curuntime::combine_output_results(cl_close, cu29::curuntime::combine_output_results(kf_close, logs_flush)))
+                } else { result };
                 match result {
                     Ok(()) => {
                         self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::MissionStopped { reason: self.stop_reason })?;
@@ -4284,9 +4292,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 pub fn log_shutdown_completed(&mut self) -> CuResult<()> {
                     if self.lifecycle_running { return Err(CuError::from("Stop the application before completing shutdown")); }
                     if self.shutdown_completed { return Ok(()); }
-                    self.copper_runtime.copperlists_manager.close_output()?;
-                    self.copper_runtime.keyframes_manager.close_output()?;
-                    self.logger_runtime.try_flush()?;
+                    let cl_close = self.copper_runtime.copperlists_manager.close_output();
+                    let kf_close = self.copper_runtime.keyframes_manager.close_output();
+                    let logs_flush = self.logger_runtime.try_flush();
+                    cu29::curuntime::combine_output_results(cl_close, cu29::curuntime::combine_output_results(kf_close, logs_flush))?;
                     self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::ShutdownCompleted)?;
                     self.shutdown_completed = true;
                     self.runtime_lifecycle_sink.take();
@@ -4460,7 +4469,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         // and align allocation only after validating this boundary.
                         self.copper_runtime_mut().copperlists_manager
                             .prepare_recorded_replay(copperlist.id)?;
-                        self.copper_runtime_mut().keyframes_manager.finish_pending()?;
                         if let Some(keyframe) = keyframe {
                             self.copper_runtime_mut().set_forced_keyframe_timestamp(timestamp);
                             self.copper_runtime_mut().lock_keyframe(keyframe);

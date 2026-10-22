@@ -4,6 +4,11 @@ extern crate alloc;
 
 mod sync_compat;
 
+#[cfg(not(feature = "std"))]
+use alloc::sync::Arc;
+#[cfg(feature = "std")]
+use std::sync::Arc;
+
 use core::sync::atomic::{AtomicUsize, Ordering};
 use cu29_clock::RobotClock;
 use cu29_log::CuLogEntry;
@@ -61,9 +66,12 @@ pub type LiveLogListener = Box<dyn Fn(&CuLogEntry, &str, &[&str]) + Send + Sync 
 
 pub type LiveLogListenerId = usize;
 
+type SharedLiveLogListener = Arc<dyn Fn(&CuLogEntry, &str, &[&str]) + Send + Sync + 'static>;
+
+#[derive(Clone)]
 struct LiveLogRegistration {
     id: LiveLogListenerId,
-    callback: LiveLogListener,
+    callback: SharedLiveLogListener,
     #[cfg(all(feature = "std", debug_assertions))]
     output: LiveLogOutput,
 }
@@ -78,14 +86,14 @@ enum LiveLogOutput {
 
 struct LiveLogListeners {
     next_id: LiveLogListenerId,
-    listeners: Vec<LiveLogRegistration>,
+    listeners: Arc<Vec<LiveLogRegistration>>,
 }
 
 impl Default for LiveLogListeners {
     fn default() -> Self {
         Self {
             next_id: 1,
-            listeners: Vec::new(),
+            listeners: Arc::new(Vec::new()),
         }
     }
 }
@@ -94,9 +102,9 @@ impl LiveLogListeners {
     fn insert(&mut self, listener: LiveLogListener) -> LiveLogListenerId {
         let id = self.next_id;
         self.next_id = self.next_id.saturating_add(1).max(1);
-        self.listeners.push(LiveLogRegistration {
+        Arc::make_mut(&mut self.listeners).push(LiveLogRegistration {
             id,
-            callback: listener,
+            callback: Arc::from(listener),
             #[cfg(all(feature = "std", debug_assertions))]
             output: LiveLogOutput::Observer,
         });
@@ -104,27 +112,36 @@ impl LiveLogListeners {
     }
 
     fn remove(&mut self, id: LiveLogListenerId) {
-        self.listeners.retain(|listener| listener.id != id);
+        Arc::make_mut(&mut self.listeners).retain(|listener| listener.id != id);
     }
 
+    #[cfg(all(test, feature = "std", debug_assertions))]
     fn notify(&self, entry: &CuLogEntry, format_str: &str, param_names: &[&str]) {
+        notify_listener_snapshot(&self.listeners, entry, format_str, param_names);
+    }
+}
+
+fn notify_listener_snapshot(
+    listeners: &[LiveLogRegistration],
+    entry: &CuLogEntry,
+    format_str: &str,
+    param_names: &[&str],
+) {
+    #[cfg(all(feature = "std", debug_assertions))]
+    let monitor_active = listeners
+        .iter()
+        .any(|listener| listener.output == LiveLogOutput::Monitor);
+    #[cfg(all(feature = "std", debug_assertions))]
+    let mut stdout_notified = false;
+    for listener in listeners {
         #[cfg(all(feature = "std", debug_assertions))]
-        let monitor_active = self
-            .listeners
-            .iter()
-            .any(|listener| listener.output == LiveLogOutput::Monitor);
-        #[cfg(all(feature = "std", debug_assertions))]
-        let mut stdout_notified = false;
-        for listener in &self.listeners {
-            #[cfg(all(feature = "std", debug_assertions))]
-            if listener.output == LiveLogOutput::Stdout {
-                if monitor_active || stdout_notified {
-                    continue;
-                }
-                stdout_notified = true;
+        if listener.output == LiveLogOutput::Stdout {
+            if monitor_active || stdout_notified {
+                continue;
             }
-            (listener.callback)(entry, format_str, param_names);
+            stdout_notified = true;
         }
+        (listener.callback)(entry, format_str, param_names);
     }
 }
 
@@ -332,6 +349,7 @@ fn log_inner(
         STRUCTURED_LOG_BYTES.fetch_add(bytes, Ordering::Relaxed);
     }
 
+    drop(guard);
     // Basic notification; richer context added in log_debug_mode.
     if notify {
         notify_live_listeners(entry, format_str, param_names);
@@ -427,7 +445,7 @@ where
         id: LOGGER_STATE.get().map(|state| {
             let mut guard = lock_mutex(&state.live_listeners);
             let id = guard.insert(Box::new(cb));
-            if let Some(listener) = guard.listeners.last_mut() {
+            if let Some(listener) = Arc::make_mut(&mut guard.listeners).last_mut() {
                 listener.output = output;
             }
             id
@@ -447,7 +465,7 @@ pub fn unregister_live_log_listener_id(id: LiveLogListenerId) {
 pub fn unregister_live_log_listener() {
     if let Some(state) = LOGGER_STATE.get() {
         let mut guard = lock_mutex(&state.live_listeners);
-        guard.listeners.clear();
+        Arc::make_mut(&mut guard.listeners).clear();
     }
 }
 
@@ -485,8 +503,11 @@ where
 #[allow(clippy::collapsible_if)]
 pub(crate) fn notify_live_listeners(entry: &CuLogEntry, format_str: &str, param_names: &[&str]) {
     if let Some(state) = LOGGER_STATE.get() {
-        let guard = lock_mutex(&state.live_listeners);
-        guard.notify(entry, format_str, param_names);
+        let snapshot = {
+            let guard = lock_mutex(&state.live_listeners);
+            Arc::clone(&guard.listeners)
+        };
+        notify_listener_snapshot(&snapshot, entry, format_str, param_names);
     }
 }
 // This is an adaptation of the Iowriter from bincode.
@@ -609,7 +630,10 @@ mod tests {
             let id = listeners.insert(Box::new(move |_, _, _| {
                 calls.lock().unwrap().push(name);
             }));
-            listeners.listeners.last_mut().unwrap().output = output;
+            Arc::make_mut(&mut listeners.listeners)
+                .last_mut()
+                .unwrap()
+                .output = output;
             id
         };
         let stdout = add("stdout", LiveLogOutput::Stdout);
@@ -640,6 +664,58 @@ mod tests {
         calls.lock().unwrap().clear();
         listeners.notify(&entry, "rc channels", &[]);
         assert_eq!(*calls.lock().unwrap(), ["other stdout", "observer"]);
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn listener_can_unregister_and_log_again_without_holding_logger_locks() {
+        use super::{
+            AtomicUsize, CuResult, LOGGER_STATE, LoggerRuntime, NullLog, Ordering, log,
+            register_live_log_listener, unregister_live_log_listener_id,
+        };
+        use cu29_clock::RobotClock;
+        use cu29_traits::WriteStream;
+        use std::sync::Arc;
+        #[derive(Debug)]
+        struct CountSink(Arc<AtomicUsize>);
+        impl WriteStream<CuLogEntry> for CountSink {
+            fn log(&mut self, _: &CuLogEntry) -> CuResult<()> {
+                self.0.fetch_add(1, Ordering::Relaxed);
+                Ok(())
+            }
+        }
+        let logs = Arc::new(AtomicUsize::new(0));
+        let runtime = LoggerRuntime::init(
+            RobotClock::default(),
+            CountSink(logs.clone()),
+            None::<NullLog>,
+        );
+        let listener_id = Arc::new(AtomicUsize::new(0));
+        let registered_id = listener_id.clone();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = calls.clone();
+        let id = register_live_log_listener(move |entry, _, _| {
+            let state = LOGGER_STATE.get().unwrap();
+            assert!(state.sink.try_lock().is_ok());
+            assert!(state.live_listeners.try_lock().is_ok());
+            unregister_live_log_listener_id(registered_id.load(Ordering::Relaxed));
+            observed.fetch_add(1, Ordering::Relaxed);
+            log(&mut entry.clone()).unwrap();
+        })
+        .unwrap();
+        listener_id.store(id, Ordering::Relaxed);
+        let mut entry = CuLogEntry {
+            time: 0.into(),
+            level: CuLogLevel::Info,
+            origin: CuLogOrigin::default(),
+            msg_index: 1,
+            paramname_indexes: smallvec![],
+            params: smallvec![],
+        };
+        log(&mut entry).unwrap();
+        assert_eq!(logs.load(Ordering::Relaxed), 2);
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
+        drop(runtime);
     }
 
     #[test]
