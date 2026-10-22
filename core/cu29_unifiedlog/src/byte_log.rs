@@ -411,12 +411,21 @@ pub struct ByteSection<R: ByteRegion> {
     generation: usize,
     offset: u64,
     write_reserved: bool,
+    append_only: bool,
 }
 impl<R: ByteRegion> ByteSection<R> {
     fn token(&self, state: usize) -> usize {
         self.generation * GENERATION_STRIDE + state
     }
     fn release_write(&mut self, state: usize) -> CuResult<()> {
+        // Append-only storage belongs to this handle until flush/drop. There is
+        // no reclaimer to compete with between records, including after errors.
+        if self.append_only {
+            if state == SEALED {
+                self.leases[self.slot].store(self.token(SEALED), Ordering::Release);
+            }
+            return Ok(());
+        }
         self.leases[self.slot]
             .compare_exchange(
                 self.token(BUSY),
@@ -433,7 +442,9 @@ impl<R: ByteRegion> ByteSection<R> {
 }
 impl<R: ByteRegion> Drop for ByteSection<R> {
     fn drop(&mut self) {
-        if self.write_reserved {
+        if self.append_only && self.header.is_open {
+            let _ = self.flush();
+        } else if self.write_reserved {
             self.region.abort();
             let _ = self.release_write(IDLE);
         }
@@ -474,6 +485,13 @@ impl<R: ByteRegion> SectionStorage for ByteSection<R> {
         if self.write_reserved {
             return Err(CuError::from("Section writing rights already reserved"));
         }
+        if self.append_only {
+            if !self.header.is_open {
+                return Err(CuError::from("Cannot reserve a closed section"));
+            }
+            self.write_reserved = true;
+            return Ok(());
+        }
         self.leases[self.slot]
             .compare_exchange(
                 self.token(IDLE),
@@ -486,6 +504,9 @@ impl<R: ByteRegion> SectionStorage for ByteSection<R> {
         Ok(())
     }
     fn is_sealed(&self) -> bool {
+        if self.append_only {
+            return !self.header.is_open;
+        }
         self.leases[self.slot].load(Ordering::Acquire) != self.token(IDLE)
     }
     fn append<E: Encode>(&mut self, entry: &E) -> Result<usize, EncodeError> {
@@ -503,7 +524,11 @@ impl<R: ByteRegion> SectionStorage for ByteSection<R> {
         if self.leases.poisoned.load(Ordering::Acquire) {
             return Err(EncodeError::Other("Logger faulted after a storage failure"));
         }
+        if self.append_only && !self.header.is_open {
+            return Ok(SectionAppendOutcome::Rebind);
+        }
         if !core::mem::take(&mut self.write_reserved)
+            && !self.append_only
             && self.leases[self.slot]
                 .compare_exchange(
                     self.token(IDLE),
@@ -562,16 +587,19 @@ impl<R: ByteRegion> SectionStorage for ByteSection<R> {
         result.and_then(|count| release.map(|()| SectionAppendOutcome::Appended(count)))
     }
     fn flush(&mut self) -> CuResult<usize> {
-        if core::mem::take(&mut self.write_reserved)
-            || self.leases[self.slot]
-                .compare_exchange(
-                    self.token(IDLE),
-                    self.token(BUSY),
-                    Ordering::AcqRel,
-                    Ordering::Acquire,
-                )
-                .is_ok()
+        if (self.append_only && self.header.is_open)
+            || core::mem::take(&mut self.write_reserved)
+            || (!self.append_only
+                && self.leases[self.slot]
+                    .compare_exchange(
+                        self.token(IDLE),
+                        self.token(BUSY),
+                        Ordering::AcqRel,
+                        Ordering::Acquire,
+                    )
+                    .is_ok())
         {
+            self.write_reserved = false;
             let guard = SectionWrite {
                 section: self,
                 released: false,
@@ -930,6 +958,18 @@ impl<B: ByteStorage> ByteLogger<B> {
         if self.faulted || self.leases.poisoned.load(Ordering::Acquire) {
             return Err(CuError::from("Cannot cleanly close a faulted logger"));
         }
+        // Live append-only handles own their commit block for their lifetime.
+        // Close cannot seal them behind an encoder's back; callers flush/drop first.
+        if self.policy != CapacityPolicy::OverwriteOldest
+            && self
+                .leases
+                .iter()
+                .any(|lease| lease.load(Ordering::Acquire) % 4 == BUSY)
+        {
+            return Err(CuError::from(
+                "Flush or drop live append-only sections before closing the logger",
+            ));
+        }
         self.faulted = true;
         let mut cursor = self.header.head_section;
         let mut remaining = (self.header.sections_end - self.header.sections_begin) / HEADER;
@@ -1255,7 +1295,12 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
         self.leases[slot].set_allocated(size);
         self.leases[slot].set_next(0);
         self.leases[slot].store(
-            self.generation * GENERATION_STRIDE + IDLE,
+            self.generation * GENERATION_STRIDE
+                + if self.policy == CapacityPolicy::OverwriteOldest {
+                    IDLE
+                } else {
+                    BUSY
+                },
             Ordering::Release,
         );
         let storage = ByteSection {
@@ -1267,6 +1312,7 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
             generation: self.generation,
             offset: position,
             write_reserved: false,
+            append_only: self.policy != CapacityPolicy::OverwriteOldest,
         };
         let handle = SectionHandle::create(header, storage)?;
         self.faulted = false;
@@ -1367,6 +1413,64 @@ mod tests {
     }
 
     #[test]
+    fn test_reclamation_cas_is_absent_from_append_only_records() {
+        let dir = tempfile::tempdir().unwrap();
+        for policy in [
+            CapacityPolicy::Grow,
+            CapacityPolicy::StopWhenFull,
+            CapacityPolicy::OverwriteOldest,
+        ] {
+            let path = dir.path().join(format!("cas-{policy:?}.copper"));
+            let mut logger = logger(&path, policy);
+            let mut section = logger
+                .add_section(UnifiedLogType::CopperList, 4096)
+                .unwrap();
+            let calls = Arc::new(AtomicUsize::new(0));
+            let observed = calls.clone();
+            LEASE_HOOK.with(|cell| {
+                *cell.borrow_mut() = Some(Box::new(move |_, event| {
+                    if matches!(event, LeaseEvent::BeforeCompareExchange) {
+                        observed.fetch_add(1, Ordering::Relaxed);
+                    }
+                }))
+            });
+            for value in 0..100u32 {
+                section.append(value).unwrap();
+            }
+            LEASE_HOOK.with(|cell| cell.borrow_mut().take());
+            assert_eq!(
+                calls.load(Ordering::Relaxed),
+                if policy == CapacityPolicy::OverwriteOldest {
+                    200
+                } else {
+                    0
+                }
+            );
+            logger.try_flush_section(&mut section).unwrap();
+            logger.close().unwrap();
+            assert_eq!(saved_values(&path), (0..100).collect::<Vec<_>>());
+        }
+    }
+
+    #[test]
+    fn test_append_only_close_waits_for_the_owner_and_drop_seals_it() {
+        let dir = tempfile::tempdir().unwrap();
+        for policy in [CapacityPolicy::Grow, CapacityPolicy::StopWhenFull] {
+            let path = dir.path().join(format!("close-{policy:?}.copper"));
+            let mut logger = logger(&path, policy);
+            let mut section = logger
+                .add_section(UnifiedLogType::CopperList, 2048)
+                .unwrap();
+            section.append(41u32).unwrap();
+            assert!(logger.close().is_err());
+            section.append(42u32).unwrap();
+            drop(section);
+            logger.close().unwrap();
+            assert_eq!(saved_values(&path), [41, 42]);
+        }
+    }
+
+    #[test]
     fn test_metadata_owners_fit_independent_physical_blocks() {
         let header = SectionHeader {
             entry_type: UnifiedLogType::CopperList,
@@ -1461,7 +1565,7 @@ mod tests {
     fn test_writer_finishing_during_slot_selection_keeps_its_generation() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("selection.copper");
-        let mut logger = logger(&path, CapacityPolicy::Grow);
+        let mut logger = logger(&path, CapacityPolicy::OverwriteOldest);
         let mut first = logger
             .add_section(UnifiedLogType::CopperList, 2048)
             .unwrap();
@@ -1513,11 +1617,7 @@ mod tests {
             }
         }
         let dir = tempfile::tempdir().unwrap();
-        for policy in [
-            CapacityPolicy::Grow,
-            CapacityPolicy::StopWhenFull,
-            CapacityPolicy::OverwriteOldest,
-        ] {
+        for policy in [CapacityPolicy::OverwriteOldest] {
             for empty in [false, true] {
                 let path = dir
                     .path()
