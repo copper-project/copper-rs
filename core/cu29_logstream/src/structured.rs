@@ -163,7 +163,7 @@ mod tests {
         let local = LogStream::<NoopSectionStorage, _>::new(
             UnifiedLogType::StructuredLogLine,
             Arc::new(Mutex::new(NoopLogger::new())),
-            1024,
+            usize::from(cu29_unifiedlog::SECTION_HEADER_COMPACT_SIZE) + 512,
         )
         .unwrap();
         let mut sink =
@@ -202,7 +202,7 @@ mod tests {
         let local = LogStream::new(
             UnifiedLogType::StructuredLogLine,
             Arc::new(Mutex::new(logger)),
-            1024,
+            usize::from(cu29_unifiedlog::SECTION_HEADER_COMPACT_SIZE) + 512,
         )
         .unwrap();
         let mut sink = StructuredLogStream::new(local, Probe(seen.clone()));
