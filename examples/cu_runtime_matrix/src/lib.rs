@@ -1051,6 +1051,8 @@ impl MissionArg {
     }
 }
 
+// Keep mission apps inline so benchmark dispatch adds no heap indirection.
+#[allow(clippy::large_enum_variant)]
 enum MissionApp {
     OneToMany(OneToMany::RuntimeMatrixApp),
     OneToManyBackground(OneToManyBackground::RuntimeMatrixApp),
@@ -1686,6 +1688,61 @@ mod tests {
         }
     }
 
+    fn drain_recorded_output(app: &mut MissionApp) -> CuResult<()> {
+        // These fixtures compare complete recordings, so drain between mock
+        // clock steps instead of depending on output-worker scheduling.
+        match app {
+            MissionApp::OneToMany(app) => {
+                let runtime = app.copper_runtime_mut();
+                runtime
+                    .copperlists_manager
+                    .reclaim_keyframes(&mut runtime.keyframes_manager)
+            }
+            MissionApp::OneToManyBackground(app) => {
+                let runtime = app.copper_runtime_mut();
+                runtime
+                    .copperlists_manager
+                    .reclaim_keyframes(&mut runtime.keyframes_manager)
+            }
+            MissionApp::ManyToOne(app) => {
+                let runtime = app.copper_runtime_mut();
+                runtime
+                    .copperlists_manager
+                    .reclaim_keyframes(&mut runtime.keyframes_manager)
+            }
+            MissionApp::ManyToOneBackground(app) => {
+                let runtime = app.copper_runtime_mut();
+                runtime
+                    .copperlists_manager
+                    .reclaim_keyframes(&mut runtime.keyframes_manager)
+            }
+            MissionApp::ManyToMany(app) => {
+                let runtime = app.copper_runtime_mut();
+                runtime
+                    .copperlists_manager
+                    .reclaim_keyframes(&mut runtime.keyframes_manager)
+            }
+            MissionApp::ManyToManyBackground(app) => {
+                let runtime = app.copper_runtime_mut();
+                runtime
+                    .copperlists_manager
+                    .reclaim_keyframes(&mut runtime.keyframes_manager)
+            }
+            MissionApp::BridgeFanout(app) => {
+                let runtime = app.copper_runtime_mut();
+                runtime
+                    .copperlists_manager
+                    .reclaim_keyframes(&mut runtime.keyframes_manager)
+            }
+            MissionApp::BridgeFanoutBackground(app) => {
+                let runtime = app.copper_runtime_mut();
+                runtime
+                    .copperlists_manager
+                    .reclaim_keyframes(&mut runtime.keyframes_manager)
+            }
+        }
+    }
+
     fn assert_sampled_progress(
         mission: MissionArg,
         emit_limit: u64,
@@ -1970,6 +2027,7 @@ mod tests {
             // committed. Wall-clock sleeps let paired branches sample different
             // sequences under load, which can leave the sink with no matching pair.
             drain_background_workers(&mut app);
+            drain_recorded_output(&mut app)?;
         }
         app.stop_all_tasks()?;
         drop(app);
@@ -2086,6 +2144,13 @@ mod tests {
             true,
         )
         .expect("configure runtime matrix");
+        // Keep one keyframe in flight so this error-path fixture cannot
+        // exhaust the paired-output capture buffers before the worker runs.
+        config
+            .logging
+            .as_mut()
+            .expect("runtime matrix logging config")
+            .keyframe_interval = Some(COMPLETED_LISTS as u32);
         let graph = config
             .get_graph_mut(Some(mission.as_str()))
             .expect("OneToMany graph");
