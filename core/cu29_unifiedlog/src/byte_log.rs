@@ -410,6 +410,7 @@ pub struct ByteSection<R: ByteRegion> {
     slot: usize,
     generation: usize,
     offset: u64,
+    write_reserved: bool,
 }
 impl<R: ByteRegion> ByteSection<R> {
     fn token(&self, state: usize) -> usize {
@@ -428,6 +429,14 @@ impl<R: ByteRegion> ByteSection<R> {
                 self.leases.poisoned.store(true, Ordering::Release);
                 CuError::from("Section lease changed during write")
             })
+    }
+}
+impl<R: ByteRegion> Drop for ByteSection<R> {
+    fn drop(&mut self) {
+        if self.write_reserved {
+            self.region.abort();
+            let _ = self.release_write(IDLE);
+        }
     }
 }
 struct SectionWrite<'a, R: ByteRegion> {
@@ -461,6 +470,21 @@ impl<R: ByteRegion> SectionStorage for ByteSection<R> {
         // The authoritative header is committed with the payload while holding the lease.
         Ok(HEADER as usize)
     }
+    fn reserve_write(&mut self) -> CuResult<()> {
+        if self.write_reserved {
+            return Err(CuError::from("Section writing rights already reserved"));
+        }
+        self.leases[self.slot]
+            .compare_exchange(
+                self.token(IDLE),
+                self.token(BUSY),
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            )
+            .map_err(|_| CuError::from("Cannot reserve revoked section writing rights"))?;
+        self.write_reserved = true;
+        Ok(())
+    }
     fn is_sealed(&self) -> bool {
         self.leases[self.slot].load(Ordering::Acquire) != self.token(IDLE)
     }
@@ -479,14 +503,15 @@ impl<R: ByteRegion> SectionStorage for ByteSection<R> {
         if self.leases.poisoned.load(Ordering::Acquire) {
             return Err(EncodeError::Other("Logger faulted after a storage failure"));
         }
-        if self.leases[self.slot]
-            .compare_exchange(
-                self.token(IDLE),
-                self.token(BUSY),
-                Ordering::AcqRel,
-                Ordering::Acquire,
-            )
-            .is_err()
+        if !core::mem::take(&mut self.write_reserved)
+            && self.leases[self.slot]
+                .compare_exchange(
+                    self.token(IDLE),
+                    self.token(BUSY),
+                    Ordering::AcqRel,
+                    Ordering::Acquire,
+                )
+                .is_err()
         {
             return Ok(SectionAppendOutcome::Rebind);
         }
@@ -537,14 +562,15 @@ impl<R: ByteRegion> SectionStorage for ByteSection<R> {
         result.and_then(|count| release.map(|()| SectionAppendOutcome::Appended(count)))
     }
     fn flush(&mut self) -> CuResult<usize> {
-        if self.leases[self.slot]
-            .compare_exchange(
-                self.token(IDLE),
-                self.token(BUSY),
-                Ordering::AcqRel,
-                Ordering::Acquire,
-            )
-            .is_ok()
+        if core::mem::take(&mut self.write_reserved)
+            || self.leases[self.slot]
+                .compare_exchange(
+                    self.token(IDLE),
+                    self.token(BUSY),
+                    Ordering::AcqRel,
+                    Ordering::Acquire,
+                )
+                .is_ok()
         {
             let guard = SectionWrite {
                 section: self,
@@ -1240,6 +1266,7 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
             slot,
             generation: self.generation,
             offset: position,
+            write_reserved: false,
         };
         let handle = SectionHandle::create(header, storage)?;
         self.faulted = false;
