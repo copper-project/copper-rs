@@ -37,8 +37,7 @@ Use `tail -f logs/isaac.log` from another terminal to inspect simulator startup
 and warnings.
 The launcher uses the optimized debug profile and background CopperList recording.
 Graph statuses show the frame, point count, RGB summary, clearance, and drive/stop
-decision. Per-run `performance.json` files split simulator and native costs;
-the overview evidence capture runs after control, and the wall-clock frame cap is
+decision. The overview evidence capture runs after control, and the wall-clock frame cap is
 disabled without changing the fixed simulation rates.
 Keep `state/` caches and the example's `logs/` when resuming. A completed run's
 `state/output/{gui,headless}/report.json` identifies its native log base under

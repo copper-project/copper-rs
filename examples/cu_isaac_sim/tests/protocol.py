@@ -80,12 +80,6 @@ class ProtocolTest(unittest.TestCase):
                 stdout, stderr = process.communicate(timeout=15)
                 self.assertEqual(process.returncode, 0, (stdout + stderr).decode())
                 self.assertTrue(list(Path(directory).glob("test_*.copper")))
-                performance = json.loads((Path(directory) / "test.performance.json").read_text())
-                self.assertEqual(performance["observations"], count)
-                self.assertGreaterEqual(performance["conversion_s"], 0.0)
-                self.assertGreaterEqual(performance["iteration_s"], 0.0)
-                self.assertEqual(performance["dropped_copperlists"], 0)
-                self.assertEqual(performance["dropped_keyframes"], 0)
 
     def test_disconnect_and_invalid_publication_abort(self):
         for invalid in (False, True):
