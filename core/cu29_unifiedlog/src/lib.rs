@@ -198,6 +198,12 @@ pub trait SectionStorage: Send + Sync {
             self.append(entry).map(SectionAppendOutcome::Appended)
         }
     }
+    /// Reserve the next append while the allocator is locked. Dropping the storage
+    /// must release unused access; append consumes the reservation even on failure.
+    #[doc(hidden)]
+    fn reserve_write(&mut self) -> CuResult<()> {
+        Ok(())
+    }
     /// Whether this handle was sealed by section reclamation.
     fn is_sealed(&self) -> bool {
         false
@@ -463,6 +469,9 @@ impl<E: Encode, S: SectionStorage, L: UnifiedLogWrite<S>> WriteStream<E> for Log
                     self.minimum_allocation_amount,
                     self.context,
                 )?;
+
+                self.current_section.storage.reserve_write()?;
+                drop(logger_guard);
 
                 let result = self.current_section.append(obj).map_err(|e| {
                     CuError::from(

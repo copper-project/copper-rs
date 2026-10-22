@@ -560,3 +560,82 @@ fn invalid_links_are_rejected_before_append_mutates_the_log() {
         assert_eq!(std::fs::read(&path).unwrap(), bytes);
     }
 }
+
+#[test]
+fn rollover_first_encode_releases_allocator_lock_while_holding_writing_rights() {
+    struct Paused {
+        entered: std::sync::mpsc::Sender<()>,
+        resume: std::sync::mpsc::Receiver<()>,
+    }
+    impl bincode::Encode for Paused {
+        fn encode<E: bincode::enc::Encoder>(
+            &self,
+            encoder: &mut E,
+        ) -> Result<(), bincode::error::EncodeError> {
+            // The old section runs out of room before reaching the pause.
+            [2u8; 900].encode(encoder)?;
+            self.entered.send(()).unwrap();
+            self.resume
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .unwrap();
+            42u32.encode(encoder)
+        }
+    }
+    let dir = test_dir();
+    for policy in [
+        CapacityPolicy::Grow,
+        CapacityPolicy::StopWhenFull,
+        CapacityPolicy::OverwriteOldest,
+    ] {
+        let path = dir.path().join(format!("rollover-lock-{policy:?}.copper"));
+        let logger = Arc::new(Mutex::new(writer(&path, 8192, 8192, false, policy)));
+        let mut stream = LogStream::new(UnifiedLogType::CopperList, logger.clone(), 2048).unwrap();
+        stream.log(&[1u8; 900]).unwrap();
+        let (entered, entering) = std::sync::mpsc::channel();
+        let (resume, resuming) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            stream
+                .log(&Paused {
+                    entered,
+                    resume: resuming,
+                })
+                .unwrap()
+        });
+        entering
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .unwrap();
+        {
+            let mut allocator = logger
+                .try_lock()
+                .expect("first rollover encode held the allocator mutex");
+            let mut next = allocator
+                .add_section(UnifiedLogType::CopperList, 2048)
+                .unwrap();
+            next.append(43u32).unwrap();
+            allocator.try_flush_section(&mut next).unwrap();
+            // In overwrite mode the next wrap would reclaim the active encoder;
+            // it must fail before mutating the retained range or descriptor.
+            if policy == CapacityPolicy::OverwriteOldest {
+                assert!(
+                    allocator
+                        .add_section(UnifiedLogType::CopperList, 4096)
+                        .is_err()
+                );
+            }
+        }
+        resume.send(()).unwrap();
+        worker.join().unwrap();
+        drop(logger);
+        let mut reader = UnifiedLoggerRead::new(&path).unwrap();
+        let mut saved = Vec::new();
+        while let Some(bytes) = reader
+            .read_next_section_type(UnifiedLogType::CopperList)
+            .unwrap()
+        {
+            saved.extend(bytes);
+        }
+        let mut expected = bincode::encode_to_vec([1u8; 900], standard()).unwrap();
+        expected.extend(bincode::encode_to_vec(([2u8; 900], 42u32, 43u32), standard()).unwrap());
+        assert_eq!(saved, expected);
+    }
+}
