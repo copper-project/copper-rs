@@ -151,6 +151,22 @@ above does not establish durable write ordering or power-loss atomicity. Keep
 interrupted-log inspection bounded by the validation rules in First delivery;
 stronger crash recovery can be designed in a later format revision.
 
+Version 3 reserves 1024 bytes per section: a 512-byte allocator descriptor,
+a 512-byte encoder commit block, then native payload bytes. Extents and origins
+remain aligned to 512 bytes. Descriptors carry origin, generation, type, context,
+extent, and successor origin/generation; commits carry origin, generation,
+committed payload length, and open state. Readers assemble `SectionHeader` as a
+view rather than decoding that view directly from disk. Matching identities and
+bounds are mandatory before exposing payloads or following links.
+
+Initialization commits the empty encoder block, writes its descriptor, then
+publishes the predecessor link and main retained range. Reclamation claims every
+affected encoder, seals its commit block, publishes removal, then reuses bytes
+with a new generation. Link publication writes only the descriptor block.
+Explicit section flush commits closed state and flushes its backing region;
+clean logger close seals remaining idle sections and flushes the main header.
+The adapters retain their existing flush behavior and durability limits.
+
 ## Section acquisition and reclamation
 
 Replace the precheck/acquire sequence with one authoritative acquisition

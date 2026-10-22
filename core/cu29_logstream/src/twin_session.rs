@@ -116,7 +116,7 @@ impl<A: LiveReplay, R: CuStreamRx + 'static> CuTwinBuilder<A, R> {
     /// entries inside a slab. A complete record must fit within one section.
     /// Choose at least the larger of `max_record_bytes` and
     /// `finite_objects.max_object_bytes` from [`Self::with_receiver_limits`],
-    /// plus 512 bytes for the section header and 32 bytes for the archive's
+    /// plus 1024 bytes for the section header and 32 bytes for the archive's
     /// continuity envelope. Round up to a multiple of 512 bytes.
     ///
     /// Increase this alongside receive bounds when captures or task-state
@@ -438,17 +438,14 @@ fn validate_sizes(
     limits: SessionRouterLimits,
 ) -> CuResult<()> {
     let header = usize::from(cu29_unifiedlog::SECTION_HEADER_COMPACT_SIZE);
-    if slab_bytes < 1024 || !slab_bytes.is_multiple_of(header) {
+    if slab_bytes < 1024 || !slab_bytes.is_multiple_of(512) {
         return Err(CuError::from(
             "Twin slab size must be at least 1024 bytes and a multiple of 512",
         ));
     }
-    if section_bytes <= header
-        || !section_bytes.is_multiple_of(header)
-        || section_bytes > slab_bytes
-    {
+    if section_bytes <= header || !section_bytes.is_multiple_of(512) || section_bytes > slab_bytes {
         return Err(CuError::from(
-            "Twin section size must exceed 512 bytes, be a multiple of 512, and fit in its slab",
+            "Twin section size must exceed 1024 bytes, be a multiple of 512, and fit in its slab",
         ));
     }
     if section_bytes - header > u32::MAX as usize {
@@ -537,5 +534,22 @@ impl<A: LiveReplay> CuTwin<A> {
 impl<A: LiveReplay> Drop for CuTwin<A> {
     fn drop(&mut self) {
         let _ = self.stop();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn storage_alignment_is_independent_of_header_reservation() {
+        let limits = SessionRouterLimits {
+            max_record_bytes: 128,
+            finite_objects: crate::FiniteObjectLimits::new(128, 128, 1),
+            ..Default::default()
+        };
+        assert!(validate_sizes(2560, 1536, limits).is_ok());
+        assert!(validate_sizes(2560, 1024, limits).is_err());
+        assert!(validate_sizes(2560, 1792, limits).is_err());
     }
 }

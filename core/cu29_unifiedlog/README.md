@@ -13,7 +13,7 @@ the same log container format in another project.
 
 ## Encapsulation and application content
 
-`UNIFIED_LOG_FORMAT_VERSION` is **2** (unreleased). Static application metadata
+`UNIFIED_LOG_FORMAT_VERSION` is **3** (unreleased). Static application metadata
 precedes a byte-addressed chain of rotating sections. Each section carries its
 construction run, instance and numeric mission identity.
 It versions only the file/section encapsulation and layout. **Never bump it for
@@ -48,7 +48,10 @@ next write. A write in progress blocks reclamation. The allocator preallocates
 Choose backing allocation sizes appropriate to the largest section.
 
 Allocations into free capacity do not wait for other streams to finish encoding.
-An active encoder commits its section's successor link before releasing its lease.
+Each section reserves separate 512-byte blocks for its allocator-owned descriptor
+and encoder-owned commit metadata. Allocating a successor updates only the
+descriptor, independently of an active encoder. Readers validate section origins,
+generations, links, and committed lengths before exposing records.
 Streams rebind when allocation revokes section access before encoding begins;
 this does not report an encoding failure.
 

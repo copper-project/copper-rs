@@ -75,10 +75,10 @@ fn fixture(path: &Path, catalog: bool, corrupt: bool, duplicate: bool) {
     let logger = Arc::new(Mutex::new(logger));
     if duplicate {
         let mut duplicate =
-            LogStream::new(UnifiedLogType::ValueDecodeCatalog, logger.clone(), 1024).unwrap();
+            LogStream::new(UnifiedLogType::ValueDecodeCatalog, logger.clone(), 1536).unwrap();
         duplicate.log(&WireBytes(catalog_blob())).unwrap();
     }
-    let mut cls = LogStream::new(UnifiedLogType::CopperList, logger, 1024).unwrap();
+    let mut cls = LogStream::new(UnifiedLogType::CopperList, logger, 1536).unwrap();
     cls.log(&WireBytes(vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0]))
         .unwrap();
     if corrupt {

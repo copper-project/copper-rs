@@ -343,13 +343,13 @@ mod tests {
                 second
             };
             let mut section = logger
-                .add_section_with_context(UnifiedLogType::CopperList, 1536, context)
+                .add_section_with_context(UnifiedLogType::CopperList, 2048, context)
                 .unwrap();
             section.append([value; 160]).unwrap();
             logger.flush_section(&mut section);
             if value.is_multiple_of(17) {
                 let mut section = logger
-                    .add_section_with_context(UnifiedLogType::RuntimeLifecycle, 1024, context)
+                    .add_section_with_context(UnifiedLogType::RuntimeLifecycle, 1536, context)
                     .unwrap();
                 section.append(value).unwrap();
                 logger.flush_section(&mut section);
@@ -415,6 +415,76 @@ mod tests {
                 .filter(|(_, kind, _)| *kind == UnifiedLogType::CopperList)
                 .count()
                 < 100
+        );
+    }
+    #[test]
+    fn sd_descriptor_linking_does_not_overwrite_an_active_encoders_commit() {
+        struct Paused {
+            entered: std::sync::mpsc::Sender<()>,
+            resume: std::sync::mpsc::Receiver<()>,
+        }
+        impl bincode::Encode for Paused {
+            fn encode<E: bincode::enc::Encoder>(
+                &self,
+                encoder: &mut E,
+            ) -> Result<(), bincode::error::EncodeError> {
+                bincode::Encode::encode(&12u32, encoder)?;
+                self.entered.send(()).unwrap();
+                self.resume
+                    .recv_timeout(std::time::Duration::from_secs(5))
+                    .unwrap();
+                Ok(())
+            }
+        }
+        let device = Device::new();
+        let mut logger = EMMCLogger::new(device.clone(), BlockIdx(7), BlockCount(32)).unwrap();
+        let mut first = logger
+            .add_section(UnifiedLogType::CopperList, 2048)
+            .unwrap();
+        first.append(11u32).unwrap();
+        let (entered, entering) = std::sync::mpsc::channel();
+        let (resume, resuming) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            first
+                .append(Paused {
+                    entered,
+                    resume: resuming,
+                })
+                .unwrap();
+            first
+        });
+        entering
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .unwrap();
+        let mut next = logger
+            .add_section(UnifiedLogType::CopperList, 2048)
+            .unwrap();
+        next.append(13u32).unwrap();
+        resume.send(()).unwrap();
+        let mut first = worker.join().unwrap();
+        logger.try_flush_section(&mut first).unwrap();
+        logger.try_flush_section(&mut next).unwrap();
+        logger.close().unwrap();
+        let dir = test_dir();
+        let path = dir.path().join("concurrent.copper");
+        std::fs::write(
+            dir.path().join("concurrent_0.copper"),
+            &device.bytes.lock().unwrap()[7 * BLK..39 * BLK],
+        )
+        .unwrap();
+        let saved = sections(&path);
+        assert_eq!(saved.len(), 2);
+        assert_eq!(
+            bincode::decode_from_slice::<(u32, u32), _>(&saved[0].2, bincode::config::standard())
+                .unwrap()
+                .0,
+            (11, 12)
+        );
+        assert_eq!(
+            bincode::decode_from_slice::<u32, _>(&saved[1].2, bincode::config::standard())
+                .unwrap()
+                .0,
+            13
         );
     }
     #[test]

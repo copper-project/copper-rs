@@ -66,26 +66,10 @@ fn values(path: &std::path::Path) -> Vec<(SectionContext, u32)> {
     values
 }
 #[test]
-fn maximum_header_fits_existing_reservation() {
-    let header = SectionHeader {
-        allocated: u64::MAX,
-        next_section: u64::MAX,
-        used: u32::MAX,
-        context: SectionContext {
-            run_id: u64::MAX,
-            instance_id: u32::MAX,
-            mission_index: u32::MAX,
-        },
-        ..SectionHeader::default()
-    };
-    let mut bytes = [0; 512];
-    assert!(encode_into_slice(&header, &mut bytes, standard()).unwrap() < 512);
-}
-#[test]
 fn sections_cross_backing_files_with_direct_native_encoding() {
     let dir = test_dir();
     let path = dir.path().join("cross.copper");
-    let mut logger = writer(&path, 1024, 8192, false, CapacityPolicy::Grow);
+    let mut logger = writer(&path, 2048, 16384, false, CapacityPolicy::Grow);
     logger
         .seal_metadata(&metadata(), Some(&[9u8; 1800]))
         .unwrap();
@@ -118,7 +102,7 @@ fn sections_cross_backing_files_with_direct_native_encoding() {
 fn repeated_wrap_rebinds_sparse_streams_and_preserves_metadata() {
     let dir = test_dir();
     let path = dir.path().join("ring.copper");
-    let mut logger = writer(&path, 2048, 8192, false, CapacityPolicy::OverwriteOldest);
+    let mut logger = writer(&path, 2048, 16384, false, CapacityPolicy::OverwriteOldest);
     logger
         .seal_metadata(&metadata(), Some(&[1u8; 100]))
         .unwrap();
@@ -127,14 +111,14 @@ fn repeated_wrap_rebinds_sparse_streams_and_preserves_metadata() {
     let mut sparse = LogStream::with_context(
         UnifiedLogType::StructuredLogLine,
         logger.clone(),
-        1024,
+        2048,
         context,
     )
     .unwrap();
     sparse.log(&100u32).unwrap();
     for value in 0..80u32 {
         let mut stream =
-            LogStream::with_context(UnifiedLogType::CopperList, logger.clone(), 1024, context)
+            LogStream::with_context(UnifiedLogType::CopperList, logger.clone(), 2048, context)
                 .unwrap();
         stream.log(&value).unwrap();
         if value.is_multiple_of(13) {
@@ -174,8 +158,8 @@ fn repeated_wrap_rebinds_sparse_streams_and_preserves_metadata() {
         allocated += section.allocated as usize;
     }
     assert_eq!(reserved, allocated);
-    assert!(reserved <= 8192);
-    let reopened = writer(&path, 2048, 8192, true, CapacityPolicy::OverwriteOldest);
+    assert!(reserved <= 16384);
+    let reopened = writer(&path, 2048, 16384, true, CapacityPolicy::OverwriteOldest);
     assert_eq!(reopened.status().total_used_space, reserved);
 }
 #[test]
@@ -188,14 +172,14 @@ fn matching_append_changes_policy_and_allocates_new_run_ids() {
         (true, CapacityPolicy::Grow),
         (true, CapacityPolicy::OverwriteOldest),
     ] {
-        let mut logger = writer(&path, 2048, 8192, append, policy);
+        let mut logger = writer(&path, 2048, 16384, append, policy);
         logger
             .seal_metadata(&metadata(), Some(&[1u8; 100]))
             .unwrap();
         let context = logger.construction_context(5, 1).unwrap();
         contexts.push(context);
         let mut handle = logger
-            .add_section_with_context(UnifiedLogType::CopperList, 1024, context)
+            .add_section_with_context(UnifiedLogType::CopperList, 2048, context)
             .unwrap();
         handle.append(42u32).unwrap();
         logger.flush_section(&mut handle);
@@ -210,7 +194,7 @@ fn matching_append_changes_policy_and_allocates_new_run_ids() {
 #[test]
 fn grow_after_wrap_preserves_retained_records_and_reconstructs_geometry() {
     let dir = test_dir();
-    for capacity in [4096, 8192] {
+    for capacity in [8192, 16384] {
         for sections in [8, 9, 15] {
             let path = dir
                 .path()
@@ -227,7 +211,7 @@ fn grow_after_wrap_preserves_retained_records_and_reconstructs_geometry() {
                 let context = logger.construction_context(5, 1).unwrap();
                 for value in 0..sections {
                     let mut section = logger
-                        .add_section_with_context(UnifiedLogType::CopperList, 1024, context)
+                        .add_section_with_context(UnifiedLogType::CopperList, 2048, context)
                         .unwrap();
                     section.append(value).unwrap();
                     logger.try_flush_section(&mut section).unwrap();
@@ -264,19 +248,19 @@ fn mismatched_append_makes_no_header_or_payload_changes() {
     let dir = test_dir();
     let path = dir.path().join("mismatch.copper");
     {
-        let mut logger = writer(&path, 8192, 8192, false, CapacityPolicy::Grow);
+        let mut logger = writer(&path, 16384, 16384, false, CapacityPolicy::Grow);
         logger.seal_metadata(&metadata(), Some(&42u32)).unwrap();
     }
     let before = std::fs::read(&path).unwrap();
     for catalog in [None, Some(43u32)] {
-        let mut logger = writer(&path, 8192, 8192, true, CapacityPolicy::Grow);
+        let mut logger = writer(&path, 16384, 16384, true, CapacityPolicy::Grow);
         assert!(logger.seal_metadata(&metadata(), catalog.as_ref()).is_err());
         drop(logger);
         assert_eq!(std::fs::read(&path).unwrap(), before);
     }
     let mut changed = metadata();
     changed.app_version = "different".into();
-    let mut logger = writer(&path, 8192, 8192, true, CapacityPolicy::Grow);
+    let mut logger = writer(&path, 16384, 16384, true, CapacityPolicy::Grow);
     assert!(logger.seal_metadata(&changed, Some(&42u32)).is_err());
     drop(logger);
     assert_eq!(std::fs::read(&path).unwrap(), before);
@@ -287,13 +271,13 @@ fn oversized_entry_rolls_back_committed_bytes_and_cursor() {
     let path = dir.path().join("rollback.copper");
     let logger = Arc::new(Mutex::new(writer(
         &path,
-        8192,
-        8192,
+        16384,
+        16384,
         false,
         CapacityPolicy::Grow,
     )));
-    let mut stream = LogStream::new(UnifiedLogType::CopperList, logger.clone(), 1024).unwrap();
-    assert!(stream.log(&[1u8; 1024]).is_err());
+    let mut stream = LogStream::new(UnifiedLogType::CopperList, logger.clone(), 2048).unwrap();
+    assert!(stream.log(&[1u8; 2048]).is_err());
     stream.log(&11u32).unwrap();
     stream.log(&12u32).unwrap();
     drop(stream);
@@ -310,9 +294,9 @@ fn oversized_entry_rolls_back_committed_bytes_and_cursor() {
 fn incomplete_log_is_inspectable_but_append_is_read_only_failure() {
     let dir = test_dir();
     let path = dir.path().join("incomplete.copper");
-    let mut logger = writer(&path, 8192, 8192, false, CapacityPolicy::Grow);
+    let mut logger = writer(&path, 16384, 16384, false, CapacityPolicy::Grow);
     let mut section = logger
-        .add_section(UnifiedLogType::CopperList, 1024)
+        .add_section(UnifiedLogType::CopperList, 2048)
         .unwrap();
     section.append(7u32).unwrap();
     assert_eq!(values(&path).last().unwrap().1, 7);
@@ -320,7 +304,7 @@ fn incomplete_log_is_inspectable_but_append_is_read_only_failure() {
     assert!(
         UnifiedLoggerBuilder::new()
             .file_base_name(&path)
-            .preallocated_size(8192)
+            .preallocated_size(16384)
             .write(true)
             .create(true)
             .append(true)
@@ -413,10 +397,10 @@ fn allocation_with_free_capacity_does_not_wait_for_an_encoder() {
     ] {
         for outcome in 0..3 {
             let path = dir.path().join(format!("free-{policy:?}-{outcome}.copper"));
-            let mut logger = writer(&path, 8192, 8192, false, policy);
+            let mut logger = writer(&path, 16384, 16384, false, policy);
             logger.seal_metadata::<()>(&metadata(), None).unwrap();
             let mut first = logger
-                .add_section(UnifiedLogType::CopperList, 1024)
+                .add_section(UnifiedLogType::CopperList, 2048)
                 .unwrap();
             first.append(41u32).unwrap();
             let (entered, entering) = std::sync::mpsc::channel();
@@ -446,7 +430,7 @@ fn allocation_with_free_capacity_does_not_wait_for_an_encoder() {
             // Both finish before the paused encoder is allowed to resume.
             for value in [43u32, 44] {
                 let mut next = logger
-                    .add_section(UnifiedLogType::CopperList, 1024)
+                    .add_section(UnifiedLogType::CopperList, 2048)
                     .unwrap();
                 next.append(value).unwrap();
                 logger.try_flush_section(&mut next).unwrap();
@@ -462,8 +446,8 @@ fn allocation_with_free_capacity_does_not_wait_for_an_encoder() {
                     .collect::<Vec<_>>(),
                 [41, 42, 43, 44]
             );
-            // Deferred links must also survive reopening for append.
-            drop(writer(&path, 8192, 8192, true, policy));
+            // Allocator-owned links survive reopening after concurrent encoding.
+            drop(writer(&path, 16384, 16384, true, policy));
         }
     }
 }
@@ -474,19 +458,19 @@ fn concurrent_stream_rollover_preserves_every_record() {
     let path = dir.path().join("concurrent.copper");
     let logger = Arc::new(Mutex::new(writer(
         &path,
-        8192,
-        8192,
+        16384,
+        16384,
         false,
         CapacityPolicy::Grow,
     )));
-    let mut first = LogStream::new(UnifiedLogType::CopperList, logger.clone(), 1024).unwrap();
+    let mut first = LogStream::new(UnifiedLogType::CopperList, logger.clone(), 2048).unwrap();
     let worker = std::thread::spawn(move || {
         for value in 0..2000u32 {
             first.log(&value).unwrap();
         }
     });
     for value in 2000..2200u32 {
-        let mut stream = LogStream::new(UnifiedLogType::CopperList, logger.clone(), 1024).unwrap();
+        let mut stream = LogStream::new(UnifiedLogType::CopperList, logger.clone(), 2048).unwrap();
         stream.log(&value).unwrap();
     }
     worker.join().unwrap();
@@ -502,13 +486,13 @@ fn concurrent_stream_rollover_preserves_every_record() {
 #[test]
 fn invalid_links_are_rejected_before_append_mutates_the_log() {
     let dir = test_dir();
-    for corrupt in [0, 1, 2] {
+    for corrupt in 0..7 {
         let path = dir.path().join(format!("invalid{corrupt}.copper"));
         {
             let mut logger = writer(&path, 4096, 4096, false, CapacityPolicy::Grow);
             logger.seal_metadata::<()>(&metadata(), None).unwrap();
             let mut handle = logger
-                .add_section(UnifiedLogType::CopperList, 1024)
+                .add_section(UnifiedLogType::CopperList, 2048)
                 .unwrap();
             handle.append(42u32).unwrap();
             logger.try_flush_section(&mut handle).unwrap();
@@ -517,16 +501,48 @@ fn invalid_links_are_rejected_before_append_mutates_the_log() {
         let offset = reader.raw_main_header().head_section;
         drop(reader);
         let mut bytes = std::fs::read(&path).unwrap();
-        let (mut header, _) =
-            decode_from_slice::<SectionHeader, _>(&bytes[offset as usize..], standard()).unwrap();
+        #[derive(bincode::Encode, bincode::Decode)]
+        struct Descriptor {
+            magic: [u8; 2],
+            block_size: u16,
+            entry_type: UnifiedLogType,
+            allocated: u64,
+            next_section: u64,
+            context: SectionContext,
+            position: u64,
+            generation: u64,
+            next_generation: u64,
+        }
+        #[derive(bincode::Encode, bincode::Decode)]
+        struct Commit {
+            position: u64,
+            generation: u64,
+            used: u32,
+            is_open: bool,
+        }
+        let (mut descriptor, _) =
+            decode_from_slice::<Descriptor, _>(&bytes[offset as usize..], standard()).unwrap();
+        let commit_offset = offset as usize + 512;
+        let (mut commit, _) =
+            decode_from_slice::<Commit, _>(&bytes[commit_offset..], standard()).unwrap();
         match corrupt {
-            0 => header.next_section = offset,
-            1 => header.next_section = u64::MAX,
-            _ => header.used = u32::MAX,
+            0 => descriptor.next_section = offset,
+            1 => descriptor.next_section = u64::MAX,
+            2 => commit.used = u32::MAX,
+            3 => commit.generation += 1,
+            4 => commit.position += 512,
+            5 => descriptor.position += 512,
+            _ => descriptor.block_size = 512,
         }
         encode_into_slice(
-            &header,
+            &descriptor,
             &mut bytes[offset as usize..offset as usize + 512],
+            standard(),
+        )
+        .unwrap();
+        encode_into_slice(
+            &commit,
+            &mut bytes[commit_offset..commit_offset + 512],
             standard(),
         )
         .unwrap();
