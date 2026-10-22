@@ -1,5 +1,7 @@
 # Concurrent log section redesign
 
+[Visual comparison: ownership, locks, cycle costs, and design tradeoffs](concurrent-log-section-redesign.svg).
+
 Replace shared header mutation with explicit ownership of allocation metadata,
 section contents, and completed runtime output. Preserve direct native encoding,
 preallocated memory, bounded handoff, deterministic replay, and `no_std` support.
@@ -8,6 +10,30 @@ Backward compatibility is not required. Logger APIs and the container layout may
 change; update in-tree writers, readers, adapters, and generated code together.
 Do not carry compatibility shims into the new design. Record semantics and replay
 correctness remain requirements, independently of byte-format compatibility.
+
+## First delivery
+
+Deliver the ownership split, append-only CAS removal, and runtime worker
+consolidation as one required PR chain without adding a crash-recovery subsystem.
+The format PR can retain the existing workers and leases as an intermediate
+state, but the first delivery is complete only after the performance changes land.
+Preserve capacity policies, native payload encoding, preallocated storage, and
+explicit flush guarantees throughout the chain. The SVG shows the required
+ownership and performance goals for this delivery.
+
+The initial format needs allocator-owned descriptors, encoder-owned commit
+metadata, section identity/generation, and bounds validation. Use separate physical
+blocks for the two writable metadata owners. Use the existing format-version
+field to reject incompatible logs; a future format version can introduce stronger
+recovery. Do not add checksums, journals, duplicate headers, automatic repair, or
+per-record durable flushes in this delivery.
+
+Require correct concurrent operation, failed-encode rollback of the committed
+length, clean close/reopen, and propagation of explicit flush errors. Inspection
+of an unclean log may expose its valid reachable committed prefix, stopping or
+reporting an error at invalid metadata. Do not promise recovery of every committed
+record after a crash or power loss. Continue rejecting append to unclean logs;
+automatic repair and resume are outside this delivery.
 
 ## Review evidence
 
@@ -111,19 +137,19 @@ This split removes the need for `LINK_PENDING`, shared successor-link atomics,
 and encoder-side repairs of allocator metadata. Keep allocator bookkeeping in
 allocator-owned structures rather than sharing mutable geometry with encoders.
 
-Define allocation, commit, reclamation, and recovery ordering together:
+Define the in-process allocation, commit, and reclamation ordering together:
 
 - Initialize a section before publishing a reachable descriptor.
 - Publish committed length only after a complete successful entry write.
 - Publish removal from retained history before reusing reclaimed bytes.
-- Reject invalid or incomplete metadata during recovery instead of interpreting
+- Reject invalid or incomplete metadata during inspection instead of interpreting
   uncommitted bytes as records.
 
-Logical commit and durable flush are separate operations. Specify what survives
-a process crash and what is guaranteed after explicit durable flush. Preserve
-inspection of the committed prefix of an interrupted recording. Do not imply
-power-loss atomicity from atomics in RAM or from a multi-block write sequence;
-choose and test the required recovery mechanism when defining the format.
+Logical commit and durable flush are separate operations. Specify what an
+explicit successful flush guarantees using the existing adapter behavior. The ordering
+above does not establish durable write ordering or power-loss atomicity. Keep
+interrupted-log inspection bounded by the validation rules in First delivery;
+stronger crash recovery can be designed in a later format revision.
 
 ## Section acquisition and reclamation
 
@@ -145,10 +171,13 @@ capacity/overload outcome before destructive mutation, without spinning on the
 real-time thread.
 
 Append-only policies do not reclaim live storage. After removing shared header
-mutation, evaluate eliminating their per-entry reclamation CAS entirely. Retain
-only synchronization needed for publication, faults, and shared stream access.
-Select this behavior from the existing capacity policy; do not add a user-facing
-concurrency setting.
+mutation, eliminate their per-entry reclamation CAS entirely: ordinary appends
+under `Grow` and `StopWhenFull` must perform zero reclamation CAS operations.
+Retain only synchronization needed for publication, faults, and shared stream
+access. Overwrite mode retains the atomic writer/reclaimer ownership transition
+and generation protection. Select this behavior from the existing capacity
+policy; do not add a user-facing concurrency setting. CAS removal is required
+within the first delivery, not a benchmark-dependent follow-up.
 
 ## Runtime output
 
@@ -156,15 +185,18 @@ Keep preallocated CopperList slots and bounded SPSC handoff. Move ownership of a
 completed slot rather than cloning payloads or constructing an intermediate
 encoded buffer. Encode directly into the storage adapter in one native pass.
 
-Use the same output engine in both modes: synchronous output invokes it inline;
-asynchronous output transfers work to a worker. Preserve compile-time typed
-wiring and keep host worker machinery outside `no_std` code.
+Preserve compile-time typed wiring and keep host worker machinery outside
+`no_std` code. Use the same output engine in both modes: synchronous output invokes
+it inline; asynchronous output transfers work to one runtime output worker.
 
-Start with one runtime output worker handling a CopperList and its associated
-keyframe, following the existing distributed-path precedent. Reuse the current
-preallocated keyframe storage through ownership transfer. Consolidation must not
-introduce payload copies or additional serialization passes. Retain separate
-encoders only if equivalent-work benchmarks show a throughput requirement.
+Consolidate CopperList and associated keyframe output into one worker and one
+bounded pending/completion SPSC pair, following the existing distributed-path
+precedent. Reuse the current preallocated keyframe storage through ownership
+transfer. Consolidation must not introduce payload copies or additional
+serialization passes. This is a required PR in the first delivery. Measure
+equivalent-work throughput, producer latency, queue pressure, and drops to catch
+and resolve regressions; measurements validate the implementation rather than
+decide whether to defer consolidation.
 
 Concurrent structured logs retain their own serialized stream. Independent
 streams retain independent encoding; do not hold the allocator mutex across a
@@ -203,22 +235,37 @@ Keep transient capacity outcomes separate from faults that stop the worker.
 
 ## Implementation sequence
 
-1. Capture deterministic regressions for the double-read slot selection and
-   acquisition/revocation races. Record performance and loss baselines before
-   changing the implementation.
-2. Specify the ownership transitions, block layout, publication order, recovery
-   behavior, and overload outcomes. Review the protocol independently of the
-   adapter implementation.
-3. Implement the shared allocator/section model and both storage adapters.
-   Remove deferred-link machinery and redundant header ownership. Update readers
-   and exporters with the new format; reject incompatible files clearly.
-4. Consolidate runtime output, completion accounting, lifecycle ordering, and
-   error cleanup. Update generated code and in-tree callers together.
-5. Validate correctness and equivalent-work performance, remove superseded APIs,
-   and update API snapshots and logging/replay documentation as applicable.
+Each row is a separately mergeable PR in the required chain. The first row is
+already represented in the current source; retain its deterministic tests as the
+baseline. Intermediate PRs may retain costs removed by later PRs; completing the
+header split alone does not complete the delivery.
+
+| PR | Change | Review boundary and acceptance |
+| --- | --- | --- |
+| 1. Race fixes | Classify one lease snapshot and acquire through a typed append/rebind outcome. | Existing format and workers; deterministic slot-selection and revocation regressions. Already present in current source. |
+| 2. Grow allocation | Allocate from known geometry without walking retained history; reconstruct geometry at open. | Existing format, leases, flushes, and workers. Cover clean reopen after a wrapped log and verify allocation visits do not grow with history. |
+| 3. Header ownership | Specify and implement the minimal descriptor/commit block split, bump the format version, and remove deferred-link repairs. | Update shared byte storage, mmap, SD/eMMC, readers, exporters, and affected API snapshots together. Retain per-entry leases and existing workers. Cover concurrent rollover, overwrite/stale generations, partial encode, clean reopen, and interrupted-log rejection/inspection. |
+| 4. Allocator lock scope | Move the first encode after rollover outside the allocator lock. | Acquire writing rights to the new section before unlocking so overwrite cannot reclaim it in the gap. Verify another stream can allocate during a paused encode; retain bounded capacity outcomes. |
+| 5. Append-only CAS removal | Remove per-entry reclamation acquire/release CAS under `Grow` and `StopWhenFull`. | Zero reclamation CAS per ordinary append; retain overwrite ownership transitions and stale-generation protection. Cover all capacity policies and compare small-record costs at equivalent persisted work. |
+| 6. Runtime output consolidation | Use one output engine inline or in one async worker for a completed CL and its associated keyframe; replace two SPSC pairs with one. | Move existing preallocated buffers without payload copies or added serialization passes. Define paired rejection/gap accounting, drain before successful lifecycle markers, wake/join on failure, conserve slots, and propagate flush errors. Move callbacks outside logger locks where required. Validate throughput, producer latency, queue pressure, drops, and failure cleanup. |
+
+PR 3 is the coordinated format migration. It does not include runtime worker
+consolidation or append-only CAS removal; PRs 5 and 6 deliver those required
+benefits within the same chain. Bounded oldest-only ring scans and a new flush
+policy can be reviewed separately. If a format invariant requires moving code
+from another PR, move only that prerequisite and document why.
+
+After these PRs, consider the remaining improvements independently:
+
+- Bound overwrite scans to the oldest sections needed for the request.
+- Bound routine metadata flushes while preserving explicit durability guarantees.
+- Add checksums or stronger crash recovery only for an agreed failure model and
+  recovery requirement. This may introduce a later format version.
 
 Keep each stage reviewable. Do not introduce an abstraction unless it expresses
-an ownership boundary or removes duplicated behavior.
+an ownership boundary or removes duplicated behavior. Run focused correctness
+and equivalent-work performance checks in the PR that changes the relevant path;
+do not defer validation to the end of the chain.
 
 ## Validation and acceptance
 
@@ -233,7 +280,9 @@ Cover:
 - Concurrent stream rollover under all three capacity policies, sparse-stream
   reclamation, tiny rings, and sections crossing backing files.
 - Partial encoding, oversized entries, encode panic, storage errors at each
-  publication step, interrupted recordings, clean close, and reopen/append.
+  publication step, clean close/reopen, and interrupted-log validation and
+  rejection of unclean append. Torn-write recovery and automatic repair are
+  follow-up work.
 - Worker failure with pending input/completions, queue exhaustion, shutdown
   during failure, slot conservation, and propagation of flush errors.
 - Sync and async output, serial and parallel runtimes, structured logs from
@@ -247,9 +296,14 @@ bytes, rejected records, CPU, memory, and p99/p999 producer latency. Include dra
 and flush time when comparing end-to-end throughput. Use equivalent overload and
 durability guarantees: iteration throughput alone can reward dropping more data.
 
-Accept the redesign when the protocol has a small documented state space, normal
-contention does not terminate logging, and allocation avoids history-dependent
-scans on growing logs. Require no new hot-path allocations, payload copies, or
-serialization passes, and no unexplained latency or throughput regression at
-equivalent completed work. Any proposed additional real-time cost requires
-explicit approval before implementation.
+Accept the first delivery when the protocol has a small documented state space,
+normal contention does not terminate logging, the writable metadata owners are
+separate, and allocation avoids history-dependent scans on growing logs. Require
+zero per-entry reclamation CAS under `Grow` and `StopWhenFull`, one runtime output
+worker with one pending/completion SPSC pair on the async path, and the same
+output engine inline on the sync path. Output cleanup must report errors and
+conserve slots; paired CL/keyframe rejection must remain observable. Stronger
+crash recovery does not gate acceptance. Require no new hot-path allocations,
+payload copies, or serialization passes, and no unexplained latency or throughput
+regression at equivalent completed work. Any proposed additional real-time cost
+requires explicit approval before implementation.
