@@ -233,6 +233,40 @@ keyframes, and expose gaps to inspection/replay. A combined handoff must define
 what happens to both a CopperList and its associated keyframe when rejected.
 Keep transient capacity outcomes separate from faults that stop the worker.
 
+## Future extension: event capture
+
+A future recorder may keep a continuous baseline (for example, highly compressed
+video and selected sensors) alongside a rolling buffer of higher-detail data.
+An event preserves a window before its trigger and continues capturing for a
+window afterward, while a fresh buffer starts the next capture. This is outside
+the first delivery; it adds no event API, format fields, or retention machinery
+to this chain.
+
+Keep baseline retention independent from event-buffer overwrite. Separate physical
+logs, each with its own allocator, are one possible implementation; a shared log
+would need explicit retention domains. Switching the whole log from
+`OverwriteOldest` to `Grow` would also retain unrelated streams and does not by
+itself implement repeated event capture.
+
+Keep write ownership and retention distinct. A sealed section has finished
+writing; that does not imply it is eligible for reclamation. Future preservation
+of a section generation belongs to the allocator, separately from an encoder's
+short writing lease. Event capture could rotate preallocated buffers and transfer
+ownership of a completed recording to an archive worker, without copying payloads
+on the runtime producer. Overlapping events must share or extend retained windows,
+or consume a bounded buffer pool with an explicit exhaustion policy; an archive
+worker cannot leave the producer waiting indefinitely for a reusable buffer.
+
+Window selection must use record timestamps, not byte capacity alone: variable
+video bitrate and sensor rates make a fixed-size ring an approximate time window.
+Preserve the decoding prerequisites before the selected window, including video
+codec reference frames, Copper keyframes, schemas, and application metadata. A
+window also needs stable run/instance/mission and message identities across buffer
+rotation, observable gaps, and explicit completion only after its post-trigger
+output and requested flushes finish. The descriptor/generation split and output
+ownership transfer in this design support those later decisions without reserving
+new fields now. Trigger evaluation and archive callbacks stay outside logger locks.
+
 ## Implementation sequence
 
 Each row is a separately mergeable PR in the required chain. The first row is
