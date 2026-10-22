@@ -107,6 +107,11 @@ artifact for documentation-only changes and regenerates it when none is availabl
 CI images refresh weekly and whenever their Docker inputs change. Actions
 dependency updates are grouped into one weekly pull request.
 
+The weekly audit checks security advisories across the full dependency tree.
+Unmaintained-crate advisories block on direct workspace dependencies; transitive
+maintenance status is left to upstream. Keep any necessary advisory exceptions
+and their reasons in `.config/deny.toml`.
+
 Build-job summaries report elapsed time and sampled disk headroom, plus available
 memory on Linux. Samples run every 15 seconds after checkout through the final
 measurement step; container pulls and post-job cache saves are outside that window.
