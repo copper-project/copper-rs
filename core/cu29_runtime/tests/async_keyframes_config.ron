@@ -10,21 +10,21 @@
     tasks: [
         (
             id: "source",
-            type: "SlowSource",
+            type: "ControlledSource",
             background: (pool: "source_pool"),
-            config: {"sleep_ms": 80},
+            config: {"gate": 0},
         ),
         (
             id: "first",
-            type: "SlowTask",
+            type: "ControlledTask",
             background: (pool: "first_pool"),
-            config: {"sleep_ms": 120},
+            config: {"gate": 1},
         ),
         (
             id: "second",
-            type: "SlowTask",
+            type: "ControlledTask",
             background: (pool: "second_pool"),
-            config: {"sleep_ms": 160},
+            config: {"gate": 2},
         ),
         (id: "sink", type: "OutputSink"),
     ],

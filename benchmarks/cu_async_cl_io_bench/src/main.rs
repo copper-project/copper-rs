@@ -107,6 +107,12 @@ pub mod tasks {
 #[derive(Parser, Debug)]
 #[command(name = "cu-async-cl-io-bench")]
 struct Args {
+    #[arg(long, default_value_t = 256 * 1024)]
+    payload_bytes: u64,
+    #[arg(long, default_value_t = 150_000)]
+    spin_iters: u64,
+    #[arg(long, default_value_t = 0)]
+    structured_records: u64,
     #[arg(long, default_value_t = 200)]
     warmup: u32,
     #[arg(long, default_value_t = 5000)]
@@ -157,6 +163,12 @@ fn main() -> CuResult<()> {
     logging.slab_size_mib = Some(args.slab_mib);
     logging.keyframe_interval = Some(args.keyframe_interval);
     let copperlist_count = logging.copperlist_count.unwrap_or(2);
+    let graph = config.get_graph_mut(None)?;
+    let source = graph
+        .get_node_mut(0)
+        .ok_or_else(|| CuError::from("Missing benchmark source"))?;
+    source.set_param("payload_bytes", args.payload_bytes);
+    source.set_param("spin_iters", args.spin_iters);
 
     let app = App::builder()
         .with_log_path(&logger_path, Some((args.slab_mib as usize) * 1024 * 1024))?
@@ -164,12 +176,22 @@ fn main() -> CuResult<()> {
         .build()?;
     let mut app = app.start()?;
 
+    let output_start = Instant::now();
     for _ in 0..args.warmup {
         app.run_one_iteration()?;
     }
 
     let mut samples_ns = Vec::with_capacity(args.iterations as usize);
     let benchmark_start = Instant::now();
+    let structured_records = args.structured_records;
+    let structured_worker = (structured_records > 0).then(|| {
+        std::thread::spawn(move || {
+            for record in 0..structured_records {
+                info!("Benchmark background record {}", record);
+                std::thread::yield_now();
+            }
+        })
+    });
     for _ in 0..args.iterations {
         let iter_start = Instant::now();
         app.run_one_iteration()?;
@@ -178,7 +200,87 @@ fn main() -> CuResult<()> {
     }
     let total_elapsed = benchmark_start.elapsed();
 
-    app.stop()?;
+    if let Some(worker) = structured_worker {
+        worker
+            .join()
+            .map_err(|_| CuError::from("Structured-log benchmark worker panicked"))?;
+    }
+    let mut stopped = app.stop()?.into_inner();
+    let runtime = stopped.copper_runtime_mut();
+    let dropped_copperlists = runtime.copperlists_manager.dropped_copperlists_total();
+    let dropped_keyframes = runtime.copperlists_manager.dropped_keyframes_total();
+    stopped.log_shutdown_completed()?;
+    drop(stopped);
+    let completed_elapsed = output_start.elapsed();
+    let mut reader = UnifiedLoggerRead::new(&logger_path)
+        .map_err(|e| CuError::new_with_cause("Cannot open benchmark log", e))?;
+    if !reader.raw_main_header().clean_close {
+        return Err(CuError::from("Benchmark output was not cleanly closed"));
+    }
+    let mut persisted_copperlists = 0u64;
+    let mut persisted_keyframes = 0u64;
+    let mut persisted_bytes = 0u64;
+    let mut copperlist_ids = Vec::new();
+    let mut keyframe_ids = Vec::new();
+    loop {
+        let (header, bytes) = reader.raw_read_section()?;
+        if header.entry_type == UnifiedLogType::LastEntry {
+            break;
+        }
+        persisted_bytes += bytes.len() as u64;
+        let mut remaining = bytes.as_slice();
+        while !remaining.is_empty() {
+            let used = match header.entry_type {
+                UnifiedLogType::CopperList => {
+                    let (culist, used) = bincode::decode_from_slice::<default::CuList, _>(
+                        remaining,
+                        bincode::config::standard(),
+                    )
+                    .map_err(|e| {
+                        CuError::new_with_cause("Cannot decode benchmark CopperList", e)
+                    })?;
+                    copperlist_ids.push(culist.id);
+                    persisted_copperlists += 1;
+                    used
+                }
+                UnifiedLogType::FrozenTasks => {
+                    let (keyframe, used) =
+                        bincode::decode_from_slice::<cu29::curuntime::KeyFrame, _>(
+                            remaining,
+                            bincode::config::standard(),
+                        )
+                        .map_err(|e| {
+                            CuError::new_with_cause("Cannot decode benchmark keyframe", e)
+                        })?;
+                    keyframe_ids.push(keyframe.culistid);
+                    persisted_keyframes += 1;
+                    used
+                }
+                _ => remaining.len(),
+            };
+            if used == 0 {
+                return Err(CuError::from("Benchmark reader made no progress"));
+            }
+            remaining = &remaining[used..];
+        }
+    }
+    if args.enable_task_logging
+        && persisted_copperlists + dropped_copperlists
+            != u64::from(args.warmup) + u64::from(args.iterations)
+    {
+        return Err(CuError::from(
+            "Persisted CopperList count does not match admissions and drops",
+        ));
+    }
+    if args.enable_task_logging
+        && keyframe_ids
+            .iter()
+            .any(|id| copperlist_ids.binary_search(id).is_err())
+    {
+        return Err(CuError::from(
+            "Persisted keyframe has no associated CopperList",
+        ));
+    }
 
     let mut jitter_ns = samples_ns
         .windows(2)
@@ -200,7 +302,7 @@ fn main() -> CuResult<()> {
     };
 
     println!(
-        "mode={} logging={} copperlist_count={} payload_kib={} spin_iters={} section_mib={} slab_mib={} keyframe_interval={} warmup={} iterations={}",
+        "mode={} logging={} copperlist_count={} payload_bytes={} spin_iters={} section_mib={} slab_mib={} keyframe_interval={} warmup={} iterations={}",
         if cfg!(feature = "async-cl-io") {
             "async-cl-io"
         } else {
@@ -208,8 +310,8 @@ fn main() -> CuResult<()> {
         },
         args.enable_task_logging,
         copperlist_count,
-        256,
-        150000,
+        args.payload_bytes,
+        args.spin_iters,
         args.section_mib,
         args.slab_mib,
         args.keyframe_interval,
@@ -232,5 +334,11 @@ fn main() -> CuResult<()> {
         format_ns_as_us(*jitter_ns.last().unwrap_or(&0))
     );
 
+    println!(
+        "persisted_copperlists={persisted_copperlists} persisted_keyframes={persisted_keyframes} persisted_bytes={persisted_bytes} dropped_copperlists={dropped_copperlists} dropped_keyframes={dropped_keyframes} structured_records={} completed_ms={:.3} persisted_hz={:.2}",
+        args.structured_records,
+        completed_elapsed.as_secs_f64() * 1000.0,
+        persisted_copperlists as f64 / completed_elapsed.as_secs_f64()
+    );
     Ok(())
 }

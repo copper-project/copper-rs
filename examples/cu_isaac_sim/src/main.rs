@@ -225,7 +225,7 @@ fn main() -> CuResult<()> {
     let shutdown_time = started.elapsed();
     let runtime = app.copper_runtime_mut();
     let dropped_copperlists = runtime.copperlists_manager.dropped_copperlists_total();
-    let dropped_keyframes = runtime.keyframes_manager.dropped_keyframes_total();
+    let dropped_keyframes = runtime.copperlists_manager.dropped_keyframes_total();
     fs::write(
         log.with_extension("performance.json"),
         serde_json::to_vec_pretty(&serde_json::json!({

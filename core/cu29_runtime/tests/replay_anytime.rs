@@ -350,7 +350,7 @@ fn smoother_stop_causes(copperlists: &[RecordedCl]) -> BTreeSet<&str> {
 }
 
 // Drive the raw lifecycle so this offline harness can drain the bounded
-// keyframe writer between iterations, independently of worker scheduling.
+// completed output between iterations, independently of worker scheduling.
 #[allow(deprecated)]
 fn record_run(log_path: &Path) -> CuResult<()> {
     let (clock, clock_mock) = RobotClock::mock();
@@ -367,7 +367,7 @@ fn record_run(log_path: &Path) -> CuResult<()> {
         clock_mock.set_value(index * DT_NANOS);
         app.run_one_iteration(&mut noop)?;
         app.copper_runtime_mut()
-            .keyframes_manager
+            .copperlists_manager
             .finish_pending()?;
     }
     app.stop_all_tasks(&mut noop)?;
@@ -394,12 +394,14 @@ fn resim_one(
     let mut callback =
         |step: default::SimStep<'_>| default::recorded_debug_replay_step(step, recorded);
     app.run_one_iteration(&mut callback)?;
-    app.copper_runtime_mut().keyframes_manager.finish_pending()
+    app.copper_runtime_mut()
+        .copperlists_manager
+        .finish_pending()
 }
 
 /// Resims `recorded` on a fresh application: the tasks start from `new()` and
 /// the resim covers the whole recording.
-#[allow(deprecated)] // Drain keyframe output through the raw lifecycle, as in record_run.
+#[allow(deprecated)] // Drain completed output through the raw lifecycle, as in record_run.
 fn resim_run(recorded: &[RecordedCl], log_path: &Path) -> CuResult<()> {
     let (clock, clock_mock) = RobotClock::mock();
     let mut noop = |_step: default::SimStep<'_>| SimOverride::ExecuteByRuntime;

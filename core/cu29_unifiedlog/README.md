@@ -58,3 +58,8 @@ this does not report an encoding failure.
 Native entries retain one encoding pass. Failed entries leave committed `used`
 and the writer cursor unchanged. Inspection reads committed bytes of incomplete
 logs; an open section or unclean main header prevents append.
+
+Under `Grow` and `StopWhenFull`, a section handle owns its commit block until
+flush or drop, so ordinary appends need no reclamation CAS. Explicit logger close
+requires live append-only handles to be flushed or dropped first. Dropping a
+handle best-effort seals it; any storage failure prevents a clean logger close.

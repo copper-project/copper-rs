@@ -189,7 +189,6 @@ pub(super) fn runtime_support(
                     .or_else(|| cu29::simulation::recorded_copperlist_timestamp(captured))
                     .ok_or_else(|| CuError::from("capture has no sender timestamp"))?;
                 self.copper_runtime.copperlists_manager.prepare_recorded_replay(captured.id)?;
-                self.copper_runtime.keyframes_manager.finish_pending()?;
                 if let Some(frame) = keyframe {
                     <Self as CuSimApplication<NoopSectionStorage, NoopLogger>>::restore_keyframe(self, frame)?;
                     self.copper_runtime.set_forced_keyframe_timestamp(timestamp);
