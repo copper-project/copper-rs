@@ -101,7 +101,7 @@ compressed catalog only at startup, before resources. It occupies one static
 section beside application metadata and contains ordered slot maps for every
 compiled mission. Native recipes and names are borrowed from the application
 image; sizing and compression use bounded working memory. See
-`examples/cu_self_describing_logs` and `doc/self-describing-logs.md`.
+`examples/cu_self_describing_logs` and `doc/design/self-describing-logs.md`.
 
 ## Python Feature
 

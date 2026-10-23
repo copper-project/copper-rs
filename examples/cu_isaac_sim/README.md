@@ -5,7 +5,7 @@ validate its onboard camera and RTX lidar. The example uses
 `nvcr.io/nvidia/isaac-sim:6.1.0` directly with mounted Python code; no image build
 is needed. A native Copper graph consumes shared-memory sensor observations and
 returns wheel commands, one iteration per observation in simulation time.
-The [integration plan](../../doc/isaac.md) tracks recording and replay milestones.
+The [integration design](../../doc/design/isaac-sim.md) tracks recording and replay milestones.
 
 ## Launch
 

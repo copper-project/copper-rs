@@ -148,6 +148,10 @@ than rendered compiler output, which changes across compiler releases.
 
 ## Design Expectations
 
+[Architecture notes](doc/design/README.md) explain implemented designs, tradeoffs,
+source entry points, and remaining work. Update the relevant note when changing
+those architectural decisions.
+
 Copper has a deliberately opinionated architecture. Contributions should preserve
 these properties:
 

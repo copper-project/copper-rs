@@ -11,7 +11,8 @@ This file defines the Copper V1 public contract. Anything not listed as stable i
 
 The logreader CLI parser types (`cu29_export::LogReaderCli`, `Command`, and
 `ExportFormat`) are experimental. `list-runs` and the global `--run`
-option select recorded runs identified by `Instantiated` lifecycle records.
+option select constructions discovered from section context, including runs whose
+`Instantiated` marker has rolled out; see [run identity](log-storage.md).
 
 ## Stable
 
@@ -101,32 +102,21 @@ option select recorded runs identified by `Instantiated` lifecycle records.
 
 ### Clock synchronization
 
-`cu29_clock::{CuInstant, sync}`, `RobotClockMock::raw_now` and
-`RobotClock::{raw_now, busy_wait_for, busy_wait_until, sync_status, origin, new_with_frequency}` provide raw-time and synchronization APIs. Raw-counter reads and
-busy waits and `sync_status()` are available with or without `clock-sync`;
-status returns `None` without the feature. Synchronization control and the
-known-frequency constructor require it. Portable observation/snapshot
-types are available for log decoding. `ClockSync` owns reference
-discipline for a shared clock; `ClockSnapshot` records its affine mapping and
-quality and origin for offline replay. `ClockOrigin`, `ClockSource`, and
-`ClockEpoch` describe provenance and timestamp interpretation. Observations carry
-that metadata without converting reference nanoseconds; GPS and application-defined
-epochs remain provider-selected. `RobotClock::origin()` requires no counter read
-or reference I/O and is available without `clock-sync`.
-`from_ref_time_with_origin` and `from_ref_time_with_rtc_and_origin` initialize
-a named reference without live synchronization. TAI metadata may include
-a valid provider-supplied TAI minus UTC offset for display consumers.
-The unmerged synchronization snapshot encoding now includes origin metadata. Existing `RobotClock` constructors and mock controls
-retain their source compatibility, including the legacy `RobotClockMock::now()`
-view of its raw counter as `CuTime`. `RobotClockMock::raw_now()` provides typed raw
-instants. `CuInstant` represents raw counter time, while `CuTime` remains execution
-time with its existing timestamp encoding. Raw deadlines, observations and
-snapshot inputs use `CuInstant`; snapshot evaluation returns `CuTime`. The
-instance-free `CuInstant::now()`/`Instant` API and free busy-wait functions are
-removed; use `RobotClock::raw_now()` and its busy-wait methods with an explicit
-clock handle. The clock crate uses allocation-free
-`SyncError` results because `cu29_traits` depends on it. Runtime integration
-converts those errors to `CuError`.
+The clock surface includes `cu29_clock::{CuInstant, sync}`, `RobotClockMock::raw_now`,
+and `RobotClock::{raw_now, busy_wait_for, busy_wait_until, sync_status, origin,
+new_with_frequency}`. Raw reads, busy waits, status, and origin are available without
+`clock-sync`; live discipline and known-frequency construction require it.
+`ClockSync` owns discipline; `ClockSnapshot` preserves mapping, quality, and origin
+for replay. `ClockOrigin`, `ClockSource`, and `ClockEpoch` separate provenance from
+timestamp interpretation. Named-reference constructors are
+`from_ref_time_with_origin` and `from_ref_time_with_rtc_and_origin`.
+
+`CuInstant` is raw counter time; `CuTime` is execution time. The instance-free
+`CuInstant::now()`/`Instant` API and free busy-wait functions are removed. Existing
+`RobotClock` constructors/mock controls retain their source compatibility,
+including the legacy mock `now()` counter view. See [clock synchronization](clock-sync.md)
+for epoch, monotonicity, error bounds, replay, and migration details. Core discipline
+uses allocation-free `SyncError`; runtime adapters return `CuError`.
 
 ## Experimental
 
@@ -151,9 +141,9 @@ converts those errors to `CuError`.
 - `cu29::value_decode_catalog` and `cu29_value::catalog`: versioned shared payload
   catalogs and offline decompression. The startup writer borrows native recipes,
   shares one graph across compiled mission slot maps, and compresses into the
-  static metadata section using fixed working memory. Catalog version 1 includes
-  a bincode version field, typed metadata, Heatshrink compression and a
-  length/checksum footer.
+  static metadata section using fixed working memory. Catalog version 1 uses
+  a bincode-encoded version field, typed metadata, Heatshrink compression, and a
+  length/checksum footer; see [catalog design](self-describing-logs.md).
 - `cu29_export::catalog`: experimental shared catalog loading and fallible
   run-scoped standalone CopperList value readers. `ValueDecodeDescription::validate`
   checks complete graphs; `decode_at` decodes selected bindings without graph copies.
@@ -170,8 +160,7 @@ converts those errors to `CuError`.
 
 - Background empty-input dispatch policy: `background_process_empty` and the defaulted
   `CuAsyncTask<T, O, const PROCESS_EMPTY: bool = false>` parameter.
-  Empty inputs are now skipped by default while completed results are collected once.
-  This corrects a specification bug to match the intended behavior. Set
+  Empty inputs are skipped by default while completed results are collected once. Set
   `background_process_empty: true` to opt into dispatching empty inputs.
 
 - LogStream session manifests and `ReceiverRequirements` decoder geometry/bounds.
@@ -192,7 +181,8 @@ converts those errors to `CuError`.
 - Low-level logging codec registry APIs in `cu29::logcodec`.
 - Low-level monitoring probes and allocation counters.
 - Direct unified-log section/header structs, `ApplicationMetadata`, `SectionContext`,
-  `CapacityPolicy`, and the metadata-aware unreleased format v2. Lifecycle records
+  `CapacityPolicy`, and the metadata-aware unreleased format v3
+  ([storage design](log-storage.md)). Lifecycle records
   use `RuntimeStopReason` and `RuntimeLifecycleOperation`.
 
 ## Internal
@@ -222,16 +212,7 @@ converts those errors to `CuError`.
 
 ## API Snapshots
 
-The checked-in V1 audit baseline lives under `api/v1/`.
+The checked-in V1 audit baseline lives under [`api/v1/`](../../api/v1/).
 
-Run:
-
-```bash
-just api-check
-```
-
-Refresh intentionally:
-
-```bash
-just api-update
-```
+Use `just api-check` to verify the baseline and `just api-update` only for an
+intentional contract update. See [contributor workflow](../../CONTRIBUTING.md).

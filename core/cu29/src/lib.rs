@@ -59,8 +59,8 @@
 //!
 //! ## V1 API status
 //!
-//! The V1 public contract is defined in `doc/v1-api-surface.md`. The prelude is the
-//! canonical application import surface; lower-level modules remain addressable by
+//! The V1 public contract is defined in `doc/design/v1-api-surface.md`.
+//! The prelude is the canonical application import surface; lower-level modules remain addressable by
 //! module path when needed, but are not implicitly part of the prelude contract.
 //!
 //! Need help or want to show what you're building? Join

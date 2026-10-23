@@ -30,5 +30,5 @@ The catalog carries storage units for distance, speed and time. Startup catalog
 serialization and Heatshrink compression use bounded working memory and support
 `no_std`. Offline readers allocate the decoded value trees.
 
-See [self-describing logs](../../doc/self-describing-logs.md) for external payloads,
+See [self-describing logs](../../doc/design/self-describing-logs.md) for external payloads,
 manual encoding recipes, format details, and registration-free Rust/Python readers.

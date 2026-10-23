@@ -9,7 +9,7 @@ using Python here is fine because it does not put Python on the runtime hot path
 
 If you want to run task logic in Python, that is a different feature entirely:
 see
-[`cu-python-task`](/home/gbin/projects/copper/copper-rs.python/components/tasks/cu_python_task/README.md).
+[`cu-python-task`](../../components/tasks/cu_python_task/README.md).
 
 ## What This Crate Provides
 
@@ -57,8 +57,8 @@ Payload sizes count native payload bytes, excluding CopperList metadata.
 
 App logreaders retain typed defaults; `extract-copperlists --decoder catalog` selects
 the standalone decoder when built with `self-describing-logs`. Read the
-[self-describing log contract](../../doc/self-describing-logs.md) for output shapes,
-bounds and Rust APIs. Try `just` in `examples/cu_self_describing_logs`.
+[self-describing log design](../../doc/design/self-describing-logs.md) for wire recipes,
+feature boundaries, and decoder pointers. Try `just` in `examples/cu_self_describing_logs`.
 
 ## Profile-Guided Scheduling
 
@@ -70,7 +70,7 @@ logreader logs/robot.copper optimize-schedule \
   --contract schedule.ron --output target/pgs --candidates 3
 ```
 
-See [Profile-Guided Scheduling](../../doc/profile-guided-scheduling.md) for the
+See [Profile-Guided Scheduling](../../doc/design/profile-guided-scheduling.md) for the
 contract, generated artifacts, compile-time application step, and measured
 comparison workflow.
 
@@ -134,7 +134,7 @@ This is useful when you want Python to inspect Copper's structured text logs or
 runtime lifecycle records.
 
 The example script at
-[`examples/cu_standalone_structlog/readlog.py`](/home/gbin/projects/copper/copper-rs.python/examples/cu_standalone_structlog/readlog.py)
+[`examples/cu_standalone_structlog/readlog.py`](../../examples/cu_standalone_structlog/readlog.py)
 shows the basic import pattern.
 
 ### 2. App-specific typed CopperList reading
