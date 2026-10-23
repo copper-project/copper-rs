@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="550" viewBox="0 0 1000 550" role="img" aria-labelledby="title desc">
+  <title id="title">Concurrent logging ownership in format v3</title>
+  <desc id="desc">Completed CopperLists and keyframes pass through one output engine. Each stream owns its payload and commit block. The allocator owns descriptors and reclamation. Structured logs use an independent serialized sink.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#cdd6f4"/>
+    </marker>
+  </defs>
+  <rect width="1000" height="550" fill="#000000"/>
+  <g font-family="DejaVu Sans, sans-serif" fill="#cdd6f4" font-size="17">
+    <text x="30" y="40" font-size="26" font-weight="bold">Concurrent logging · format v3</text>
+    <g fill="#11111b" stroke="#89b4fa" stroke-width="2">
+      <rect x="30" y="75" width="240" height="85" rx="8"/>
+      <rect x="370" y="75" width="260" height="85" rx="8"/>
+      <rect x="730" y="75" width="240" height="85" rx="8"/>
+    </g>
+    <text x="50" y="108">Runtime slot lease</text>
+    <text x="50" y="138">CopperList + keyframe</text>
+    <text x="390" y="108">One output engine</text>
+    <text x="390" y="138">Inline / async worker</text>
+    <text x="750" y="108">Runtime streams</text>
+    <text x="750" y="138">Keyframe → CopperList</text>
+    <g fill="none" stroke="#cdd6f4" stroke-width="2" marker-end="url(#arrow)">
+      <path d="M 270 118 H 370"/>
+      <path d="M 630 118 H 730"/>
+      <path d="M 970 118 H 985 V 190 H 15 V 118 H 30"/>
+    </g>
+    <text x="295" y="100" font-size="14">Pending</text>
+    <text x="390" y="212" font-size="14">Completion / ownership return</text>
+    <g fill="#11111b" stroke-width="2">
+      <rect x="30" y="250" width="300" height="80" rx="8" stroke="#cba6f7"/>
+      <rect x="370" y="250" width="260" height="80" rx="8" stroke="#f5c2e7"/>
+      <rect x="680" y="250" width="290" height="80" rx="8" stroke="#a6e3a1"/>
+    </g>
+    <text x="50" y="283">Structured-log callers</text>
+    <text x="50" y="311">Separate serialized sink</text>
+    <text x="390" y="283">Serialized allocator</text>
+    <text x="390" y="311">Geometry / reclamation</text>
+    <text x="700" y="283">Exclusive stream encoder</text>
+    <text x="700" y="311">Payload / committed length</text>
+    <g fill="#11111b" stroke-width="2">
+      <rect x="30" y="395" width="300" height="95" stroke="#f5c2e7"/>
+      <rect x="330" y="395" width="300" height="95" stroke="#a6e3a1"/>
+      <rect x="630" y="395" width="340" height="95" stroke="#a6e3a1"/>
+    </g>
+    <text x="50" y="428">Descriptor · 512 B</text>
+    <text x="50" y="458">Origin / generation / links</text>
+    <text x="350" y="428">Commit · 512 B</text>
+    <text x="350" y="458">Identity / used / open</text>
+    <text x="650" y="428">Native payload</text>
+    <text x="650" y="458">One encoding pass</text>
+    <g fill="none" stroke-width="2" marker-end="url(#arrow)">
+      <path d="M 500 330 V 365 H 180 V 395" stroke="#f5c2e7"/>
+      <path d="M 825 330 V 365 H 480 V 395" stroke="#a6e3a1"/>
+      <path d="M 825 365 V 395" stroke="#a6e3a1"/>
+    </g>
+    <text x="30" y="527" font-size="16">Grow / StopWhenFull: exclusive handle · OverwriteOldest: generation-tagged writer/reclaimer lease</text>
+  </g>
+</svg>

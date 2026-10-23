@@ -140,7 +140,7 @@ runtime, then records messages, timing, and state into one replayable log.
   </tr>
   <tr>
     <td><strong>Go deeper</strong></td>
-    <td><a href="https://github.com/copper-project/copper-rs/tree/master/examples">Examples</a> · <a href="https://copper-project.github.io/copper-rs-book/logging-replay.html">Logging and replay</a> · <a href="https://copper-project.github.io/copper-rs/Python-Support">Python support</a></td>
+    <td><a href="doc/design/README.md">Architecture notes</a> · <a href="https://github.com/copper-project/copper-rs/tree/master/examples">Examples</a> · <a href="https://copper-project.github.io/copper-rs-book/logging-replay.html">Logging and replay</a> · <a href="https://copper-project.github.io/copper-rs/Python-Support">Python support</a></td>
   </tr>
   <tr>
     <td><strong>Project</strong></td>
