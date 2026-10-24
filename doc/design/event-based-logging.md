@@ -4,50 +4,192 @@
 This changes how recordings are kept and selected; the existing native payload
 encoders remain the starting point.
 
-## 1. What changes for a robot
+Extend the universal logger for mmap slabs and raw SD/eMMC partitions. Copper
+owns byte allocation and retained ranges on both backends.
 
-Example graph: `camera → detector → tracker → planner`.
-An operator wants every detection saved normally, plus full camera data for
-**30 minutes before and 2 minutes after** an interesting detection.
+## 1. Goal
 
-| | Today | Proposed |
-| --- | --- | --- |
-| Ordinary recording | One configured selection of task outputs | A baseline recording, such as detections only |
-| Camera history | Record images continuously or have no past images | Continuously write images into temporary disk history |
-| Trigger | No event-retention API | Keep the requested history and continue keeping the next 2 minutes |
-| Expiry | Rollover overwrites oldest sections | Delete old temporary recordings unless an event or reader still needs them |
-| Replay input | Read an ordinary log | Read an event's selected cycles plus earlier state and inputs needed to reproduce them |
+For `camera → detector → tracker → planner`, keep detections routinely and retain
+camera data around an interesting observation. Configure byte budgets for past
+and future capture. Log readers derive timing and duration from existing records.
+
+An event starts at an existing retained keyframe and ends at a complete
+CopperList. The range can occupy several ordinary native sections and share
+boundary sections with neighboring ranges. A keyframe interval has no fixed
+storage slot or maximum size of its own. Existing keyframes remain state recovery
+points; event tooling reuses them without extra freezes.
 
 **A trigger saves already recorded data.** It cannot recover images that were
-never written. This reduces permanent storage and upload volume; it still pays
-continuous image encoding, disk bandwidth, and flash wear. A window longer than
-RAM lives on disk, not in a queue of image handles.
+never written. Continuous capture still pays encoding, storage bandwidth, and
+flash wear; events reduce permanent storage and upload volume. Past data lives
+on the medium, not in a queue of sensor handles. A trigger changes which native
+sections remain retained without copying the past recording.
 
-## 2. The logger's layers, from messages to disk
+## 2. User API
 
-Existing source links below are relative to this document. Proposed modules are
-marked **new**.
+### Enable and select data
 
-```text
-Task outputs: CuMsg<T> in a runtime-owned CopperList
-    │
-    │ completed cycle + optional KeyFrame (saved component state)
-    ▼
-Runtime output engine — curuntime.rs
-    │ inline today, or one bounded async worker with async-cl-io
-    ▼
-Generated selection + encoding — cu29_derive
-    │ choose slots, apply codecs, encode CopperList/KeyFrame records
-    ▼
-Typed stream — WriteStream<E> / LogStream
-    │ append encoded records into sections
-    ▼
-ByteLogger — byte_log.rs
-    │ allocate sections; own headers, links, commit lengths, reuse rules
-    ▼
-Storage adapter — memmap.rs or SD logger
-      map backing files, or write device blocks
+No new Cargo feature is required. Add `logging.events` to `copperconfig.ron`.
+Omitting it preserves ordinary logging. `cu29/async-cl-io` remains an optional
+output placement; the same native retention implementation serves `std` and
+`no_std`.
+
+```ron
+logging: (
+    enable_task_logging: true,
+    enable_keyframe_logging: true,
+    keyframe_interval: 100,
+    section_size_mib: 1,
+    events: (
+        capture: ["camera", "detector", "tracker"],
+        history_bytes: 1073741824,
+        saved_bytes: 4294967296,
+        before_bytes: 536870912,
+        after_bytes: 134217728,
+        max_event_bytes: 1073741824,
+        baseline_bytes: 268435456,
+        max_events: 64,
+        trigger_queue_capacity: 32,
+    ),
+),
 ```
+
+This is a fragment inside the existing application config. Each `capture` entry
+is a task ID (all its outputs) or a `"bridge_id/channel_id"` Rx endpoint. Resolve
+names to typed slots at compile time. Existing per-node `logging.enabled`, codec, and handle policies
+select the routine **baseline**. Disable baseline logging on `camera` and enable
+it on `detector`; events can still retain both. Slots outside both selections are
+not captured. Enabling events does not silently enable every output.
+
+A slot shared by baseline and event capture has one representation and codec
+state. Events do not introduce a second codec or override handle policies. Select
+full handle contents and a lossless representation for inputs needed by replay;
+codec correctness remains its existing contract. Capture must also decode from
+the chosen starting point: losslessness alone does not establish that. A codec
+requiring discarded earlier records is unsupported for that range; verify cropped
+decoding offline rather than adding codec snapshots on the robot. Validate
+incompatible static settings at compile time. Partial capture supports inspection and whichever
+subgraph has all its required recorded inputs; it is not a promise of whole-app
+replay.
+
+| Parameter | Default / limits / meaning |
+| --- | --- |
+| `logging.events` | Absent by default; no event-specific capture or queues |
+| `capture` | Required, nonempty list of known task-output or bridge Rx names; duplicates and unknown names are compile errors |
+| `history_bytes: u64` | Required; positive, backend-aligned rolling capture capacity; `before_bytes <= history_bytes` |
+| `saved_bytes: u64` | Required; aligned saved-section capacity; at least `max_event_bytes`; shared sections count once |
+| `before_bytes: u64` | Required; nonnegative target for capture preceding the trigger; rounded to a usable retained keyframe |
+| `after_bytes: u64` | Required; nonnegative target for capture after the trigger; stop at a complete CopperList |
+| `max_event_bytes: u64` | Required; aligned hard cap on sections retained by one event, including repeated triggers; `before_bytes + after_bytes <= max_event_bytes <= saved_bytes` with checked arithmetic |
+| `baseline_bytes: u64` | Default `0`; zero disables routine retention; otherwise an aligned capacity for baseline records |
+| `max_events: u16` | Default `64`; `1..=65535` saved event descriptors, including the event currently collecting |
+| `trigger_queue_capacity: u16` | Default `32`; `1..=65535` queued requests per application |
+| Existing logging switches | Task and keyframe logging must be enabled; `keyframe_interval` must be present and positive |
+
+Hard capacities are multiples of 512 B and must accommodate the configured native
+section allocations; byte targets need not be aligned. Byte targets use sizes
+already observed by native encoding. Hard capacities count
+allocated sections, including headers and boundary slack. Keyframes and section
+boundaries make the resulting window approximate. There is no byte-to-seconds
+estimator, sizing encode, or fixed capacity per keyframe interval.
+
+Compile selections, capacities, arithmetic checks, section geometry, and memory
+requirements from RON. Startup validates actual medium bounds and backend
+alignment, which cannot always be known at compile time. Reserve the history,
+saved, and baseline quotas plus bounded native event metadata and the live-section
+headroom required by the compiled streams. Shared sections occupy storage once.
+
+Use the usual `.with_log_path(...)` for mmap or `.with_logger(...)` for SD/eMMC.
+The generated builder applies the native layout before creating streams. A
+supplied logger must support the configured capacities. Host paths and slab sizes
+remain backing-storage choices.
+
+### Trigger
+
+The runtime supplies the endpoint in `CuContext`:
+
+```rust
+// Inside an existing task's process callback.
+if interesting {
+    match ctx.try_trigger_event(CuEventReason(7)) {
+        CuEventSubmission::Queued => {}
+        CuEventSubmission::QueueFull => { /* retry or count in application code */ }
+        CuEventSubmission::Disabled | CuEventSubmission::NotRunning => {}
+    }
+}
+```
+
+`CuEventReason` is an application-defined `u16`. The request carries the existing
+cycle/component identity and reason. It contains no new timestamp, payload, or
+per-call window override. `Queued` means submitted; the output owner still has
+to check retained history and capacity. Its acceptance, merge, or rejection is
+recorded in the native log. There is no ticket/result-expiration protocol.
+
+For a button, remote handler, or application-owned thread, obtain
+`let trigger = app.event_handle()` before `app.run()`, then call the same method
+on that handle. External requests anchor at the next completed cycle serviced by
+the output owner. This avoids publishing an extra latest-cycle counter on every
+robot iteration. Readers use that cycle's existing timestamps.
+
+```rust
+impl CuContext {
+    pub fn try_trigger_event(&self, reason: CuEventReason) -> CuEventSubmission;
+}
+impl CuEventHandle {
+    pub fn try_trigger_event(&self, reason: CuEventReason) -> CuEventSubmission;
+}
+```
+
+Submission makes a bounded, allocation-free queue attempt. Queue contention can
+return `QueueFull`; the caller never waits for storage. Disabled configuration,
+replay, and callbacks outside active processing return `Disabled` or `NotRunning`.
+The existing output owner handles requests in synchronous and asynchronous
+placements. Event logging adds no control worker or per-cycle clock read.
+
+### Boundaries, spam, and overlap
+
+At admission, choose the earliest retained keyframe whose prefix through the
+trigger fits the past-byte target. If even the nearest preceding keyframe needs
+more than that target, keep its necessary prefix provided it fits the hard event
+cap. Reject `HistoryUnavailable` if no usable starting keyframe remains, or
+`EventLimit` if including the trigger would exceed the cap. Ordinary capture
+continues when a keyframe interval is larger than a requested event window.
+
+Keep complete CopperLists until the future-byte target is reached. Section slack
+or variable record sizes can make the hard cap arrive first; finish at the last
+complete list and record `CapacityLimit`. Do not discard a whole keyframe interval
+because it outgrew an artificial slot, or force another keyframe at the end.
+
+| Situation | Behavior |
+| --- | --- |
+| Startup has less past history | Retain the available usable prefix; readers determine the shortfall from recorded references and config |
+| Trigger lies in the collecting event | Merge into that event and extend its future target within `max_event_bytes` |
+| Spam would exceed the event cap | Reject the extension; keep the previously accepted range |
+| Duplicate changes no retained range or reason | No event-metadata write |
+| Overlap with a completed event | New event ID, sharing existing native sections |
+| Queue full | Immediate `QueueFull`; no submission |
+| Event table or saved quota full | Record rejection; retain accepted events and continue rolling history |
+| Missing output, storage error, or early stop | Preserve the last complete range and record the actual failure |
+
+Only one event collects future data at a time. A delayed request that falls
+outside it is rejected as `Busy`; no interval-merging scheduler is introduced.
+Reserve the remaining hard cap for that collecting event, release unused space
+on completion, and charge shared sections once. Merging keeps the first and last
+reason/origin. It does not add trigger counters or a history of duplicate calls.
+
+An event descriptor stores its ID, starting keyframe reference, trigger cycle,
+last complete record reference, reasons, and terminal state/cause. Update it only
+when these values change. Log readers compute timestamps, duration, coverage,
+replay readiness, and inspection indexes from original records.
+
+Read/export events while the logger is stopped and opened for inspection.
+Proposed `app.delete_event(id) -> CuResult<()>` also requires a stopped logger
+and exclusive access; deleting a collecting event returns a busy error. There
+is no live-reader lease protocol. Deletion releases that event's ownership;
+other events or rolling retention can still keep the same sections. Saved events
+are not automatically evicted.
+
+## 3. Copper today
 
 These objects are different sizes and have different owners:
 
@@ -59,372 +201,121 @@ These objects are different sizes and have different owners:
 | Section | A byte range allocated to a stream; its header tracks type, context, links, and committed bytes |
 | Slab | One backing file/mapping; a section can cross slab boundaries |
 
-The proposal adds an **event recorder above `ByteLogger`**. It keeps a sequence
-of small independent unified logs, called **capture logs** here. Each has its own
-header, application metadata, optional decode catalog, sections, and backing slabs.
-A capture log is the unit deleted or retained. There is no new kind of section.
+![Existing Copper output, allocator, and backing adapters](event-logging-current.svg)
 
-```text
-Existing completed-output worker; owns ONE CopperList/keyframe pair
-    ├─ generated baseline selection ─► ordinary unified log
-    └─ generated capture selection  ─► current capture log
-                                            │ rotate after size/time limit
-                                      next capture log
-
-Event coordinator, on a separate control thread:
-    triggers ─► choose capture logs to keep ─► event manifest on disk
-    expiry   ─► delete eligible closed capture logs
-```
-
-An **event manifest** is a small description of an event: requested interval,
-selected profile, ordered capture-log IDs, replay starting point, gaps, and status.
-It refers to existing bytes. Two overlapping events share those bytes.
-
-### Existing modules to extend
-
-| Module | Responsibility today → change |
+| Existing component | Relevant behavior |
 | --- | --- |
-| [`cu29_runtime/src/curuntime.rs`](../../core/cu29_runtime/src/curuntime.rs) | `RuntimeOutputItem` owns a completed arena-slot lease and optional keyframe; `write_completed_output` writes keyframe first → preserve that owner/order, add raw cycle time and route both selections before returning the slot |
-| [`cu29_runtime/src/config.rs`](../../core/cu29_runtime/src/config.rs) | `LoggingConfig` describes ordinary logging → add baseline selection and event-profile declarations |
-| [`cu29_derive/src/lib.rs`](../../core/cu29_derive/src/lib.rs) | `build_compressed_culist_tuple_encode` generates slot/codec selection → generate independent baseline and capture encoders |
-| [`cu29_derive/src/runtime_macro.rs`](../../core/cu29_derive/src/runtime_macro.rs) | Builder, `prepare_log_metadata`, output wiring → attach recorder, prepare catalogs, request continuous keyframes, bind typed profile handles |
-| [`cu29_export/src`](../../core/cu29_export/src/lib.rs) | Read sections/runs and decode records → add event reader across ordered capture logs, then reuse decoders |
+| Generated encoder | Compile task/slot masks, codecs, handle policies, and metadata/catalog layout |
+| `KeyFramesManager` | Produce existing scheduled `Freezable` state recovery points |
+| `write_completed_output` | Write the keyframe before its associated CopperList in both placements |
+| `AsyncCopperListsManager` | Keep the completed slot lease through output; reuse it only after consumers finish |
+| `LogStream` / `ByteSection` | Encode into native sections; expose actual encoded byte counts |
+| `ByteLogger<B: ByteStorage>` | Shared mmap/SD allocator; current rollover reclaims a linked prefix through the last overlap |
+| `MmapStorage` / `SdStorage` | Supply byte regions over backing slabs or partition blocks |
 
-### New modules and their owners
+Two existing constraints require real changes. The allocator cannot skip retained
+middle sections. The current CopperList encoder writes a complete selected tuple;
+simply invoking two masked encoders repeats common metadata and shared payloads.
+See [storage](log-storage.md), [concurrency](concurrent-logging.md), and
+[catalogs](self-describing-logs.md).
 
-| Proposed location | Owns |
-| --- | --- |
-| `core/cu29_runtime/src/eventlog.rs` | Fixed-size request/ticket/profile types and preallocated trigger handles; shared definitions use `core` types |
-| `core/cu29_eventlog/src/recorder.rs` | Host `CuEventRecorder`, control thread, trigger admission, event status, reader leases, deletion decisions |
-| `core/cu29_eventlog/src/store.rs` | Prepared/current/closed capture logs, file mappings, rotation, bounded disk index/cache |
-| `core/cu29_eventlog/src/manifest.rs` | Versioned event references, acceptance/deletion journal, restart recovery |
-| `core/cu29_export/src/events.rs` | Event iteration and standalone export; borrows a recorder lease while reading |
+## 4. Proposed changes
 
-`cu29_eventlog` is a proposed host-only crate depending on unifiedlog and shared
-runtime types. The runtime does not depend on that host crate: generated host
-wiring connects it through internal output hooks. The ordinary `no_std` logger
-keeps its existing path. An SD implementation of event retention is later work.
+![The same components with single-encode routing and native retention](event-logging-proposed.svg)
 
-The **output worker exclusively owns the current capture logger and its streams**.
-The **control thread owns manifests, admission, prepared-log creation, and deletion**.
-They exchange prepared logs and closed-log range notices through bounded queues;
-the encoder does not take the coordinator's lock for each record.
+### One stored representation per selected message
 
-## 3. Application API and configuration
+Partition slots at compile time into baseline records and event-only records.
+A message in both selections is encoded in the baseline part once, with both
+retention policies referring to it. Each message's original metadata and handle
+contents also appear once. Omit an empty part entirely.
 
-All code in this section is **proposed**, not a working example today.
+The generated parts borrow the same completed CopperList. Their cycle IDs and
+compiled slot maps let readers join them offline. This requires an explicit
+native part layout and corresponding generated decoders/catalog maps; two calls
+to today's `__encode_capture` are insufficient because each currently encodes
+common metadata for the whole tuple. Baseline parts carry routine slots;
+event-only parts carry only additional selected slots. This is format/codegen
+work, not a second runtime graph or a payload cache. Native section-full retries
+remain as today; the change removes extra encoding caused by the two selections.
 
-### Before and after at the application boundary
+Keep the slot until native output and existing transport consumers finish.
+Transport behavior remains unchanged. Preserve keyframe-before-list ordering and
+write the scheduled keyframe once.
 
-```rust
-// Today: one ordinary recording.
-let mut app = App::builder()
-    .with_log_path("logs/robot.copper", Some(64 * 1024 * 1024))?
-    .build()?;
-```
+### Retain native sections
 
-```rust
-// Proposed: baseline stays ordinary; a separate store holds event history.
-let mut recorder = CuEventRecorder::open("logs/events", limits)?;
-let mut app = App::builder()
-    .with_log_path("logs/baseline.copper", Some(64 * 1024 * 1024))?
-    .with_event_recorder(&mut recorder)?
-    .build()?;
+Extend `ByteLogger` allocation so it can reuse an eligible section range while
+skipping sections kept by baseline, capture history, or saved events. Preserve
+native section generations and the existing descriptor/encoder-commit ownership
+split. A section can cross mmap slab files; all references remain log-relative
+byte offsets plus the existing generation identity.
 
-// AppEventProfile is generated from this app's declared profiles.
-let clock = app.clock();
-let mut trigger = recorder.trigger_handle(AppEventProfile::Perception)?;
-let ticket = trigger.try_trigger(CuEventRequest {
-    sequence: 1,
-    anchor: clock.raw_now(),
-    reason: CuEventReason::Manual,
-})?;
-```
+Use a bounded native event table. Reuse section `SectionContext`; do not duplicate
+it in a new epoch header. Keep only the references and byte bookkeeping needed
+for allocation and event retention. Derive RON-dependent structure at compile time.
+This changes native allocation/encapsulation and must be versioned deliberately.
 
-`limits` is a deployment-supplied `CuEventStoreLimits`: history bytes, saved-event
-bytes, maximum capture-log bytes/duration, maximum encoded cycle size, maximum
-active events, and fixed queue/cache/reader capacities. Paths and device capacity
-belong here; task selection belongs in RON.
+At boundaries, retaining a section may keep extra records. Accept that storage
+slack instead of copying records, adding per-message files, or rebinding every
+stream at every keyframe. Text and lifecycle streams keep their normal append
+behavior. Retain their required native sections; no keyframe barrier waits for
+an idle text writer. Existing active-encoder claims still prevent unsafe reuse.
 
-Proposed replacement for the logging block, for the example graph:
+Preserve recorded inputs and any existing lifecycle/clock records needed to
+restart from the selected keyframe. State absent from the retained deterministic
+chain belongs in a recovery point when correctness requires it. Tooling must
+reuse that state rather than request additional snapshots or computed metadata.
 
-```ron
-logging: (
-    baseline: (outputs: ["detector"], every_n_cycles: 1),
-    events: (
-        max_trigger_lateness_s: 5,
-        max_checkpoint_age_s: 10,
-        profiles: [
-            (
-                id: "perception",
-                before_s: 1800,
-                after_s: 120,
-                replay_tasks: ["detector", "tracker"],
-            ),
-        ],
-    ),
-    keyframe_interval: 100,
-),
-```
+### Keep one output owner
 
-`baseline` replaces the old single archive-selection decision. An empty `outputs`
-list requests no baseline payloads. Existing codec declarations still specify
-payload encoding. The profile compiler derives camera output as the recorded
-input at the selected replay boundary, validates every other incoming edge, and
-includes execution context and keyframes. All event profiles share the union of
-required inputs, at full rate with a lossless encoding per slot. A baseline
-exclusion cannot disable event capture.
+The existing output owner coordinates native writes, control requests, and range
+retention with the allocator. Protect selected past sections before another
+allocation can reuse them. Admission and reuse must be serialized by the shared
+logger; a task trigger never performs that work itself. Queue delay can exhaust
+history, so stale anchors are explicit rejections.
 
-The first API uses fixed per-profile windows; it has no per-request override.
-Names resolve to typed slot indices/profile IDs at generation, never on the
-trigger caller. Changing the compiled capture selection begins new history;
-it cannot supply a past window from before it was armed.
+Reuse native encoded-byte results for byte targets and quota decisions. The
+necessary added runtime work is bounded control submission, single-encode routing,
+and native allocation/retention bookkeeping. Measure these on both output
+placements before accepting the implementation; there are no measured latency
+claims in this proposal.
 
-### Trigger and control signatures
+Use the existing logger write/flush and unclean-shutdown behavior. Future
+power-loss recovery could attach to the native event table; it is outside this
+design.
 
-Signature sketch; ID, status, and lease types are opaque public types:
+## 5. Implementation
 
-```rust
-pub struct CuEventRequest {
-    pub sequence: u64,
-    pub anchor: CuInstant,
-    pub reason: CuEventReason,
-}
+1. **Native allocation and event ownership:**
+   [`byte_log.rs`](../../core/cu29_unifiedlog/src/byte_log.rs),
+   [`lib.rs`](../../core/cu29_unifiedlog/src/lib.rs), and a shared `events.rs`.
+   Add retained-range protection, bounded event records, and byte quotas over
+   `ByteStorage`. Adapt [mmap](../../core/cu29_unifiedlog/src/memmap.rs) and
+   [SD/eMMC](../../components/libs/cu_sdlogger/src/logger.rs) for the same layout.
+   **Pass:** identical save/wrap/delete cases preserve middle ranges on both
+   backends; variable keyframe intervals span ordinary sections without a slot cap.
 
-pub enum CuEventReason { Manual, Remote, Model, DatasetNovelty }
+2. **Disjoint generated encoding:**
+   [`cu29_derive/src/lib.rs`](../../core/cu29_derive/src/lib.rs),
+   [`runtime_macro.rs`](../../core/cu29_derive/src/runtime_macro.rs), and native
+   decoder/catalog support. Generate baseline/event-only layouts and typed
+   borrowing encoders. **Pass:** shared messages, their metadata, and handles
+   occur in one part only; readers join parts correctly and decode from a cropped
+   start with a fresh codec; omitted slots do no capture work.
 
-impl CuEventTrigger {
-    pub fn try_trigger(&mut self, request: CuEventRequest) -> CuResult<CuEventTicket>;
-}
+3. **Configuration and trigger wiring:**
+   [`config.rs`](../../core/cu29_runtime/src/config.rs),
+   [`context.rs`](../../core/cu29_runtime/src/context.rs), and
+   [`curuntime.rs`](../../core/cu29_runtime/src/curuntime.rs). Implement the exact
+   user API above on the existing output owner. **Pass:** invalid static settings
+   fail at compile time; queue spam, delayed anchors, caps, merges, and stop/drain
+   obey the documented outcomes; no extra per-cycle clock/shared-counter updates.
 
-impl CuEventRecorder {
-    pub fn open(path: impl AsRef<Path>, limits: CuEventStoreLimits) -> CuResult<Self>;
-    pub fn trigger_handle(&mut self, profile: impl Into<CuEventProfileId>) -> CuResult<CuEventTrigger>;
-    pub fn request_status(&self, ticket: CuEventTicket) -> CuResult<CuEventRequestStatus>;
-    pub fn event_info(&self, event: CuEventId) -> CuResult<CuEventInfo>;
-    pub fn lease(&mut self, event: CuEventId) -> CuResult<CuEventLease>;
-    pub fn delete(&mut self, event: CuEventId) -> CuResult<()>;
-    pub fn close(self) -> CuResult<()>;
-}
-```
-
-The generated enum converts to `CuEventProfileId`; binding checks that it belongs
-to the attached app. New user-facing items are experimental; generated attachment
-hooks are hidden. No new task trait is required.
-
-`try_trigger` only enqueues a fixed-size request. Queue full returns an error
-immediately. A ticket means **queued**, not accepted. `request_status` returns
-`Queued`, `Accepted(event_id)`, or `Rejected(reason)`. Rejection reasons include
-expired history, unavailable replay state, invalid time, capacity, and closing.
-
-A trigger handle binds one profile, producer ID, and recording session at setup.
-Each handle has one bounded producer queue; allocate extra handles before the
-control loop for independent producers. Bound ticket retention and the retry
-period at setup; repeated sequences return the same decision within that period,
-and expired retries are rejected. Requests contain no strings,
-images, or embedding vectors. Model evidence remains ordinary logged payloads
-identified by producer sequence/cycle. A task receives its handle through existing
-resource injection; manual, remote, ML, and novelty producers use this same API.
-
-### Internal output boundary
-
-Today's two independent `WriteStream` sinks cannot coordinate rotation of a
-keyframe/CopperList pair. Extend `write_completed_output` with one internal
-pair-aware consumer, rather than rotating in either leaf sink independently:
-
-```rust
-// Proposed internal hook in curuntime.rs; not an application task trait.
-#[doc(hidden)]
-pub trait CompletedOutput<P: CopperListTuple> {
-    fn write_pair(
-        &mut self,
-        culist: &CopperList<P>,
-        keyframe: Option<&KeyFrame>,
-        admitted_at: CuInstant,
-    ) -> CuResult<()>;
-}
-```
-
-The generated consumer reserves the configured worst-case pair size, rotates if
-needed, then invokes both encoders using these borrows. No sizing encode pass is
-required. Preserve existing byte counters and sink-error
-reporting in the implementation. Build the composition statically; expose only
-hidden hooks needed by generated code. Builder attachment transfers owned/shared
-connections, so the running app does not borrow the `CuEventRecorder` control handle.
-
-## 4. Lifecycle and ownership
-
-### Startup → recording → shutdown
-
-1. **Open store.** Recover manifests before enabling deletion; preallocate queues,
-   caches, and spare capture logs. The generated builder attaches immutable
-   metadata/catalogs and one recording-session identity. Arming never constructs
-   another robot or initializes its resources.
-2. **Record cycles.** Runtime freezes state at configured intervals, then hands
-   its completed slot to the existing async worker. The worker writes keyframe
-   before CopperList into each selected output. After both outputs finish, it
-   returns the slot and image-pool handles to the runtime.
-3. **Rotate capture log.** At a completed-pair boundary, close all its streams,
-   seal/flush the log, publish its time/cycle range, and switch to a prepared log.
-   Preserve session/run/instance/mission IDs. Opening a new `ByteLogger` must not
-   reset construction identity. A keyframe/CopperList pair stays together.
-4. **Expire history.** The coordinator deletes a closed capture log only when
-   it is outside required history, no event references it, and no reader lease
-   holds it. Release every section handle/mapping before deleting its slab family.
-5. **Stop and close.** App stop drains runtime output. Recorder close rejects new
-   requests, finalizes or marks unfinished events incomplete, persists manifests,
-   flushes and joins control work. Stop/start retains construction identity;
-   teardown precedes recorder close. Drop is best effort; explicit close reports errors.
-
-Event recording initially **requires `std` + `async-cl-io`**. Synchronous apps do
-not acquire event encoding on their task thread.
-
-### One trigger, concretely
-
-A trigger at robot time **12:00:00** requests **11:30:00–12:02:00**.
-
-1. The coordinator validates the request and temporarily prevents deletion of
-   candidate history while looking up its ranges. It rejects missing history
-   rather than silently shortening the interval.
-2. It locates the last usable keyframe at or before 11:30:00, protects all needed
-   inputs from that point, and reserves capacity through 12:02:00. It journals
-   acceptance and references before allowing those bytes to be reclaimed.
-3. As output finishes, it adds new capture-log references to the manifest.
-   Overlapping events keep separate IDs/reasons and share the same logs.
-4. It finishes only after the runtime has advanced past 12:02:00 **and** every
-   admitted cycle through that point has been written or explicitly marked lost.
-   A timer firing while output is backlogged is insufficient.
-5. Deleting an event first persists its deletion, then releases its references.
-   Another event, history requirement, or export lease may still keep the data.
-
-### What the reader receives
-
-`CuEventInfo` reports requested/actual bounds, known gaps, collection state,
-durability (`Buffered` or `Synced`), and `replay_ready` separately. An event may
-contain inspectable records and still lack enough state for replay.
-
-Time-window membership uses a raw `CuInstant` sampled when the runtime admits
-a cycle. This is when the runtime observes data; sensor `tov` remains available
-for offline exposure-time queries. A session ID prevents comparison across clock
-resets. Remote requests default to local receipt time; externally timestamped
-requests need an explicit clock mapping. Delayed detectors may name earlier raw
-times within the lateness bound. Control-queue delay consumes that bound.
-
-For detector/tracker replay, restore their preceding keyframe, inject recorded
-camera and other boundary inputs, and execute the prefix before 11:30:00 without
-showing prefix results in the event view. Keep inputs through the whole prefix;
-a trigger-time snapshot cannot restore past state. Initially retain full component
-keyframes. Held inputs from still earlier cycles also need retention or a snapshot.
-`keyframe_interval` counts cycles; the configured maximum age must also hold in
-elapsed time. Missing state/inputs makes `replay_ready` false. Matching executable,
-codec behavior, clock corrections, and scheduling context are still required.
-
-## 5. Storage choice and failure behavior
-
-Today's [`.rollover(size)`](../../core/cu29_unifiedlog/src/memmap.rs) uses
-`OverwriteOldest`: one linked section chain reclaims its oldest prefix through
-the next overlap. It cannot keep an arbitrary old event while reusing later
-bytes. Adding a flag to one section does not solve that allocator constraint.
-
-**Keep that allocator for ordinary logs. For events, rotate independent capture
-logs using append-only allocation inside each.** Enforce size/time limits above
-`ByteLogger`; reserve headroom for the largest allowed pair. Closed logs are
-immutable, so any eligible log can be deleted independently. Metadata/catalog
-repetition buys independent decoding. An event retains whole logs, potentially
-more tasks/time than requested; export filters and repacks the selected records.
-
-A capture-log ID contains persistent store identity and sequence/generation;
-a reused filename is insufficient. The disk index stores ranges/checkpoint
-locations. Manifests store ordered references in pages. Both use bounded caches:
-long windows must not require all references or mappings in RAM.
-
-| Failure | Required behavior |
-| --- | --- |
-| Capacity or active-event limit exhausted | Reject new event; preserve accepted events and the history/rotation reserve |
-| Output queue full or oversized pair | Drop pair together, record a gap, clear affected replay guarantee; return owned buffers |
-| Capture write failure or no prepared log | Report recorder failure/gaps; stop claiming complete coverage; never grow queues indefinitely |
-| Optional baseline fails | Report separately; allow healthy capture to continue and return slots |
-| Crash/restart | Recover ownership before deletion; ambiguous logs remain protected; interrupted future windows become incomplete |
-
-Durable acceptance needs a journal ordering data flushes, range publication,
-event references, and deletion. File/directory synchronization and crash fault
-injection are required before advertising `Synced`. Existing mmap flush and
-`clean_close` alone do not provide that guarantee.
-
-Structured text logging in `cu29_log_runtime` remains caller-side and uses the
-most recently installed process-global sink. Leave it in its normal archive;
-event completeness initially covers runtime capture, not every text message.
-Replay-required lifecycle/clock records need explicit context-bound capture.
-
-## 6. Performance: what this costs
-
-| Operation | Today → with events | Thread / consequence |
-| --- | --- | --- |
-| Finish a cycle | Existing handoff → plus raw-time stamp and small metadata | Runtime; new latency must be measured and approved before implementation |
-| Freeze state | Only when required by current consumers → continuously required for armed replay profiles | Existing capture path; extra frequency/state work can affect control latency |
-| Encode outputs | One local selection → capture plus baseline selections | Output worker; common slots encode twice, images excluded from baseline encode once |
-| Hold payloads | Until existing output finishes → until both outputs finish | Longer worker service increases arena/image-pool pressure and drop risk |
-| Keep an event | No API → index lookup, journal, references, future-byte reservation | Control thread; no past-window payload copy on trigger |
-
-Handle-content policies and codec caches must be scoped to each selection.
-Today's generated encoder can mutate handle logging policy; running baseline
-`none` before capture must not suppress the capture image. Fix and test both
-encoding orders without cloning images.
-
-For encoded capture rate `R`, use bounded measured maxima, not average bitrate:
-
-```text
-history duration >= largest before + trigger lateness
-                  + oldest required checkpoint/held input age
-                  + output lag + capture-log rounding allowance
-history bytes    >= R × history duration + state/metadata/alignment overhead
-store bytes      >= history bytes + unique saved-event bytes
-                  + reserved future bytes + rotation/admission reserve
-```
-
-At **80 MiB/s**, 30 minutes alone is **140.625 GiB**, another 2 minutes is
-**9.375 GiB**, and continuous capture writes about **6.59 TiB/day**. These are
-arithmetic examples, not measured Copper performance. Add baseline writes,
-keyframes, metadata, and storage headroom. Overlapping events share physical
-storage; unrelated saved events keep consuming quota until deletion/offload.
-
-RAM holds in-flight slots, codec buffers, fixed queues, and bounded caches.
-It does **not** hold `R × 30 minutes`. Event references grow on disk. Prepared
-logs and mappings must remain bounded across repeated rotations.
-
-No performance result is claimed. Before implementation is accepted, compare
-ordinary logging, capture only, and capture plus baseline on identical input:
-producer p50/p99/max, freeze cost, worker throughput, queue/pool occupancy, drops,
-encoded bytes, rotation latency, and sustained disk writes. Extending the existing
-[`cu-async-cl-io-bench`](../../benchmarks/cu_async_cl_io_bench) is the starting point.
-Additional hot-path allocation, copies, serialization, or latency needs explicit
-approval; this proposal does not grant it.
-
-## 7. Migration: exactly what changes where
-
-This is an implementation sequence for the logger, not a rewrite of task code
-or a conversion of old recordings. Each row has a concrete result to review.
-
-| Step | Code change | Evidence before proceeding |
-| --- | --- | --- |
-| 1. Rotate capture logs | Add `cu29_eventlog::store`; reuse `ByteLogger`/mmap, add explicit context wiring in `runtime_macro.rs` | One continuous capture rotates and deletes whole expired logs; IDs survive rotation; mapping/cache counts remain bounded |
-| 2. Keep an event | Add `eventlog.rs`, recorder/coordinator, journal/manifests, builder attachment | A manual request retains the past/future interval across rotations; overlapping requests share bytes; restart cannot delete accepted data |
-| 3. Produce both selections | Extend `LoggingConfig`, generated encoders/catalogs, `OutputRequirements`, and `write_completed_output` | Detections persist in baseline; event history has lossless camera inputs; policy isolation and queue/sink failures pass; overhead measured |
-| 4. Read and replay events | Add `cu29_export::events`, leased reads, prefix/checkpoint selection, gap-aware status | Stateful detector/tracker replay matches recorded outputs; standalone export decodes independently; gaps prevent a replay-ready claim |
-| 5. Expose complete workflow | Add trigger resource binding and a manual/ML example; test shutdown and crash publication points | The example captures the stated window, exports it, deletes it, and releases bytes; shared runtime still builds without `std` |
-
-Application migration is concrete: replace one logging selection with baseline
-and profile declarations; add recorder setup/attachment; inject a trigger handle
-only into producers that need it; stop/drain the app before closing the recorder.
-Existing source/task/sink lifecycle methods do not change.
-
-Reader migration is concrete: event-aware tools open a manifest plus its referenced
-logs, instead of opening one log base path. Standalone export rewrites section
-links/offsets; concatenating slab files is invalid. Existing per-log decoders are
-reused. Keep container/catalog versions only while their actual layouts match;
-version the new manifest independently. No dual writer or legacy dispatch is
-required solely for compatibility. Old recordings stay with their matching tools.
-
-The first usable release needs all five steps, including conservative recovery
-and leased export. Partial steps are engineering milestones. Upload, dataset
-novelty scoring, and SD event retention are separate follow-up implementations.
+4. **Offline reading, deletion, and replay:** native reader support, then
+   [`cu29_export`](../../core/cu29_export/src/lib.rs) and
+   [`app_sim.rs`](../../core/cu29_runtime/src/app_sim.rs). **Pass:** timing comes
+   from existing records, saved sections survive independent event deletion, and
+   stateful replay with complete recorded inputs starts from an existing keyframe.
+   Add public user APIs to the experimental V1 surface; keep generated internals
+   hidden. Verify `no_std` and measure the required output work before merge.
