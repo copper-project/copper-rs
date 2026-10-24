@@ -29,10 +29,41 @@ sections remain retained without copying the past recording.
 
 ### Enable and select data
 
-No new Cargo feature is required. Add `logging.events` to `copperconfig.ron`.
-Omitting it preserves ordinary logging. `cu29/async-cl-io` remains an optional
-output placement; the same native retention implementation serves `std` and
-`no_std`.
+Select event data in each task's existing `logging` block, beside its main-log
+selection. The proposed `logging.events: bool` defaults to `false` and applies to
+all outputs of that task. Existing `logging.enabled` keeps its main-log meaning
+and default `true`; the two selections are independent. Streaming/telemetry
+settings remain on the task as today.
+
+For the camera/detector/tracker application, the relevant declarations are:
+
+```ron
+tasks: [
+    (
+        id: "camera",
+        type: "tasks::Camera",
+        logging: (enabled: false, events: true),
+    ),
+    (
+        id: "detector",
+        type: "tasks::Detector",
+        logging: (enabled: true, events: true),
+    ),
+    (
+        id: "tracker",
+        type: "tasks::Tracker",
+        logging: (enabled: true, events: true),
+    ),
+],
+```
+
+Keep the application's existing connections and other task fields. Camera output
+is event-only; detector and tracker output belongs to both selections. For
+main-log-only output, use `logging: (enabled: true, events: false)`; with both
+flags false, neither log selection captures that task's outputs. These flags
+select data, not permission to trigger an event: any running task can trigger.
+
+The top-level `logging.events` section configures shared capacities and policy:
 
 ```ron
 logging: (
@@ -41,7 +72,6 @@ logging: (
     keyframe_interval: 100,
     section_size_mib: 1,
     events: (
-        capture: ["camera", "detector", "tracker"],
         history_bytes: 1073741824,
         saved_bytes: 4294967296,
         before_bytes: 536870912,
@@ -54,12 +84,22 @@ logging: (
 ),
 ```
 
-This is a fragment inside the existing application config. Each `capture` entry
-is a task ID (all its outputs) or a `"bridge_id/channel_id"` Rx endpoint. Resolve
-names to typed slots at compile time. Existing per-node `logging.enabled`, codec, and handle policies
-select the routine **baseline**. Disable baseline logging on `camera` and enable
-it on `detector`; events can still retain both. Slots outside both selections are
-not captured. Enabling events does not silently enable every output.
+Both examples are fragments of `copperconfig.ron`; only the task-level `events`
+flag and the top-level event configuration are new. The routine main log is called
+the **baseline** below. There is no task-name selection list under the global
+event section. Code generation derives typed baseline/event masks from the local
+flags, including event-only tasks whose main-log `enabled` flag is false.
+
+For a bridge Rx output, propose the same `NodeLogging` block on its declaration:
+`Rx(id: "frames", logging: (enabled: false, events: true))`. This extends the Rx
+schema; it is not a field accepted today. Selection remains with the producing
+task or channel. Bridge Tx inputs are already selected at their producer.
+
+No new Cargo feature is required. With all local event flags false and the global
+section omitted, ordinary logging is unchanged. A local event flag without global
+budgets, or global budgets without any selected output, is a compile-time error.
+`cu29/async-cl-io` remains an optional output placement; the same native retention
+implementation serves `std` and `no_std`.
 
 A slot shared by baseline and event capture has one representation and codec
 state. Events do not introduce a second codec or override handle policies. Select
@@ -74,8 +114,9 @@ replay.
 
 | Parameter | Default / limits / meaning |
 | --- | --- |
-| `logging.events` | Absent by default; no event-specific capture or queues |
-| `capture` | Required, nonempty list of known task-output or bridge Rx names; duplicates and unknown names are compile errors |
+| `tasks[].logging.events: bool` | Default `false`; include all outputs of that task in event capture, independently of main-log `logging.enabled` |
+| Rx channel `logging.events: bool` | Default `false`; same selection on that producing channel; proposed reuse of `NodeLogging` on Rx declarations |
+| Top-level `logging.events` | Absent by default; required when any local event flag is true; contains only shared budgets/policy; remaining fields below belong here |
 | `history_bytes: u64` | Required; positive, backend-aligned rolling capture capacity; `before_bytes <= history_bytes` |
 | `saved_bytes: u64` | Required; aligned saved-section capacity; at least `max_event_bytes`; shared sections count once |
 | `before_bytes: u64` | Required; nonnegative target for capture preceding the trigger; rounded to a usable retained keyframe |
@@ -84,7 +125,7 @@ replay.
 | `baseline_bytes: u64` | Default `0`; zero disables routine retention; otherwise an aligned capacity for baseline records |
 | `max_events: u16` | Default `64`; `1..=65535` saved event descriptors, including the event currently collecting |
 | `trigger_queue_capacity: u16` | Default `32`; `1..=65535` queued requests per application |
-| Existing logging switches | Task and keyframe logging must be enabled; `keyframe_interval` must be present and positive |
+| Global logging switches | Top-level `enable_task_logging` and `enable_keyframe_logging` must be true; `keyframe_interval` must be present and positive; per-task main-log `enabled` may be false |
 
 Hard capacities are multiples of 512 B and must accommodate the configured native
 section allocations; byte targets need not be aligned. Byte targets use sizes
@@ -225,7 +266,8 @@ See [storage](log-storage.md), [concurrency](concurrent-logging.md), and
 
 ### One stored representation per selected message
 
-Partition slots at compile time into baseline records and event-only records.
+Derive slot membership from each task/Rx `NodeLogging.enabled` and
+`NodeLogging.events` at compile time, then partition baseline and event-only records.
 A message in both selections is encoded in the baseline part once, with both
 retention policies referring to it. Each message's original metadata and handle
 contents also appear once. Omit an empty part entirely.
@@ -299,7 +341,8 @@ design.
 2. **Disjoint generated encoding:**
    [`cu29_derive/src/lib.rs`](../../core/cu29_derive/src/lib.rs),
    [`runtime_macro.rs`](../../core/cu29_derive/src/runtime_macro.rs), and native
-   decoder/catalog support. Generate baseline/event-only layouts and typed
+   decoder/catalog support. Derive masks from local logging flags and generate
+   baseline/event-only layouts and typed
    borrowing encoders. **Pass:** shared messages, their metadata, and handles
    occur in one part only; readers join parts correctly and decode from a cropped
    start with a fresh codec; omitted slots do no capture work.
@@ -308,8 +351,12 @@ design.
    [`config.rs`](../../core/cu29_runtime/src/config.rs),
    [`context.rs`](../../core/cu29_runtime/src/context.rs), and
    [`curuntime.rs`](../../core/cu29_runtime/src/curuntime.rs). Implement the exact
-   user API above on the existing output owner. **Pass:** invalid static settings
-   fail at compile time; queue spam, delayed anchors, caps, merges, and stop/drain
+   user API above on the existing output owner: add default-false
+   `NodeLogging.events`, reuse `NodeLogging` on bridge Rx declarations, and keep
+   global event config limited to shared budgets/policy. **Pass:** all four local
+   main-log/event flag combinations select the expected outputs; missing budgets
+   or an empty aggregate selection fail at compile time; queue spam, delayed
+   anchors, caps, merges, and stop/drain
    obey the documented outcomes; no extra per-cycle clock/shared-counter updates.
 
 4. **Offline reading, deletion, and replay:** native reader support, then

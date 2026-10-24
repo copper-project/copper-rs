@@ -9,7 +9,7 @@ remaining work is labeled separately from implemented behavior.
 | [Log storage](log-storage.md) | Byte addressing, static metadata, run identity, append, rollover, lifecycle |
 | [Concurrent logging](concurrent-logging.md) | Format v3 ownership, reclamation, output handoff, failures, performance evidence |
 | [Self-describing logs](self-describing-logs.md) | Native wire recipes, startup catalog, offline decoding, feature boundaries |
-| [Event-based logging](event-based-logging.md) | Proposed: user API, byte budgets, single-encode routing, native retention on slabs and raw partitions |
+| [Event-based logging](event-based-logging.md) | Proposed: per-task selection, byte budgets, single-encode routing, native retention on slabs and raw partitions |
 | [Clock synchronization](clock-sync.md) | Raw/execution timelines, reference discipline, uncertainty, replay |
 | [Profile-Guided Scheduling](profile-guided-scheduling.md) | Recorded profiles, offline search, compile-time plans, measured selection |
 | [Isaac Sim](isaac-sim.md) | Simulation stepping, shared-buffer ownership, task overrides, replay gaps |

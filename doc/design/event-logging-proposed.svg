@@ -11,7 +11,7 @@
 <rect x="40" y="65" width="1360" height="100" rx="9" fill="#181825" stroke="#a6e3a1" stroke-width="1.5"/>
 <text x="58" y="96" fill="#a6e3a1" font-size="22" text-anchor="start" font-weight="600">Generated builder / native encoders</text>
 <text x="58" y="126" fill="#cdd6f4" font-size="18" text-anchor="start" font-weight="400">ApplicationMetadata + catalog → resources → runtime streams</text>
-<text x="58" y="151" fill="#cdd6f4" font-size="18" text-anchor="start" font-weight="400">Proposed: compile byte limits/layout; bind trigger handles</text>
+<text x="58" y="151" fill="#cdd6f4" font-size="18" text-anchor="start" font-weight="400">Proposed: local logging flags → compiled masks; global byte budgets</text>
 <rect x="40" y="225" width="390" height="130" rx="9" fill="#181825" stroke="#89b4fa" stroke-width="1.5"/>
 <text x="58" y="256" fill="#89b4fa" font-size="22" text-anchor="start" font-weight="600">Tasks / KeyFramesManager</text>
 <text x="58" y="286" fill="#cdd6f4" font-size="18" text-anchor="start" font-weight="400">Runtime-owned CuMsg slots</text>
