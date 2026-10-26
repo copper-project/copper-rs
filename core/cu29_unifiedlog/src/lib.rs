@@ -361,10 +361,21 @@ pub struct LogStream<S: SectionStorage, L: UnifiedLogWrite<S>> {
     entry_type: UnifiedLogType,
     parent_logger: Arc<Mutex<L>>,
     current_section: SectionHandle<S>,
-    current_position: usize,
     minimum_allocation_amount: usize,
     last_log_bytes: usize,
     context: SectionContext,
+}
+
+// Storage has already appended: detect invalid accounting without publishing
+// a truncated/wrapped header. This cannot roll back a faulty storage writer.
+fn record_bytes(header: &mut SectionHeader, bytes: usize) -> CuResult<()> {
+    let bytes = u32::try_from(bytes)
+        .map_err(|_| CuError::from("Encoded entry size exceeds section counter"))?;
+    header.used = header
+        .used
+        .checked_add(bytes)
+        .ok_or_else(|| CuError::from("Encoded section size exceeds section counter"))?;
+    Ok(())
 }
 
 impl<S: SectionStorage, L: UnifiedLogWrite<S>> LogStream<S, L> {
@@ -409,7 +420,6 @@ impl<S: SectionStorage, L: UnifiedLogWrite<S>> LogStream<S, L> {
             entry_type,
             parent_logger,
             current_section: section,
-            current_position: 0,
             minimum_allocation_amount,
             last_log_bytes: 0,
             context,
@@ -422,7 +432,7 @@ impl<S: SectionStorage, L: UnifiedLogWrite<S>> Debug for LogStream<S, L> {
         write!(
             f,
             "MmapStream {{ entry_type: {:?}, current_position: {}, minimum_allocation_amount: {} }}",
-            self.entry_type, self.current_position, self.minimum_allocation_amount
+            self.entry_type, self.current_section.header.used, self.minimum_allocation_amount
         )
     }
 }
@@ -433,8 +443,7 @@ impl<E: Encode, S: SectionStorage, L: UnifiedLogWrite<S>> WriteStream<E> for Log
         let rebind = matches!(&result, Ok(SectionAppendOutcome::Rebind));
         match result {
             Ok(SectionAppendOutcome::Appended(nb_bytes)) => {
-                self.current_position += nb_bytes;
-                self.current_section.header.used += nb_bytes as u32;
+                record_bytes(&mut self.current_section.header, nb_bytes)?;
                 self.last_log_bytes = nb_bytes;
                 // Lifecycle sections are promptly closed, so sparse events cannot pin the ring.
                 if self.entry_type == UnifiedLogType::RuntimeLifecycle {
@@ -480,8 +489,7 @@ impl<E: Encode, S: SectionStorage, L: UnifiedLogWrite<S>> WriteStream<E> for Log
                     .add_cause(e.to_string().as_str())
                 })?; // If we fail just after creating a section, there is not much we can do.
 
-                self.current_position += result;
-                self.current_section.header.used += result as u32;
+                record_bytes(&mut self.current_section.header, result)?;
                 self.last_log_bytes = result;
                 if self.entry_type == UnifiedLogType::RuntimeLifecycle {
                     self.current_section.storage.flush()?;
@@ -531,6 +539,94 @@ impl<S: SectionStorage, L: UnifiedLogWrite<S>> Drop for LogStream<S, L> {
         {
             let mut logger_guard = self.parent_logger.lock();
             logger_guard.flush_section(&mut self.current_section);
+        }
+    }
+}
+
+#[cfg(test)]
+mod accounting_tests {
+    use super::*;
+
+    // A deliberately faulty storage backend reports sizes without encoding data.
+    struct ReportedSizeStorage {
+        bytes: usize,
+        rebind: bool,
+    }
+    impl SectionStorage for ReportedSizeStorage {
+        fn initialize<E: Encode>(&mut self, _: &E) -> Result<usize, EncodeError> {
+            Ok(0)
+        }
+        fn post_update_header<E: Encode>(&mut self, _: &E) -> Result<usize, EncodeError> {
+            Ok(0)
+        }
+        fn append<E: Encode>(&mut self, _: &E) -> Result<usize, EncodeError> {
+            Ok(self.bytes)
+        }
+        fn append_or_rebind<E: Encode>(
+            &mut self,
+            entry: &E,
+        ) -> Result<SectionAppendOutcome, EncodeError> {
+            if self.rebind {
+                Ok(SectionAppendOutcome::Rebind)
+            } else {
+                self.append(entry).map(SectionAppendOutcome::Appended)
+            }
+        }
+        fn flush(&mut self) -> CuResult<usize> {
+            Ok(0)
+        }
+    }
+    struct ReportedSizeLogger {
+        bytes: usize,
+        rebind: bool,
+    }
+    impl UnifiedLogWrite<ReportedSizeStorage> for ReportedSizeLogger {
+        fn add_section(
+            &mut self,
+            _: UnifiedLogType,
+            _: usize,
+        ) -> CuResult<SectionHandle<ReportedSizeStorage>> {
+            SectionHandle::create(
+                SectionHeader::default(),
+                ReportedSizeStorage {
+                    bytes: self.bytes,
+                    rebind: self.rebind,
+                },
+            )
+        }
+        fn flush_section(&mut self, _: &mut SectionHandle<ReportedSizeStorage>) {}
+        fn status(&self) -> UnifiedLogStatus {
+            UnifiedLogStatus {
+                total_used_space: 0,
+                total_allocated_space: 0,
+            }
+        }
+    }
+
+    #[test]
+    fn test_stream_rejects_counter_overflow_without_changing_header() {
+        let logger = Arc::new(Mutex::new(ReportedSizeLogger {
+            bytes: u32::MAX as usize,
+            rebind: false,
+        }));
+        let mut stream = LogStream::new(UnifiedLogType::CopperList, logger, 4096).unwrap();
+        stream.log(&0_u8).unwrap();
+        assert!(stream.log(&0_u8).is_err());
+        assert_eq!(stream.current_section.header.used, u32::MAX);
+    }
+
+    #[test]
+    #[cfg(target_pointer_width = "64")]
+    fn test_stream_rejects_truncation_on_append_and_rebind() {
+        for rebind in [false, true] {
+            let logger = Arc::new(Mutex::new(ReportedSizeLogger {
+                bytes: u32::MAX as usize + 1,
+                rebind,
+            }));
+            let mut stream = LogStream::new(UnifiedLogType::CopperList, logger, 4096).unwrap();
+            assert!(stream.log(&0_u8).is_err());
+            assert_eq!(stream.current_section.header.used, 0);
+            assert_eq!(WriteStream::<u8>::last_log_bytes(&stream), Some(0));
         }
     }
 }
