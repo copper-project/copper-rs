@@ -34,6 +34,10 @@ option select constructions discovered from section context, including runs whos
   - `CuRecordedReplayApplication`
   - `CuDistributedReplayApplication`
   - `CuSubsystemMetadata`
+  - `CuApplicationOutput` (`std`): `wait_for_output()` on normal and simulation
+    `Running` handles waits for submitted CopperLists and associated keyframes.
+    This explicit offline barrier preserves lifecycle state, propagates output
+    errors, and does not flush sinks or guarantee durable storage or remote delivery.
 - Task and bridge authoring APIs:
   - `CuSrcTask`
   - `CuTask`

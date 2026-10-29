@@ -1,0 +1,10 @@
+(
+    logging: (
+        enable_task_logging: true,
+        enable_keyframe_logging: true,
+        keyframe_interval: 1,
+        copperlist_count: 4,
+    ),
+    tasks: [(id: "source", type: "Source")],
+    cnx: [(src: "source", dst: "__nc__", msg: "u32")],
+)

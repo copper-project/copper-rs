@@ -4325,6 +4325,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         };
 
+        let app_output_impl = std.then(|| quote! {
+            impl cu29::prelude::app::CuApplicationOutput for #application_name {
+                fn wait_for_output(&mut self) -> CuResult<()> {
+                    self.copper_runtime.copperlists_manager.finish_pending()
+                }
+            }
+        });
+
         let app_reflect_impl = quote! {
             impl cu29::reflect::ReflectTaskIntrospection for #application_name {
                 fn reflect_task(&self, task_id: &str) -> Option<&dyn cu29::reflect::Reflect> {
@@ -5295,6 +5303,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #app_drop_impl
                 #app_builder_inherent_impl
                 #app_metadata_impl
+                #app_output_impl
                 #app_reflect_impl
                 #app_runtime_copperlist_impl
                 #application_impl
