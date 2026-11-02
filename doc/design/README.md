@@ -8,6 +8,7 @@ remaining work is labeled separately from implemented behavior.
 | --- | --- |
 | [Log storage](log-storage.md) | Byte addressing, static metadata, run identity, append, rollover, lifecycle |
 | [Concurrent logging](concurrent-logging.md) | Format v3 ownership, reclamation, output handoff, failures, performance evidence |
+| [Offline telemetry plan](offline-telemetry.md) | Proposed blocking TCP delivery for replay, bounded buffering, and receiver completion |
 | [Self-describing logs](self-describing-logs.md) | Native wire recipes, startup catalog, offline decoding, feature boundaries |
 | [Clock synchronization](clock-sync.md) | Raw/execution timelines, reference discipline, uncertainty, replay |
 | [Profile-Guided Scheduling](profile-guided-scheduling.md) | Recorded profiles, offline search, compile-time plans, measured selection |
