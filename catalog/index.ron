@@ -90,5 +90,85 @@
         ),
         (name: "cu-zenoh-bridge", source: GitHub(path: "components/bridges/cu_zenoh_bridge")),
         (name: "cu-zenoh-sink", source: GitHub(path: "components/sinks/cu_zenoh_sink")),
+        (
+            name: "repose",
+            source: GitHub(
+                repo: Some("ReposeRobotics/repose"),
+                rev: Some("v0.8.2"),
+                path: "components/libs/repose",
+            ),
+        ),
+        (
+            name: "repose-collision",
+            source: GitHub(
+                repo: Some("ReposeRobotics/repose"),
+                rev: Some("v0.8.2"),
+                path: "components/libs/repose_collision",
+            ),
+        ),
+        (
+            name: "repose-controller",
+            source: GitHub(
+                repo: Some("ReposeRobotics/repose"),
+                rev: Some("v0.8.2"),
+                path: "components/tasks/repose_controller",
+            ),
+        ),
+        (
+            name: "repose-io",
+            source: GitHub(
+                repo: Some("ReposeRobotics/repose"),
+                rev: Some("v0.8.2"),
+                path: "components/tasks/repose_io",
+            ),
+        ),
+        (
+            name: "repose-joint-rrt-star",
+            source: GitHub(
+                repo: Some("ReposeRobotics/repose"),
+                rev: Some("v0.8.2"),
+                path: "components/tasks/repose_joint_rrt_star",
+            ),
+        ),
+        (
+            name: "repose-kinematics",
+            source: GitHub(
+                repo: Some("ReposeRobotics/repose"),
+                rev: Some("v0.8.2"),
+                path: "components/libs/repose_kinematics",
+            ),
+        ),
+        (
+            name: "repose-motion-planning",
+            source: GitHub(
+                repo: Some("ReposeRobotics/repose"),
+                rev: Some("v0.8.2"),
+                path: "components/tasks/repose_motion_planning",
+            ),
+        ),
+        (
+            name: "repose-robot-description",
+            source: GitHub(
+                repo: Some("ReposeRobotics/repose"),
+                rev: Some("v0.8.2"),
+                path: "components/libs/repose_robot_description",
+            ),
+        ),
+        (
+            name: "repose-robot-interface",
+            source: GitHub(
+                repo: Some("ReposeRobotics/repose"),
+                rev: Some("v0.8.2"),
+                path: "components/libs/repose_robot_interface",
+            ),
+        ),
+        (
+            name: "repose-trajectory",
+            source: GitHub(
+                repo: Some("ReposeRobotics/repose"),
+                rev: Some("v0.8.2"),
+                path: "components/libs/repose_trajectory",
+            ),
+        ),
     ],
 )
