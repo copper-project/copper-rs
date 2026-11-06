@@ -20,6 +20,10 @@
 </p>
 
 <p align="center">
+  <a href="https://hackergit.org/r/copper-project/copper-rs"><img src="https://hackergit.org/badge/copper-project/copper-rs.svg?style=card" alt="Hacker News" width="250" height="55"></a>
+</p>
+
+<p align="center">
   <strong><a href="https://cdn.copper-robotics.com/demo/balancebot/index.html">▶ Try Copper in your browser</a></strong>
   &nbsp;·&nbsp;
   <strong><a href="#build-your-first-copper-app">Build your first app</a></strong>
