@@ -12,6 +12,8 @@ pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, State>::into_inner(self) -> A
 impl<S, L, A> cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Initialized> where S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static, A: cu29_runtime::app::CuApplication<S, L>
 pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::inner_mut(&mut self) -> &mut A
 pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::new(app: A) -> Self
+impl<S, L, A> cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Running> where S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static, A: cu29_runtime::app::CuApplication<S, L> + cu29_runtime::app::CuApplicationOutput
+pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Running>::wait_for_output(&mut self) -> cu29_traits::CuResult<()>
 impl<S, L, A> cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Running> where S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static, A: cu29_runtime::app::CuApplication<S, L>
 pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Running>::run_one_iteration(&mut self) -> cu29_traits::CuResult<()>
 impl<S, L, A, State> core::fmt::Debug for cu29_runtime::app::CuAppLifecycle<S, L, A, State>
@@ -39,6 +41,8 @@ pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, State>::inner(&self) -> &A
 pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, State>::into_inner(self) -> A
 impl<S, L, A> cu29_runtime::app::CuSimAppLifecycle<S, L, A, cu29_runtime::app::Initialized> where S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static, A: cu29_runtime::app::CuSimApplication<S, L>
 pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::new(app: A) -> Self
+impl<S, L, A> cu29_runtime::app::CuSimAppLifecycle<S, L, A, cu29_runtime::app::Running> where S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static, A: cu29_runtime::app::CuSimApplication<S, L> + cu29_runtime::app::CuApplicationOutput
+pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, cu29_runtime::app::Running>::wait_for_output(&mut self) -> cu29_traits::CuResult<()>
 impl<S, L, A> cu29_runtime::app::CuSimAppLifecycle<S, L, A, cu29_runtime::app::Running> where S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static, A: cu29_runtime::app::CuSimApplication<S, L>
 pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, cu29_runtime::app::Running>::run_one_iteration(&mut self, sim_callback: &mut impl for<'z> core::ops::function::FnMut(<A as cu29_runtime::app::CuSimApplication<S, L>>::Step) -> cu29_runtime::simulation::SimOverride) -> cu29_traits::CuResult<()>
 impl<S, L, A, State> core::fmt::Debug for cu29_runtime::app::CuSimAppLifecycle<S, L, A, State>
@@ -106,6 +110,8 @@ pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Initialized
 pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::run_one_iteration(&mut self) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::start_all_tasks(&mut self) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::stop_all_tasks(&mut self) -> cu29_traits::CuResult<()>
+pub trait cu29_runtime::app::CuApplicationOutput
+pub fn cu29_runtime::app::CuApplicationOutput::wait_for_output(&mut self) -> cu29_traits::CuResult<()>
 pub trait cu29_runtime::app::CuDistributedReplayApplication<S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static>: cu29_runtime::app::CuRecordedReplayApplication<S, L> + cu29_runtime::app::CuSubsystemMetadata
 pub fn cu29_runtime::app::CuDistributedReplayApplication::build_distributed_replay(clock: cu29_clock::RobotClock, unified_logger: alloc::sync::Arc<std::sync::poison::mutex::Mutex<L>>, instance_id: u32, config_override: core::option::Option<cu29_runtime::config::CuConfig>) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
 pub trait cu29_runtime::app::CuRecordedReplayApplication<S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static>: cu29_runtime::app::CuSimApplication<S, L>

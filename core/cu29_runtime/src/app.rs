@@ -327,6 +327,36 @@ pub trait CuDistributedReplayApplication<S: SectionStorage, L: UnifiedLogWrite<S
         Self: Sized;
 }
 
+/// Completion barrier for application recording output.
+///
+/// Generated host applications implement this capability independently of their
+/// lifecycle traits, so existing application implementations remain compatible.
+///
+/// # Example
+///
+/// ```rust
+/// use cu29_runtime::app::{CuApplicationOutput, CuStdAppLifecycle, CuStdApplication, Running};
+/// use cu29_traits::CuResult;
+///
+/// fn record_iteration<A: CuStdApplication + CuApplicationOutput>(
+///     app: &mut CuStdAppLifecycle<A, Running>,
+/// ) -> CuResult<()> {
+///     app.run_one_iteration()?;
+///     app.wait_for_output()
+/// }
+/// ```
+#[cfg(feature = "std")]
+pub trait CuApplicationOutput {
+    /// Wait for previously submitted CopperLists and their associated keyframes
+    /// to finish being consumed by the output sinks, returning worker errors.
+    ///
+    /// This blocks the caller and is intended for offline replay between
+    /// iterations. Synchronous output has already completed when the iteration
+    /// returns. It does not flush sink buffers, synchronize durable storage,
+    /// wait for structured text logs, or guarantee remote telemetry delivery.
+    fn wait_for_output(&mut self) -> CuResult<()>;
+}
+
 /// Typestate marker: the application is built but its tasks have not been started yet.
 pub struct Initialized;
 
@@ -566,6 +596,23 @@ where
     #[allow(deprecated)] // forwards to the raw trait, deprecated for direct use only
     pub fn run_one_iteration(&mut self) -> CuResult<()> {
         self.app.run_one_iteration()
+    }
+}
+
+#[cfg(feature = "std")]
+impl<S, L, A> CuAppLifecycle<S, L, A, Running>
+where
+    S: SectionStorage,
+    L: UnifiedLogWrite<S> + 'static,
+    A: CuApplication<S, L> + CuApplicationOutput,
+{
+    /// Wait for submitted CopperLists and associated keyframes to complete.
+    ///
+    /// Blocks between offline replay iterations without changing lifecycle state.
+    /// Returns output errors. See [`CuApplicationOutput::wait_for_output`] for
+    /// completion semantics and the distinction from flushing or remote delivery.
+    pub fn wait_for_output(&mut self) -> CuResult<()> {
+        self.app.wait_for_output()
     }
 }
 
@@ -819,6 +866,23 @@ where
         sim_callback: &mut impl for<'z> FnMut(<A as CuSimApplication<S, L>>::Step<'z>) -> SimOverride,
     ) -> CuResult<()> {
         self.app.run_one_iteration(sim_callback)
+    }
+}
+
+#[cfg(feature = "std")]
+impl<S, L, A> CuSimAppLifecycle<S, L, A, Running>
+where
+    S: SectionStorage,
+    L: UnifiedLogWrite<S> + 'static,
+    A: CuSimApplication<S, L> + CuApplicationOutput,
+{
+    /// Wait for submitted CopperLists and associated keyframes to complete.
+    ///
+    /// Blocks between offline replay iterations without changing lifecycle state.
+    /// Returns output errors. See [`CuApplicationOutput::wait_for_output`] for
+    /// completion semantics and the distinction from flushing or remote delivery.
+    pub fn wait_for_output(&mut self) -> CuResult<()> {
+        self.app.wait_for_output()
     }
 }
 
