@@ -8,21 +8,22 @@
   static robot task graphs, from Linux to bare metal.
 </p>
 <p align="center">
-  <a href="https://github.com/copper-project/copper-rs/actions/workflows/general.yml"><img src="https://img.shields.io/github/check-runs/copper-project/copper-rs/master?nameFilter=CI%20Status&amp;label=CI%2FCD" alt="CI/CD status" /></a>
-  <a href="https://crates.io/crates/cu29"><img src="https://img.shields.io/crates/v/cu29.svg" alt="cu29 on crates.io" /></a>
-  <img src="https://img.shields.io/badge/Rust-1.96+-orange.svg" alt="Rust 1.96 or newer" />
-  <a href="https://copper-project.github.io/copper-rs-book/"><img src="https://img.shields.io/badge/book-read-blue" alt="Read the Copper book" /></a>
-  <a href="https://copper-project.github.io/copper-rs/"><img src="https://img.shields.io/badge/docs-read-blue" alt="Copper documentation" /></a>
-  <a href="https://github.com/copper-project/copper-rs/wiki/Copper-Release-Notes"><img src="https://img.shields.io/badge/release_notes-read-blue" alt="Copper release notes" /></a>
-  <a href="https://discord.gg/VkCG7Sb9Kw"><img src="https://img.shields.io/discord/1305916875741597826?logo=discord" alt="Copper Discord" /></a>
+  <a href="https://github.com/copper-project/copper-rs/actions/workflows/general.yml"><img src="https://github.com/copper-project/copper-rs/actions/workflows/general.yml/badge.svg?branch=master" alt="CI/CD status" /></a>
+  <a href="https://crates.io/crates/cu29"><img src="https://raw.githubusercontent.com/copper-project/copper-rs/master/doc/static/crates-badge.svg" alt="cu29 on crates.io" /></a>
+  <img src="https://raw.githubusercontent.com/copper-project/copper-rs/master/doc/static/rust-badge.svg" alt="Rust 1.96 or newer" />
+  <a href="https://copper-project.github.io/copper-rs-book/"><img src="https://raw.githubusercontent.com/copper-project/copper-rs/master/doc/static/book-badge.svg" alt="Read the Copper book" /></a>
+  <a href="https://copper-project.github.io/copper-rs/"><img src="https://raw.githubusercontent.com/copper-project/copper-rs/master/doc/static/docs-badge.svg" alt="Copper documentation" /></a>
+  <a href="https://cdn.copper-robotics.com/catalog/index.html"><img src="https://raw.githubusercontent.com/copper-project/copper-rs/master/doc/static/catalog-badge.svg" alt="Browse the Copper component catalog" /></a>
+  <a href="https://github.com/copper-project/copper-rs/wiki/Copper-Release-Notes"><img src="https://raw.githubusercontent.com/copper-project/copper-rs/master/doc/static/releases-badge.svg" alt="Copper release notes" /></a>
+  <a href="https://discord.gg/VkCG7Sb9Kw"><img src="https://img.shields.io/badge/Discord-join-5865F2?logo=discord&amp;logoColor=white" alt="Join Copper Discord" /></a>
 </p>
 <p align="center">
   <a href="https://hackergit.org/r/copper-project/copper-rs"><img src="https://hackergit.org/badge/copper-project/copper-rs.svg?style=card" alt="Hacker News" width="250" height="55"></a>
 </p>
 <p align="center">
-  <strong><a href="https://cdn.copper-robotics.com/demo/balancebot/index.html">▶ Try Copper in your browser</a></strong>
+  <strong>▶ <a href="https://cdn.copper-robotics.com/demo/balancebot/index.html">Try Copper in your browser</a></strong>
   &nbsp;·&nbsp;
-  <strong><a href="#build-your-first-copper-app">Build your first app</a></strong>
+  <strong>⚒︎ <a href="#build-your-first-copper-app">Build your first app</a></strong>
 </p>
 <h3 id="why-copper"><a class="doc-anchor" href="#why-copper">§</a>Why Copper</h3><div class="table"><table><thead><tr><th>Built for robots</th><th>Built to ship</th></tr></thead><tbody>
 <tr><td><strong>Static by design:</strong> task graphs are declared in RON and wired at compile time.</td><td><strong>Runs anywhere:</strong> Linux, macOS, SBCs, and bare-metal microcontrollers.</td></tr>
@@ -30,7 +31,7 @@
 <tr><td><strong>Rust-first:</strong> ergonomic task APIs with compile-time guarantees.</td><td><strong>Interoperable:</strong> connect to ROS 2 through Zenoh and migrate progressively.</td></tr>
 </tbody></table>
 </div>
-<p>Already flying, driving, swimming, spacefaring, and powering humanoids.</p>
+<p>Already flying, driving, swimming, spacefaring, powering humanoids, and moving robot arms.</p>
 <h3 id="see-it-run"><a class="doc-anchor" href="#see-it-run">§</a>See It Run</h3>
 <p>These are the same Copper applications used on physical robots, recompiled for the
 browser. The simulator runs beside a live view of the Copper task graph and latency.</p>
@@ -93,27 +94,27 @@ runtime, then records messages, timing, and state into one replayable log.
 <h3 id="what-sets-copper-apart"><a class="doc-anchor" href="#what-sets-copper-apart">§</a>What Sets Copper Apart</h3>
 <ul>
 <li>
-<p><img src="doc/static/version-0.13.svg" alt="v0.13" align="absmiddle" />   <strong><a href="https://copper-project.github.io/copper-rs-book/logging-replay.html#remote-debug-and-time-traveler">Time Travel Debugging</a></strong><br>
+<p><img src="https://raw.githubusercontent.com/copper-project/copper-rs/master/doc/static/version-0.13.svg" alt="v0.13" align="absmiddle" />   <strong><a href="https://copper-project.github.io/copper-rs-book/logging-replay.html#remote-debug-and-time-traveler">Time Travel Debugging</a></strong><br>
 Seek through a recording, restore task state, and re-execute your code with recorded inputs and robot time.</p>
 </li>
 <li>
-<p><img src="doc/static/version-1.0.svg" alt="v1.0" align="absmiddle" />   <strong><a href="https://copper-project.github.io/copper-rs-book/logging-replay.html#typed-logging-codecs">Typed Lossless Log Codecs</a></strong><br>
+<p><img src="https://raw.githubusercontent.com/copper-project/copper-rs/master/doc/static/version-1.0.svg" alt="v1.0" align="absmiddle" />   <strong><a href="https://copper-project.github.io/copper-rs-book/logging-replay.html#typed-logging-codecs">Typed Lossless Log Codecs</a></strong><br>
 Choose lossless compression per payload type in the task graph; Copper handles encoding and decoding for recording and replay.</p>
 </li>
 <li>
-<p><img src="doc/static/version-1.1.svg" alt="v1.1" align="absmiddle" />   <strong><a href="examples/cu_anytime_rrt_star">Anytime Computation</a></strong><br>
+<p><img src="https://raw.githubusercontent.com/copper-project/copper-rs/master/doc/static/version-1.1.svg" alt="v1.1" align="absmiddle" />   <strong><a href="examples/cu_anytime_rrt_star">Anytime Computation</a></strong><br>
 Produce a base result, then refine it within time or quality budgets, with refinement steps in the deterministic execution plan.</p>
 </li>
 <li>
-<p><img src="doc/static/version-1.2.svg" alt="v1.2" align="absmiddle" />   <strong><a href="https://copper-project.github.io/copper-rs-book/logstream-telemetry.html">Live Twinning Telemetry Over Lossy Links</a></strong><br>
+<p><img src="https://raw.githubusercontent.com/copper-project/copper-rs/master/doc/static/version-1.2.svg" alt="v1.2" align="absmiddle" />   <strong><a href="https://copper-project.github.io/copper-rs-book/logstream-telemetry.html">Live Twinning Telemetry Over Lossy Links</a></strong><br>
 Run selected robot tasks on the ground to reconstruct outputs you never transmitted, while keeping a replayable archive.</p>
 </li>
 <li>
-<p><img src="doc/static/version-1.3.svg" alt="v1.3" align="absmiddle" />   <strong><a href="https://copper-project.github.io/copper-rs-book/clock-sync.html">First Class Clock Sync With Replay</a></strong><br>
+<p><img src="https://raw.githubusercontent.com/copper-project/copper-rs/master/doc/static/version-1.3.svg" alt="v1.3" align="absmiddle" />   <strong><a href="https://copper-project.github.io/copper-rs-book/clock-sync.html">First Class Clock Sync With Replay</a></strong><br>
 Synchronize <code>RobotClock</code> to PTP or custom references, track uncertainty, and replay clock corrections.</p>
 </li>
 <li>
-<p><img src="doc/static/version-1.3.svg" alt="v1.3" align="absmiddle" />   <strong><a href="https://copper-project.github.io/copper-rs-book/profile-guided-scheduling.html">Profile Guided Scheduling (PGS)</a></strong><br>
+<p><img src="https://raw.githubusercontent.com/copper-project/copper-rs/master/doc/static/version-1.3.svg" alt="v1.3" align="absmiddle" />   <strong><a href="https://copper-project.github.io/copper-rs-book/profile-guided-scheduling.html">Profile Guided Scheduling (PGS)</a></strong><br>
 Profile-Guided Scheduling turns measured timings, sensor rates, and deadlines into candidate schedules. Measure, select, and compile one into your runtime.</p>
 </li>
 </ul>
