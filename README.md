@@ -10,13 +10,14 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/copper-project/copper-rs/actions/workflows/general.yml"><img src="https://img.shields.io/github/check-runs/copper-project/copper-rs/master?nameFilter=CI%20Status&amp;label=CI%2FCD" alt="CI/CD status" /></a>
+  <a href="https://github.com/copper-project/copper-rs/actions/workflows/general.yml"><img src="https://github.com/copper-project/copper-rs/actions/workflows/general.yml/badge.svg?branch=master" alt="CI/CD status" /></a>
   <a href="https://crates.io/crates/cu29"><img src="https://img.shields.io/crates/v/cu29.svg" alt="cu29 on crates.io" /></a>
   <img src="https://img.shields.io/badge/Rust-1.96+-orange.svg" alt="Rust 1.96 or newer" />
   <a href="https://copper-project.github.io/copper-rs-book/"><img src="https://img.shields.io/badge/book-read-blue" alt="Read the Copper book" /></a>
   <a href="https://copper-project.github.io/copper-rs/"><img src="https://img.shields.io/badge/docs-read-blue" alt="Copper documentation" /></a>
+  <a href="https://cdn.copper-robotics.com/catalog/index.html"><img src="https://img.shields.io/badge/components-browse-blue" alt="Browse the Copper component catalog" /></a>
   <a href="https://github.com/copper-project/copper-rs/wiki/Copper-Release-Notes"><img src="https://img.shields.io/badge/release_notes-read-blue" alt="Copper release notes" /></a>
-  <a href="https://discord.gg/VkCG7Sb9Kw"><img src="https://img.shields.io/discord/1305916875741597826?logo=discord" alt="Copper Discord" /></a>
+  <a href="https://discord.gg/VkCG7Sb9Kw"><img src="https://img.shields.io/badge/Discord-join-5865F2?logo=discord&amp;logoColor=white" alt="Join Copper Discord" /></a>
 </p>
 
 <p align="center">
@@ -37,7 +38,7 @@
 | **Realtime first:** zero-allocation, data-oriented execution on the hot path. | **Deterministic replay:** record a run, reproduce it, and inspect it offline. |
 | **Rust-first:** ergonomic task APIs with compile-time guarantees. | **Interoperable:** connect to ROS 2 through Zenoh and migrate progressively. |
 
-Already flying, driving, swimming, spacefaring, and powering humanoids.
+Already flying, driving, swimming, spacefaring, powering humanoids, and moving robot arms.
 
 ## See It Run
 
