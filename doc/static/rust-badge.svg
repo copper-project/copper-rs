@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="99" height="20" viewBox="0 0 99 20" role="img" aria-labelledby="title">
+  <title id="title">Rust: 1.96+</title>
+  <linearGradient id="shade" x2="0" y2="100%">
+    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+    <stop offset="1" stop-opacity=".1"/>
+  </linearGradient>
+  <clipPath id="corners"><rect width="99" height="20" rx="3"/></clipPath>
+  <g clip-path="url(#corners)">
+    <path fill="#555" d="M0 0h52v20H0z"/>
+    <path fill="#e05d44" d="M52 0h47v20H52z"/>
+    <path fill="url(#shade)" d="M0 0h99v20H0z"/>
+  </g>
+  <g transform="translate(5 3) scale(.5833)" fill="none" stroke="#fff" stroke-linejoin="round" stroke-linecap="round" stroke-width="1.6" aria-hidden="true">
+    <path d="m10 2 1-2h2l1 2 3 1 2-1 2 2-1 2 1 3 2 1v2l-2 1-1 3 1 2-2 2-2-1-3 1-1 2h-2l-1-2-3-1-2 1-2-2 1-2-1-3-2-1v-2l2-1 1-3-1-2 2-2 2 1Z"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9m4 0 4 4"/>
+  </g>
+  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11">
+    <g fill="#010101" fill-opacity=".3" aria-hidden="true">
+      <text x="37.5" y="15">Rust</text><text x="75.5" y="15">1.96+</text>
+    </g>
+    <text x="37.5" y="14">Rust</text><text x="75.5" y="14">1.96+</text>
+  </g>
+</svg>

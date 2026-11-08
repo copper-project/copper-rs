@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="89" height="20" viewBox="0 0 89 20" role="img" aria-labelledby="title">
+  <title id="title">docs: read</title>
+  <linearGradient id="shade" x2="0" y2="100%">
+    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+    <stop offset="1" stop-opacity=".1"/>
+  </linearGradient>
+  <clipPath id="corners"><rect width="89" height="20" rx="3"/></clipPath>
+  <g clip-path="url(#corners)">
+    <path fill="#555" d="M0 0h55v20H0z"/>
+    <path fill="#007ec6" d="M55 0h34v20H55z"/>
+    <path fill="url(#shade)" d="M0 0h89v20H0z"/>
+  </g>
+  <g transform="translate(5 3) scale(.5833)" fill="none" stroke="#fff" stroke-linejoin="round" stroke-linecap="round" stroke-width="1.6" aria-hidden="true">
+    <path d="M14 1H4v22h16V7Zm0 0v6h6M8 12h8M8 16h8M8 20h5"/>
+  </g>
+  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11">
+    <g fill="#010101" fill-opacity=".3" aria-hidden="true">
+      <text x="39" y="15">docs</text><text x="72" y="15">read</text>
+    </g>
+    <text x="39" y="14">docs</text><text x="72" y="14">read</text>
+  </g>
+</svg>

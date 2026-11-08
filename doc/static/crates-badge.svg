@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="122" height="20" viewBox="0 0 122 20" role="img" aria-labelledby="title">
+  <title id="title">crates.io: cu29</title>
+  <linearGradient id="shade" x2="0" y2="100%">
+    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+    <stop offset="1" stop-opacity=".1"/>
+  </linearGradient>
+  <clipPath id="corners"><rect width="122" height="20" rx="3"/></clipPath>
+  <g clip-path="url(#corners)">
+    <path fill="#555" d="M0 0h83v20H0z"/>
+    <path fill="#007ec6" d="M83 0h39v20H83z"/>
+    <path fill="url(#shade)" d="M0 0h122v20H0z"/>
+  </g>
+  <g fill="none" stroke="#fff" stroke-linejoin="round" stroke-width="1.2" aria-hidden="true">
+    <path d="m6 6 6-3 6 3v8l-6 3-6-3Zm0 0 6 3 6-3M12 9v8M9 4.5l6 3V11"/>
+  </g>
+  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11">
+    <g fill="#010101" fill-opacity=".3" aria-hidden="true">
+      <text x="53" y="15">crates.io</text><text x="102.5" y="15">cu29</text>
+    </g>
+    <text x="53" y="14">crates.io</text><text x="102.5" y="14">cu29</text>
+  </g>
+</svg>
