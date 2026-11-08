@@ -25,9 +25,9 @@
 </p>
 
 <p align="center">
-  <strong><a href="https://cdn.copper-robotics.com/demo/balancebot/index.html">▶ Try Copper in your browser</a></strong>
+  <strong>▶ <a href="https://cdn.copper-robotics.com/demo/balancebot/index.html">Try Copper in your browser</a></strong>
   &nbsp;·&nbsp;
-  <strong><a href="#build-your-first-copper-app">Build your first app</a></strong>
+  <strong>⚒︎ <a href="#build-your-first-copper-app">Build your first app</a></strong>
 </p>
 
 ## Why Copper
