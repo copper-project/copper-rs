@@ -1,5 +1,20 @@
 # Release notes
 
+## 1.3.2
+
+This patch fixes section byte accounting while preserving the Copper 1.3 public APIs, configuration, Rust 1.95 minimum, and log encapsulation.
+
+### Fixes
+
+- The no-op logger rotates sections at their configured capacity, rejects entries that cannot fit in an empty section, and rejects section sizes that cannot be represented by the log format. This prevents long-running no-op logging from overflowing section counters. ([#1553](https://github.com/copper-project/copper-rs/pull/1553))
+- Log streams check encoded byte counts before updating section headers. Oversized or overflowing counts return an error without publishing a truncated or wrapped header. Stream position comes from the section byte counter. ([#1555](https://github.com/copper-project/copper-rs/pull/1555))
+
+### Packages and upgrading
+
+Only `cu29` and `cu29-unifiedlog` advance to **1.3.2**. `cu29` requires `cu29-unifiedlog = "~1.3.2"` so upgrading the main crate selects the fixed logger. Other packages retain their released versions.
+
+Use `cu29 = "~1.3.2"`, then run `cargo update`. Applications depending directly on `cu29-unifiedlog` can use `~1.3.2`. Existing log encodings remain unchanged; use the producing application's matching decoder for replay.
+
 ## 1.3.1
 
 This patch fixes runtime shutdown, concurrent logging, image payloads, and project scaffolding while preserving Copper 1.3 APIs, configuration, and v2 log encapsulation.
