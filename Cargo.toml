@@ -259,8 +259,8 @@ eframe = { version = "0.37", default-features = false, features = [
   "web_screen_reader",
   "x11",
 ] }
-candle-core = "0.11.0"
-candle-nn = "0.11.0"
+candle-core = "0.11.1"
+candle-nn = "0.11.1"
 
 cu-serial = { path = "components/libs/cu_serial", version = "~1.4.0-dev", default-features = false }
 cu-hc12 = { path = "components/res/cu_hc12", version = "~1.4.0-dev", default-features = false }
@@ -427,7 +427,8 @@ bevy = { version = "0.19.1", default-features = false }
 bevy_ratatui = { version = "0.11.1", default-features = false }
 buddy_system_allocator = { version = "0.13", default-features = false }
 bytemuck = "1.23.0"
-cached-path = { version = "0.10.0", default-features = false }
+# Use ZIP >=9 until https://github.com/epwalsh/rust-cached-path/pull/92 is released.
+cached-path = { git = "https://github.com/valkum/rust-cached-path", rev = "651a398e140f081dbf300aa15954204d7bf19c7b", default-features = false }
 cfg_aliases = "0.2.1"
 chrono = "0.4.41"
 circular-buffer = { version = "2.0.0", default-features = false }

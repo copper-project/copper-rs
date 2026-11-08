@@ -8,10 +8,4 @@ ignore = [
   "RUSTSEC-2026-0041", # lz4_flex security vulnerability detected. https://rustsec.org/advisories/RUSTSEC-2026-0041
   "RUSTSEC-2026-0291", # Zenoh shared memory -> lockfree -> owned-alloc; no fixed release. Track eclipse-zenoh/zenoh#2811.
   "RUSTSEC-2026-0344", # ruzstd decompression bomb; Bevy 0.19.1 requires ruzstd 0.8. Remove when Bevy supports ruzstd >=0.9.1.
-  # ZIP 9 is blocked by cached-path 0.10.1 and candle-core 0.11.0. Copper does not
-  # enable cached-path extraction; Candle reads entries without extracting them.
-  # Remove these exceptions when both upstream releases support ZIP >=9.
-  { id = "RUSTSEC-2026-0367", reason = "privileged permission bits affect unused ZIP extraction APIs." },
-  { id = "RUSTSEC-2026-0368", reason = "symlink creation affects unused ZIP extraction APIs." },
-  { id = "RUSTSEC-2026-0369", reason = "symlink permission changes affect unused ZIP extraction APIs." },
 ]
