@@ -4,6 +4,8 @@ These notes describe the checked-in implementation, its constraints, and why the
 design took this shape. Source links identify the code and regression coverage;
 remaining work is labeled separately from implemented behavior.
 
+Proposals are marked explicitly and do not describe shipped APIs.
+
 | Area | Read for |
 | --- | --- |
 | [Log storage](log-storage.md) | Byte addressing, static metadata, run identity, append, rollover, lifecycle |
@@ -12,6 +14,7 @@ remaining work is labeled separately from implemented behavior.
 | [Clock synchronization](clock-sync.md) | Raw/execution timelines, reference discipline, uncertainty, replay |
 | [Profile-Guided Scheduling](profile-guided-scheduling.md) | Recorded profiles, offline search, compile-time plans, measured selection |
 | [Isaac Sim](isaac-sim.md) | Simulation stepping, shared-buffer ownership, task overrides, replay gaps |
+| [Temporal system fuzzing (proposal)](fuzzing.md) | Timed input scenarios, mutation/property APIs, task coverage, TimeTraveler campaigns |
 | [V1 API contract](v1-api-surface.md) | Stability labels, supported application APIs, experimental and internal surfaces |
 | [Workspace](workspace.md) | In-tree codec/camera/inference dependencies and import provenance |
 
