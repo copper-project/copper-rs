@@ -35,7 +35,6 @@ fn derive_encode_inner(input: TokenStream) -> Result<TokenStream> {
         }
     }
 
-    generator.export_to_file("bincode", "Encode");
     generator.finish()
 }
 
@@ -68,7 +67,6 @@ fn derive_decode_inner(input: TokenStream) -> Result<TokenStream> {
         }
     }
 
-    generator.export_to_file("bincode", "Decode");
     generator.finish()
 }
 
@@ -101,6 +99,5 @@ fn derive_borrow_decode_inner(input: TokenStream) -> Result<TokenStream> {
         }
     }
 
-    generator.export_to_file("bincode", "BorrowDecode");
     generator.finish()
 }
