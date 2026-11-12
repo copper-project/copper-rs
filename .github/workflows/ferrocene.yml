@@ -1,0 +1,63 @@
+name: Ferrocene Compatibility
+
+on:
+  schedule:
+    - cron: "0 12 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_NET_RETRY: "10"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  ferrocene:
+    name: Core tests and bare-metal example
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - name: Require Ferrocene download credentials
+        env:
+          CRITICALUP_TOKEN: ${{ secrets.CRITICALUP_TOKEN }}
+        run: |
+          if [[ -z "$CRITICALUP_TOKEN" ]]; then
+            echo "::error::Set the CRITICALUP_TOKEN repository secret to run Ferrocene compatibility checks."
+            exit 1
+          fi
+      - name: Install CriticalUp
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf \
+            https://github.com/ferrocene/criticalup/releases/download/v1.7.2/criticalup-installer.sh \
+            -o "$RUNNER_TEMP/criticalup-installer.sh"
+          sh "$RUNNER_TEMP/criticalup-installer.sh"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Install pinned Ferrocene toolchain
+        env:
+          CRITICALUP_TOKEN: ${{ secrets.CRITICALUP_TOKEN }}
+        run: |
+          criticalup auth set "$CRITICALUP_TOKEN"
+          criticalup install
+          criticalup link create
+          cargo +ferrocene --version
+          rustc +ferrocene --version --verbose
+      - name: Collect unvalidated-call lint report
+        run: python3 support/ci/ferrocene_report.py
+      - name: Upload shareable Ferrocene report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ferrocene-report-${{ github.sha }}
+          path: target/ferrocene-report/
+          if-no-files-found: warn
+          retention-days: 90
+      - name: Build core without default features
+        run: cargo +ferrocene build --no-default-features
+      # These tests use Linux's test harness; the report also cross-builds without std.
+      - name: Test core without default features
+        run: cargo +ferrocene test --no-default-features --lib --tests

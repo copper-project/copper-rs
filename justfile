@@ -90,7 +90,7 @@ compile-tests toolchain="stable":
 
 # Validate workflow expressions, shell snippets, YAML, and change classification.
 ci-config-check:
-	python3 -m unittest discover -s support/ci -p test_ci_changes.py
+	python3 -m unittest discover -s support/ci -p 'test_ci*.py'
 	prek run --all-files check-yaml
 	actionlint -ignore 'shellcheck reported issue.*SC2086'
 
