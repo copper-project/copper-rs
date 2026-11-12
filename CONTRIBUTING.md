@@ -112,6 +112,48 @@ Unmaintained-crate advisories block on direct workspace dependencies; transitive
 maintenance status is left to upstream. Keep any necessary advisory exceptions
 and their reasons in `.config/deny.toml`.
 
+Ferrocene compatibility runs weekly on `master` and can be started manually from
+the **Ferrocene Compatibility** workflow on a selected branch or tag. It builds
+and tests the default core members with default features disabled on Linux, then
+cross-builds the existing `cu-min-baremetal` generated runtime example for
+`aarch64-unknown-none`. Host tests use the standard Rust test harness; the
+bare-metal build checks compilation without a host standard library. This is a
+compatibility check, not a safety qualification of Copper, and is not a required
+PR check.
+
+Each run also builds the existing `cu-nologging-task` host example and enables
+`ferrocene::unvalidated` on both example binaries. Download the
+`ferrocene-report-<commit>` artifact to share `report.md`, structured diagnostics,
+raw Cargo JSON/stderr logs, and the pinned toolchain manifest with Ferrous Systems.
+The report records the compiler, commit, exact commands, and build status. Lint
+findings are advisory; compilation failures fail the job and retain partial reports.
+
+This lint checks calls from prevalidated functions, including ordinary `main`
+entrypoints. Copper functions are not marked prevalidated, so diagnostics identify
+unvalidated call boundaries rather than every uncertified library function used
+inside Copper. The bare-metal example uses `no_main` without an annotated root;
+an empty result there does not demonstrate certified-subset compliance. No
+prevalidation claims or suppressions are added to produce this report. See
+[Ferrocene's certified-subset guidance](https://public-docs.ferrocene.dev/main/safety-manual/core/subset.html).
+
+Maintainers must configure the `CRITICALUP_TOKEN` repository secret with download
+access to the Ferrocene release pinned in [`criticalup.toml`](criticalup.toml).
+Missing credentials fail the job rather than reporting untested compatibility as
+success. Update the pin deliberately when changing the supported Ferrocene
+baseline; it must satisfy Copper's minimum Rust version. To reproduce the checks,
+install and authenticate [CriticalUp](https://criticalup.ferrocene.dev/), then run:
+
+```bash
+criticalup install
+criticalup link create
+python3 support/ci/ferrocene_report.py
+cargo +ferrocene build --no-default-features
+cargo +ferrocene test --no-default-features --lib --tests
+cargo +ferrocene build -p cu-min-baremetal --bin cu-min-baremetal \
+  --no-default-features --target aarch64-unknown-none \
+  --config examples/cu_min_baremetal/.cargo/config-nostd.toml
+```
+
 Build-job summaries report elapsed time and sampled disk headroom, plus available
 memory on Linux. Samples run every 15 seconds after checkout through the final
 measurement step; container pulls and post-job cache saves are outside that window.

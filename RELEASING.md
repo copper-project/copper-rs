@@ -26,6 +26,12 @@ Development versions are not published or tagged. Release tags use
 Fixes normally land on `master` first and are then cherry-picked into each
 supported release branch.
 
+Before claiming Ferrocene compatibility for a release, manually run the
+**Ferrocene Compatibility** workflow on the exact release commit (select its
+branch or tag) and require a passing result. Record the commit and pinned
+Ferrocene version with the release validation. See
+[Contributing](CONTRIBUTING.md#checks) for coverage and credential setup.
+
 ## Preparing 1.2
 
 1. Audit publishable workspace members, including new crates, for package

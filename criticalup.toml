@@ -1,0 +1,12 @@
+# Compatibility baseline for .github/workflows/ferrocene.yml.
+# Ferrocene 26.08 includes Rust 1.97.1, above Copper's Rust 1.96 minimum.
+manifest-version = 1
+
+[products.ferrocene]
+release = "stable-26.08.0"
+packages = [
+  "rustc-${rustc-host}",
+  "cargo-${rustc-host}",
+  "rust-std-${rustc-host}",
+  "rust-std-aarch64-unknown-none",
+]
