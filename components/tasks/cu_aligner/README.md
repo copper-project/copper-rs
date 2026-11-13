@@ -65,7 +65,16 @@ You defined task will need to be connected with the matching tasks upstream in t
 The type of the input will be a tuple of CuMsg (which is what the aligner expects). From the example:
 `(CuMsg<f32>, CuMsg<MyPayload>)`.
 The type of the output will be a CuMsg of a tuple of CuArrays holding the aligned messages for each stream. From the
-example: `CuMsg<(CuArray<f32, 7>, CuArray<MyPayload, 5>)>`.
+example: `CuMsg<(CuArray<CuMsg<f32>, 7>, CuArray<CuMsg<MyPayload>, 5>)>`.
+
+Each array element preserves the complete input message: its optional payload, original
+`Tov` (point or range), processing timestamps, status text, and remote origin metadata.
+Read values with `sample.payload()` and timing with `sample.tov`; the outer message
+metadata describes the aligner itself, not the original sources.
+
+When migrating from payload-only arrays, change downstream input and RON connection
+types from `CuArray<T, N>` to `CuArray<CuMsg<T>, N>` and access each value through
+`payload()`. This also changes the serialized output schema.
 
 ### Performance consideration
 
