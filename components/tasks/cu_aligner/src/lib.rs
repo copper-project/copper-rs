@@ -1,104 +1,114 @@
 #![doc = include_str!("../README.md")]
 
 pub mod buffers;
+pub mod master;
+
+#[doc(hidden)]
+pub use paste;
+
+/// Compatibility alias for [`define_window_task!`].
+#[macro_export]
+macro_rules! define_task {
+    ($($tokens:tt)*) => { $crate::define_window_task!($($tokens)*); };
+}
 
 /// Define a task that aligns incoming messages based on their timestamps
 /// See module doc for use.
 #[macro_export]
-macro_rules! define_task {
+macro_rules! define_window_task {
     ($name:ident, $($index:tt => { $mis:expr, $mos:expr, $p:ty }),+) => {
 
-       paste::paste! {
+        $crate::paste::paste! {
             #[allow(unused_imports)]
             use cu29::prelude::*;
 
             $crate::buffers::alignment_buffers!(
-                AlignmentBuffers,
+                [<$name Buffers>],
                 $(
                     [<buffer $index>]: TimeboundCircularBuffer<$mis, CuStampedData<$p, CuMsgMetadata>>
                 ),*
             );
-        }
 
-        #[derive(Reflect)]
-        #[reflect(from_reflect = false)]
-        pub struct $name {
-            #[reflect(ignore)]
-            aligner: AlignmentBuffers,
-        }
-
-        impl Freezable for $name {
-            fn freeze<E: cu29::bincode::enc::Encoder>(&self, encoder: &mut E) -> Result<(), cu29::bincode::error::EncodeError> {
-                self.aligner.freeze(encoder)
+            #[derive(Reflect)]
+            #[reflect(from_reflect = false)]
+            pub struct $name {
+                #[reflect(ignore)]
+                aligner: [<$name Buffers>],
             }
 
-            fn thaw<D: cu29::bincode::de::Decoder>(&mut self, decoder: &mut D) -> Result<(), cu29::bincode::error::DecodeError> {
-                self.aligner.thaw(decoder)
-            }
-        }
-
-        impl CuTask for $name {
-    type Resources<'r> = ();
-            type Input<'m> = input_msg!('m, $($p),*);
-            type Output<'m> = output_msg!(($(
-                CuArray<CuMsg<$p>, { $mos }>
-            ),*));
-
-            fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
-            where
-                Self: Sized,
-            {
-                let config = config.ok_or_else(|| CuError::from("Config Missing"))?;
-                let target_alignment_window_ms: u64 = config
-                    .get::<u32>("target_alignment_window_ms")?
-                    .ok_or_else(|| CuError::from("Missing target_alignment_window"))?
-                    .into();
-                let stale_data_horizon_ms: u64 = config
-                    .get::<u32>("stale_data_horizon_ms")?
-                    .ok_or_else(|| CuError::from("Missing stale_data_horizon"))?
-                    .into();
-
-                let target_alignment_window =
-                    cu29_clock::CuDuration(target_alignment_window_ms * 1_000_000);
-                let stale_data_horizon =
-                    cu29_clock::CuDuration(stale_data_horizon_ms * 1_000_000);
-
-                Ok(Self {
-                    aligner: AlignmentBuffers::new(target_alignment_window, stale_data_horizon),
-                })
-            }
-
-            fn preprocess(&mut self, ctx: &CuContext) -> CuResult<()> {
-                self.aligner.purge(ctx.now());
-                Ok(())
-            }
-
-            fn process(
-                &mut self,
-                _ctx: &CuContext,
-                input: &Self::Input<'_>,
-                output: &mut Self::Output<'_>,
-            ) -> CuResult<()> {
-                // add the incoming data into the buffers
-                // input is a tuple of &CuMsg<T> for each T in the input
-                paste::paste! {
-                    $(
-                        self.aligner.[<buffer $index>].push(input.$index.clone());
-                    )*
+            impl Freezable for $name {
+                fn freeze<E: cu29::bincode::enc::Encoder>(&self, encoder: &mut E) -> Result<(), cu29::bincode::error::EncodeError> {
+                    self.aligner.freeze(encoder)
                 }
 
+                fn thaw<D: cu29::bincode::de::Decoder>(&mut self, decoder: &mut D) -> Result<(), cu29::bincode::error::DecodeError> {
+                    self.aligner.thaw(decoder)
+                }
+            }
 
-                // this is a tuple of iterators of CuStampedDataSet
-                let Some(tuple_of_iters) = self.aligner.get_latest_aligned_data() else {
-                    return Ok(());
-                };
+            impl CuTask for $name {
+                type Resources<'r> = ();
+                type Input<'m> = input_msg!('m, $($p),*);
+                type Output<'m> = output_msg!(($(
+                    CuArray<CuMsg<$p>, { $mos }>
+                ),*));
 
-                // Populate the CuArray fields in the output message
-                let output_payload = output.payload_mut().get_or_insert_with(Default::default);
-                $(
-                    output_payload.$index.fill_from_iter(tuple_of_iters.$index.cloned());
-                )*
-                Ok(())
+                fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+                where
+                    Self: Sized,
+                {
+                    let config = config.ok_or_else(|| CuError::from("Config Missing"))?;
+                    let target_alignment_window_ms: u64 = config
+                        .get::<u32>("target_alignment_window_ms")?
+                        .ok_or_else(|| CuError::from("Missing target_alignment_window"))?
+                        .into();
+                    let stale_data_horizon_ms: u64 = config
+                        .get::<u32>("stale_data_horizon_ms")?
+                        .ok_or_else(|| CuError::from("Missing stale_data_horizon"))?
+                        .into();
+
+                    let target_alignment_window =
+                        cu29_clock::CuDuration(target_alignment_window_ms * 1_000_000);
+                    let stale_data_horizon =
+                        cu29_clock::CuDuration(stale_data_horizon_ms * 1_000_000);
+
+                    Ok(Self {
+                        aligner: [<$name Buffers>]::new(target_alignment_window, stale_data_horizon),
+                    })
+                }
+
+                fn preprocess(&mut self, ctx: &CuContext) -> CuResult<()> {
+                    self.aligner.purge(ctx.now());
+                    Ok(())
+                }
+
+                fn process(
+                    &mut self,
+                    _ctx: &CuContext,
+                    input: &Self::Input<'_>,
+                    output: &mut Self::Output<'_>,
+                ) -> CuResult<()> {
+                    // add the incoming data into the buffers
+                    // input is a tuple of &CuMsg<T> for each T in the input
+                     $crate::paste::paste! {
+                        $(
+                            self.aligner.[<buffer $index>].push(input.$index.clone());
+                        )*
+                    }
+
+
+                    // this is a tuple of iterators of CuStampedDataSet
+                    let Some(tuple_of_iters) = self.aligner.get_latest_aligned_data() else {
+                        return Ok(());
+                    };
+
+                    // Populate the CuArray fields in the output message
+                    let output_payload = output.payload_mut().get_or_insert_with(Default::default);
+                    $(
+                        output_payload.$index.fill_from_iter(tuple_of_iters.$index.cloned());
+                    )*
+                    Ok(())
+                }
             }
         }
     };

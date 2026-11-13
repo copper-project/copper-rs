@@ -1,4 +1,4 @@
-use cu_aligner::define_task;
+use cu_aligner::define_window_task;
 use cu_sensor_payloads::{CuImage, CuImageBufferFormat};
 use cu29::bincode::{Decode, Encode};
 use cu29::payload::CuArray;
@@ -8,7 +8,7 @@ use std::sync::Arc;
 const BUFFER_CAP: usize = 16;
 const OUTPUT_CAP: usize = 4;
 
-define_task!(
+define_window_task!(
     ImageAlignerTask,
     0 => { BUFFER_CAP, OUTPUT_CAP, CuImage<Vec<u8>> },
     1 => { BUFFER_CAP, OUTPUT_CAP, CuImage<Vec<u8>> }
