@@ -52,7 +52,8 @@ pub const SECTION_MAGIC: [u8; 2] = [0xFA, 0x57]; // FAST
 /// to CopperLists, payload types, keyframes, or their serialization must not bump
 /// this value. Decode content with the logreader built for the exact application
 /// version that produced it; this header cannot establish content compatibility.
-/// Unreleased version 2 uses byte links, static metadata and construction contexts.
+/// Version 2, released in Copper 1.3.0, uses byte links, static metadata and
+/// construction contexts.
 pub const UNIFIED_LOG_FORMAT_VERSION: u8 = 2;
 
 pub const SECTION_HEADER_COMPACT_SIZE: u16 = 512; // Usual minimum size for a disk sector.
