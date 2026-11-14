@@ -20,7 +20,7 @@ viewer = ["app", "dep:rerun", "dep:clap", "dep:ctrlc", "dep:tokio"]
 debug = ["app", "cu29/rerun"]
 
 [dependencies]
-cu29 = { workspace = true, default-features = false, features = [
+cu29 = { path = "../../core/cu29", version = "~1.4.0-dev", default-features = false, features = [
   "std",
   "units",
 ] }
