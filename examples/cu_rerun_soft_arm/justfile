@@ -1,8 +1,12 @@
-# Open the soft-arm gesture in the embedded Rerun viewer.
+# Run the Copper app with live Rerun visualization and Copper logging.
 [default]
 run:
     cargo run --manifest-path "{{justfile_directory()}}/Cargo.toml" --bin cu-rerun-soft-arm
 
-# Save the same gesture for sharing or opening later in Rerun 0.43.
+# Record one gesture to Copper and RRD without opening a window.
 save path="soft-arm.rrd":
     cargo run --manifest-path "{{justfile_directory()}}/Cargo.toml" --bin cu-rerun-soft-arm -- --save {{quote(path)}}
+
+# Serve the last Copper recording to Timetraveler.
+debug log="logs/soft-arm.copper" debug_base="copper/examples/cu_rerun_soft_arm/debug/v1":
+    cargo run --manifest-path "{{justfile_directory()}}/Cargo.toml" --no-default-features --features debug --bin soft-arm-resim -- --log-base {{quote(log)}} --debug-base {{quote(debug_base)}}
