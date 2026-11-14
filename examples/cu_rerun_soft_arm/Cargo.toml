@@ -1,0 +1,43 @@
+[package]
+name = "cu-rerun-soft-arm"
+description = "Custom Copper payload representation: tendon lengths rendered as a soft robot arm"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[package.metadata.copper]
+environments = ["host"]
+ci_exclude_workspace = true
+
+[features]
+default = ["rerun", "viewer"]
+rerun = ["dep:cu-rerun", "dep:nalgebra", "cu29/reflect"]
+viewer = ["rerun", "dep:rerun", "dep:clap"]
+
+[dependencies]
+cu29 = { workspace = true, default-features = false, features = [
+  "std",
+  "units",
+] }
+bincode = { workspace = true }
+serde = { workspace = true }
+cu-rerun = { path = "../../components/libs/cu_rerun", version = "~1.4.0-dev", optional = true }
+nalgebra = { version = "0.35.0", default-features = false, features = [
+  "std",
+], optional = true }
+rerun = { version = "=0.43.2", default-features = false, features = [
+  "sdk",
+  "native_viewer",
+], optional = true }
+clap = { workspace = true, optional = true }
+
+[[bin]]
+name = "cu-rerun-soft-arm"
+path = "src/main.rs"
+required-features = ["viewer"]
+
+[dev-dependencies]
+cu29-traits = { workspace = true }

@@ -58,5 +58,9 @@ This initial adapter logs one entity per value; `AsComponents` can combine batch
 from multiple archetypes on that entity. The wire format is currently pinned to
 Rerun 0.43, matching Timetraveler. Representation APIs are experimental.
 
+Start with the [soft-arm example](../../../examples/cu_rerun_soft_arm) to build a
+custom representation from tendon measurements and open it directly in Rerun with
+`just`. Its optional attribute also makes that representation available to the debug API.
+
 See `cu-ahrs`'s `rerun` feature for working message and task-state implementations,
 and `examples/cu_flight_controller`'s `resim-mcu-debug` recipe to try them.

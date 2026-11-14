@@ -1,0 +1,8 @@
+# Open the soft-arm gesture in the embedded Rerun viewer.
+[default]
+run:
+    cargo run --manifest-path "{{justfile_directory()}}/Cargo.toml" --bin cu-rerun-soft-arm
+
+# Save the same gesture for sharing or opening later in Rerun 0.43.
+save path="soft-arm.rrd":
+    cargo run --manifest-path "{{justfile_directory()}}/Cargo.toml" --bin cu-rerun-soft-arm -- --save {{quote(path)}}

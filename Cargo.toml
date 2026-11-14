@@ -123,6 +123,7 @@ members = [
   "examples/cu_config_variation",
   "examples/cu_gnss_ublox_demo",
   "examples/cu_human_pose",
+  "examples/cu_rerun_soft_arm",
   "examples/cu_image_codec_demo",
   "examples/cu_image_aligner",
   "examples/cu_instance_overrides_demo",
