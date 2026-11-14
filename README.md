@@ -12,7 +12,6 @@
 <p align="center">
   <a href="https://github.com/copper-project/copper-rs/actions/workflows/general.yml"><img src="https://github.com/copper-project/copper-rs/actions/workflows/general.yml/badge.svg?branch=master" alt="CI/CD status" /></a>
   <a href="https://crates.io/crates/cu29"><img src="https://raw.githubusercontent.com/copper-project/copper-rs/master/doc/static/crates-badge.svg" alt="cu29 on crates.io" /></a>
-  <img src="https://raw.githubusercontent.com/copper-project/copper-rs/master/doc/static/rust-badge.svg" alt="Rust 1.96 or newer" />
   <a href="https://copper-project.github.io/copper-rs-book/"><img src="https://raw.githubusercontent.com/copper-project/copper-rs/master/doc/static/book-badge.svg" alt="Read the Copper book" /></a>
   <a href="https://copper-project.github.io/copper-rs/"><img src="https://raw.githubusercontent.com/copper-project/copper-rs/master/doc/static/docs-badge.svg" alt="Copper documentation" /></a>
   <a href="https://cdn.copper-robotics.com/catalog/index.html"><img src="https://raw.githubusercontent.com/copper-project/copper-rs/master/doc/static/catalog-badge.svg" alt="Browse the Copper component catalog" /></a>
