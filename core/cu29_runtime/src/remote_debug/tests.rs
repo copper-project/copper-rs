@@ -320,11 +320,64 @@ fn capabilities_advertise_single_session_heartbeat_lease() {
 }
 
 #[test]
+fn representation_methods_follow_the_rerun_feature() {
+    let capabilities = capabilities_json(SessionLifecycleLimits::default());
+    let methods = capabilities["supports_methods"].as_array().unwrap();
+    for method in ["representation.list", "representation.read"] {
+        assert_eq!(
+            methods.contains(&serde_json::json!(method)),
+            cfg!(feature = "rerun")
+        );
+    }
+}
+
+#[cfg(feature = "rerun")]
+#[test]
+fn typed_rrd_response_round_trips_as_cbor_bytes() -> CuResult<()> {
+    use super::{RepresentationDescriptor, RepresentationTarget, RrdPayload};
+    use cu29_traits::debug_representation::ViewClassIdentifier;
+
+    let view_class = ViewClassIdentifier::from_static_str("3D");
+    let descriptor = RepresentationDescriptor {
+        target: RepresentationTarget::TaskState {
+            task_id: "ahrs".into(),
+        },
+        task_id: "ahrs".into(),
+        type_path: "cu_ahrs::CuAhrsDebugState".into(),
+        view_class,
+    };
+    let mut response = super::ok_response(
+        "rrd".into(),
+        serde_json::json!({"descriptor": descriptor}),
+        None,
+        None,
+    );
+    let bytes = vec![0xde, 0xad, 0xbe, 0xef];
+    response.representation = Some(RrdPayload {
+        bytes: bytes.clone(),
+    });
+    let encoded = encode_payload(&response, WireCodec::Cbor, "encode RRD response")?;
+    assert!(
+        encoded
+            .windows(5)
+            .any(|window| window == [0x44, 0xde, 0xad, 0xbe, 0xef])
+    );
+    let decoded = super::decode_response(&encoded, WireCodec::Cbor)?;
+    assert_eq!(decoded.representation.unwrap().bytes, bytes);
+    let descriptor: RepresentationDescriptor =
+        serde_json::from_value(decoded.result.unwrap()["descriptor"].clone()).unwrap();
+    assert_eq!(descriptor.view_class, view_class);
+    Ok(())
+}
+
+#[test]
 fn cbor_handle_attachments_are_encoded_as_byte_strings() -> CuResult<()> {
     let data = vec![0xde, 0xad, 0xbe, 0xef];
     let response = DebugRpcResponse {
         request_id: "binary-attachment".to_owned(),
+        #[cfg(feature = "rerun")]
         representation: None,
+        #[cfg(feature = "rerun")]
         representation_frames: Vec::new(),
         ok: true,
         result: Some(serde_json::json!({

@@ -1,7 +1,9 @@
 //! On-demand serialization of explicit payload and task-state representations.
 
 use super::*;
-use cu29_traits::debug_representation::{DebugRepresentation, DebugRepresentationContext};
+use cu29_traits::debug_representation::{
+    DebugRepresentation, DebugRepresentationContext, ViewClassIdentifier,
+};
 
 /// Typed value whose explicit representation is requested.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -28,7 +30,7 @@ impl RepresentationTarget {
 pub struct RepresentationFrame {
     pub target: RepresentationTarget,
     pub culistid: u64,
-    pub payload: Option<RepresentationPayload>,
+    pub payload: Option<RrdPayload>,
 }
 
 /// An explicitly registered representation advertised by the debug server.
@@ -37,16 +39,15 @@ pub struct RepresentationDescriptor {
     pub target: RepresentationTarget,
     pub task_id: String,
     pub type_path: String,
-    pub format: String,
-    pub view_class: String,
+    pub view_class: ViewClassIdentifier,
 }
 
-/// Opaque backend data. Binary bytes are carried directly by the CBOR transport.
+/// Rerun recording data carried as a CBOR byte string.
+/// RRD headers carry the Rerun format version.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RepresentationPayload {
-    pub format: String,
+pub struct RrdPayload {
     #[serde(with = "serde_bytes")]
-    pub data: Vec<u8>,
+    pub bytes: Vec<u8>,
 }
 
 #[derive(Deserialize)]
@@ -145,7 +146,7 @@ where
                 );
             }
         };
-        let result = (|| -> CuResult<(Option<RepresentationPayload>, ResolvedAt)> {
+        let result = (|| -> CuResult<(Option<RrdPayload>, ResolvedAt)> {
             let resolved = if let Some(target) = &parsed.at {
                 resolve_target(&mut state.session, target, ResolveMode::Exact, &time_of)?
             } else {
@@ -213,8 +214,7 @@ fn append_descriptor(
             target,
             task_id: task_id.to_string(),
             type_path: type_path.to_string(),
-            format: representation.format.to_string(),
-            view_class: representation.view_class.to_string(),
+            view_class: representation.view_class,
         });
     }
 }
@@ -222,14 +222,13 @@ fn append_descriptor(
 fn encode(
     value: &dyn Reflect,
     context: &DebugRepresentationContext<'_>,
-) -> CuResult<Option<RepresentationPayload>> {
+) -> CuResult<Option<RrdPayload>> {
     let representation = value
         .get_represented_type_info()
         .and_then(DebugRepresentation::for_type)
         .ok_or_else(|| CuError::from("type has no explicit debug representation"))?;
-    Ok(Some(RepresentationPayload {
-        format: representation.format.to_string(),
-        data: (representation.encode)(value, context)?,
+    Ok(Some(RrdPayload {
+        bytes: (representation.encode)(value, context)?,
     }))
 }
 
@@ -239,7 +238,7 @@ pub(super) fn encode_target<App, P, CB, TF, S, L>(
     replayed: bool,
     index: usize,
     context: &DebugRepresentationContext<'_>,
-) -> CuResult<Option<RepresentationPayload>>
+) -> CuResult<Option<RrdPayload>>
 where
     App: CuSimApplication<S, L> + ReflectTaskIntrospection + CurrentRuntimeCopperList<P>,
     L: UnifiedLogWrite<S> + 'static,

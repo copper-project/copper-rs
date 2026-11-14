@@ -1,8 +1,9 @@
-//! Optional host-side representations attached to reflected types.
+//! Optional Rerun representations attached to reflected types (`rerun` feature).
 
 use crate::CuResult;
 use alloc::vec::Vec;
 use bevy_reflect::{Reflect, TypeInfo};
+pub use re_types_core::ViewClassIdentifier;
 
 /// Placement and sample time supplied by the debugger to a representation encoder.
 pub struct DebugRepresentationContext<'a> {
@@ -16,15 +17,13 @@ pub struct DebugRepresentationContext<'a> {
 
 /// Optional reflection attribute containing a debug-only serialization callback.
 ///
-/// Integration crates construct this attribute; the runtime transports its opaque bytes
-/// without depending on the visualization backend. Encoding is never called by task execution.
+/// The optional `cu-rerun` adapter constructs this attribute. Encoding produces RRD bytes
+/// on explicit debug requests and is never called by task execution.
 #[derive(Clone, Reflect)]
 #[reflect(opaque)]
 pub struct DebugRepresentation {
-    /// Versioned backend wire format identifier.
-    pub format: &'static str,
-    /// Backend-owned view class identifier; Copper does not interpret it.
-    pub view_class: &'static str,
+    /// Rerun view class suggested for these components.
+    pub view_class: ViewClassIdentifier,
     /// Serializes a concrete reflected value outside task execution.
     pub encode: fn(&dyn Reflect, &DebugRepresentationContext<'_>) -> CuResult<Vec<u8>>,
 }

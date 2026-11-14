@@ -301,7 +301,7 @@ sim = [
 vitfly-cuda = ["sim", "cu-vitfly/cuda"]
 vitfly-mkl = ["sim", "cu-vitfly/mkl"]
 sim-debug = ["sim", "cu29/reflect", "cu29/remote-debug"]
-rerun = ["sim-debug", "cu-ahrs/rerun"]
+rerun = ["sim-debug", "cu29/rerun", "cu-ahrs/rerun"]
 bevymon = [
   "sim_core",
   "dep:cu-bevymon",

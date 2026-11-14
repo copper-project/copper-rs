@@ -22,7 +22,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 extern crate alloc;
 
-#[cfg(feature = "reflect")]
+#[cfg(feature = "rerun")]
 pub mod debug_representation;
 
 #[cfg(feature = "reflect")]

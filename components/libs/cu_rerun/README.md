@@ -30,21 +30,29 @@ cu-rerun = { version = "~1.4.0-dev", optional = true }
 ```
 
 `Spatial3DView` is Rerun's own view type. The adapter accepts any Rerun `View`;
-Copper transports its identifier without maintaining a view taxonomy.
+Copper carries its native `ViewClassIdentifier` through reflection metadata and the
+debug protocol to Timetraveler.
 
 The same implementation works with a local `recording.log("arm", &state)`.
 For task internals, put the attribute on the type exposed through the task's
 `with_debug_state` / `debug_state_type_path` hooks. Existing type registration
 makes the representation discoverable; there is no separate registration list.
 
-Enable the feature in the application-specific replay/debug server. The debugger
+Enable `cu29/rerun` plus the component's representation feature in the replay/debug
+server (`cu-ahrs/rerun` for the AHRS example). `cu29/rerun` includes `remote-debug`
+and enables the representation RPCs, descriptors, and response fields. Local
+`RecordingStream::log` calls only need the component feature.
+
+The debugger
 calls `AsComponents` on its typed payload or task-state value, then sends a small
 RRD stream over CBOR with the requested entity path and Copper timelines. Timetraveler
 imports those components into its own recording. Users do not rebuild Timetraveler
 or supply a dynamic library. The receiver must already support the chosen Rerun
 view class; transmitting components does not install a custom renderer.
 
-The core runtime has no Rerun dependency. No representation is computed or logged
+Rerun types are optional dependencies, enabled by the `rerun` feature. The protocol
+uses `RrdPayload { bytes }`; RRD headers carry the format version.
+No representation is computed or logged
 on the robot's task execution path, and existing Copper logs need no conversion.
 This initial adapter logs one entity per value; `AsComponents` can combine batches
 from multiple archetypes on that entity. The wire format is currently pinned to

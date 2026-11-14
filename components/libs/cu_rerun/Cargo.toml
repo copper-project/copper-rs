@@ -8,7 +8,9 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-cu29-traits = { path = "../../../core/cu29_traits", version = "~1.4.0-dev", features = ["reflect", "std"] }
+cu29-traits = { path = "../../../core/cu29_traits", version = "~1.4.0-dev", features = [
+  "rerun",
+] }
 bevy_reflect = { workspace = true }
 rerun = { version = "=0.43.2", default-features = false, features = ["sdk"] }
 

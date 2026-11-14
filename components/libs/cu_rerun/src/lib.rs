@@ -12,14 +12,10 @@ pub use rerun;
 use rerun::external::re_sdk_types::View;
 pub use rerun::external::re_sdk_types::blueprint::views;
 
-/// Versioned wire format understood by the Timetraveler Rerun receiver.
-pub const FORMAT: &str = "rerun.rrd/0.43";
-
 /// Attaches a standard `AsComponents` implementation to Copper reflection.
 pub fn representation<T: Reflect + rerun::AsComponents, V: View>() -> DebugRepresentation {
     DebugRepresentation {
-        format: FORMAT,
-        view_class: V::identifier().as_str(),
+        view_class: V::identifier(),
         encode: encode::<T>,
     }
 }
