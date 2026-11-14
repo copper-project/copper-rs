@@ -9,6 +9,9 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "rerun")]
 mod representation;
 
+#[cfg(feature = "app")]
+pub mod tasks;
+
 /// Three tendons routed at 0°, 120°, and 240° around one flexible section.
 /// Lengths are measured within this section, not from the base of the whole arm.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, Reflect)]

@@ -1,0 +1,19 @@
+(
+    resources: [(id: "viewer", provider: "cu_rerun_soft_arm::tasks::ViewerBundle")],
+    tasks: [
+        (id: "motion", type: "cu_rerun_soft_arm::tasks::Motion", run_in_sim: true),
+        (
+            id: "rerun",
+            type: "cu_rerun_soft_arm::tasks::RerunSink",
+            resources: {"recording": "viewer.recording"},
+        ),
+    ],
+    cnx: [(src: "motion", dst: "rerun", msg: "cu_rerun_soft_arm::SoftArm")],
+    runtime: (rate_target_hz: 30),
+    logging: (
+        enable_task_logging: true,
+        slab_size_mib: 16,
+        section_size_mib: 1,
+        keyframe_interval: 30,
+    ),
+)
