@@ -72,6 +72,12 @@
 //! | `params` | `object` | yes | Method-specific params (can be `{}`). |
 //! | `reply_to` | `string` | yes | Reply topic keyexpr. |
 //!
+//! Representations are opt-in, backend-owned bytes. `representation.read` reads a recorded
+//! message at `at`, or reconstructs task state there (moving the cursor). With `replayed: true`,
+//! omit `at` to serialize the current runtime output/state. `nav.replay` accepts optional
+//! `representation_targets` and returns `representation_frames` captured before each advance,
+//! using `replayed/representations/...` entity paths. Both binary paths require CBOR.
+//!
 //! ### Response: [`DebugRpcResponse`]
 //!
 //! | Field | Type | Present when | Notes |
@@ -146,6 +152,8 @@
 //! | --- | --- | --- | --- |
 //! | `session.open` | no | [`SessionOpenParams`] | `session_id`, `capabilities`, `wire_codec`, `initial_cursor` |
 //! | `session.close` | yes | `{}` | `closed: bool` |
+//! | `representation.list` | yes | `{}` | descriptors for explicitly annotated message and task-state types |
+//! | `representation.read` | yes | `target`, optional exact `at`, optional `replayed`, `entity_path` | CBOR `representation` bytes, or absent payload |
 //! | `session.capabilities` | yes | `{}` | protocol capability descriptor |
 //! | `session.cancel` | yes | `{ op_id }` | `cancelled` (currently always `false`, placeholder) |
 //! | `admin.stop` | no | `{}` | `stopping: true` |
@@ -513,6 +521,10 @@ pub struct DebugRpcResponse {
     pub resolved_at: Option<ResolvedAt>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub attachments: Vec<DebugRpcAttachment>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub representation: Option<RepresentationPayload>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub representation_frames: Vec<RepresentationFrame>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -681,6 +693,8 @@ struct NavReplayParams {
     include_replayed_cl: bool,
     #[serde(default)]
     include_state: bool,
+    #[serde(default)]
+    representation_targets: Vec<RepresentationTarget>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -1693,11 +1707,18 @@ where
             .get("include_handle_contents")
             .and_then(Value::as_bool)
             .unwrap_or(false);
-        if include_handle_contents && codec != WireCodec::Cbor {
+        let include_representations = request.method == "representation.read"
+            || (request.method == "nav.replay"
+                && request
+                    .params
+                    .get("representation_targets")
+                    .and_then(Value::as_array)
+                    .is_some_and(|targets| !targets.is_empty()));
+        if (include_handle_contents || include_representations) && codec != WireCodec::Cbor {
             return err_response(
                 request_id,
                 "BinaryAttachmentsRequireCbor",
-                "handle contents are available only with the CBOR wire codec",
+                "binary handle contents and representations require the CBOR wire codec",
             );
         }
 
@@ -1720,6 +1741,8 @@ where
         let request_id = request.request_id.clone();
 
         match request.method.as_str() {
+            "representation.list" => self.handle_representation_list(request),
+            "representation.read" => self.handle_representation_read(request),
             "session.open" => self.handle_session_open(request_id, &request.params),
             "session.close" => self.handle_session_close(request_id, request.session_id.as_deref()),
             "session.capabilities" => {
@@ -2205,6 +2228,7 @@ where
             update_after_jump(state, &jump);
         }
 
+        let mut representation_frames = Vec::new();
         let mut items = Vec::with_capacity(parsed.limit as usize);
         for step_idx in 0..parsed.limit {
             let (replay_result, captured_logs) = if step_idx == 0 {
@@ -2224,6 +2248,39 @@ where
                     Ok(v) => v,
                     Err(e) => return err_response(request_id, "ReplayFailed", &e.to_string()),
                 };
+            if !parsed.representation_targets.is_empty() {
+                let cursor = match cursor_snapshot(state, &time_of) {
+                    Ok(cursor) => cursor,
+                    Err(e) => {
+                        return err_response(request_id, "RepresentationFailed", &e.to_string());
+                    }
+                };
+                for target in &parsed.representation_targets {
+                    let path = target.entity_path("replayed");
+                    let context = cu29_traits::debug_representation::DebugRepresentationContext {
+                        entity_path: &path,
+                        culistid: cursor.cl,
+                        time_ns: cursor.ts_ns.unwrap_or(0),
+                    };
+                    let payload = match representations::encode_target(
+                        state, target, true, cursor.idx, &context,
+                    ) {
+                        Ok(payload) => payload,
+                        Err(e) => {
+                            return err_response(
+                                request_id,
+                                "RepresentationFailed",
+                                &e.to_string(),
+                            );
+                        }
+                    };
+                    representation_frames.push(RepresentationFrame {
+                        target: target.clone(),
+                        culistid: cursor.cl,
+                        payload,
+                    });
+                }
+            }
             items.push(item);
         }
 
@@ -2232,7 +2289,7 @@ where
             Err(e) => return err_response(request_id, "ReplayFailed", &e.to_string()),
         };
 
-        ok_response(
+        let mut response = ok_response(
             request_id,
             json!({
                 "cursor": cursor,
@@ -2242,7 +2299,9 @@ where
             }),
             Some(state.cursor_rev),
             resolved_at,
-        )
+        );
+        response.representation_frames = representation_frames;
+        response
     }
 
     fn handle_timeline_get_cursor(
@@ -3336,6 +3395,8 @@ fn ok_response(
         cursor_rev,
         resolved_at,
         attachments: Vec::new(),
+        representation: None,
+        representation_frames: Vec::new(),
     }
 }
 
@@ -3352,6 +3413,8 @@ fn err_response(request_id: String, code: &str, message: &str) -> DebugRpcRespon
         cursor_rev: None,
         resolved_at: None,
         attachments: Vec::new(),
+        representation: None,
+        representation_frames: Vec::new(),
     }
 }
 
@@ -3360,6 +3423,10 @@ fn param_err_response(request_id: String, message: String) -> DebugRpcResponse {
 }
 
 mod client;
+mod representations;
+pub use representations::{
+    RepresentationDescriptor, RepresentationFrame, RepresentationPayload, RepresentationTarget,
+};
 
 pub use client::{RemoteDebugZenohClient, RemoteDebugZenohClientBuilder};
 fn capabilities_json(session_lifecycle: SessionLifecycleLimits) -> Value {
@@ -3392,6 +3459,8 @@ fn capabilities_json(session_lifecycle: SessionLifecycleLimits) -> Value {
             "nav.run_until",
             "nav.step",
             "nav.replay",
+            "representation.list",
+            "representation.read",
             "timeline.get_cursor",
             "timeline.get_cl",
             "timeline.list",

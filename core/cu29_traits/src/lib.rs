@@ -23,6 +23,9 @@
 extern crate alloc;
 
 #[cfg(feature = "reflect")]
+pub mod debug_representation;
+
+#[cfg(feature = "reflect")]
 pub use bevy_reflect::Reflect;
 #[cfg(feature = "reflect")]
 use bevy_reflect::{GetTypeRegistration, TypePath, TypeRegistry};

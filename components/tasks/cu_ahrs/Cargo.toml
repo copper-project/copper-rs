@@ -19,6 +19,7 @@ environments = ["host", "embedded"]
 
 [features]
 default = ["std"]
+rerun = ["std", "cu29/reflect", "dep:cu-rerun"]
 firmware = []
 rp2350-demo = [
   "defmt",
@@ -40,6 +41,7 @@ textlogs = [
 ]
 
 [dependencies]
+cu-rerun = { path = "../../libs/cu_rerun", version = "~1.4.0-dev", optional = true }
 cu29 = { path = "../../../core/cu29", version = "~1.4.0-dev", default-features = false, features = [
   "units",
 ] }

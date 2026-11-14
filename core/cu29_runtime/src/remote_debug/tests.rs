@@ -324,6 +324,8 @@ fn cbor_handle_attachments_are_encoded_as_byte_strings() -> CuResult<()> {
     let data = vec![0xde, 0xad, 0xbe, 0xef];
     let response = DebugRpcResponse {
         request_id: "binary-attachment".to_owned(),
+        representation: None,
+        representation_frames: Vec::new(),
         ok: true,
         result: Some(serde_json::json!({
             "handle": {
