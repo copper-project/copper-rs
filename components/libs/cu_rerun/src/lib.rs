@@ -1,8 +1,33 @@
 //! Rerun representations usable both with `RecordingStream::log` and Copper's debugger.
 //!
-//! Implement `rerun::AsComponents` and attach
+//! Implement [`rerun::AsComponents`] on your payload or task debug-state type to
+//! describe its Rerun data. Then choose a view for Copper's debugger by attaching
+//! a reflection attribute. For example, for 3D data, use
 //! `#[reflect(@cu_rerun::representation::<Self, cu_rerun::views::Spatial3DView>())]`
-//! to the payload or task debug-state type. Enable this crate only in host/debug builds.
+//! to your type.
+//!
+//! `Spatial3DView` is just an example: [`representation`] accepts any Rerun view
+//! type. Replace it with a type from [`views`] that matches your components:
+//!
+//! - [`views::Spatial3DView`]: 3D points, meshes, and poses.
+//! - [`views::Spatial2DView`]: images and 2D geometry.
+//! - [`views::TimeSeriesView`]: scalar values over time.
+//! - [`views::BarChartView`]: bar charts.
+//! - [`views::TextLogView`]: text log entries.
+//! - [`views::TextDocumentView`]: text or Markdown documents.
+//! - [`views::TensorView`]: multidimensional arrays.
+//! - [`views::MapView`]: geographic data.
+//! - [`views::GraphView`]: nodes and edges.
+//! - [`views::DataframeView`]: tabular inspection.
+//!
+//! See Rerun's [view guide](https://rerun.io/docs/reference/types/views) for
+//! examples and the archetypes each view can display, and [`views`] for the Rust
+//! API available in this crate's Rerun version. The debugger must support the
+//! chosen view; the attribute selects its view class, not its layout or settings.
+//!
+//! The same `AsComponents` implementation works with `RecordingStream::log`;
+//! the reflection attribute is only needed for Copper's debugger.
+//! Enable this crate only in host/debug builds.
 
 use bevy_reflect::Reflect;
 use cu29_traits::CuError;
