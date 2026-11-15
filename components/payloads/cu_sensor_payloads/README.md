@@ -23,7 +23,7 @@ package these descriptions for offline decoding.
 Enable `rerun` to inspect `CuImage` in Copper's 2D debug view or log it directly
 with Rerun. RGB/BGR, RGBA/BGRA, grayscale, NV12, and YUYV/YUY2 are supported.
 Row padding is removed during visualization; the original buffer is unchanged.
-Unsupported formats, malformed layouts, and short buffers emit no image components.
+Unsupported formats, malformed layouts, and short buffers clear the previous image.
 
 Generate a sample recording with `cargo run -p cu-sensor-payloads --features rerun
 --example rerun_image -- image.rrd`, then open `image.rrd` in Rerun.

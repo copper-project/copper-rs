@@ -35,10 +35,10 @@ where
     fn as_serialized_batches(&self) -> Vec<SerializedComponentBatch> {
         let (pixel_format, color_model, channel_datatype) = image_format_from_cu(self.format);
         if pixel_format.is_none() && color_model.is_none() {
-            return Vec::new();
+            return rerun::Clear::flat().as_serialized_batches();
         }
         let Some(bytes) = packed_image_bytes(self) else {
-            return Vec::new();
+            return rerun::Clear::flat().as_serialized_batches();
         };
         let format = ImageFormat(RerunImageFormat {
             width: self.format.width,
@@ -144,7 +144,10 @@ mod tests {
             format,
             buffer_handle: cu29::prelude::CuHandle::new_detached(vec![0; 10]),
         };
-        assert!(short.as_serialized_batches().is_empty());
+        assert_eq!(
+            short.as_serialized_batches()[0].descriptor,
+            rerun::Clear::descriptor_is_recursive()
+        );
     }
 
     #[test]
@@ -163,7 +166,7 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_image_formats_emit_no_components() {
+    fn unsupported_image_formats_clear_previous_image() {
         let format = CuImageBufferFormat {
             width: 2,
             height: 2,
@@ -171,7 +174,10 @@ mod tests {
             pixel_format: *b"MJPG",
         };
         let image = CuImage::new(format, cu29::prelude::CuHandle::new_detached(vec![0; 8]));
-        assert!(image.as_serialized_batches().is_empty());
+        assert_eq!(
+            image.as_serialized_batches()[0].descriptor,
+            rerun::Clear::descriptor_is_recursive()
+        );
     }
 
     #[test]
