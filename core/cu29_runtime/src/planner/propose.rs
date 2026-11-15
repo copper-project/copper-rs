@@ -325,7 +325,7 @@ impl Model {
                 })
                 .collect()
         };
-        let mut chains = Vec::new();
+        let mut chains: Vec<Vec<(usize, usize)>> = Vec::new();
         for chain in &contract.chains {
             let sources = units_of(&chain.source);
             let sinks = units_of(&chain.sink);

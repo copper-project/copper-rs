@@ -1,6 +1,7 @@
 //! On-demand serialization of explicit payload and task-state representations.
 
 use super::*;
+use std::sync::Arc;
 use cu29_traits::debug_representation::{
     DebugRepresentation, DebugRepresentationContext, ViewClassIdentifier,
 };
