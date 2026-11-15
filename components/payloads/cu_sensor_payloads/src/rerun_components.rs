@@ -139,7 +139,11 @@ mod tests {
             packed_image_bytes(&image),
             Some(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
         );
-        let short = CuImage::new(format, cu29::prelude::CuHandle::new_detached(vec![0; 10]));
+        let short = CuImage {
+            seq: 0,
+            format,
+            buffer_handle: cu29::prelude::CuHandle::new_detached(vec![0; 10]),
+        };
         assert!(short.as_serialized_batches().is_empty());
     }
 

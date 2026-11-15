@@ -2,6 +2,7 @@
 use cu_sensor_payloads::{CuImage, CuImageBufferFormat};
 use cu29::debug_representation::{DebugRepresentation, DebugRepresentationContext};
 use cu29::prelude::*;
+use cu29::reflect::PartialReflect;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let format = CuImageBufferFormat {
