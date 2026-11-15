@@ -1,12 +1,8 @@
 #![cfg(feature = "std")]
 
-use cu29_runtime::monitoring::CountingAlloc;
+use cu29_runtime::monitoring::ScopedAllocCounter;
 use cu29_traits::CuError;
-use std::alloc::System;
 use std::fmt::{self, Write};
-
-#[global_allocator]
-static ALLOCATOR: CountingAlloc<System> = CountingAlloc::new(System);
 
 struct StackBuffer {
     bytes: [u8; 256],
@@ -37,9 +33,10 @@ fn display_does_not_allocate_for_plain_or_caused_errors() {
             bytes: [0; 256],
             len: 0,
         };
-        let before = ALLOCATOR.allocated();
+        // Ignore allocations made by the test harness on other threads.
+        let counter = ScopedAllocCounter::new();
         let result = write!(&mut output, "{error}");
-        let allocated_bytes = ALLOCATOR.allocated() - before;
+        let allocated_bytes = counter.allocated();
         assert!(result.is_ok());
         assert_eq!(
             std::str::from_utf8(&output.bytes[..output.len]).unwrap(),
