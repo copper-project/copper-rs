@@ -20,7 +20,7 @@ fn arrows(
         if value.iter().any(|v| !v.is_finite()) {
             return;
         }
-        let magnitude = value.iter().map(|v| v * v).sum::<f32>().sqrt();
+        let magnitude = value[0].hypot(value[1]).hypot(value[2]);
         vectors.push(value.map(|v| if magnitude > 0.0 { v / magnitude } else { 0.0 }));
         origins.push([offset, 0.0, 0.0]);
         labels.push(format!("{label}: {magnitude:.3} {unit}"));
@@ -84,5 +84,62 @@ impl AsComponents for MagnetometerPayload {
 impl AsComponents for ImuWithMagPayload {
     fn as_serialized_batches(&self) -> Vec<SerializedComponentBatch> {
         arrows(Some(&self.imu), self.mag.as_ref())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cu_rerun::rerun::{FromArrow, components::Vector3D};
+    use cu29::bevy_reflect::Reflect;
+    use cu29::debug_representation::{DebugRepresentation, DebugRepresentationContext};
+
+    fn vectors(value: &impl AsComponents) -> Vec<[f32; 3]> {
+        let batch = value
+            .as_serialized_batches()
+            .into_iter()
+            .find(|batch| batch.descriptor == Arrows3D::descriptor_vectors())
+            .unwrap();
+        Vector3D::from_arrow(&batch.array)
+            .unwrap()
+            .into_iter()
+            .map(|v| v.0.0)
+            .collect()
+    }
+
+    #[test]
+    fn normalized_directions_and_missing_magnetometer() {
+        let imu = ImuPayload::from_raw([3.0, 4.0, 0.0], [0.0; 3], 25.0);
+        assert_eq!(vectors(&imu), vec![[0.6, 0.8, 0.0], [0.0; 3]]);
+        let combined = ImuWithMagPayload::new(imu, None);
+        assert_eq!(vectors(&combined).len(), 2);
+        let mag = MagnetometerPayload::from_raw([0.0, 0.0, -25.0]);
+        assert_eq!(vectors(&mag), vec![[0.0, 0.0, -1.0]]);
+        assert_eq!(
+            vectors(&MagnetometerPayload::from_raw([f32::NAN, 0.0, 1.0])).len(),
+            0
+        );
+    }
+
+    #[test]
+    fn debugger_discovers_and_encodes_all_payloads() {
+        let imu = ImuPayload::default();
+        let mag = MagnetometerPayload::default();
+        let combined = ImuWithMagPayload::new(imu, Some(mag));
+        for value in [&imu as &dyn Reflect, &mag, &combined] {
+            let representation =
+                DebugRepresentation::for_type(value.get_represented_type_info().unwrap()).unwrap();
+            assert_eq!(representation.view_class.as_str(), "3D");
+            let bytes = (representation.encode)(
+                value,
+                &DebugRepresentationContext {
+                    entity_path: "sensor",
+                    culistid: 42,
+                    time_ns: 1_000,
+                },
+            )
+            .unwrap();
+            assert!(!bytes.is_empty());
+        }
     }
 }
