@@ -26,6 +26,7 @@ cu29-soa-derive = { workspace = true }
 libm = { version = "0.2", default-features = false }
 serde = { workspace = true }
 rerun = { workspace = true, optional = true }
+cu-rerun = { path = "../../libs/cu_rerun", version = "~1.4.0-dev", optional = true }
 
 faer = { version = "0.24.0", optional = true, default-features = false }
 nalgebra = { version = "0.35.0", optional = true, default-features = false }
@@ -36,4 +37,4 @@ default = ["glam"]
 faer = ["dep:faer"]
 nalgebra = ["dep:nalgebra"]
 glam = ["dep:glam"]
-rerun = ["dep:rerun"]
+rerun = ["dep:rerun", "dep:cu-rerun", "cu29/reflect"]

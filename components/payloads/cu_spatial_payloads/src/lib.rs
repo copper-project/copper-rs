@@ -35,6 +35,7 @@ mod rerun_components;
 #[derive(
     Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize, Encode, Decode, Reflect,
 )]
+#[cfg_attr(feature = "rerun", reflect(@cu_rerun::representation::<Self, cu_rerun::views::MapView>()))]
 pub struct GeodeticPosition {
     pub latitude: Angle64,
     pub longitude: Angle64,
