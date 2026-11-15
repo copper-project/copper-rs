@@ -54,7 +54,14 @@ fn build_rerun_transform<T: Copy + Into<f64> + Debug + Default + 'static>(
 }
 
 fn build_rerun_geo_point(position: &GeodeticPosition) -> GeoPoints {
-    GeoPoints::from_lat_lon([(position.latitude_degrees(), position.longitude_degrees())])
+    let latitude = position.latitude_degrees();
+    let longitude = position.longitude_degrees();
+    let points = if (-90.0..=90.0).contains(&latitude) && (-180.0..=180.0).contains(&longitude) {
+        alloc::vec![(latitude, longitude)]
+    } else {
+        Vec::new()
+    };
+    GeoPoints::from_lat_lon(points)
 }
 
 impl AsComponents for GeodeticPosition {
@@ -103,6 +110,23 @@ mod tests {
         ]);
 
         assert!(!transform.as_serialized_batches().is_empty());
+    }
+
+    #[test]
+    fn invalid_geodetic_positions_clear_points() {
+        use rerun::{FromArrow, components::LatLon};
+        for position in [
+            GeodeticPosition::from_degrees(f64::NAN, 0.0),
+            GeodeticPosition::from_degrees(91.0, 0.0),
+            GeodeticPosition::from_degrees(0.0, 181.0),
+        ] {
+            let batch = position
+                .as_serialized_batches()
+                .into_iter()
+                .find(|batch| batch.descriptor == GeoPoints::descriptor_positions())
+                .unwrap();
+            assert!(LatLon::from_arrow(&batch.array).unwrap().is_empty());
+        }
     }
 
     #[test]

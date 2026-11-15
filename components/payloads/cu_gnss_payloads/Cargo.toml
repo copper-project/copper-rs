@@ -34,3 +34,7 @@ textlogs = ["cu29/textlogs"]
 reflect = ["cu29/reflect"]
 
 rerun = ["std", "reflect", "dep:cu-rerun", "cu-spatial-payloads/rerun"]
+
+[[example]]
+name = "rerun_gnss"
+required-features = ["rerun"]
