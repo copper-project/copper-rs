@@ -4,6 +4,7 @@ use super::*;
 use cu29_traits::debug_representation::{
     DebugRepresentation, DebugRepresentationContext, ViewClassIdentifier,
 };
+use std::sync::Arc;
 
 /// Typed value whose explicit representation is requested.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
