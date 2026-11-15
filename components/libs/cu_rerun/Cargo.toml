@@ -12,7 +12,7 @@ cu29-traits = { path = "../../../core/cu29_traits", version = "~1.4.0-dev", feat
   "rerun",
 ] }
 bevy_reflect = { workspace = true }
-rerun = { version = "=0.43.2", default-features = false, features = ["sdk"] }
+rerun = { version = "~0.43.2", default-features = false, features = ["sdk"] }
 
 [package.metadata.copper]
 kind = "lib"
