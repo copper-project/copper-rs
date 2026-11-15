@@ -26,6 +26,7 @@ cu29 = { path = "../../../core/cu29", version = "~1.4.0-dev", default-features =
   "units",
 ] }
 rerun = { workspace = true, optional = true }
+cu-rerun = { path = "../../libs/cu_rerun", version = "~1.4.0-dev", optional = true }
 image = { workspace = true, default-features = false, optional = true }
 kornia-image = { version = "0.2.0", optional = true }
 kornia-tensor = { version = "0.2.0", optional = true }
@@ -42,5 +43,9 @@ std = ["cu29/std", "cu29-clock/std"]
 textlogs = ["cu29/textlogs"]
 image = ["std", "dep:image"]
 kornia = ["std", "dep:kornia-image", "dep:kornia-tensor"]
-rerun = ["std", "dep:rerun"]
+rerun = ["std", "cu29/reflect", "dep:rerun", "dep:cu-rerun"]
 reflect = ["cu29/reflect"]
+
+[[example]]
+name = "rerun_imu"
+required-features = ["rerun"]
