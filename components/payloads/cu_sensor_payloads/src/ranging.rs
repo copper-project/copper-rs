@@ -65,6 +65,14 @@ impl TryFrom<&str> for RangePeerId {
     type Error = RangePeerIdError;
 
     fn try_from(peer_id: &str) -> Result<Self, Self::Error> {
+        peer_id.parse()
+    }
+}
+
+impl core::str::FromStr for RangePeerId {
+    type Err = RangePeerIdError;
+
+    fn from_str(peer_id: &str) -> Result<Self, Self::Err> {
         if peer_id.is_empty() {
             return Err(RangePeerIdError::Empty);
         }
@@ -307,6 +315,34 @@ mod tests {
     fn range_peer_id_rejects_too_long_values() {
         let err = RangePeerId::new("1234567890123456789012345").unwrap_err();
         assert!(matches!(err, RangePeerIdError::TooLong { .. }));
+    }
+
+    #[test]
+    fn test_range_peer_id_parsing_preserves_validation() {
+        for input in [
+            "TAG-01",
+            "é",
+            "123456789012345678901234",
+            "",
+            "1234567890123456789012345",
+            "ééééééééééééé",
+        ] {
+            let parsed = input.parse::<RangePeerId>();
+            assert_eq!(parsed, RangePeerId::new(input));
+            assert_eq!(parsed, RangePeerId::try_from(input));
+            if let Ok(peer_id) = parsed {
+                assert_eq!(peer_id.as_str(), input);
+                assert_eq!(peer_id.len(), input.len());
+            }
+        }
+        assert_eq!("".parse::<RangePeerId>(), Err(RangePeerIdError::Empty));
+        assert_eq!(
+            "ééééééééééééé".parse::<RangePeerId>(),
+            Err(RangePeerIdError::TooLong {
+                len: 26,
+                max: RANGE_PEER_ID_CAPACITY
+            })
+        );
     }
 
     #[test]
