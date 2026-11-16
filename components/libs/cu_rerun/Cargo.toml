@@ -1,0 +1,20 @@
+[package]
+name = "cu-rerun"
+description = "Optional Rerun representations for Copper debug and replay"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+cu29-traits = { path = "../../../core/cu29_traits", version = "~1.4.0-dev", features = [
+  "rerun",
+] }
+bevy_reflect = { workspace = true }
+rerun = { version = "~0.43.2", default-features = false, features = ["sdk"] }
+
+[package.metadata.copper]
+kind = "lib"
+domains = ["debug/visualization"]
+environments = ["host"]

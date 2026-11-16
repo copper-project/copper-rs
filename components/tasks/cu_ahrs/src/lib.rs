@@ -16,10 +16,14 @@ use nalgebra::{Quaternion, UnitQuaternion, Vector3};
 use serde::{Deserialize, Serialize};
 use uf_ahrs::{Ahrs, Mahony, MahonyParams};
 
+#[cfg(feature = "rerun")]
+mod rerun_components;
+
 /// Pose expressed as Euler angles (radians) using the aerospace body frame.
 #[derive(
     Debug, Clone, Copy, Default, Encode, Decode, Serialize, Deserialize, PartialEq, Reflect,
 )]
+#[cfg_attr(feature = "rerun", reflect(@cu_rerun::representation::<Self, cu_rerun::views::Spatial3DView>()))]
 pub struct AhrsPose {
     pub roll: Angle,
     pub pitch: Angle,
@@ -45,6 +49,7 @@ pub struct CuAhrs {
 /// not a second copy of the filter state.
 #[derive(Debug, Clone, Copy, Serialize, Reflect)]
 #[reflect(from_reflect = false)]
+#[cfg_attr(feature = "rerun", reflect(@cu_rerun::representation::<Self, cu_rerun::views::Spatial3DView>()))]
 pub struct CuAhrsDebugState {
     pub orientation_w: Ratio,
     pub orientation_i: Ratio,

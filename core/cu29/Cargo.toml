@@ -51,6 +51,7 @@ rayon = { workspace = true, optional = true }
 ctrlc = { workspace = true, optional = true }
 
 [features]
+rerun = ["remote-debug", "cu29-runtime/rerun"]
 clock-sync = [
   "cu29-clock/clock-sync",
   "cu29-runtime/clock-sync",

@@ -176,6 +176,12 @@ uses allocation-free `SyncError`; runtime adapters return `CuError`.
   sections retain its run, instance and mission indices across rollover. Generated
   twins validate the sender mission against their compiled mission index.
 - `remote-debug` feature and `cu29::remote_debug`.
+- `cu29_traits::debug_representation` reflection attributes and the optional `cu-rerun` adapter.
+  Gated by `rerun`; representation callbacks run only on explicit debug reads/replay
+  requests. The API carries native Rerun `ViewClassIdentifier` values and typed
+  `RrdPayload` responses. Composite adapters add named entities, native Rerun blueprint recordings,
+  recursive reflected discovery, and complete subtree snapshots. Rerun dependencies
+  remain optional.
 - `parallel-rt` feature and parallel executor APIs.
 - `async-cl-io` feature and async CopperList I/O internals.
 - `safety-ids` feature and `cu29::safety` metadata collection/export APIs.

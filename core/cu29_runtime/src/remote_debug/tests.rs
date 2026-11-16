@@ -320,10 +320,106 @@ fn capabilities_advertise_single_session_heartbeat_lease() {
 }
 
 #[test]
+fn representation_methods_follow_the_rerun_feature() {
+    let capabilities = capabilities_json(SessionLifecycleLimits::default());
+    let methods = capabilities["supports_methods"].as_array().unwrap();
+    for method in ["representation.list", "representation.read"] {
+        assert_eq!(
+            methods.contains(&serde_json::json!(method)),
+            cfg!(feature = "rerun")
+        );
+    }
+}
+
+#[cfg(feature = "rerun")]
+#[test]
+fn typed_rrd_response_round_trips_as_cbor_bytes() -> CuResult<()> {
+    use super::{RepresentationDescriptor, RepresentationTarget, RrdPayload};
+    use cu29_traits::debug_representation::ViewClassIdentifier;
+
+    let view_class = ViewClassIdentifier::from_static_str("3D");
+    let descriptor = RepresentationDescriptor {
+        target: RepresentationTarget::TaskState {
+            task_id: "ahrs".into(),
+        },
+        task_id: "ahrs".into(),
+        type_path: "cu_ahrs::CuAhrsDebugState".into(),
+        view_class: Some(view_class),
+    };
+    let mut response = super::ok_response(
+        "rrd".into(),
+        serde_json::json!({"descriptor": descriptor}),
+        None,
+        None,
+    );
+    let bytes = vec![0xde, 0xad, 0xbe, 0xef];
+    response.representation = Some(RrdPayload {
+        composition: None,
+        bytes: bytes.clone(),
+    });
+    let encoded = encode_payload(&response, WireCodec::Cbor, "encode RRD response")?;
+    assert!(
+        encoded
+            .windows(5)
+            .any(|window| window == [0x44, 0xde, 0xad, 0xbe, 0xef])
+    );
+    let decoded = super::decode_response(&encoded, WireCodec::Cbor)?;
+    assert_eq!(decoded.representation.unwrap().bytes, bytes);
+    let descriptor: RepresentationDescriptor =
+        serde_json::from_value(decoded.result.unwrap()["descriptor"].clone()).unwrap();
+    assert_eq!(descriptor.view_class, Some(view_class));
+    Ok(())
+}
+
+#[cfg(feature = "rerun")]
+#[test]
+fn composite_snapshot_round_trips_native_blueprint_bytes() -> CuResult<()> {
+    use super::RrdPayload;
+    use cu29_traits::debug_representation::{
+        BlueprintPayload, CompositionSnapshot, RepresentationEntity, ViewClassIdentifier,
+    };
+    let mut response = super::ok_response("composite".into(), serde_json::json!({}), None, None);
+    response.representation = Some(RrdPayload {
+        bytes: Vec::new(),
+        composition: Some(CompositionSnapshot {
+            entities: vec![RepresentationEntity {
+                path: "logged/stereo/right".into(),
+                view_class: ViewClassIdentifier::from_static_str("2D"),
+                bytes: vec![0xde, 0xad, 0xbe, 0xef],
+            }],
+            blueprint: Some(BlueprintPayload {
+                bytes: vec![0xab, 0xcd],
+            }),
+        }),
+    });
+    let encoded = encode_payload(&response, WireCodec::Cbor, "encode composite response")?;
+    assert!(
+        encoded
+            .windows(5)
+            .any(|window| window == [0x44, 0xde, 0xad, 0xbe, 0xef])
+    );
+    assert!(
+        encoded
+            .windows(3)
+            .any(|window| window == [0x42, 0xab, 0xcd])
+    );
+    let decoded = super::decode_response(&encoded, WireCodec::Cbor)?;
+    let snapshot = decoded.representation.unwrap().composition.unwrap();
+    assert_eq!(snapshot.entities[0].path, "logged/stereo/right");
+    assert_eq!(snapshot.entities[0].bytes, [0xde, 0xad, 0xbe, 0xef]);
+    assert_eq!(snapshot.blueprint.unwrap().bytes, [0xab, 0xcd]);
+    Ok(())
+}
+
+#[test]
 fn cbor_handle_attachments_are_encoded_as_byte_strings() -> CuResult<()> {
     let data = vec![0xde, 0xad, 0xbe, 0xef];
     let response = DebugRpcResponse {
         request_id: "binary-attachment".to_owned(),
+        #[cfg(feature = "rerun")]
+        representation: None,
+        #[cfg(feature = "rerun")]
+        representation_frames: Vec::new(),
         ok: true,
         result: Some(serde_json::json!({
             "handle": {

@@ -143,6 +143,15 @@ cd examples/cu_flight_controller
 just resim-mcu-debug
 ```
 
+The MCU debug recipe enables the optional `rerun` feature. In TimeTraveler, open
+Messages → `ahrs` → `AhrsPose`, or State → `ahrs` → `CuAhrsDebugState`, and use
+`+` to open a 3D view. Forward, Right, and Down arrows rotate with the recorded
+Euler-angle payload or the task's quaternion state. Replayed views retain their
+own geometry when restoring cached frames.
+
+Only the replay server needs this feature; firmware and recorded logs are unchanged.
+To build a debugger without these representations, use `--features sim-debug`.
+
 To inspect the compute-side log in Time Traveler—including the depth raster
 that was actually passed to ViTFly—run:
 
