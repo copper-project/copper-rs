@@ -165,6 +165,8 @@ just resim-compute-debug
 
 Then attach Time Traveler to
 `copper/examples/cu_flight_controller/compute/debug/v1`.
+The compute debug recipe also enables `rerun`. Use the `+` on the
+`vitfly_context` message header to view its `AhrsPose` as rotating 3D body axes.
 
 The replay target uses the standardized replay contract:
 
