@@ -53,6 +53,13 @@ on:
 
 env:
   CARGO_NET_RETRY: "10"
+  # Caller workflow env is not inherited by reusable workflows.
+  # Keep CI artifacts small across the full workspace test matrix.
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+  CARGO_PROFILE_DEV_CODEGEN_UNITS: "16"
+  CARGO_PROFILE_TEST_CODEGEN_UNITS: "16"
+  CARGO_INCREMENTAL: "0"
   # cargo-generate resolves an author even though cargo-cunew templates omit it.
   CARGO_NAME: "Copper Tests"
 
@@ -737,9 +744,6 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      # Keep all-feature test artifacts within the hosted runner disk budget.
-      CARGO_PROFILE_DEV_DEBUG: "0"
-      CARGO_PROFILE_TEST_DEBUG: "0"
       BASE_FEATURES: cu29/reflect,cu29/async-cl-io,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: workspace
 
