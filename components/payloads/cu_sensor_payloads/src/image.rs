@@ -164,6 +164,7 @@ impl CuImageBufferFormat {
 }
 
 #[derive(Debug, Encode, Reflect)]
+#[cfg_attr(feature = "rerun", reflect(@cu_rerun::representation::<Self, cu_rerun::views::Spatial2DView>()))]
 #[reflect(from_reflect = false, no_field_bounds, type_path = false)]
 #[bincode(describe)]
 pub struct CuImage<A>

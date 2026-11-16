@@ -17,3 +17,15 @@ sinks, including image and point-cloud related data structures.
 Native encoding descriptions are always available, including captured image and
 depth buffers. Enable `cu29/self-describing-logs` in the catalog application to
 package these descriptions for offline decoding.
+
+## Rerun images
+
+Enable `rerun` to inspect `CuImage` in Copper's 2D debug view or log it directly
+with Rerun. RGB/BGR, RGBA/BGRA, grayscale, NV12/NV21, I420/YV12, and YUYV/YUY2/UYVY are supported.
+Subsampled 4:2:0 images require even width and height; packed 4:2:2 images
+require even width.
+Row padding is removed during visualization; the original buffer is unchanged.
+Unsupported formats, malformed layouts, and short buffers clear the previous image.
+
+Generate a sample recording with `cargo run -p cu-sensor-payloads --features rerun
+--example rerun_image -- image.rrd`, then open `image.rrd` in Rerun.
