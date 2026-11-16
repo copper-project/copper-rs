@@ -1,4 +1,4 @@
-use cu_aligner::define_task;
+use cu_aligner::define_window_task;
 use cu_sensor_payloads::{CuImage, CuImageBufferFormat};
 use cu29::bincode::{Decode, Encode};
 use cu29::payload::CuArray;
@@ -8,7 +8,7 @@ use std::sync::Arc;
 const BUFFER_CAP: usize = 16;
 const OUTPUT_CAP: usize = 4;
 
-define_task!(
+define_window_task!(
     ImageAlignerTask,
     0 => { BUFFER_CAP, OUTPUT_CAP, CuImage<Vec<u8>> },
     1 => { BUFFER_CAP, OUTPUT_CAP, CuImage<Vec<u8>> }
@@ -118,8 +118,8 @@ impl Freezable for AlignedImageSink {}
 impl CuSinkTask for AlignedImageSink {
     type Resources<'r> = ();
     type Input<'m> = input_msg!((
-        CuArray<CuImage<Vec<u8>>, OUTPUT_CAP>,
-        CuArray<CuImage<Vec<u8>>, OUTPUT_CAP>
+        CuArray<CuMsg<CuImage<Vec<u8>>>, OUTPUT_CAP>,
+        CuArray<CuMsg<CuImage<Vec<u8>>>, OUTPUT_CAP>
     ));
 
     fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
@@ -136,8 +136,8 @@ impl CuSinkTask for AlignedImageSink {
         let (left, right) = payload;
         let left_len = left.len();
         let right_len = right.len();
-        let left_img = left.as_slice().first();
-        let right_img = right.as_slice().first();
+        let left_img = left.as_slice().first().and_then(CuMsg::payload);
+        let right_img = right.as_slice().first().and_then(CuMsg::payload);
 
         if let (Some(left_img), Some(right_img)) = (left_img, right_img) {
             let left_sample = sample_pixel(left_img);
