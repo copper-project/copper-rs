@@ -17,6 +17,13 @@ on:
 
 env:
   CARGO_NET_RETRY: "10"
+  # Caller workflow env is not inherited by reusable workflows.
+  # Keep CI artifacts small across the embedded build and test jobs.
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+  CARGO_PROFILE_DEV_CODEGEN_UNITS: "16"
+  CARGO_PROFILE_TEST_CODEGEN_UNITS: "16"
+  CARGO_INCREMENTAL: "0"
 
 jobs:
   nostd:
