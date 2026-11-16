@@ -4,6 +4,7 @@ use super::*;
 use cu29_traits::debug_representation::{
     DebugRepresentation, DebugRepresentationContext, ViewClassIdentifier,
 };
+use std::sync::Arc;
 
 /// Typed value whose explicit representation is requested.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -33,21 +34,25 @@ pub struct RepresentationFrame {
     pub payload: Option<RrdPayload>,
 }
 
-/// An explicitly registered representation advertised by the debug server.
+/// A representation root, including reflected wrappers with represented children.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RepresentationDescriptor {
     pub target: RepresentationTarget,
     pub task_id: String,
     pub type_path: String,
-    pub view_class: ViewClassIdentifier,
+    /// Single-entity view class; composite/discovery roots carry layout in their snapshot.
+    pub view_class: Option<ViewClassIdentifier>,
 }
 
-/// Rerun recording data carried as a CBOR byte string.
+/// Single-entity RRD bytes or a complete composition snapshot.
 /// RRD headers carry the Rerun format version.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RrdPayload {
     #[serde(with = "serde_bytes")]
     pub bytes: Vec<u8>,
+    /// Complete child snapshot and suggested layout for a composite.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub composition: Option<cu29_traits::debug_representation::CompositionSnapshot>,
 }
 
 #[derive(Deserialize)]
@@ -58,6 +63,8 @@ struct ReadParams {
     #[serde(default)]
     replayed: bool,
     entity_path: String,
+    #[serde(default)]
+    field_path: Vec<String>,
 }
 
 impl<App, P, CB, TF, S, L, AF> RemoteDebugZenohServer<App, P, CB, TF, S, L, AF>
@@ -176,6 +183,7 @@ where
                 parsed.replayed,
                 resolved.idx,
                 &context,
+                &parsed.field_path,
             )?;
             Ok((payload, resolved))
         })();
@@ -206,15 +214,15 @@ fn append_descriptor(
     target: RepresentationTarget,
     entries: &mut Vec<RepresentationDescriptor>,
 ) {
-    if let Some(representation) = registry
-        .get_with_type_path(type_path)
-        .and_then(|registration| DebugRepresentation::for_type(registration.type_info()))
+    if let Some(registration) = registry.get_with_type_path(type_path)
+        && cu29_traits::debug_representation::has_representation(registration.type_info())
     {
         entries.push(RepresentationDescriptor {
             target,
             task_id: task_id.to_string(),
             type_path: type_path.to_string(),
-            view_class: representation.view_class,
+            view_class: DebugRepresentation::for_type(registration.type_info())
+                .map(|representation| representation.view_class),
         });
     }
 }
@@ -222,13 +230,65 @@ fn append_descriptor(
 fn encode(
     value: &dyn Reflect,
     context: &DebugRepresentationContext<'_>,
+    field_path: &[String],
 ) -> CuResult<Option<RrdPayload>> {
-    let representation = value
+    let mut selected = value.as_partial_reflect();
+    for segment in field_path {
+        if segment.is_empty() || segment.contains('/') || segment == "." || segment == ".." {
+            return Err(CuError::from("invalid representation field path segment"));
+        }
+        if let bevy_reflect::ReflectRef::Enum(value) = selected.reflect_ref()
+            && value.variant_name() == segment
+        {
+            continue;
+        }
+        selected = match selected.reflect_ref() {
+            bevy_reflect::ReflectRef::Struct(value) => value.field(segment),
+            bevy_reflect::ReflectRef::TupleStruct(value) => {
+                segment.parse().ok().and_then(|index| value.field(index))
+            }
+            bevy_reflect::ReflectRef::Tuple(value) => {
+                segment.parse().ok().and_then(|index| value.field(index))
+            }
+            bevy_reflect::ReflectRef::Enum(value) => {
+                let child = value
+                    .field(segment)
+                    .or_else(|| segment.parse().ok().and_then(|index| value.field_at(index)));
+                // A previously selected variant can disappear at this sample.
+                if child.is_none() {
+                    return Ok(None);
+                }
+                child
+            }
+            _ => None,
+        }
+        .ok_or_else(|| CuError::from("representation field path does not exist"))?;
+    }
+    let value = selected
+        .try_as_reflect()
+        .ok_or_else(|| CuError::from("representation field is not fully reflected"))?;
+    let path = field_path
+        .iter()
+        .fold(context.entity_path.to_owned(), |path, segment| {
+            format!("{path}/{segment}")
+        });
+    let context = &DebugRepresentationContext {
+        entity_path: &path,
+        culistid: context.culistid,
+        time_ns: context.time_ns,
+    };
+    if let Some(representation) = value
         .get_represented_type_info()
         .and_then(DebugRepresentation::for_type)
-        .ok_or_else(|| CuError::from("type has no explicit debug representation"))?;
+    {
+        return Ok(Some(RrdPayload {
+            bytes: (representation.encode)(value, context)?,
+            composition: None,
+        }));
+    }
     Ok(Some(RrdPayload {
-        bytes: (representation.encode)(value, context)?,
+        bytes: Vec::new(),
+        composition: Some(cu_rerun::represent(value, context)?),
     }))
 }
 
@@ -238,6 +298,7 @@ pub(super) fn encode_target<App, P, CB, TF, S, L>(
     replayed: bool,
     index: usize,
     context: &DebugRepresentationContext<'_>,
+    field_path: &[String],
 ) -> CuResult<Option<RrdPayload>>
 where
     App: CuSimApplication<S, L> + ReflectTaskIntrospection + CurrentRuntimeCopperList<P>,
@@ -255,7 +316,7 @@ where
     Ok(match target {
         RepresentationTarget::TaskState { task_id } => state
             .session
-            .with_debug_state(task_id, |value| encode(value, context))??,
+            .with_debug_state(task_id, |value| encode(value, context, field_path))??,
         RepresentationTarget::Message { output_index } => {
             if *output_index >= P::get_output_specs().len() {
                 return Err("representation output index out of range".into());
@@ -284,11 +345,72 @@ where
                     .get(*output_index)
                     .and_then(|msg| msg.payload_reflect())
                 {
-                    Some(value) => encode(value, context)?,
+                    Some(value) => encode(value, context, field_path)?,
                     None => None,
                 },
                 None => None,
             }
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn leaf() -> DebugRepresentation {
+        DebugRepresentation {
+            view_class: ViewClassIdentifier::from_static_str("3D"),
+            encode: |_, context| Ok(context.entity_path.as_bytes().to_vec()),
+        }
+    }
+
+    #[derive(Reflect)]
+    #[reflect(@leaf())]
+    struct Leaf;
+
+    #[derive(Reflect)]
+    struct Wrapper {
+        left: Leaf,
+        right: Option<Leaf>,
+    }
+
+    #[test]
+    fn child_read_uses_the_same_identity_as_discovery() {
+        let value = Wrapper {
+            left: Leaf,
+            right: Some(Leaf),
+        };
+        let context = DebugRepresentationContext {
+            entity_path: "root",
+            culistid: 4,
+            time_ns: 10,
+        };
+        let payload = encode(
+            &value,
+            &context,
+            &["right".into(), "Some".into(), "0".into()],
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(payload.bytes, b"root/right/Some/0");
+        assert!(payload.composition.is_none());
+        assert!(encode(&value, &context, &["../right".into()]).is_err());
+        let payload = encode(&value, &context, &[]).unwrap().unwrap();
+        assert!(payload.bytes.is_empty());
+        assert!(payload.composition.is_some());
+        let absent = Wrapper {
+            left: Leaf,
+            right: None,
+        };
+        assert!(
+            encode(
+                &absent,
+                &context,
+                &["right".into(), "Some".into(), "0".into()]
+            )
+            .unwrap()
+            .is_none()
+        );
+    }
 }

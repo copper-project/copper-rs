@@ -52,6 +52,13 @@ fn encode<T: Reflect + rerun::AsComponents>(
     let value = value
         .downcast_ref::<T>()
         .ok_or_else(|| CuError::from("representation type mismatch"))?;
+    encode_components(value, context)
+}
+
+fn encode_components(
+    value: &dyn rerun::AsComponents,
+    context: &DebugRepresentationContext<'_>,
+) -> CuResult<Vec<u8>> {
     let rec = rerun::RecordingStreamBuilder::new("copper-debug-representation")
         .send_properties(false)
         .buffered()
@@ -72,3 +79,8 @@ fn encode<T: Reflect + rerun::AsComponents>(
         .read()
         .ok_or_else(|| CuError::from("Rerun representation encoder produced no data"))
 }
+
+mod composition;
+pub use composition::{
+    Composition, composite, container, entity, field, horizontal, overlay, represent, vertical,
+};
