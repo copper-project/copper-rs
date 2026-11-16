@@ -20,8 +20,7 @@ All community participation is governed by our
 
 ## Set Up the Workspace
 
-Copper's minimum supported Rust version is 1.96. Install the latest stable Rust
-toolchain with [rustup](https://rustup.rs/), then install
+Install the latest stable Rust toolchain with [rustup](https://rustup.rs/), then install
 [`just`](https://just.systems/) and clone your fork:
 
 ```bash

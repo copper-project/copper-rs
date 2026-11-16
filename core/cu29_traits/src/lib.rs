@@ -22,6 +22,9 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 extern crate alloc;
 
+#[cfg(feature = "rerun")]
+pub mod debug_representation;
+
 #[cfg(feature = "reflect")]
 pub use bevy_reflect::Reflect;
 #[cfg(feature = "reflect")]

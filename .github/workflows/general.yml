@@ -22,7 +22,6 @@ env:
   CARGO_PROFILE_DEV_CODEGEN_UNITS: "16"
   CARGO_PROFILE_TEST_CODEGEN_UNITS: "16"
   CARGO_INCREMENTAL: "0"
-  MSRV: "1.96.0"
 
 jobs:
   changes:
@@ -277,6 +276,10 @@ jobs:
         uses: ./.github/actions/ci-resources
         with:
           phase: start
+      - name: Read MSRV from Cargo.toml
+        run: |
+          MSRV=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["rust-version"])')
+          echo "MSRV=$MSRV" >> "$GITHUB_ENV"
       - id: rust_ci_setup
         uses: ./.github/actions/rust-ci-setup
         with:
@@ -314,6 +317,10 @@ jobs:
         uses: ./.github/actions/ci-resources
         with:
           phase: start
+      - name: Read MSRV from Cargo.toml
+        run: |
+          MSRV=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["rust-version"])')
+          echo "MSRV=$MSRV" >> "$GITHUB_ENV"
       - id: rust_ci_setup
         uses: ./.github/actions/rust-ci-setup
         with:
@@ -601,7 +608,7 @@ jobs:
         with:
           components: rustfmt
       - name: Install formatting tools
-        uses: taiki-e/install-action@v2.90.0
+        uses: taiki-e/install-action@v2.90.3
         with:
           tool: taplo-cli, fmtron@0.10.0, typos
       - name: Install actionlint
@@ -659,7 +666,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - uses: taiki-e/install-action@v2.90.0
+      - uses: taiki-e/install-action@v2.90.3
         with:
           tool: just
       - uses: Swatinem/rust-cache@v2
