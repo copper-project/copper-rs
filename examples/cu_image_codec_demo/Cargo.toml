@@ -29,7 +29,13 @@ required-features = ["logreader"]
 
 [features]
 default = []
-ffv1 = ["dep:cu-ffv1-codec", "dep:cu-png-codec"]
+ffv1 = [
+  "dep:serde",
+  "dep:cu29",
+  "dep:cu-ffv1-codec",
+  "dep:cu-png-codec",
+  "dep:cu-sensor-payloads",
+]
 consolemon = ["ffv1", "dep:cu-consolemon", "cu29/log-level-debug"]
 logreader = ["ffv1", "dep:cu29-export"]
 
@@ -37,10 +43,14 @@ logreader = ["ffv1", "dep:cu29-export"]
 cu-ffv1-codec = { workspace = true, optional = true, features = ["ffmpeg"] }
 cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "~1.4.0-dev", optional = true }
 cu-png-codec = { workspace = true, optional = true }
-cu-sensor-payloads = { workspace = true }
-cu29 = { workspace = true }
+cu-sensor-payloads = { workspace = true, optional = true }
+cu29 = { workspace = true, optional = true }
 cu29-export = { workspace = true, optional = true }
-serde = { workspace = true }
+serde = { workspace = true, optional = true }
 
 [build-dependencies]
 cu29-build = { workspace = true }
+
+[lints.cargo]
+# Workspace dependency feature flags can enable optional dependencies without enabling this demo.
+unused_dependencies = "allow"

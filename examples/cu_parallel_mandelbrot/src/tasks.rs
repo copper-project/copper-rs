@@ -1279,14 +1279,12 @@ impl CuSinkTask for LoggedFrameDrain {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_arch = "x86_64"))]
 mod tests {
     use super::*;
 
-    #[cfg(target_arch = "x86_64")]
     type IterateBandFn = unsafe fn(StripePlane, &mut [f32], &mut [f32], &mut [u16], u16, u16);
 
-    #[cfg(target_arch = "x86_64")]
     fn assert_simd_matches_scalar(iterate_band_simd: IterateBandFn) {
         let plane = StripePlane {
             width: 19,
@@ -1336,7 +1334,6 @@ mod tests {
         }
     }
 
-    #[cfg(target_arch = "x86_64")]
     #[test]
     fn avx512_matches_scalar_escape_iterations() {
         if !std::arch::is_x86_feature_detected!("avx512f")
@@ -1348,7 +1345,6 @@ mod tests {
         assert_simd_matches_scalar(iterate_band_avx512);
     }
 
-    #[cfg(target_arch = "x86_64")]
     #[test]
     fn avx2_matches_scalar_escape_iterations() {
         if !std::arch::is_x86_feature_detected!("avx2")

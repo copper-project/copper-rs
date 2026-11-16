@@ -19,10 +19,10 @@ required-features = ["demo"]
 
 [features]
 default = []
-demo = []
+demo = ["dep:eframe"]
 
 [dependencies]
-eframe = { workspace = true }
+eframe = { workspace = true, optional = true }
 zed-sdk-sys = { workspace = true }
 
 [package.metadata.cargo-shear]

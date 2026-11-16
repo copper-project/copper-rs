@@ -86,6 +86,11 @@ Prefer the root `justfile` over copying long Cargo command lines:
 | Runtime proc-macro expansion | `just expand-runtime pkg=<crate> bin=<bin> [features=<features>]` |
 | SoA derive expansion | `just expand-soa` |
 
+The root `justfile` and CI build/test workflows set `CARGO_BUILD_WARNINGS=deny`,
+so compiler and Cargo lint warnings fail checks, including test compilation and
+unused dependency lints. This also applies to cached compilation warnings and to
+both the PR smoke checks and weekly platform checks.
+
 Linux is the full-workspace PR gate. Each code PR also runs one focused native
 smoke job on macOS and Windows: clocks, mapped logs, UDP integration, and runtime
 replay with async I/O. Embedded coverage is compile-time rather than

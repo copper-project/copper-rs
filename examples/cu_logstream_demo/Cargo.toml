@@ -17,7 +17,18 @@ self-describing-logs = [
 ]
 verify-reconstruction = ["demo", "cu29/logstream-verify"]
 # Keep async runtime features out of ordinary workspace builds.
-demo = ["cu29/logstream", "cu29/reflect", "dep:cu-transform"]
+demo = [
+  "dep:cu29",
+  "dep:cu29-logstream",
+  "dep:cu29-unifiedlog",
+  "dep:clap",
+  "dep:serde",
+  "dep:cu29-export",
+  "dep:cu29-logstream-udp",
+  "cu29/logstream",
+  "cu29/reflect",
+  "dep:cu-transform",
+]
 replay = ["demo", "cu29/remote-debug"]
 tui = ["demo", "dep:ratatui", "dep:cu29-intern-strs"]
 sender-monitor = ["demo", "dep:cu-consolemon"]
@@ -39,18 +50,18 @@ path = "src/resim.rs"
 required-features = ["replay"]
 
 [dependencies]
-cu29 = { workspace = true }
+cu29 = { workspace = true, optional = true }
 cu-transform = { version = "~1.4.0-dev", path = "../../components/libs/cu_transform", optional = true }
 cu-consolemon = { version = "~1.4.0-dev", path = "../../components/monitors/cu_consolemon", default-features = false, features = [
   "dag",
   "hop",
 ], optional = true }
-cu29-logstream = { workspace = true, features = ["std"] }
-cu29-logstream-udp = { workspace = true }
-cu29-export = { workspace = true }
-cu29-unifiedlog = { workspace = true }
-clap = { workspace = true, features = ["derive"] }
-serde = { workspace = true }
+cu29-logstream = { workspace = true, features = ["std"], optional = true }
+cu29-logstream-udp = { workspace = true, optional = true }
+cu29-export = { workspace = true, optional = true }
+cu29-unifiedlog = { workspace = true, optional = true }
+clap = { workspace = true, features = ["derive"], optional = true }
+serde = { workspace = true, optional = true }
 cu29-intern-strs = { workspace = true, optional = true }
 ratatui = { version = "0.30", optional = true }
 
@@ -59,3 +70,7 @@ cu29-build = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+
+[lints.cargo]
+# Workspace dependency feature flags can enable optional dependencies without enabling this demo.
+unused_dependencies = "allow"

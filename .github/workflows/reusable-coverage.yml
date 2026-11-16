@@ -20,6 +20,7 @@ on:
         default: "ubuntu-latest"
 
 env:
+  CARGO_BUILD_WARNINGS: deny
   CARGO_NET_RETRY: "10"
   # Reusable workflows declare their own Cargo profile settings.
   # Coverage instrumentation provides source mapping; omit bulky debug symbols.

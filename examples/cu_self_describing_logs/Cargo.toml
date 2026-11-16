@@ -27,3 +27,7 @@ tempfile = { workspace = true }
 default = []
 self-describing-logs = ["dep:cu29", "cu29/self-describing-logs"]
 flat-copperlist-encoding = ["cu29?/flat-copperlist-encoding"]
+
+[lints.cargo]
+# Workspace dependency feature flags can enable optional dependencies without enabling this demo.
+unused_dependencies = "allow"

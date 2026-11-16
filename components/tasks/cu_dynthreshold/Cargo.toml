@@ -20,14 +20,20 @@ environments = ["host"]
 
 [dependencies]
 gstreamer = { workspace = true, default-features = false, optional = true }
-cu29 = { workspace = true }
-cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "~1.4.0-dev" }
+cu29 = { workspace = true, optional = true }
+cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "~1.4.0-dev", optional = true }
 cu-gstreamer = { path = "../../sources/cu_gstreamer", version = "~1.4.0-dev", optional = true }
 
 [features]
 # The 'gst' feature includes dependencies for GStreamer support.
 # 'cu-gstreamer/gst' is included to propagate the 'gst' flag to the cu-gstreamer crate.
-gst = ["dep:gstreamer", "dep:cu-gstreamer", "cu-gstreamer/gst"]
+gst = [
+  "dep:cu29",
+  "dep:cu-sensor-payloads",
+  "dep:gstreamer",
+  "dep:cu-gstreamer",
+  "cu-gstreamer/gst",
+]
 
 [build-dependencies]
 cu29-build = { workspace = true }

@@ -265,8 +265,6 @@ candle-core = "0.11.1"
 candle-nn = "0.11.1"
 
 cu-serial = { path = "components/libs/cu_serial", version = "~1.4.0-dev", default-features = false }
-cu-hc12 = { path = "components/res/cu_hc12", version = "~1.4.0-dev", default-features = false }
-cu29-logstream-serial = { path = "components/res/cu29_logstream_serial", version = "~1.4.0-dev", default-features = false }
 cu-serial-bridge = { path = "components/bridges/cu_serial_bridge", version = "~1.4.0-dev", default-features = false }
 
 
@@ -277,7 +275,6 @@ cu29-reflect-derive = { path = "core/cu29_reflect_derive", version = "~1.4.0-dev
 cu29-clock = { path = "core/cu29_clock", default-features = false, version = "~1.4.0-dev" }
 cu29-derive = { path = "core/cu29_derive", default-features = false, version = "~1.4.0-dev" }
 cu29-export = { path = "core/cu29_export", version = "~1.4.0-dev" } # std only
-cu29-helpers = { path = "core/cu29_helpers", version = "~1.4.0-dev" } # compatibility stub
 cu29-intern-strs = { path = "core/cu29_intern_strs", version = "~1.4.0-dev" } # std only
 cu29-log = { path = "core/cu29_log", default-features = false, version = "~1.4.0-dev" }
 cu29-log-derive = { path = "core/cu29_log_derive", default-features = false, version = "~1.4.0-dev" }
@@ -303,19 +300,13 @@ cu29-logstream-udp = { path = "components/res/cu29_logstream_udp", version = "~1
 cu-ads7883-new = { path = "components/sources/cu_ads7883", version = "~1.4.0-dev" }
 cu-ahrs = { path = "components/tasks/cu_ahrs", version = "~1.4.0-dev" }
 cu-anynet = { path = "components/tasks/cu_anynet", version = "~1.4.0-dev" }
-cu-bdshot = { path = "components/bridges/cu_bdshot", version = "~1.4.0-dev" }
 cu-bevymon = { path = "components/monitors/cu_bevymon", version = "~1.4.0-dev" }
-cu-bmi088 = { path = "components/sources/cu_bmi088", version = "~1.4.0-dev" }
 cu-consolemon = { path = "components/monitors/cu_consolemon", version = "~1.4.0-dev" }
-cu-crsf = { path = "components/bridges/cu_crsf", version = "~1.4.0-dev" }
-cu-dps310 = { path = "components/sources/cu_dps310", version = "~1.4.0-dev" }
 cu-feetech = { path = "components/bridges/cu_feetech", version = "~1.4.0-dev" }
 cu-gnss-ublox = { path = "components/sources/cu_gnss_ublox", version = "~1.4.0-dev" }
 cu-gstreamer = { path = "components/sources/cu_gstreamer", version = "~1.4.0-dev" }
-cu-ist8310 = { path = "components/sources/cu_ist8310", version = "~1.4.0-dev" }
 cu-logmon = { path = "components/monitors/cu_logmon", version = "~1.4.0-dev" }
 cu-micoairh743 = { path = "components/res/cu_micoairh743", version = "~1.4.0-dev" }
-cu-msp-bridge = { path = "components/bridges/cu_msp_bridge", version = "~1.4.0-dev" }
 cu-msp-lib = { path = "components/libs/cu_msp_lib", version = "~1.4.0-dev" }
 cu-rp-encoder = { path = "components/sources/cu_rp_encoder", version = "~1.4.0-dev" }
 cu-rp-sn754410-new = { path = "components/sinks/cu_rp_sn754410", version = "~1.4.0-dev" }
@@ -326,7 +317,6 @@ cu-zenoh-bridge = { path = "components/bridges/cu_zenoh_bridge", version = "~1.4
 # Payload definitions
 cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads", version = "~1.4.0-dev" }
 cu-gnss-payloads = { path = "components/payloads/cu_gnss_payloads", version = "~1.4.0-dev" }
-cu-spatial-payloads = { path = "components/payloads/cu_spatial_payloads", version = "~1.4.0-dev" }
 cu-ros2-payloads = { path = "components/payloads/cu_ros2_payloads", version = "~1.4.0-dev" }
 cu-pid = { path = "components/tasks/cu_pid", version = "~1.4.0-dev" }
 
@@ -426,7 +416,6 @@ anyhow = { version = "1.0", default-features = false }
 arrayvec = { version = "0.7", default-features = false }
 avian3d = { version = "0.7.0", default-features = false }
 bevy = { version = "0.19.1", default-features = false }
-bevy_ratatui = { version = "0.11.1", default-features = false }
 buddy_system_allocator = { version = "0.13", default-features = false }
 bytemuck = "1.23.0"
 # Use ZIP >=9 until https://github.com/epwalsh/rust-cached-path/pull/92 is released.

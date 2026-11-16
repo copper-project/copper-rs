@@ -33,3 +33,7 @@ cfg_aliases = { workspace = true }
 [features]
 default = []
 mock = []
+
+[lints.cargo]
+# The mock feature disables cu-linux-resources; Cargo cannot gate dependencies on not(feature).
+unused_dependencies = "allow"
