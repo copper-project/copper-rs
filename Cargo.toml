@@ -11,6 +11,7 @@ members = [
   "components/sources/cu_zed",
   "components/tasks/cu_vitfly",
   "components/libs/cu_serial",
+  "components/libs/cu_rerun",
   "components/res/cu_hc12",
   "components/res/cu29_logstream_serial",
   "components/bridges/cu_serial_bridge",
@@ -397,7 +398,7 @@ tempfile = { version = "3.23", default-features = false }
 spin = { version = "0.12" } # should be removed when std is on, but cargo is bad at negative features
 
 # rerun
-rerun = { version = "0.38.1", default-features = false, features = [
+rerun = { version = "~0.43.2", default-features = false, features = [
   "sdk",
   "server",
   "log",
