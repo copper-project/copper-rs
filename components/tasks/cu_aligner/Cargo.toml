@@ -22,3 +22,4 @@ cu29 = { workspace = true }
 cu29-clock = { workspace = true }
 circular-buffer = { workspace = true }
 paste = { workspace = true }
+serde = { workspace = true, features = ["derive"] }

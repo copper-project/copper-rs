@@ -2274,7 +2274,12 @@ where
                         time_ns: cursor.ts_ns.unwrap_or(0),
                     };
                     let payload = match representations::encode_target(
-                        state, target, true, cursor.idx, &context,
+                        state,
+                        target,
+                        true,
+                        cursor.idx,
+                        &context,
+                        &[],
                     ) {
                         Ok(payload) => payload,
                         Err(e) => {

@@ -37,7 +37,7 @@
         (
             src: "aligner",
             dst: "sink",
-            msg: "(cu29::payload::CuArray<cu_sensor_payloads::CuImage<Vec<u8>>, 4>, cu29::payload::CuArray<cu_sensor_payloads::CuImage<Vec<u8>>, 4>)",
+            msg: "(cu29::payload::CuArray<cu29::prelude::CuMsg<cu_sensor_payloads::CuImage<Vec<u8>>>, 4>, cu29::payload::CuArray<cu29::prelude::CuMsg<cu_sensor_payloads::CuImage<Vec<u8>>>, 4>)",
         ),
     ],
 )
