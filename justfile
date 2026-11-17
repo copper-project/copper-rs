@@ -63,7 +63,7 @@ pr-check:
 	cargo +stable test -p cu29-runtime --test replay_primitives --features cu29/async-cl-io
 	just --justfile examples/cu_logstream_demo/justfile check
 
-# Reproduce the scheduled weekly audit and beta checks on the local host.
+# Run the weekly audit and beta checks on this host (native stable checks run in Actions).
 weekly: weekly-audit
 	cargo +beta fmt --all -- --check
 	just std-ci toolchain=beta
@@ -90,7 +90,7 @@ compile-tests toolchain="stable":
 
 # Validate workflow expressions, shell snippets, YAML, and change classification.
 ci-config-check:
-	python3 -m unittest discover -s support/ci -p test_ci_changes.py
+	python3 -m unittest discover -s support/ci -p 'test_ci_*.py'
 	prek run --all-files check-yaml
 	actionlint -ignore 'shellcheck reported issue.*SC2086'
 
@@ -185,9 +185,9 @@ clippy-std:
 	cargo +stable clippy --workspace --all-targets $workspace_excludes -- --deny warnings
 	cargo +stable clippy --workspace --all-targets $features_flag $workspace_excludes -- --deny warnings
 
-# Run the Unit-Tests job locally via act (debug/ubuntu matrix).
+# Run the Linux CI workflow locally via act.
 ci:
-  act -W .github/workflows/general.yml -j Unit-Tests --matrix os:ubuntu-latest --matrix mode:debug -P ubuntu-latest=ghcr.io/catthehacker/ubuntu:act-latest
+  act -W .github/workflows/general.yml -j Unit-Tests-Linux -P ubuntu-latest=ghcr.io/catthehacker/ubuntu:act-latest
 
 # Host target detection for cross-platform logreader builds
 host_target := `rustc +stable -vV | sed -n 's/host: //p'`
