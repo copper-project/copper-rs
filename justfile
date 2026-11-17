@@ -63,13 +63,13 @@ pr-check:
 	cargo +stable test -p cu29-runtime --test replay_primitives --features cu29/async-cl-io
 	just --justfile examples/cu_logstream_demo/justfile check
 
-# Run the weekly audit and beta checks on this host (native stable checks run in Actions).
-weekly: weekly-audit
+# Run the weekly beta checks on this host.
+weekly:
 	cargo +beta fmt --all -- --check
 	just std-ci toolchain=beta
 	just nostd-ci toolchain=beta
 
-# Run the cargo-deny portion of the weekly workflow.
+# Run the nightly dependency audit locally (legacy recipe name retained).
 weekly-audit:
 	#!/usr/bin/env bash
 	set -euo pipefail

@@ -1,4 +1,4 @@
-name: Weekly Platform and Beta Checks
+name: Weekly Beta Checks
 
 on:
   schedule:
@@ -23,32 +23,16 @@ env:
   CARGO_INCREMENTAL: "0"
 
 jobs:
-  audit:
+  fmt-beta:
+    name: Beta Formatting
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@beta
         with:
-          components: clippy, rustfmt
-      - name: Install audit
-        uses: taiki-e/install-action@v2.90.3
-        with:
-          tool: cargo-deny
-      - name: Run deny bans
-        run: cargo deny --config .config/deny.toml check bans
-      - name: Run deny sources
-        run: cargo deny --config .config/deny.toml check sources
-      - name: Run deny advisories
-        run: cargo deny --config .config/deny.toml check advisories
+          components: rustfmt
       - name: Check formatting
         run: cargo +beta fmt --all -- --check
-
-  native-stable:
-    name: Stable Platforms
-    uses: ./.github/workflows/reusable-native-tests.yml
-    with:
-      toolchain: stable
-      full: true
 
   linux-beta:
     name: Linux Beta

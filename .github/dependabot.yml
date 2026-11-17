@@ -9,4 +9,4 @@ updates:
         patterns:
           - "*"
 
-# Rust dependency updates are reviewed through the weekly dependency audit.
+# Rust dependency updates are reviewed through the nightly dependency audit.
