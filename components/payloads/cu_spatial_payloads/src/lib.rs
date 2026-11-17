@@ -68,11 +68,15 @@ impl GeodeticPosition {
 /// Transform3D represents a 3D transformation (rotation + translation)
 /// When the glam feature is enabled, it uses glam's optimized types internally
 #[derive(Debug, Clone, Copy, Reflect)]
-#[reflect(opaque, from_reflect = false)]
+#[cfg_attr(not(feature = "rerun"), reflect(opaque, from_reflect = false))]
+#[cfg_attr(feature = "rerun", reflect(from_reflect = false, no_field_bounds))]
+#[cfg_attr(feature = "rerun", reflect(@rerun_pose::representation::<T>()))]
 pub struct Transform3D<T: Copy + Debug + 'static> {
     #[cfg(feature = "glam")]
+    #[cfg_attr(feature = "rerun", reflect(ignore))]
     inner: TransformInner<T>,
     #[cfg(not(feature = "glam"))]
+    #[cfg_attr(feature = "rerun", reflect(ignore))]
     pub mat: [[T; 4]; 4],
 }
 
@@ -1422,3 +1426,6 @@ mod tests {
 
 #[cfg(feature = "rerun")]
 mod rerun_geometry;
+
+#[cfg(feature = "rerun")]
+mod rerun_pose;
