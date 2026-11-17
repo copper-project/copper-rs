@@ -86,8 +86,9 @@ Prefer the root `justfile` over copying long Cargo command lines:
 | Runtime proc-macro expansion | `just expand-runtime pkg=<crate> bin=<bin> [features=<features>]` |
 | SoA derive expansion | `just expand-soa` |
 
-Linux is the primary full-workspace gate. macOS is also release-blocking, Windows
-validates a reduced core surface, and embedded coverage is compile-time rather than
+Linux is the full-workspace PR gate. Each code PR also runs one focused native
+smoke job on macOS and Windows: clocks, mapped logs, UDP integration, and runtime
+replay with async I/O. Embedded coverage is compile-time rather than
 hardware-in-the-loop. See
 [Supported Platforms](https://copper-project.github.io/copper-rs/Supported-Platforms)
 for the public platform matrix.
@@ -101,10 +102,29 @@ wrappers.
 
 Actions uses standard GitHub-hosted runners. Documentation-only changes run the
 formatting gate and CI status check; code and build-configuration changes run the
-full matrix and PR coverage. Docs publishing reuses an unexpired master coverage
+Linux matrix, native smoke checks, and PR coverage. Docs publishing reuses an unexpired master coverage
 artifact for documentation-only changes and regenerates it when none is available.
-CI images refresh weekly and whenever their Docker inputs change. Actions
-dependency updates are grouped into one weekly pull request.
+CI images refresh weekly and whenever their Docker inputs change. Same-repository
+PRs build changed images once through the main workflow; fork PRs use Linux host
+checks plus a separate, non-publishing Docker build when image inputs change.
+Actions dependency updates are grouped into one weekly pull request.
+
+The weekly workflow (also available through Run workflow) separates stable platform
+regressions from upcoming compiler changes:
+
+- Stable macOS runs default and feature-enabled workspace tests, compile fixtures,
+  UDP integration, deterministic replay, and template generation/builds.
+- Stable Windows runs default and async-I/O core tests, compile fixtures, UDP
+  integration, and selected component checks/tests.
+- Linux beta runs the full host matrix, CUDA checks, and embedded checks. CUDA tests
+  compile without execution when the runner has no GPU driver.
+
+Broad native regressions can therefore be discovered after merge; the PR smoke
+jobs catch a smaller set of native failures. Each weekly native job shares setup
+and build artifacts across its checks. Multimedia dependencies are installed only
+for workspace checks, not for native smoke jobs. Linux container and fork host
+jobs use the same check implementation in `.github/actions/linux-checks`.
+The `CI Status` aggregate remains the overall PR result.
 
 The weekly audit checks security advisories across the full dependency tree.
 Unmaintained-crate advisories block on direct workspace dependencies; transitive

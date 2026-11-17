@@ -1,0 +1,158 @@
+name: Reusable Native Tests
+
+on:
+  workflow_call:
+    inputs:
+      toolchain:
+        type: string
+        default: stable
+      full:
+        description: Full weekly platform coverage instead of the PR smoke checks.
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_NET_RETRY: "10"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+  CARGO_PROFILE_DEV_CODEGEN_UNITS: "16"
+  CARGO_PROFILE_TEST_CODEGEN_UNITS: "16"
+  CARGO_INCREMENTAL: "0"
+  CARGO_NAME: "Copper Tests"
+
+jobs:
+  native:
+    name: ${{ inputs.full && 'Full' || 'Smoke' }} (${{ matrix.os }}, ${{ inputs.toolchain }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    env:
+      WORKSPACE_SCOPE: ${{ inputs.full && matrix.os == 'macos-latest' && 'workspace' || 'core' }}
+      BASE_FEATURES: cu29/reflect,cu29/async-cl-io,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/ci-resources
+        with:
+          phase: start
+      - name: Set up Python
+        if: inputs.full && runner.os == 'macOS'
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.x"
+      - uses: ./.github/actions/rust-ci-setup
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          cache_prefix: debug
+          cache_shared_key: rust-${{ runner.os }}
+          install_nextest: "true"
+          sccache_write: "true"
+      - name: Install Python task dependency
+        if: inputs.full && runner.os == 'macOS'
+        run: python -m pip install cbor2
+      - name: Test native clocks, mapped logs, and UDP
+        if: ${{ !inputs.full }}
+        run: >
+          cargo +${{ inputs.toolchain }} nextest run
+          -p cu29-clock -p cu29-unifiedlog -p cu29-logstream-udp
+          --features cu29-logstream-udp/runtime-integration
+      - name: Test runtime replay with async I/O
+        if: ${{ !inputs.full }}
+        run: cargo +${{ inputs.toolchain }} test -p cu29-runtime --test replay_primitives --features cu29/async-cl-io
+      - name: Detect default workspace exclusions
+        if: inputs.full && runner.os == 'macOS'
+        run: |
+          EXCLUDES=$(python3 support/ci/workspace_excludes.py excludes --toolchain ${{ inputs.toolchain }})
+          echo "WORKSPACE_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+      - name: Run Unit Tests
+        if: inputs.full
+        run: cargo +${{ inputs.toolchain }} nextest run --all-targets $WORKSPACE_FLAG $WORKSPACE_EXCLUDES -- --skip test_compile_fail
+      - name: Run UDP logstream integration
+        if: inputs.full
+        run: cargo +${{ inputs.toolchain }} test -p cu29-logstream-udp --features runtime-integration
+      - name: Check two-process UDP logstream demo
+        if: inputs.full && runner.os == 'macOS'
+        run: |
+          cargo +${{ inputs.toolchain }} test -p cu29-logstream --test pacing
+          cargo +${{ inputs.toolchain }} test -p cu29 --features logstream --test logstream_runtime
+          cargo +${{ inputs.toolchain }} clippy -p cu-logstream-demo --all-targets --features replay -- --deny warnings
+          cargo +${{ inputs.toolchain }} build -p cu-logstream-demo --features replay --bins
+          python3 examples/cu_logstream_demo/run.py all --binary "${CARGO_TARGET_DIR:-target}/debug/cu-logstream-demo"
+      - name: Run compile tests
+        if: inputs.full
+        run: |
+          cargo +${{ inputs.toolchain }} test -p cu29-derive --lib test_compile_fail -- --nocapture
+          cargo +${{ inputs.toolchain }} test -p cu29-value --features self-describing-logs --test value_decode_compile -- --nocapture
+      - name: Run cu-caterpillar determinism test (determinism_ci)
+        if: inputs.full && runner.os == 'macOS'
+        env:
+          RAYON_NUM_THREADS: "1"
+          COPPER_DETERMINISM_ITERS: "256"
+          COPPER_DETERMINISM_DT_TICKS: "1000"
+        run: >
+          cargo +${{ inputs.toolchain }} test -p cu-caterpillar --features determinism_ci
+          -- determinism_record_and_resim --test-threads=1
+      - name: Set features (MacOS)
+        if: inputs.full && runner.os == 'macOS'
+        run: |
+          echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
+      - name: Set features (Windows)
+        if: inputs.full && runner.os == 'Windows'
+        run: |
+          echo "FEATURES_FLAG=--features cu29/async-cl-io" >> $GITHUB_ENV
+      - name: Test enabled features
+        if: inputs.full
+        run: cargo +${{ inputs.toolchain }} nextest run --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $WORKSPACE_EXCLUDES -- --skip test_compile_fail
+      - name: Check selected Windows components
+        if: inputs.full && runner.os == 'Windows'
+        run: >
+          cargo +${{ inputs.toolchain }} check --all-targets
+          -p cu-consolemon
+          -p cu-tuimon
+          -p cu-logmon
+          -p cu-safetymon
+          -p cu-sensor-payloads
+          -p cu-spatial-payloads
+          -p cu-gnss-payloads
+          -p cu-transform
+          -p cu-pid
+          -p cu-ahrs
+          -p cu-ratelimit
+          -p cu-caterpillar
+          -p cu-bridge-test
+          -p cu-resources-test
+          -p cu-monitoring
+      - name: Test portable Windows components
+        if: inputs.full && runner.os == 'Windows'
+        run: >
+          cargo +${{ inputs.toolchain }} nextest run
+          -p cu-sensor-payloads
+          -p cu-spatial-payloads
+          -p cu-gnss-payloads
+          -p cu-transform
+          -p cu-pid
+          -p cu-ahrs
+          -p cu-ratelimit
+      - name: Install cargo-generate
+        if: inputs.full && runner.os == 'macOS'
+        uses: taiki-e/install-action@v2.90.3
+        with:
+          tool: cargo-generate
+      - name: Generate and build templates
+        if: inputs.full && runner.os == 'macOS'
+        run: bash support/ci/check_templates.sh '${{ inputs.toolchain }}'
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
+      - uses: ./.github/actions/ci-resources
+        if: always()
+        with:
+          phase: finish

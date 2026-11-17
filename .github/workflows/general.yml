@@ -66,87 +66,12 @@ jobs:
         uses: ./.github/actions/ci-resources
         with:
           phase: start
-      - id: registry_access
-        shell: bash
-        run: |
-          can_use_registry=true
-          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]] && [[ "${{ github.event.pull_request.head.repo.full_name }}" != "$GITHUB_REPOSITORY" ]]; then
-            can_use_registry=false
-          fi
-          echo "enabled=$can_use_registry" >> "$GITHUB_OUTPUT"
-      - name: Log in to GHCR
-        if: steps.registry_access.outputs.enabled == 'true'
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
       - id: image_ref
-        shell: bash
-        run: |
-          stable_image="ghcr.io/copper-project/copper-rs-ci:ubuntu-26.04"
-          force_rebuild=false
-          relevant_image_paths='^support/docker/'
-
-          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
-            if [[ "${{ github.event.pull_request.head.repo.full_name }}" != "$GITHUB_REPOSITORY" ]]; then
-              echo "image=" >> "$GITHUB_OUTPUT"
-              echo "should_build=false" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-
-            git fetch --no-tags --depth=1 origin "${{ github.event.pull_request.base.sha }}"
-            changed_files="$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "$GITHUB_SHA")"
-            if grep -Eq "$relevant_image_paths" <<<"$changed_files"; then
-              force_rebuild=true
-            fi
-          elif [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
-            if [[ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]]; then
-              git fetch --no-tags --depth=1 origin "${{ github.event.before }}" || true
-              changed_files="$(git diff --name-only "${{ github.event.before }}" "$GITHUB_SHA" || true)"
-            else
-              changed_files="$(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" || true)"
-            fi
-            if grep -Eq "$relevant_image_paths" <<<"$changed_files"; then
-              force_rebuild=true
-            fi
-          fi
-
-          if [[ "$force_rebuild" != "true" ]] && docker manifest inspect "$stable_image" >/dev/null 2>&1; then
-            echo "image=$stable_image" >> "$GITHUB_OUTPUT"
-            echo "should_build=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          run_image="ghcr.io/copper-project/copper-rs-ci:run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          {
-            echo "image=$run_image"
-            echo "should_build=true"
-            echo "tags<<EOF"
-            echo "$run_image"
-            if [[ "$GITHUB_REF" == "refs/heads/master" ]]; then
-              echo "$stable_image"
-            fi
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-      - name: Set up Docker Buildx
-        if: steps.image_ref.outputs.should_build == 'true'
-        id: buildx
-        uses: docker/setup-buildx-action@v4
+        uses: ./.github/actions/ci-image
         with:
-          driver: docker-container
-      - name: Build and push Linux CI image
-        if: steps.image_ref.outputs.should_build == 'true'
-        uses: docker/build-push-action@v7
-        with:
-          builder: ${{ steps.buildx.outputs.name }}
-          context: ./support/docker
-          file: ./support/docker/Dockerfile.ci-ubuntu26
-          pull: true
-          push: true
-          tags: ${{ steps.image_ref.outputs.tags }}
-          cache-from: type=gha,scope=linux-ci-image-ubuntu26
-          cache-to: type=gha,mode=max,scope=linux-ci-image-ubuntu26
+          tag: ubuntu-26.04
+          dockerfile: Dockerfile.ci-ubuntu26
+          cache_scope: linux-ci-image-ubuntu26
       - name: Report resource measurements
         if: always()
         uses: ./.github/actions/ci-resources
@@ -171,87 +96,12 @@ jobs:
         uses: ./.github/actions/ci-resources
         with:
           phase: start
-      - id: registry_access
-        shell: bash
-        run: |
-          can_use_registry=true
-          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]] && [[ "${{ github.event.pull_request.head.repo.full_name }}" != "$GITHUB_REPOSITORY" ]]; then
-            can_use_registry=false
-          fi
-          echo "enabled=$can_use_registry" >> "$GITHUB_OUTPUT"
-      - name: Log in to GHCR
-        if: steps.registry_access.outputs.enabled == 'true'
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
       - id: image_ref
-        shell: bash
-        run: |
-          stable_image="ghcr.io/copper-project/copper-rs-ci:cuda-12.6.1-ubuntu-24.04"
-          force_rebuild=false
-          relevant_image_paths='^support/docker/'
-
-          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
-            if [[ "${{ github.event.pull_request.head.repo.full_name }}" != "$GITHUB_REPOSITORY" ]]; then
-              echo "image=" >> "$GITHUB_OUTPUT"
-              echo "should_build=false" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-
-            git fetch --no-tags --depth=1 origin "${{ github.event.pull_request.base.sha }}"
-            changed_files="$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "$GITHUB_SHA")"
-            if grep -Eq "$relevant_image_paths" <<<"$changed_files"; then
-              force_rebuild=true
-            fi
-          elif [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
-            if [[ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]]; then
-              git fetch --no-tags --depth=1 origin "${{ github.event.before }}" || true
-              changed_files="$(git diff --name-only "${{ github.event.before }}" "$GITHUB_SHA" || true)"
-            else
-              changed_files="$(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" || true)"
-            fi
-            if grep -Eq "$relevant_image_paths" <<<"$changed_files"; then
-              force_rebuild=true
-            fi
-          fi
-
-          if [[ "$force_rebuild" != "true" ]] && docker manifest inspect "$stable_image" >/dev/null 2>&1; then
-            echo "image=$stable_image" >> "$GITHUB_OUTPUT"
-            echo "should_build=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          run_image="ghcr.io/copper-project/copper-rs-ci:cuda-run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          {
-            echo "image=$run_image"
-            echo "should_build=true"
-            echo "tags<<EOF"
-            echo "$run_image"
-            if [[ "$GITHUB_REF" == "refs/heads/master" ]]; then
-              echo "$stable_image"
-            fi
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-      - name: Set up Docker Buildx
-        if: steps.image_ref.outputs.should_build == 'true'
-        id: buildx
-        uses: docker/setup-buildx-action@v4
+        uses: ./.github/actions/ci-image
         with:
-          driver: docker-container
-      - name: Build and push Linux CUDA CI image
-        if: steps.image_ref.outputs.should_build == 'true'
-        uses: docker/build-push-action@v7
-        with:
-          builder: ${{ steps.buildx.outputs.name }}
-          context: ./support/docker
-          file: ./support/docker/Dockerfile.ci-cuda-ubuntu24
-          pull: true
-          push: true
-          tags: ${{ steps.image_ref.outputs.tags }}
-          cache-from: type=gha,scope=linux-cuda-ci-image-ubuntu24
-          cache-to: type=gha,mode=max,scope=linux-cuda-ci-image-ubuntu24
+          tag: cuda-12.6.1-ubuntu-24.04
+          dockerfile: Dockerfile.ci-cuda-ubuntu24
+          cache_scope: linux-cuda-ci-image-ubuntu24
       - name: Report resource measurements
         if: always()
         uses: ./.github/actions/ci-resources
@@ -284,7 +134,6 @@ jobs:
         uses: ./.github/actions/rust-ci-setup
         with:
           toolchain: ${{ env.MSRV }}
-          linux_cargo_paths: true
           prebaked_linux_image: "true"
           cache_prefix: msrv-ubuntu26-container
           cache_shared_key: rust-ubuntu
@@ -325,8 +174,6 @@ jobs:
         uses: ./.github/actions/rust-ci-setup
         with:
           toolchain: ${{ env.MSRV }}
-          linux_cargo_paths: true
-          linux_disk_workarounds: "false"
           cache_prefix: msrv-ubuntu-host
           cache_shared_key: rust-ubuntu
           install_nextest: "false"
@@ -345,21 +192,11 @@ jobs:
         with:
           phase: finish
 
-  Unit-Tests-Other:
+  Native-Tests:
     if: needs.changes.outputs.code == 'true'
     needs: changes
-    name: Unit Tests
-    uses: ./.github/workflows/reusable-unit-tests.yml
-    secrets: inherit
-    with:
-      toolchain: stable
-      linux_cargo_paths: true
-      linux_disk_workarounds: false
-      linux_runner_label: ubuntu-latest
-      windows_runner_label: windows-latest
-      run_linux: false
-      run_cuda: false
-      run_other: true
+    name: Native Tests
+    uses: ./.github/workflows/reusable-native-tests.yml
 
   Unit-Tests-Linux:
     if: needs.changes.outputs.code == 'true'
@@ -369,15 +206,9 @@ jobs:
     secrets: inherit
     with:
       toolchain: stable
-      linux_cargo_paths: true
-      linux_disk_workarounds: false
       linux_ci_image: ${{ needs.linux-ci-image.outputs.image }}
-      linux_runner_label: ubuntu-latest
-      linux_light_runner_label: ubuntu-latest
-      windows_runner_label: windows-latest
       run_linux: true
       run_cuda: false
-      run_other: false
 
   Unit-Tests-CUDA:
     if: needs.changes.outputs.code == 'true'
@@ -387,14 +218,9 @@ jobs:
     secrets: inherit
     with:
       toolchain: stable
-      linux_cargo_paths: true
-      linux_disk_workarounds: false
       linux_cuda_ci_image: ${{ needs.linux-cuda-ci-image.outputs.image }}
-      linux_runner_label: ubuntu-latest
-      windows_runner_label: windows-latest
       run_linux: false
       run_cuda: true
-      run_other: false
 
   extra-examples-container:
     name: Extra Examples
@@ -418,7 +244,6 @@ jobs:
         uses: ./.github/actions/rust-ci-setup
         with:
           toolchain: stable
-          linux_cargo_paths: true
           prebaked_linux_image: "true"
           cache_prefix: extra-examples-ubuntu26-container
           cache_shared_key: rust-ubuntu-latest
@@ -453,8 +278,6 @@ jobs:
         uses: ./.github/actions/rust-ci-setup
         with:
           toolchain: stable
-          linux_cargo_paths: true
-          linux_disk_workarounds: "false"
           cache_prefix: extra-examples-ubuntu-host
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
@@ -493,7 +316,6 @@ jobs:
         uses: ./.github/actions/rust-ci-setup
         with:
           toolchain: stable
-          linux_cargo_paths: true
           prebaked_linux_image: "true"
           cache_prefix: benchmarks-ubuntu26-container
           cache_shared_key: rust-ubuntu-latest
@@ -526,8 +348,6 @@ jobs:
         uses: ./.github/actions/rust-ci-setup
         with:
           toolchain: stable
-          linux_cargo_paths: true
-          linux_disk_workarounds: "false"
           cache_prefix: benchmarks-ubuntu-host
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
@@ -550,8 +370,6 @@ jobs:
     secrets: inherit
     with:
       toolchain: stable
-      linux_cargo_paths: true
-      linux_disk_workarounds: false
       linux_ci_image: ${{ needs.linux-ci-image.outputs.image }}
       linux_runner_label: ubuntu-latest
 
@@ -603,7 +421,7 @@ jobs:
       - name: Check workspace CI exclusions
         run: |
           python3 -m unittest discover -s support/ci -p test_workspace_excludes.py
-          python3 -m unittest discover -s support/ci -p test_ci_changes.py
+          python3 -m unittest discover -s support/ci -p 'test_ci_*.py'
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
@@ -686,7 +504,7 @@ jobs:
       - linux-cuda-ci-image
       - msrv-container
       - msrv-host
-      - Unit-Tests-Other
+      - Native-Tests
       - Unit-Tests-Linux
       - Unit-Tests-CUDA
       - extra-examples-container

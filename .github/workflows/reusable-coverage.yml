@@ -10,14 +10,6 @@ on:
         required: false
         type: string
         default: ""
-      linux_cargo_paths:
-        required: false
-        type: boolean
-        default: false
-      linux_disk_workarounds:
-        required: false
-        type: boolean
-        default: true
       linux_ci_image:
         required: false
         type: string
@@ -69,8 +61,6 @@ jobs:
         with:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
-          linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
-          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
           prebaked_linux_image: "true"
           cache_prefix: coverage-ubuntu26-container
           cache_shared_key: rust-ubuntu-latest
@@ -128,8 +118,6 @@ jobs:
         with:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
-          linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
-          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
           cache_prefix: coverage-ubuntu-host
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "true"

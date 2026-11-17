@@ -1,0 +1,130 @@
+name: Linux checks
+description: Shared Linux checks for container runners and the fork-safe host fallback.
+inputs:
+  toolchain:
+    required: true
+    description: Rust toolchain.
+  task:
+    required: true
+    description: clippy, test, ui, features, doctests, or templates.
+  cuda:
+    default: "false"
+    description: Enable CUDA features and compile tests when no GPU driver exists.
+  image:
+    default: ""
+    description: Nonempty when dependencies are provided by the job container.
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/rust-ci-setup
+      with:
+        toolchain: ${{ inputs.toolchain }}
+        prebaked_linux_image: ${{ inputs.image != '' }}
+
+        cache_prefix: ${{ inputs.cuda == 'true' && 'cuda-debug' || 'debug' }}
+        cache_shared_key: rust-linux
+        install_nextest: ${{ inputs.task == 'test' || inputs.task == 'features' }}
+        sccache_write: ${{ inputs.task == 'clippy' || inputs.task == 'features' }}
+    - name: Configure CUDA
+      if: inputs.cuda == 'true'
+      shell: bash
+      run: |
+        cap=$(nvcc --list-gpu-code | awk -F_ '/sm_/ {print $2}' | sort -n | tail -1)
+        echo "CUDA_COMPUTE_CAP=${cap:-86}" >> "$GITHUB_ENV"
+        echo "CUDA_FEATURE=,cuda" >> "$GITHUB_ENV"
+    - name: Set features (Linux)
+      shell: bash
+      run: |
+        echo "FEATURES_FLAG=--features $BASE_FEATURES,python${CUDA_FEATURE}" >> $GITHUB_ENV
+    - name: Source ROS 2 (if present)
+      if: inputs.task == 'test' || inputs.task == 'features'
+      shell: bash
+      run: |
+        if [ -f "/opt/ros/lyrical/setup.bash" ]; then
+          source /opt/ros/lyrical/setup.bash
+          {
+            echo "AMENT_PREFIX_PATH=${AMENT_PREFIX_PATH:-}"
+            echo "CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH:-}"
+            echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}"
+            echo "PYTHONPATH=${PYTHONPATH:-}"
+            echo "PATH=$PATH"
+            echo "ROS_DISTRO=${ROS_DISTRO:-lyrical}"
+            echo "ROS_VERSION=${ROS_VERSION:-2}"
+            echo "ROS_PYTHON_VERSION=${ROS_PYTHON_VERSION:-3}"
+            echo "RMW_IMPLEMENTATION=rmw_zenoh_cpp"
+          } >> "$GITHUB_ENV"
+        fi
+    - name: Detect default workspace exclusions
+      shell: bash
+      run: |
+        EXCLUDES=$(python3 support/ci/workspace_excludes.py excludes --toolchain ${{ inputs.toolchain }})
+        echo "WORKSPACE_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+    - name: Lint default features
+      if: inputs.task == 'clippy' && inputs.cuda != 'true'
+      shell: bash
+      run: cargo +${{ inputs.toolchain }} clippy $WORKSPACE_FLAG --all-targets $WORKSPACE_EXCLUDES -- --deny warnings
+    - name: Lint enabled features
+      if: inputs.task == 'clippy'
+      shell: bash
+      run: cargo +${{ inputs.toolchain }} clippy $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $WORKSPACE_EXCLUDES -- --deny warnings
+    - name: Test default features
+      if: inputs.task == 'test'
+      shell: bash
+      run: cargo +${{ inputs.toolchain }} nextest run --all-targets $WORKSPACE_FLAG $WORKSPACE_EXCLUDES -- --skip test_compile_fail
+    # Compile the real demo with async queues even when no workspace member enables them.
+    - name: Check Bevy demo with async CopperList I/O
+      if: inputs.task == 'clippy' && inputs.cuda != 'true'
+      shell: bash
+      run: cargo +${{ inputs.toolchain }} check -p cu-bevymon-demo --all-targets --features cu29/async-cl-io
+    - name: Run UDP logstream integration
+      if: inputs.task == 'test'
+      shell: bash
+      run: cargo +${{ inputs.toolchain }} test -p cu29-logstream-udp --features runtime-integration
+    - name: Check two-process UDP logstream demo
+      if: inputs.task == 'test'
+      shell: bash
+      run: |
+        cargo +${{ inputs.toolchain }} test -p cu29-logstream --test pacing
+        cargo +${{ inputs.toolchain }} test -p cu29 --features logstream --test logstream_runtime
+        cargo +${{ inputs.toolchain }} clippy -p cu-logstream-demo --all-targets --features replay -- --deny warnings
+        cargo +${{ inputs.toolchain }} build -p cu-logstream-demo --features replay --bins
+        python3 examples/cu_logstream_demo/run.py all --binary "${CARGO_TARGET_DIR:-target}/debug/cu-logstream-demo"
+    - name: Run compile fixtures
+      if: inputs.task == 'ui'
+      shell: bash
+      run: |
+        cargo +${{ inputs.toolchain }} test -p cu29-derive --lib test_compile_fail -- --nocapture
+        cargo +${{ inputs.toolchain }} test -p cu29-value --features self-describing-logs --test value_decode_compile -- --nocapture
+    - name: Run cu-caterpillar determinism test (determinism_ci)
+      if: inputs.task == 'test'
+      env:
+        RAYON_NUM_THREADS: "1"
+        COPPER_DETERMINISM_ITERS: "256"
+        COPPER_DETERMINISM_DT_TICKS: "1000"
+      shell: bash
+      run: >
+        cargo +${{ inputs.toolchain }} test -p cu-caterpillar --features determinism_ci
+        -- determinism_record_and_resim --test-threads=1
+    - name: Test enabled features
+      if: inputs.task == 'features'
+      shell: bash
+      run: |
+        if [[ '${{ inputs.cuda }}' == 'true' ]] && ! ldconfig -p 2>/dev/null | grep 'libcuda\.so\.1' >/dev/null; then
+          echo "libcuda.so.1 not found; compiling all-feature tests without executing them."
+          cargo +${{ inputs.toolchain }} test --no-run --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $WORKSPACE_EXCLUDES
+          exit 0
+        fi
+        cargo +${{ inputs.toolchain }} nextest run --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $WORKSPACE_EXCLUDES -- --skip test_compile_fail
+    - name: Run doctests
+      if: inputs.task == 'doctests'
+      shell: bash
+      run: cargo +${{ inputs.toolchain }} test --doc $WORKSPACE_FLAG $WORKSPACE_EXCLUDES --quiet
+    - name: Install cargo-generate
+      if: inputs.task == 'templates'
+      uses: taiki-e/install-action@v2.90.3
+      with:
+        tool: cargo-generate
+    - name: Generate and build templates
+      if: inputs.task == 'templates'
+      shell: bash
+      run: bash support/ci/check_templates.sh '${{ inputs.toolchain }}'
