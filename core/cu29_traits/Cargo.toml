@@ -36,4 +36,4 @@ defmt = ["dep:defmt"]                                              # this is onl
 
 [dev-dependencies]
 serde_json = "1.0"
-cu29-runtime = { workspace = true, features = ["std"] }
+cu29-runtime = { workspace = true, features = ["std", "memory_monitoring"] }

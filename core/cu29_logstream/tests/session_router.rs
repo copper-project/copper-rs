@@ -415,38 +415,18 @@ fn startup_overflow_is_bounded_and_never_claims_a_complete_session() {
     );
 }
 
-struct CountingAllocator;
-thread_local! {
-    static ALLOCATIONS: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
-}
-unsafe impl std::alloc::GlobalAlloc for CountingAllocator {
-    unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
-        let _ = ALLOCATIONS.try_with(|count| {
-            if let Some(value) = count.get() {
-                count.set(Some(value + 1));
-            }
-        });
-        unsafe { std::alloc::System.alloc(layout) }
-    }
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
-        unsafe { std::alloc::System.dealloc(ptr, layout) }
-    }
-    unsafe fn realloc(&self, ptr: *mut u8, layout: std::alloc::Layout, size: usize) -> *mut u8 {
-        let _ = ALLOCATIONS.try_with(|count| {
-            if let Some(value) = count.get() {
-                count.set(Some(value + 1));
-            }
-        });
-        unsafe { std::alloc::System.realloc(ptr, layout, size) }
-    }
-}
-#[global_allocator]
-static ALLOCATOR: CountingAllocator = CountingAllocator;
-
-fn count_allocations(run: impl FnOnce()) -> usize {
-    ALLOCATIONS.with(|count| count.set(Some(0)));
+fn count_allocated_bytes(run: impl FnOnce()) -> usize {
+    let counter = cu29_runtime::monitoring::ScopedAllocCounter::new();
     run();
-    ALLOCATIONS.with(|count| count.replace(None).unwrap())
+    counter.allocated()
+}
+
+#[test]
+fn allocation_counter_detects_heap_allocations() {
+    let allocated_bytes = count_allocated_bytes(|| {
+        std::hint::black_box(vec![0u8; 1024]);
+    });
+    assert!(allocated_bytes >= 1024);
 }
 
 #[test]
@@ -509,13 +489,16 @@ fn warmed_router_reuses_record_buffers_with_reordering_and_consumer_retries() {
         }
     };
     deliver_pair(&packets[..2]);
-    let allocations = count_allocations(|| {
+    let allocated_bytes = count_allocated_bytes(|| {
         for pair in packets[2..].as_chunks::<2>().0 {
             deliver_pair(pair);
         }
     });
     assert_eq!(next, 200);
-    assert_eq!(allocations, 0, "steady-state receive and retry allocated");
+    assert_eq!(
+        allocated_bytes, 0,
+        "steady-state receive and retry allocated"
+    );
 }
 
 #[test]
@@ -544,7 +527,7 @@ fn recovery_delivery_retries_borrow_the_same_verified_control_records() {
     }
     let pointers = pointers.expect("recovery event");
     let mut delivered = false;
-    let allocations = count_allocations(|| {
+    let allocations = count_allocated_bytes(|| {
         router
             .drain_events(&mut |event| {
                 if let SessionEvent::VerifiedRecoveryPoint {
@@ -607,7 +590,7 @@ fn archive_writes_recovery_bytes_without_allocating() {
                         );
                     }
                     if matches!(event, SessionEvent::VerifiedRecoveryPoint { .. }) {
-                        let allocations = count_allocations(|| {
+                        let allocations = count_allocated_bytes(|| {
                             archive.as_mut().unwrap().accept(&event).unwrap();
                         });
                         assert_eq!(
@@ -641,7 +624,7 @@ fn continuity_records_support_borrowed_writes_and_owned_reads() {
     for record in records {
         let mut bytes = [0; 512];
         let mut len = 0;
-        let allocations = count_allocations(|| {
+        let allocations = count_allocated_bytes(|| {
             len = bincode::encode_into_slice(&record, &mut bytes, bincode::config::standard())
                 .unwrap();
             let (decoded, used): (StreamContinuityRecord<&[u8]>, _) =
@@ -996,19 +979,19 @@ fn structured_handoff_allocates_nothing_preserves_local_logs_and_stops_without_l
     let mut entry = CuLogEntry::new(47, CuLogLevel::Info);
     entry.paramname_indexes.push(0);
     entry.params.push(cu29_value::Value::U64(42));
-    assert_eq!(count_allocations(|| sink.log(&entry).unwrap()), 0);
+    assert_eq!(count_allocated_bytes(|| sink.log(&entry).unwrap()), 0);
     let mut oversized = CuLogEntry::new(48, CuLogLevel::Warning);
     for _ in 0..700 {
         oversized.paramname_indexes.push(0);
         oversized.params.push(cu29_value::Value::U64(u64::MAX));
     }
-    assert_eq!(count_allocations(|| sink.log(&oversized).unwrap()), 0);
+    assert_eq!(count_allocated_bytes(|| sink.log(&oversized).unwrap()), 0);
     assert_eq!(monitor.inbox_drops(), 1);
     // The logger still owns the structured handoff when output teardown joins.
     drop((cl, kf));
     assert!(monitor.final_stats().is_some());
     assert!(!monitor.failed());
-    assert_eq!(count_allocations(|| sink.log(&entry).unwrap()), 0);
+    assert_eq!(count_allocated_bytes(|| sink.log(&entry).unwrap()), 0);
     assert_eq!(monitor.inbox_drops(), 2);
     drop(sink);
     let mut decoder = cu29_logstream::FiniteObjectDecoder::new(

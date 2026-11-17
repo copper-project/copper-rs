@@ -37,6 +37,7 @@ raptorq = { workspace = true }
 cu29-build = { workspace = true }
 
 [dev-dependencies]
+cu29-runtime = { workspace = true, features = ["std", "memory_monitoring"] }
 tempfile = { workspace = true }
 serde = { workspace = true }
 
