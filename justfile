@@ -139,9 +139,9 @@ check-format-tools:
 		exit 1
 	fi
 
-# Typo check only
+# Check tracked files for typos, respecting the shared exclusions.
 typos:
-	typos -c .config/_typos.toml
+	git ls-files -z | xargs -0 -r typos -c .config/_typos.toml --force-exclude
 
 # Ensure public API snapshot tooling is available.
 check-public-api:
