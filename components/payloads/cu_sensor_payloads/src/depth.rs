@@ -219,6 +219,7 @@ where
 /// retain a sensor's compact native representation without a producer-side
 /// conversion or copy.
 #[derive(Debug, Default, Clone, Reflect)]
+#[cfg_attr(feature = "rerun", reflect(@cu_rerun::representation::<Self, cu_rerun::views::Spatial2DView>()))]
 #[reflect(
     from_reflect = false,
     no_field_bounds,

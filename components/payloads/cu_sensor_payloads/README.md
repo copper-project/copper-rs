@@ -28,6 +28,17 @@ available through field inspection.
 Record an example with `cargo run -p cu-sensor-payloads --features rerun --example rerun_imu -- imu.rrd`,
 then open `imu.rrd` in Rerun.
 
+## Rerun depth images
+
+Enable `rerun` to inspect `CuDepthMap` in Copper's 2D debug view or log it directly
+with Rerun. All `CuDepthEncoding` implementations are decoded into metric depth
+only when visualization is requested. Row padding is removed; invalid, nonfinite,
+and nonpositive samples become zero (missing depth). Malformed layouts and short
+buffers clear the previous depth image. Recorded payloads retain their native encoding.
+
+Generate a sample recording with `cargo run -p cu-sensor-payloads --features rerun
+--example rerun_depth -- depth.rrd`, then open `depth.rrd` in Rerun.
+
 ## Rerun images
 
 Enable `rerun` to inspect `CuImage` in Copper's 2D debug view or log it directly

@@ -31,3 +31,6 @@ pub use ranging::*;
 
 #[cfg(feature = "rerun")]
 mod rerun_imu;
+
+#[cfg(feature = "rerun")]
+mod depth_rerun;
