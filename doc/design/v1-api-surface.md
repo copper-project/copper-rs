@@ -128,6 +128,7 @@ uses allocation-free `SyncError`; runtime adapters return `CuError`.
   in-memory SVG rendering. The SVG markup and layout are presentation output, not
   a stable serialization format.
 
+- `cu29::logstream::protocol` exposes experimental record-level sender and receiver traits for custom live twin protocols.
 - `cu29::logstream::CuTwinBuilder`: `with_slab_size`, `with_section_size`,
   `with_receiver_limits`, `with_replay_capacity`, and `with_log_capacity` configure
   receiver-side archive and buffering budgets. `SessionRouterLimits::default()`
