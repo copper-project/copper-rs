@@ -19,12 +19,12 @@ domains = ["sensor/camera"]
 environments = ["host"]
 
 [dependencies]
-cu29 = { workspace = true }
-bincode = { workspace = true }
-circular-buffer = { workspace = true }
+cu29 = { workspace = true, optional = true }
+bincode = { workspace = true, optional = true }
+circular-buffer = { workspace = true, optional = true }
 gstreamer = { workspace = true, default-features = false, optional = true }
 gstreamer-app = { version = "0.25", default-features = false, optional = true }
-serde = { workspace = true }
+serde = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
@@ -35,4 +35,11 @@ cu29-build = { workspace = true }
 cfg_aliases = { workspace = true }
 
 [features]
-gst = ["dep:gstreamer", "dep:gstreamer-app"]
+gst = [
+  "bincode",
+  "dep:serde",
+  "dep:cu29",
+  "dep:circular-buffer",
+  "dep:gstreamer",
+  "dep:gstreamer-app",
+]

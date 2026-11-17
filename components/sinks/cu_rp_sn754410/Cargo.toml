@@ -40,3 +40,7 @@ cfg_aliases = { workspace = true }
 [features]
 default = []
 mock = []
+
+[lints.cargo]
+# The mock feature disables rppal; Cargo cannot gate dependencies on not(feature).
+unused_dependencies = "allow"

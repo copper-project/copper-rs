@@ -18,3 +18,7 @@ bincode = { workspace = true }
 [package.metadata.cargo-shear]
 # ui_test exposes these dependencies to the fixture files through --extern.
 ignored = ["cu29", "cu29-derive", "serde", "bincode"]
+
+[lints.cargo]
+# ui_test passes these dependencies to fixtures through --extern.
+unused_dependencies = "allow"

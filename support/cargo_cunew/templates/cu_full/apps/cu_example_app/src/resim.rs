@@ -4,7 +4,7 @@
 #![allow(deprecated)]
 
 mod messages;
-mod tasks;
+pub mod tasks;
 
 use cu29::prelude::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
 use cu29::prelude::*;

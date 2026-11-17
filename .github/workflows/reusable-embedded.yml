@@ -16,6 +16,7 @@ on:
         default: "ubuntu-latest"
 
 env:
+  CARGO_BUILD_WARNINGS: deny
   CARGO_NET_RETRY: "10"
   # Caller workflow env is not inherited by reusable workflows.
   # Keep CI artifacts small across the embedded build and test jobs.

@@ -6,6 +6,8 @@ BASE_FEATURES := "cu29/reflect,cu29/async-cl-io,mock,cu-sensor-payloads/image,ko
 WINDOWS_BASE_FEATURES := "cu29/reflect,cu29/async-cl-io,mock,cu-sensor-payloads/image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode"
 PUBLIC_API_VERSION := "0.51.0"
 PUBLIC_API_TOOLCHAIN := "nightly-2026-06-25"
+# Reject compiler and Cargo lint warnings in local checks, including test builds.
+export CARGO_BUILD_WARNINGS := "deny"
 # Keep imported recipes anchored to the file that defines them.
 export ROOT := source_directory()
 MSRV := shell('''python3 -c 'import pathlib, sys, tomllib; print(tomllib.loads((pathlib.Path(sys.argv[1]) / "Cargo.toml").read_text())["workspace"]["package"]["rust-version"])' "$1"''', ROOT)

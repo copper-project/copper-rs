@@ -21,7 +21,6 @@ high-precision-limiter = ["cu29/high-precision-limiter"]
 [dependencies]
 cu29 = { workspace = true, features = ["log-level-info"] }
 serde = { workspace = true }
-cu29-export = { workspace = true }
 
 [lib]
 path = "src/lib.rs"
@@ -36,7 +35,7 @@ path = "src/bin/rate_target_precise.rs"
 required-features = ["high-precision-limiter"]
 
 [package.metadata.cargo-shear]
-ignored = ["serde", "cu29-export"]
+ignored = ["serde"]
 
 [build-dependencies]
 cu29-build = { workspace = true }
