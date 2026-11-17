@@ -72,7 +72,8 @@
 //! | `params` | `object` | yes | Method-specific params (can be `{}`). |
 //! | `reply_to` | `string` | yes | Reply topic keyexpr. |
 //!
-//! Rerun representations require the `rerun` feature. RRD headers carry format versions.
+//! Remote debugging always includes Rerun representation RPCs. RRD headers carry format versions.
+//! Payload crates must enable their own representation features to advertise their types.
 //! `representation.read` reads a recorded message at `at`, or reconstructs task state there
 //! (moving the cursor). With `replayed: true`,
 //! omit `at` to serialize the current runtime output/state. `nav.replay` accepts optional
@@ -522,10 +523,8 @@ pub struct DebugRpcResponse {
     pub resolved_at: Option<ResolvedAt>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub attachments: Vec<DebugRpcAttachment>,
-    #[cfg(feature = "rerun")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub representation: Option<RrdPayload>,
-    #[cfg(feature = "rerun")]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub representation_frames: Vec<RepresentationFrame>,
 }
@@ -696,7 +695,6 @@ struct NavReplayParams {
     include_replayed_cl: bool,
     #[serde(default)]
     include_state: bool,
-    #[cfg(feature = "rerun")]
     #[serde(default)]
     representation_targets: Vec<RepresentationTarget>,
 }
@@ -1711,9 +1709,6 @@ where
             .get("include_handle_contents")
             .and_then(Value::as_bool)
             .unwrap_or(false);
-        #[cfg(not(feature = "rerun"))]
-        let include_representations = false;
-        #[cfg(feature = "rerun")]
         let include_representations = request.method == "representation.read"
             || (request.method == "nav.replay"
                 && request
@@ -1748,9 +1743,7 @@ where
         let request_id = request.request_id.clone();
 
         match request.method.as_str() {
-            #[cfg(feature = "rerun")]
             "representation.list" => self.handle_representation_list(request),
-            #[cfg(feature = "rerun")]
             "representation.read" => self.handle_representation_read(request),
             "session.open" => self.handle_session_open(request_id, &request.params),
             "session.close" => self.handle_session_close(request_id, request.session_id.as_deref()),
@@ -2237,7 +2230,6 @@ where
             update_after_jump(state, &jump);
         }
 
-        #[cfg(feature = "rerun")]
         let mut representation_frames = Vec::new();
         let mut items = Vec::with_capacity(parsed.limit as usize);
         for step_idx in 0..parsed.limit {
@@ -2258,7 +2250,6 @@ where
                     Ok(v) => v,
                     Err(e) => return err_response(request_id, "ReplayFailed", &e.to_string()),
                 };
-            #[cfg(feature = "rerun")]
             if !parsed.representation_targets.is_empty() {
                 let cursor = match cursor_snapshot(state, &time_of) {
                     Ok(cursor) => cursor,
@@ -2316,7 +2307,6 @@ where
             Some(state.cursor_rev),
             resolved_at,
         );
-        #[cfg(feature = "rerun")]
         let response = DebugRpcResponse {
             representation_frames,
             ..response
@@ -3415,9 +3405,7 @@ fn ok_response(
         cursor_rev,
         resolved_at,
         attachments: Vec::new(),
-        #[cfg(feature = "rerun")]
         representation: None,
-        #[cfg(feature = "rerun")]
         representation_frames: Vec::new(),
     }
 }
@@ -3435,9 +3423,7 @@ fn err_response(request_id: String, code: &str, message: &str) -> DebugRpcRespon
         cursor_rev: None,
         resolved_at: None,
         attachments: Vec::new(),
-        #[cfg(feature = "rerun")]
         representation: None,
-        #[cfg(feature = "rerun")]
         representation_frames: Vec::new(),
     }
 }
@@ -3447,9 +3433,7 @@ fn param_err_response(request_id: String, message: String) -> DebugRpcResponse {
 }
 
 mod client;
-#[cfg(feature = "rerun")]
 mod representations;
-#[cfg(feature = "rerun")]
 pub use representations::{
     RepresentationDescriptor, RepresentationFrame, RepresentationTarget, RrdPayload,
 };
@@ -3483,13 +3467,9 @@ fn capabilities_json(session_lifecycle: SessionLifecycleLimits) -> Value {
         "health.ping",
         "health.stats",
         "process.describe",
+        "representation.list",
+        "representation.read",
     ];
-    #[cfg(feature = "rerun")]
-    let methods = {
-        let mut methods = methods;
-        methods.extend(["representation.list", "representation.read"]);
-        methods
-    };
     json!({
         "version": API_VERSION,
         "wire_codecs": ["cbor", "json"],

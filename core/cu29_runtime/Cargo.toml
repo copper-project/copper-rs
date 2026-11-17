@@ -94,7 +94,8 @@ serde = { workspace = true }
 tempfile = { workspace = true }
 
 [features]
-rerun = ["remote-debug", "cu29-traits/rerun", "dep:cu-rerun"]
+# Compatibility alias: remote debugging always includes Rerun representations.
+rerun = ["remote-debug"]
 clock-sync = ["cu29-clock/clock-sync", "dep:rtrb"]
 self-describing-logs = ["cu29-value/self-describing-logs"]
 default = ["std"]
@@ -112,6 +113,8 @@ parallel-rt = ["std"]
 rt-scheduling = ["std", "dep:core_affinity", "dep:libc"]
 mmap-fsync = ["std", "cu29-unifiedlog/mmap-fsync"]
 remote-debug = [
+  "cu29-traits/rerun",
+  "dep:cu-rerun",
   "std",
   "reflect",
   "dep:libc",

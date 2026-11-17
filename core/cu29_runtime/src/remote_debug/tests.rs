@@ -320,18 +320,14 @@ fn capabilities_advertise_single_session_heartbeat_lease() {
 }
 
 #[test]
-fn representation_methods_follow_the_rerun_feature() {
+fn remote_debug_always_advertises_representation_methods() {
     let capabilities = capabilities_json(SessionLifecycleLimits::default());
     let methods = capabilities["supports_methods"].as_array().unwrap();
     for method in ["representation.list", "representation.read"] {
-        assert_eq!(
-            methods.contains(&serde_json::json!(method)),
-            cfg!(feature = "rerun")
-        );
+        assert!(methods.contains(&serde_json::json!(method)));
     }
 }
 
-#[cfg(feature = "rerun")]
 #[test]
 fn typed_rrd_response_round_trips_as_cbor_bytes() -> CuResult<()> {
     use super::{RepresentationDescriptor, RepresentationTarget, RrdPayload};
@@ -371,7 +367,6 @@ fn typed_rrd_response_round_trips_as_cbor_bytes() -> CuResult<()> {
     Ok(())
 }
 
-#[cfg(feature = "rerun")]
 #[test]
 fn composite_snapshot_round_trips_native_blueprint_bytes() -> CuResult<()> {
     use super::RrdPayload;
@@ -416,9 +411,7 @@ fn cbor_handle_attachments_are_encoded_as_byte_strings() -> CuResult<()> {
     let data = vec![0xde, 0xad, 0xbe, 0xef];
     let response = DebugRpcResponse {
         request_id: "binary-attachment".to_owned(),
-        #[cfg(feature = "rerun")]
         representation: None,
-        #[cfg(feature = "rerun")]
         representation_frames: Vec::new(),
         ok: true,
         result: Some(serde_json::json!({
