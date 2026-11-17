@@ -3970,7 +3970,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let injected_logstream_sinks = logstream
                     .map(|destination| {
                         let (mut copperlist,keyframe,monitor) = destination.start::<#mission_mod::CuStampedDataSet>(log_context, clock.clone())?;
-                        stream_monitors.push(monitor);
+                        stream_monitors.extend(monitor);
                         let structured = copperlist.take_structured_log_sink();
                         Ok::<_, CuError>(((copperlist, keyframe), structured))
                     })

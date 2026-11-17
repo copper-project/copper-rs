@@ -326,7 +326,7 @@ impl TelemetryDestination {
     ) -> CuResult<(
         ScheduledCopperListSink<P>,
         ScheduledKeyFrameSink,
-        cu29_runtime::monitoring::LogStreamMonitor,
+        Option<cu29_runtime::monitoring::LogStreamMonitor>,
     )> {
         let schema = P::stream_schema();
         let selective = !schema.reconstruction.is_empty();
@@ -344,13 +344,9 @@ impl TelemetryDestination {
                     context,
                     schema,
                 };
-                let (lists, frames, monitor) =
+                let (lists, frames, _) =
                     telemetry_sinks(tx, session, max_capture_bytes, max_keyframe_bytes, clock)?;
-                (
-                    lists,
-                    frames,
-                    monitor.into_runtime_monitor("telemetry", 0, 0),
-                )
+                (lists, frames, None)
             }
             Self::Fec(transport, config) => {
                 let mut config = *config;
@@ -378,7 +374,7 @@ impl TelemetryDestination {
                 (
                     lists,
                     frames,
-                    monitor.into_runtime_monitor("injected", bitrate, baseline),
+                    Some(monitor.into_runtime_monitor("injected", bitrate, baseline)),
                 )
             }
         };
@@ -572,8 +568,8 @@ trait Driver: CuTelemetryTx {
     fn is_idle(&self) -> bool {
         true
     }
-    fn stats(&self) -> SenderStats {
-        SenderStats::default()
+    fn stats(&self) -> Option<SenderStats> {
+        None
     }
     fn feedback(&self) -> Option<FeedbackSnapshot> {
         None
@@ -681,8 +677,8 @@ impl<T: CuStreamTx + CuFeedbackRx> Driver for FecDriver<T> {
     fn is_idle(&self) -> bool {
         self.core.is_idle()
     }
-    fn stats(&self) -> SenderStats {
-        self.core.stats()
+    fn stats(&self) -> Option<SenderStats> {
+        Some(self.core.stats())
     }
     fn feedback(&self) -> Option<FeedbackSnapshot> {
         self.feedback.as_ref().map(FeedbackController::snapshot)
@@ -795,7 +791,7 @@ fn spawn_worker<P: CopperListTuple + Send + Sync>(
                     let now = clock.now();
                     if now >= next_snapshot {
                         if let Ok(mut snapshot) = status.snapshot.try_lock() {
-                            *snapshot = SenderSnapshot { sampled_at: now, stats: driver.stats(),
+                            *snapshot = SenderSnapshot { sampled_at: now, stats: driver.stats().unwrap_or_default(),
                                 inbox_drops: status.inbox_drops.load(Ordering::Relaxed),
                                 feedback: driver.feedback(), feedback_failed: driver.feedback_failed(),
                                 ..Default::default() };
@@ -831,15 +827,19 @@ fn spawn_worker<P: CopperListTuple + Send + Sync>(
                 let _ = structured_worker.free.push(record);
             }
             let stats = driver.stats();
-            *status.final_stats.lock().expect("sender stats") = Some(stats);
+            *status.final_stats.lock().expect("sender stats") = stats;
             *status.snapshot.lock().expect("sender snapshot") = SenderSnapshot {
-                sampled_at: clock.now(), stats, inbox_drops: status.inbox_drops.load(Ordering::Relaxed),
+                sampled_at: clock.now(), stats: stats.unwrap_or_default(), inbox_drops: status.inbox_drops.load(Ordering::Relaxed),
                 stopped: true, failed: result.is_err(), feedback_failed: driver.feedback_failed(),
                 feedback: driver.feedback(),
             };
-            cu29_log_derive::info!("Logstream sender stopped: sent={} bytes={} queue_drops={} expired={} transport_drops={} inbox_drops={} shutdown_drops={}",
+            if let Some(stats) = stats {
+                cu29_log_derive::info!("Logstream sender stopped: sent={} bytes={} queue_drops={} expired={} transport_drops={} inbox_drops={} shutdown_drops={}",
                 stats.packets_sent, stats.bytes_sent, stats.queue_drops, stats.expired_packets, stats.transport_drops,
                 status.inbox_drops.load(Ordering::Relaxed), stats.shutdown_drops);
+            } else {
+                cu29_log_derive::info!("Telemetry sender stopped: inbox_drops={}", status.inbox_drops.load(Ordering::Relaxed));
+            }
             if let Err(error) = result {
                 status.failed.store(true, Ordering::Release);
                 cu29_log_derive::error!("Logstream sender failed: {}", error.to_string());
