@@ -23,6 +23,8 @@ pub type Reflectivity = Ratio;
     Default, Clone, PartialEq, Debug, Soa, Serialize, Deserialize, Encode, Decode, Reflect,
 )]
 #[reflect(from_reflect = false)]
+#[cfg_attr(feature = "rerun", reflect(@cu_rerun::representation::<Self, cu_rerun::views::Spatial3DView>()))]
+#[soa(attributes(cfg_attr(feature = "rerun", reflect(@cu_rerun::representation::<Self, cu_rerun::views::Spatial3DView>()))))]
 pub struct PointCloud {
     pub tov: CuTime, // Time of Validity, not sorted.
     pub x: Distance,

@@ -39,6 +39,21 @@ buffers clear the previous depth image. Recorded payloads retain their native en
 Generate a sample recording with `cargo run -p cu-sensor-payloads --features rerun
 --example rerun_depth -- depth.rrd`, then open `depth.rrd` in Rerun.
 
+## Rerun point clouds
+
+Enable `rerun` to view `PointCloud`, `PointCloudSoa<N>`, and
+`PointCloudSoaHandle<N>` as 3D points in Copper's debugger or log them directly
+with `RecordingStream::log`. Only the populated portion of each cloud is shown.
+Handle-backed clouds are read when the representation is requested.
+
+With `rerun` enabled, reflection of `CuHandlePayload<T, M>` requires
+`T: Reflect + Typed` so the handle can forward its inner representation.
+Other handle operations and builds without `rerun` retain their existing bounds.
+
+Generate a recording with `cargo run -p cu-sensor-payloads --features rerun
+--example rerun_pointcloud -- pointcloud.rrd`, then open it with
+`rerun pointcloud.rrd`.
+
 ## Rerun images
 
 Enable `rerun` to inspect `CuImage` in Copper's 2D debug view or log it directly

@@ -31,6 +31,8 @@ pub trait CuHandlePayloadInit: Debug + Send + Sync + 'static {
 
 #[derive(Reflect)]
 #[reflect(from_reflect = false, no_field_bounds, type_path = false)]
+#[cfg_attr(feature = "rerun", reflect(where T: bevy_reflect::Reflect + bevy_reflect::Typed))]
+#[cfg_attr(feature = "rerun", reflect(@handle_representation::<T, M>()))]
 pub struct CuHandlePayload<T, M>
 where
     T: Debug + Send + Sync + 'static,
@@ -172,4 +174,37 @@ where
         let inner = T::decode_boxed(decoder)?;
         Ok(Self::from_box(inner))
     }
+}
+
+#[cfg(feature = "rerun")]
+fn handle_representation<T, M>() -> Option<cu29::debug_representation::DebugRepresentation>
+where
+    T: Debug + Send + Sync + bevy_reflect::Reflect + bevy_reflect::Typed + 'static,
+    M: CuHandlePayloadMeta + 'static,
+{
+    use cu29::debug_representation::{DebugRepresentation, DebugRepresentationContext};
+    fn encode<T, M>(
+        value: &dyn bevy_reflect::Reflect,
+        context: &DebugRepresentationContext<'_>,
+    ) -> CuResult<alloc::vec::Vec<u8>>
+    where
+        T: Debug + Send + Sync + bevy_reflect::Reflect + bevy_reflect::Typed + 'static,
+        M: CuHandlePayloadMeta + 'static,
+    {
+        let payload = value
+            .downcast_ref::<CuHandlePayload<T, M>>()
+            .ok_or_else(|| CuError::from("handle representation type mismatch"))?;
+        payload.with_inner(|inner| {
+            let info = inner
+                .get_represented_type_info()
+                .ok_or_else(|| CuError::from("missing inner type metadata"))?;
+            let representation = DebugRepresentation::for_type(info)
+                .ok_or_else(|| CuError::from("missing inner representation"))?;
+            (representation.encode)(inner, context)
+        })
+    }
+    DebugRepresentation::for_type(T::type_info()).map(|inner| DebugRepresentation {
+        view_class: inner.view_class,
+        encode: encode::<T, M>,
+    })
 }
