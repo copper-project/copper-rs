@@ -51,5 +51,9 @@ name = "rerun_imu"
 required-features = ["rerun"]
 
 [[example]]
+name = "rerun_depth"
+required-features = ["rerun"]
+
+[[example]]
 name = "rerun_image"
 required-features = ["rerun"]
