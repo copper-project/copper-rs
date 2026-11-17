@@ -1,5 +1,5 @@
 //! Rerun components for sensor payloads.
-use crate::{CuImage, CuImageBufferFormat, PointCloud, PointCloudSoa};
+use crate::{CuImage, CuImageBufferFormat, PointCloud, PointCloudSoa, PointCloudSoaHandle};
 use alloc::vec::Vec;
 use cu29::prelude::ArrayLike;
 use rerun::components::{ImageBuffer, ImageFormat};
@@ -112,6 +112,12 @@ fn packed_image_bytes<A: ArrayLike<Element = u8>>(image: &CuImage<A>) -> Option<
 impl AsComponents for PointCloud {
     fn as_serialized_batches(&self) -> Vec<SerializedComponentBatch> {
         Points3D::new([[self.x.value, self.y.value, self.z.value]]).as_serialized_batches()
+    }
+}
+
+impl<const N: usize> AsComponents for PointCloudSoaHandle<N> {
+    fn as_serialized_batches(&self) -> Vec<SerializedComponentBatch> {
+        self.with_inner(AsComponents::as_serialized_batches)
     }
 }
 
