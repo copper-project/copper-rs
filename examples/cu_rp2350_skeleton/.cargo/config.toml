@@ -15,7 +15,7 @@ target = "thumbv8m.main-none-eabihf"
 # build-riscv = "build --target=riscv32imac-unknown-none-elf --bin cu-blinky --features firmware"
 # run-riscv = "run --target=riscv32imac-unknown-none-elf --bin cu-blinky --features firmware"
 
-[target.thumbv8m.main-none-eabihf]
+[target.'cfg(all(target_arch = "arm", target_os = "none"))']
 rustflags = [
   "-C",
   "link-arg=--nmagic",     # Turns off page alignment of sections (which saves flash space)

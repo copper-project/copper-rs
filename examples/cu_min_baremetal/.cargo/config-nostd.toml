@@ -1,2 +1,6 @@
 [build]
-target = "aarch64-unknown-none" # This is for the Cortex-M33 in the RP2350
+target = "aarch64-unknown-none"
+
+[target.aarch64-unknown-none]
+# This compile-only smoke example provides main without a platform startup runtime.
+rustflags = ["-C", "link-arg=--entry=main"]
