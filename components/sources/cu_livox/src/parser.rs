@@ -1,9 +1,9 @@
 use bytemuck::{Pod, Zeroable};
-use chrono::{DateTime, Utc};
 use cu29::prelude::CuTime;
 use cu29::units::si::f32::{Length, Ratio};
 use cu29::units::si::length::millimeter;
 use cu29::units::si::ratio::ratio;
+use jiff::Timestamp;
 use std::error::Error;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
@@ -272,7 +272,7 @@ impl fmt::Display for LivoxError {
 
 impl Error for LivoxError {}
 
-pub type RefTime = (DateTime<Utc>, CuTime);
+pub type RefTime = (Timestamp, CuTime);
 
 pub fn parse_frame(data: &[u8]) -> Result<&LidarFrame, LivoxError> {
     if data[0] != 0x05
@@ -311,8 +311,8 @@ pub fn parse_frame(data: &[u8]) -> Result<&LidarFrame, LivoxError> {
 #[cfg(test)]
 mod tests {
     use crate::parser::{LidarFrame, RefTime, parse_frame};
-    use chrono::prelude::*;
     use cu29::prelude::{CuDuration, RobotClock};
+    use jiff::Timestamp;
 
     #[test]
     fn test_tele15_packet() {
@@ -427,7 +427,7 @@ mod tests {
 
         let packet = parse_frame(&packet_data).unwrap();
 
-        let datetime = Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap();
+        let datetime = Timestamp::UNIX_EPOCH;
         let _rt: RefTime = (datetime, robot_clock.now());
         let timestamp = packet.header.timestamp;
         println!("Tov: {timestamp}");
