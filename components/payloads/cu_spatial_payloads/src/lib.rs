@@ -1419,3 +1419,6 @@ mod tests {
         assert_eq!(position.longitude_degrees(), 18.075_631);
     }
 }
+
+#[cfg(feature = "rerun")]
+mod rerun_geometry;

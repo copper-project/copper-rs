@@ -20,6 +20,9 @@ use serde::{Deserialize, Serialize};
 #[derive(
     Default, Debug, Clone, Copy, PartialEq, Encode, Decode, Serialize, Deserialize, Reflect, Soa,
 )]
+#[reflect()]
+#[cfg_attr(feature = "rerun", reflect(@crate::rerun_geometry::point2_representation::<L>()))]
+#[soa(attributes(cfg_attr(feature = "rerun", reflect(@crate::rerun_geometry::point2_soa_representation::<L, N>()))))]
 pub struct Point2<L: Copy + Debug + 'static> {
     pub x: L,
     pub y: L,
@@ -32,6 +35,9 @@ pub struct Point2<L: Copy + Debug + 'static> {
 #[derive(
     Default, Debug, Clone, Copy, PartialEq, Encode, Decode, Serialize, Deserialize, Reflect, Soa,
 )]
+#[reflect()]
+#[cfg_attr(feature = "rerun", reflect(@crate::rerun_geometry::point3_representation::<L>()))]
+#[soa(attributes(cfg_attr(feature = "rerun", reflect(@crate::rerun_geometry::point3_soa_representation::<L, N>()))))]
 pub struct Point3<L: Copy + Debug + 'static> {
     pub x: L,
     pub y: L,
@@ -227,6 +233,7 @@ impl_point_metrics!(Length64, Area64, f64, libm::sqrt);
 #[derive(
     Default, Debug, Clone, Copy, PartialEq, Encode, Decode, Serialize, Deserialize, Reflect,
 )]
+#[cfg_attr(feature = "rerun", reflect(@crate::rerun_geometry::bbox_representation::<P>()))]
 pub struct BBox<P: Copy + Debug + 'static> {
     pub min: P,
     pub max: P,

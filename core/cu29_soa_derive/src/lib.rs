@@ -81,6 +81,10 @@ use syn::{Attribute, Data, DeriveInput, Fields, Path, PathArguments, Type, parse
 /// Bincode encoding changed: SoA fields no longer include per-field length prefixes. Old blobs are
 /// not compatible with the new layout.
 ///
+/// Attributes on the generated `*Soa` type can be supplied explicitly with
+/// `#[soa(attributes(reflect(@MyAttribute)))]`. Attributes are not copied from
+/// the scalar type; use `cfg_attr` inside `attributes(...)` for optional metadata.
+///
 /// Memory layout
 /// - Flat fields: `MyStructSoa<N>` stores `len` plus one `[T; N]` per field.
 /// - Nested fields (`#[soa(nested)]`): the field is stored inline as `<Field>SoaStorage<N>`,
@@ -127,9 +131,26 @@ use syn::{Attribute, Data, DeriveInput, Fields, Path, PathArguments, Type, parse
 #[proc_macro_derive(Soa, attributes(soa))]
 pub fn derive_soa(input: TokenStream) -> TokenStream {
     use syn::TypePath;
+    use syn::parse::Parse;
 
     let input = parse_macro_input!(input as DeriveInput);
     let visibility = &input.vis;
+    let mut soa_attributes = Vec::<syn::Meta>::new();
+    for attribute in input.attrs.iter().filter(|a| a.path().is_ident("soa")) {
+        if let Err(error) = attribute.parse_nested_meta(|meta| {
+            if meta.path.is_ident("attributes") {
+                let content;
+                syn::parenthesized!(content in meta.input);
+                let attributes = content.parse_terminated(syn::Meta::parse, syn::Token![,])?;
+                soa_attributes.extend(attributes);
+                Ok(())
+            } else {
+                Err(meta.error("expected attributes(...) on a struct"))
+            }
+        }) {
+            return error.to_compile_error().into();
+        }
+    }
     let derive_reflect = input
         .attrs
         .iter()
@@ -879,6 +900,7 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
 
             #[derive(Debug)]
             #soa_reflect_attrs
+            #(#[#soa_attributes])*
             #visibility struct #soa_struct_name #soa_decl {
                 pub len: usize,
                 #(#field_decls,)*

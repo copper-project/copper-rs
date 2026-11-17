@@ -8,6 +8,7 @@ mod tests {
     #[derive(
         Debug, Clone, Copy, Default, PartialEq, Soa, Encode, Decode, Serialize, Deserialize,
     )]
+    #[soa(attributes(derive(PartialEq)))]
     pub struct GXy<L: Copy + Debug + 'static> {
         x: L,
         y: L,
@@ -18,6 +19,7 @@ mod tests {
         let mut soa = GXySoa::<f32, 4>::default();
         soa.push(GXy { x: 1.0, y: 2.0 });
         soa.push(GXy { x: 3.0, y: 4.0 });
+        assert_eq!(soa, soa.clone());
         assert_eq!(soa.len(), 2);
         assert_eq!(soa.x()[..2], [1.0, 3.0]);
         assert_eq!(soa.get(1), GXy { x: 3.0, y: 4.0 });
