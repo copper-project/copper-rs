@@ -47,5 +47,9 @@ rerun = ["std", "dep:rerun", "dep:cu-rerun", "cu29/reflect"]
 reflect = ["cu29/reflect"]
 
 [[example]]
+name = "rerun_imu"
+required-features = ["rerun"]
+
+[[example]]
 name = "rerun_image"
 required-features = ["rerun"]

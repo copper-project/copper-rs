@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 
 /// Standardized IMU payload carrying acceleration, angular velocity, and optional magnetometer data.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, Encode, Decode, Reflect)]
+#[cfg_attr(feature = "rerun", reflect(@cu_rerun::representation::<Self, cu_rerun::views::Spatial3DView>()))]
 pub struct ImuPayload {
     pub accel_x: Acceleration,
     pub accel_y: Acceleration,
@@ -82,6 +83,7 @@ impl ImuPayload {
 
 /// Magnetometer payload split from the main IMU data for composition.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, Encode, Decode, Reflect)]
+#[cfg_attr(feature = "rerun", reflect(@cu_rerun::representation::<Self, cu_rerun::views::Spatial3DView>()))]
 pub struct MagnetometerPayload {
     pub mag_x: MagneticFluxDensity,
     pub mag_y: MagneticFluxDensity,
@@ -125,6 +127,7 @@ impl MagnetometerPayload {
 
 /// Combined payload allowing optional magnetometer data.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, Encode, Decode, Reflect)]
+#[cfg_attr(feature = "rerun", reflect(@cu_rerun::representation::<Self, cu_rerun::views::Spatial3DView>()))]
 pub struct ImuWithMagPayload {
     pub imu: ImuPayload,
     pub mag: Option<MagnetometerPayload>,

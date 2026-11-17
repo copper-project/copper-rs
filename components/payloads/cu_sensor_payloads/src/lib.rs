@@ -28,3 +28,6 @@ pub use imu::*;
 #[cfg(feature = "std")]
 pub use pointcloud::*;
 pub use ranging::*;
+
+#[cfg(feature = "rerun")]
+mod rerun_imu;
