@@ -37,4 +37,8 @@ default = ["glam"]
 faer = ["dep:faer"]
 nalgebra = ["dep:nalgebra"]
 glam = ["dep:glam"]
-rerun = ["dep:rerun", "dep:cu-rerun", "cu29/reflect"]
+rerun = ["dep:rerun", "dep:cu-rerun", "cu29/reflect", "cu29/rerun"]
+
+[[example]]
+name = "rerun_geometry"
+required-features = ["rerun"]

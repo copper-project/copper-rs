@@ -31,12 +31,15 @@ pub struct DebugRepresentation {
 impl DebugRepresentation {
     /// Looks up an explicit representation on a user-defined reflected type.
     pub fn for_type(info: &TypeInfo) -> Option<&Self> {
-        match info {
-            TypeInfo::Struct(info) => info.get_attribute::<Self>(),
-            TypeInfo::TupleStruct(info) => info.get_attribute::<Self>(),
-            TypeInfo::Enum(info) => info.get_attribute::<Self>(),
-            _ => None,
-        }
+        let attributes = match info {
+            TypeInfo::Struct(info) => info.custom_attributes(),
+            TypeInfo::TupleStruct(info) => info.custom_attributes(),
+            TypeInfo::Enum(info) => info.custom_attributes(),
+            _ => return None,
+        };
+        attributes
+            .get::<Self>()
+            .or_else(|| attributes.get::<Option<Self>>().and_then(Option::as_ref))
     }
 }
 
