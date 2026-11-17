@@ -1,8 +1,6 @@
 name: Nightly Platform and Audit Checks
 
 on:
-  push:
-    branches: ["ci/nightly-platform-checks"]
   schedule:
     - cron: "23 6 * * *"
   workflow_dispatch:
