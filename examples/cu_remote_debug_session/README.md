@@ -131,3 +131,17 @@ Older files with prefix `cu_remote_debug_session` are cleaned at start of each r
   restore the tracked `logs/` directory (for example, `git checkout -- logs/.keep`).
 - No success line printed:
   inspect earlier stderr for the first failing RPC (`RPC <method> failed: ...`).
+
+## Rerun representations
+
+The `cu29/remote-debug` feature includes `representation.list`,
+`representation.read`, and representation snapshots in replay responses.
+`cu29/rerun` remains a compatibility alias for `remote-debug`; a separate
+server-side switch is unnecessary. Ordinary builds without remote debugging
+do not gain a Rerun dependency.
+
+Payload and component crates still opt into their type representations: for
+example, enable `cu-sensor-payloads/rerun` for images, depth maps, IMU data, and
+point clouds. Cargo features on `cu29` cannot enable features on downstream
+payload crates. Unannotated types remain inspectable through the schema and
+state APIs, but are not advertised by `representation.list`.
