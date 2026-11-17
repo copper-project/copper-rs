@@ -20,5 +20,9 @@ bincode = { package = "cu-bincode", path = "../../../cu_bincode", version = "~2.
 # ui_test exposes this dependency to the fixture files through --extern.
 ignored = ["bincode"]
 
+[lints.cargo]
+# ui_test passes this dependency to fixtures through --extern.
+unused_dependencies = "allow"
+
 # Keep the self-describing derive confined to this compile-test harness.
 [workspace]

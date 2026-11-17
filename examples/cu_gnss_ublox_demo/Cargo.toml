@@ -15,7 +15,6 @@ ci_exclude_workspace = true
 cu29 = { workspace = true, features = ["log-level-debug"] }
 cu-gnss-ublox = { workspace = true }
 cu-gnss-payloads = { workspace = true }
-cu29-export = { workspace = true, optional = true }
 cu-linux-resources = { workspace = true }
 tempfile = { workspace = true }
 serde = { workspace = true }
@@ -26,7 +25,7 @@ ignored = ["serde", "cu-linux-resources"]
 
 [features]
 default = []
-logexport = ["dep:cu29-export", "cu-gnss-ublox/reflect"]
+logexport = ["cu-gnss-ublox/reflect"]
 
 [build-dependencies]
 cu29-build = { workspace = true }
