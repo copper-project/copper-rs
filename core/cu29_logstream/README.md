@@ -37,6 +37,8 @@ preserves the received payloads and timestamps.
 
 ## Custom telemetry protocols
 
+The [plain UDP example](../../examples/cu_udp_telemetry) includes both endpoints and a working twin.
+
 Implement `protocol::CuTelemetryTx` to receive a session followed by native
 capture, keyframe and structured-log payloads on the robot's sender worker.
 Install it with `Robot::builder().with_telemetry_tx(tx, max_capture_bytes,

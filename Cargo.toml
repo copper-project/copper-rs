@@ -113,6 +113,7 @@ members = [
   "examples/cu_clock_sync",
   "examples/cu_self_describing_logs",
   "examples/cu_logstream_demo",
+  "examples/cu_udp_telemetry",
   "examples/cu_distributed_resim_demo",
   "examples/cu_elrs_bdshot_demo",
   "examples/cu_feetech_demo",
