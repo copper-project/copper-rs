@@ -2307,11 +2307,10 @@ where
             Some(state.cursor_rev),
             resolved_at,
         );
-        let response = DebugRpcResponse {
+        DebugRpcResponse {
             representation_frames,
             ..response
-        };
-        response
+        }
     }
 
     fn handle_timeline_get_cursor(
