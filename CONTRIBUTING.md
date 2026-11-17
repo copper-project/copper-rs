@@ -109,24 +109,25 @@ PRs build changed images once through the main workflow; fork PRs use Linux host
 checks plus a separate, non-publishing Docker build when image inputs change.
 Actions dependency updates are grouped into one weekly pull request.
 
-The weekly workflow (also available through Run workflow) separates stable platform
-regressions from upcoming compiler changes:
+The nightly workflow runs at 06:23 UTC every day and checks stable platform
+regressions and dependency advisories. The weekly workflow runs at 12:00 UTC on
+Mondays and checks upcoming compiler changes. Both support Run workflow:
 
-- Stable macOS runs default and feature-enabled workspace tests, compile fixtures,
+- Nightly stable macOS runs default and feature-enabled workspace tests, compile fixtures,
   UDP integration, deterministic replay, and template generation/builds.
-- Stable Windows runs default and async-I/O core tests, compile fixtures, UDP
+- Nightly stable Windows runs default and async-I/O core tests, compile fixtures, UDP
   integration, and selected component checks/tests.
-- Linux beta runs the full host matrix, CUDA checks, and embedded checks. CUDA tests
-  compile without execution when the runner has no GPU driver.
+- Weekly beta runs formatting, the full Linux host matrix, CUDA checks, and embedded
+  checks. CUDA tests compile without execution when the runner has no GPU driver.
 
 Broad native regressions can therefore be discovered after merge; the PR smoke
-jobs catch a smaller set of native failures. Each weekly native job shares setup
+jobs catch a smaller set of native failures. Each nightly native job shares setup
 and build artifacts across its checks. Multimedia dependencies are installed only
 for workspace checks, not for native smoke jobs. Linux container and fork host
 jobs use the same check implementation in `.github/actions/linux-checks`.
 The `CI Status` aggregate remains the overall PR result.
 
-The weekly audit checks security advisories across the full dependency tree.
+The nightly audit uses stable Rust and checks security advisories across the full dependency tree.
 Unmaintained-crate advisories block on direct workspace dependencies; transitive
 maintenance status is left to upstream. Keep any necessary advisory exceptions
 and their reasons in `.config/deny.toml`.

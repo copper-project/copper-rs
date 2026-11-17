@@ -7,7 +7,7 @@ on:
         type: string
         default: stable
       full:
-        description: Full weekly platform coverage instead of the PR smoke checks.
+        description: Full nightly platform coverage instead of the PR smoke checks.
         type: boolean
         default: false
 
