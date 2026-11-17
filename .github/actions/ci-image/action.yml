@@ -1,0 +1,64 @@
+name: Prepare CI image
+description: Reuse the published image or build changed Docker inputs; forks never publish.
+inputs:
+  tag:
+    required: true
+    description: Stable GHCR image tag.
+  dockerfile:
+    required: true
+    description: Dockerfile name under support/docker.
+  cache_scope:
+    required: true
+    description: BuildKit cache scope.
+  refresh:
+    default: "false"
+    description: Force a build for weekly refreshes or fork Dockerfile validation.
+outputs:
+  image:
+    description: Usable image reference, or empty for fork host fallback.
+    value: ${{ steps.image_ref.outputs.image }}
+runs:
+  using: composite
+  steps:
+    - id: registry_access
+      shell: bash
+      run: |
+        can_use_registry=true
+        if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]] && [[ "${{ github.event.pull_request.head.repo.full_name }}" != "$GITHUB_REPOSITORY" ]]; then
+          can_use_registry=false
+        fi
+        echo "enabled=$can_use_registry" >> "$GITHUB_OUTPUT"
+    - name: Log in to GHCR
+      if: steps.registry_access.outputs.enabled == 'true'
+      uses: docker/login-action@v4
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
+    - id: image_ref
+      shell: bash
+      env:
+        CI_IMAGE_TAG: ${{ inputs.tag }}
+        REFRESH_IMAGE: ${{ inputs.refresh }}
+        PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        BEFORE_SHA: ${{ github.event.before }}
+      run: bash support/ci/prepare_ci_image.sh
+    - name: Set up Docker Buildx
+      if: steps.image_ref.outputs.should_build == 'true'
+      id: buildx
+      uses: docker/setup-buildx-action@v4
+      with:
+        driver: docker-container
+    - name: Build CI image
+      if: steps.image_ref.outputs.should_build == 'true'
+      uses: docker/build-push-action@v7
+      with:
+        builder: ${{ steps.buildx.outputs.name }}
+        context: ./support/docker
+        file: ./support/docker/${{ inputs.dockerfile }}
+        pull: true
+        push: ${{ steps.registry_access.outputs.enabled == 'true' }}
+        tags: ${{ steps.image_ref.outputs.tags }}
+        cache-from: type=gha,scope=${{ inputs.cache_scope }}
+        cache-to: type=gha,mode=max,scope=${{ inputs.cache_scope }}

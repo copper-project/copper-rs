@@ -8,14 +8,6 @@ inputs:
     description: Optional CARGO_TARGET_DIR override.
     required: false
     default: ""
-  linux_cargo_paths:
-    description: Use Linux-only cargo paths.
-    required: false
-    default: "false"
-  linux_disk_workarounds:
-    description: Enable legacy Linux disk-space and cargo-path workarounds.
-    required: false
-    default: "true"
   prebaked_linux_image:
     description: Skip Linux host setup because system dependencies are baked into the job container image.
     required: false
@@ -145,31 +137,6 @@ runs:
       if: runner.os == 'Windows' && env.WORKSPACE_SCOPE == 'workspace'
       uses: Cyberboss/install-winget@v1
 
-    - name: Free Disk Space (Ubuntu)
-      if: runner.os == 'Linux' && inputs.prebaked_linux_image != 'true' && inputs.linux_disk_workarounds == 'true'
-      uses: jlumbroso/free-disk-space@main
-      with:
-        # this might remove tools that are actually needed,
-        # if set to "true" but frees about 6 GB
-        tool-cache: false
-        android: true
-        dotnet: true
-        haskell: true
-        # do not remove large-packages, as it is necessary
-        large-packages: false
-        docker-images: true
-        swap-storage: true
-
-    - name: Linux-only Cargo paths
-      if: runner.os == 'Linux' && inputs.linux_cargo_paths == 'true' && inputs.prebaked_linux_image != 'true' && inputs.linux_disk_workarounds == 'true'
-      shell: bash
-      run: |
-        echo "CARGO_TARGET_DIR=/mnt/cargo-target" >> "$GITHUB_ENV"
-        echo "CARGO_HOME=/mnt/cargo-home" >> "$GITHUB_ENV"
-        echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
-        sudo mkdir -p /mnt/cargo-home /mnt/cargo-target /mnt/tmp
-        sudo chown -R "$USER:$USER" /mnt/cargo-home /mnt/cargo-target /mnt/tmp
-
     - name: Setup rust-cache
       uses: Swatinem/rust-cache@v2
       with:
@@ -242,7 +209,7 @@ runs:
         fi
 
     - name: Install GStreamer (macOS)
-      if: runner.os == 'macOS'
+      if: runner.os == 'macOS' && env.WORKSPACE_SCOPE == 'workspace'
       uses: gerlero/brew-install@v1
       env:
         HOMEBREW_NO_AUTO_UPDATE: "1"
@@ -262,7 +229,7 @@ runs:
           qt@5
 
     - name: Export GStreamer env (macOS)
-      if: runner.os == 'macOS'
+      if: runner.os == 'macOS' && env.WORKSPACE_SCOPE == 'workspace'
       shell: bash
       run: |
         QT_PREFIX="$(brew --prefix qt@5)"
@@ -270,7 +237,7 @@ runs:
         echo "PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig:/opt/homebrew/opt/gstreamer/lib/pkgconfig:${QT_PREFIX}/lib/pkgconfig:$PKG_CONFIG_PATH" >> "$GITHUB_ENV"
 
     - name: Verify GStreamer installation (macOS)
-      if: runner.os == 'macOS'
+      if: runner.os == 'macOS' && env.WORKSPACE_SCOPE == 'workspace'
       shell: bash
       run: |
         pkg-config --modversion gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0

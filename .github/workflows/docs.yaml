@@ -58,8 +58,6 @@ jobs:
     secrets: inherit
     with:
       toolchain: stable
-      linux_cargo_paths: true
-      linux_disk_workarounds: false
       linux_runner_label: ubuntu-latest
 
   build:

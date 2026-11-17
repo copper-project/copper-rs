@@ -1,9 +1,17 @@
-name: Weekly Audit and Beta Test
+name: Weekly Platform and Beta Checks
 
 on:
   schedule:
     - cron: "0 12 * * 1"
   workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: weekly-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -35,15 +43,21 @@ jobs:
       - name: Check formatting
         run: cargo +beta fmt --all -- --check
 
-  Unit-Tests:
-    name: Unit Tests
+  native-stable:
+    name: Stable Platforms
+    uses: ./.github/workflows/reusable-native-tests.yml
+    with:
+      toolchain: stable
+      full: true
+
+  linux-beta:
+    name: Linux Beta
     uses: ./.github/workflows/reusable-unit-tests.yml
     with:
       toolchain: beta
-      linux_cargo_paths: true
-      linux_runner_label: ubuntu-latest
-      linux_light_runner_label: ubuntu-latest
-      windows_runner_label: windows-latest
+      linux_ci_image: ghcr.io/copper-project/copper-rs-ci:ubuntu-26.04
+      linux_cuda_ci_image: ghcr.io/copper-project/copper-rs-ci:cuda-12.6.1-ubuntu-24.04
+      run_cuda: true
 
   embedded:
     name: CI for embedded targets
