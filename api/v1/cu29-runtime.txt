@@ -666,6 +666,7 @@ pub fn cu29_runtime::context::CuContextBuilder::task_ids(self, task_ids: &'stati
 pub mod cu29_runtime::continuity
 pub enum cu29_runtime::continuity::SourceGapReason
 pub cu29_runtime::continuity::SourceGapReason::LateJoin
+pub cu29_runtime::continuity::SourceGapReason::ProtocolLoss
 pub cu29_runtime::continuity::SourceGapReason::RecoveryPoint
 pub cu29_runtime::continuity::SourceGapReason::RlcWindowExpired
 pub cu29_runtime::continuity::SourceGapReason::SessionEnded
@@ -687,6 +688,10 @@ pub cu29_runtime::continuity::StreamContinuityRecord::Manifest::record: B
 pub cu29_runtime::continuity::StreamContinuityRecord::RecoveryPoint
 pub cu29_runtime::continuity::StreamContinuityRecord::RecoveryPoint::copperlist_id: u64
 pub cu29_runtime::continuity::StreamContinuityRecord::RecoveryPoint::record: B
+pub cu29_runtime::continuity::StreamContinuityRecord::TelemetryKeyFrame
+pub cu29_runtime::continuity::StreamContinuityRecord::TelemetryKeyFrame::copperlist_id: u64
+pub cu29_runtime::continuity::StreamContinuityRecord::TelemetrySession
+pub cu29_runtime::continuity::StreamContinuityRecord::TelemetrySession::record: B
 impl<'__de, B, __Context> cu_bincode::de::BorrowDecode<'__de, __Context> for cu29_runtime::continuity::StreamContinuityRecord<B> where B: cu_bincode::de::BorrowDecode<'__de, __Context>
 pub fn cu29_runtime::continuity::StreamContinuityRecord<B>::borrow_decode<__D: cu_bincode::de::BorrowDecoder<'__de, Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
 impl<B, __Context> cu_bincode::de::Decode<__Context> for cu29_runtime::continuity::StreamContinuityRecord<B> where B: cu_bincode::de::Decode<__Context>

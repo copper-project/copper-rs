@@ -138,7 +138,8 @@ fn verify(
     let recovery_points: Vec<_> = continuity
         .iter()
         .filter_map(|entry| match entry {
-            StreamContinuityRecord::RecoveryPoint { copperlist_id, .. } => Some(*copperlist_id),
+            StreamContinuityRecord::RecoveryPoint { copperlist_id, .. }
+            | StreamContinuityRecord::TelemetryKeyFrame { copperlist_id } => Some(*copperlist_id),
             _ => None,
         })
         .collect();
@@ -179,7 +180,10 @@ fn verify(
     }
     if !matches!(
         continuity.first(),
-        Some(StreamContinuityRecord::Manifest { .. })
+        Some(
+            StreamContinuityRecord::Manifest { .. }
+                | StreamContinuityRecord::TelemetrySession { .. }
+        )
     ) || !matches!(continuity.last(), Some(StreamContinuityRecord::Finished { next_copperlist_id }) if *next_copperlist_id == next)
     {
         return Err("Missing archive provenance/finalization".into());

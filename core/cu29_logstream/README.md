@@ -35,6 +35,23 @@ its manifest. Feed its events to `NativeArchive<P>`, where `P` is your applicati
 generated dataset type. The archive checks that the sender's schema matches and
 preserves the received payloads and timestamps.
 
+## Custom telemetry protocols
+
+Implement `protocol::CuTelemetryTx` to receive a session followed by native
+capture, keyframe and structured-log payloads on the robot's sender worker.
+Install it with `Robot::builder().with_telemetry_tx(tx, max_capture_bytes,
+max_keyframe_bytes)`. Both bounds are native payload sizes. A full capture pool
+drops a record and increments the existing inbox counter.
+
+Implement `protocol::CuTelemetryRx` to deliver those records to
+`Twin::from_telemetry(rx).with_log_path(path).spawn()?`. The receiver owns
+packet framing, integrity, duplicate suppression and its reordering policy.
+Report gaps in CopperList ID order, including missing history before a late
+join. Copper validates native IDs and the session schema, archives the records
+and restores replay from matching keyframes. The sender and twin must use the
+same application encoding. The traits support `no_std`; the generated sender
+worker, archive and live-twin builder use `std`.
+
 ## What to expect
 
 - Recovery uses bounded memory. Packet loss beyond those bounds leaves gaps.
@@ -73,7 +90,8 @@ The sender reserves four structured-record buffers per destination, each capped
 at 4096 bytes including the existing record header, or `max_object_bytes` when
 smaller. Size overflow, exhausted pools, and stopped destinations increment
 `inbox_drops` while the local record remains intact. These buffers and their
-queue storage count toward `memory_budget_kib`. The demo uses 576 KiB to cover
+queue storage count toward `memory_budget_kib`. The demo uses 640 KiB to cover
+the FEC worker’s reusable native-record framing buffer,
 its CL/keyframe pools, structured buffers, recovery retention, and packet queues.
 A section rollover resets the copied entry before the local serialization retry;
 only a successful local write admits the completed entry for transmission.

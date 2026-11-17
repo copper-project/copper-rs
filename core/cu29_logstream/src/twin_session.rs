@@ -1,10 +1,9 @@
 //! Copper-owned receive, archive, and reconstruction lifecycle for one robot session.
 
+use crate::protocol::{CuTelemetryEvent, CuTelemetryPoll, CuTelemetryRecord, CuTelemetryRx};
 use crate::telemetry::{TelemetryReader, telemetry_channel};
 use crate::twin::{LiveReplay, TwinFrame, TwinReceiverStatus, TwinStatus, TwinWorker};
-use crate::{
-    CaptureArchive, CuStreamRx, SessionEvent, SessionRouter, SessionRouterLimits, StreamIdentity,
-};
+use crate::{CaptureArchive, CuStreamRx, FecTelemetryRx, SessionRouterLimits, StreamIdentity};
 use cu29_traits::{CuError, CuResult};
 use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder};
 use std::marker::PhantomData;
@@ -58,12 +57,17 @@ impl TwinReceiverStatus for CuTwinStatus {
     }
 }
 
+type OpenTelemetryReceiver<R> = Box<
+    dyn FnOnce(SessionRouterLimits, Option<Box<dyn crate::CuFeedbackTx>>) -> CuResult<R> + Send,
+>;
+
 /// Builder for a generated application's live twin. Copper owns all worker,
 /// routing, archive, and recovery plumbing; callers supply a packet transport.
 /// Receiver bounds match the default 1200-byte-MTU, 64-symbol streaming profile.
 /// One handle accepts one sender session, with a fresh archive path.
 pub struct CuTwinBuilder<A, R> {
-    rx: R,
+    open: OpenTelemetryReceiver<R>,
+    feedback_status: fn(&R, &mut CuTwinStatus),
     feedback_tx: Option<Box<dyn crate::CuFeedbackTx>>,
     log_base: Option<PathBuf>,
     log_rollover: Option<usize>,
@@ -72,18 +76,39 @@ pub struct CuTwinBuilder<A, R> {
     replay_capacity: NonZeroUsize,
     slab_bytes: usize,
     section_bytes: usize,
-    receiver_limits: SessionRouterLimits,
+    receiver_limits: Option<SessionRouterLimits>,
     reconstruct: bool,
     app: PhantomData<fn() -> A>,
 }
 
-impl<A: LiveReplay, R: CuStreamRx + 'static> CuTwinBuilder<A, R> {
+impl<A: LiveReplay, R: CuStreamRx + 'static> CuTwinBuilder<A, FecTelemetryRx<R>> {
     /// Enable feedback only when the sender advertises support. The caller owns endpoint selection.
     pub fn with_feedback<T: crate::CuFeedbackTx + 'static>(mut self, tx: T) -> Self {
         self.feedback_tx = Some(Box::new(tx));
         self
     }
 
+    /// Sets receive size and buffering limits for one sender session.
+    /// Defaults to [`SessionRouterLimits::default`].
+    ///
+    /// `max_record_bytes` bounds one complete serialized CopperList record
+    /// (default: 4 KiB). `finite_objects.max_object_bytes` bounds one manifest,
+    /// keyframe, or structured log record (default: 64 KiB). Match or exceed
+    /// the sender's advertised bounds so its captures and recovery snapshots
+    /// can be received, and increase [`Self::with_section_size`] to fit them.
+    ///
+    /// The remaining limits bound records, packets, recovery data, and objects
+    /// buffered during decoding. Larger sizes and concurrency limits increase
+    /// receiver memory use; they are not a total process memory budget.
+    /// `max_sessions` must be 1. The packet profile remains a 1200-byte MTU with
+    /// at most 1128-byte symbols and 64 FEC equations.
+    pub fn with_receiver_limits(mut self, limits: SessionRouterLimits) -> Self {
+        self.receiver_limits = Some(limits);
+        self
+    }
+}
+
+impl<A: LiveReplay, R: CuTelemetryRx + 'static> CuTwinBuilder<A, R> {
     pub fn with_log_path(mut self, path: impl AsRef<Path>) -> Self {
         self.log_base = Some(path.as_ref().to_path_buf());
         self
@@ -115,7 +140,7 @@ impl<A: LiveReplay, R: CuStreamRx + 'static> CuTwinBuilder<A, R> {
     /// Sections group records such as CopperLists, keyframes, and structured log
     /// entries inside a slab. A complete record must fit within one section.
     /// Choose at least the larger of `max_record_bytes` and
-    /// `finite_objects.max_object_bytes` from [`Self::with_receiver_limits`],
+    /// `finite_objects.max_object_bytes` from the FEC receiver limits,
     /// plus 1024 bytes for the section header and 32 bytes for the archive's
     /// continuity envelope. Round up to a multiple of 512 bytes.
     ///
@@ -124,25 +149,6 @@ impl<A: LiveReplay, R: CuStreamRx + 'static> CuTwinBuilder<A, R> {
     /// slabs much larger lets each file hold many sections.
     pub fn with_section_size(mut self, bytes: usize) -> Self {
         self.section_bytes = bytes;
-        self
-    }
-
-    /// Sets receive size and buffering limits for one sender session.
-    /// Defaults to [`SessionRouterLimits::default`].
-    ///
-    /// `max_record_bytes` bounds one complete serialized CopperList record
-    /// (default: 4 KiB). `finite_objects.max_object_bytes` bounds one manifest,
-    /// keyframe, or structured log record (default: 64 KiB). Match or exceed
-    /// the sender's advertised bounds so its captures and recovery snapshots
-    /// can be received, and increase [`Self::with_section_size`] to fit them.
-    ///
-    /// The remaining limits bound records, packets, recovery data, and objects
-    /// buffered during decoding. Larger sizes and concurrency limits increase
-    /// receiver memory use; they are not a total process memory budget.
-    /// `max_sessions` must be 1. The packet profile remains a 1200-byte MTU with
-    /// at most 1128-byte symbols and 64 FEC equations.
-    pub fn with_receiver_limits(mut self, limits: SessionRouterLimits) -> Self {
-        self.receiver_limits = limits;
         self
     }
 
@@ -199,9 +205,7 @@ impl<A: LiveReplay, R: CuStreamRx + 'static> CuTwinBuilder<A, R> {
 
     pub fn spawn(self) -> CuResult<(CuTwin<A>, CuTwinReader<A>)> {
         validate_sizes(self.slab_bytes, self.section_bytes, self.receiver_limits)?;
-        // Validate and construct routing before creating directories or starting workers.
-        let mut router =
-            SessionRouter::<1128, 64, 64>::new(self.receiver_limits).map_err(stream_error)?;
+        let mut rx = (self.open)(self.receiver_limits.unwrap_or_default(), self.feedback_tx)?;
         if self
             .log_rollover
             .is_some_and(|bytes| bytes <= self.section_bytes || !bytes.is_multiple_of(512))
@@ -256,122 +260,141 @@ impl<A: LiveReplay, R: CuStreamRx + 'static> CuTwinBuilder<A, R> {
                 let mut archive = None;
                 let result = (|| {
                     let _ = ready_tx.send(Ok(()));
-                    let mut rx = self.rx;
-                    let mut feedback_tx = self.feedback_tx;
-                    let feedback_clock = cu29_clock::RobotClock::new();
-                    let receiver_id = crate::new_session_id();
-                    let mut reporter = None;
-                    let mut feedback_packet = [0; crate::feedback::FEEDBACK_BUFFER_BYTES];
-                    let mut packet = [0; 1200];
                     while !stopping.load(Ordering::Acquire) {
-                        if let Some(len) = rx
-                            .try_recv(&mut packet)
-                            .map_err(|e| CuError::from(format!("Twin receive: {e:?}")))?
-                        {
-                            let bytes = packet.get(..len).ok_or_else(|| {
-                                CuError::from("Transport returned an invalid packet length")
-                            })?;
-                            status.last_packet = Some(Instant::now());
-                            router
-                                .receive_datagram(bytes, |event| {
-                                    // Recovery objects can arrive before the manifest.
-                                    // The router retains them and emits VerifiedRecoveryPoint
-                                    // once their manifest/keyframe references agree.
-                                    if matches!(&event, SessionEvent::Object { record, .. } if record.decoded().kind != crate::RecordKind::StructuredLog) {
-                                        return Ok(());
-                                    }
-                                    if let SessionEvent::Manifest(manifest) = &event {
-                                        if manifest.manifest().context.mission_index != A::MISSION_INDEX {
-                                            return Err(crate::Error::InvalidConfig("twin requires the matching sender mission"));
-                                        }
-                                        status.identity = Some(manifest.manifest().identity);
-                                        if feedback_tx.is_some() {
-                                            reporter = crate::feedback::FeedbackReporter::new(
-                                                manifest.manifest(),
-                                                receiver_id,
-                                                feedback_clock.now(),
-                                            );
-                                        }
-                                        let mut builder = UnifiedLoggerBuilder::new()
-                                            .file_base_name(&path)
-                                            .preallocated_size(self.log_rollover.unwrap_or(self.slab_bytes))
-                                            .write(true)
-                                            .create(true);
-                                        if let Some(bytes) = self.log_rollover {
-                                            builder = builder.rollover(bytes);
-                                        }
-                                        let logger = builder.build()
-                                            .map_err(|e| crate::Error::Codec(e.to_string()))?;
-                                        let UnifiedLogger::Write(mut logger) = logger else {
-                                            unreachable!()
-                                        };
-                                        A::seal_archive_metadata(&mut logger)
-                                            .map_err(|e| crate::Error::Codec(e.to_string()))?;
-                                        archive = Some(CaptureArchive::<A::DataSet>::new_with_logger(
-                                            manifest, self.section_bytes, logger,
-                                        )?);
-                                    }
-                                    let writer =
-                                        archive.as_mut().ok_or(crate::Error::InvalidConfig(
-                                            "capture arrived before its manifest",
-                                        ))?;
-                                    let capture = writer.accept(&event)?;
-                                    if let Some(entry) = writer.take_structured_log() {
-                                        status.structured_logs += 1;
-                                        if let SessionEvent::Object { identity, record } = &event {
-                                            log_publisher.publish(ReceivedStructuredLog {
-                                                identity: *identity, sequence: record.decoded().object_id, entry,
-                                            });
-                                        }
-                                    }
-                                    if let Some(capture) = &capture {
-                                        status.latest = Some(capture.copperlist.id);
-                                        status.archived += 1;
-                                        status.state = CuTwinRecordingState::Recording;
-                                    }
+                        let previous_status = status;
+                        let poll = rx.try_recv(|event| {
+                            if let CuTelemetryEvent::Record(CuTelemetryRecord::Session(session)) =
+                                event
+                            {
+                                if archive.is_some()
+                                    || session.context.mission_index != A::MISSION_INDEX
+                                {
+                                    return Err("twin requires one matching sender mission".into());
+                                }
+                                status.identity = Some(session.identity);
+                                let mut builder = UnifiedLoggerBuilder::new()
+                                    .file_base_name(&path)
+                                    .preallocated_size(self.log_rollover.unwrap_or(self.slab_bytes))
+                                    .write(true)
+                                    .create(true);
+                                if let Some(bytes) = self.log_rollover {
+                                    builder = builder.rollover(bytes);
+                                }
+                                let UnifiedLogger::Write(mut logger) =
+                                    builder.build().map_err(|e| CuError::from(e.to_string()))?
+                                else {
+                                    unreachable!()
+                                };
+                                A::seal_archive_metadata(&mut logger)?;
+                                archive = Some(
+                                    CaptureArchive::<A::DataSet>::from_session(
+                                        session,
+                                        self.section_bytes,
+                                        logger,
+                                    )
+                                    .map_err(stream_error)?,
+                                );
+                                if let Some(replay) = &replay {
+                                    replay.recover();
+                                }
+                                return Ok(());
+                            }
+                            let payload_len = match event {
+                                CuTelemetryEvent::Record(CuTelemetryRecord::CopperList {
+                                    capture,
+                                    ..
+                                }) => capture.len(),
+                                CuTelemetryEvent::Record(CuTelemetryRecord::KeyFrame {
+                                    state,
+                                    ..
+                                }) => state.len(),
+                                CuTelemetryEvent::Record(CuTelemetryRecord::StructuredLog {
+                                    entry,
+                                    ..
+                                }) => entry.len(),
+                                _ => 0,
+                            };
+                            if payload_len
+                                > self.section_bytes
+                                    - usize::from(cu29_unifiedlog::SECTION_HEADER_COMPACT_SIZE)
+                            {
+                                return Err(
+                                    "telemetry payload exceeds archive section capacity".into()
+                                );
+                            }
+                            let writer = archive
+                                .as_mut()
+                                .ok_or_else(|| CuError::from("record before session"))?;
+                            let identity = status
+                                .identity
+                                .ok_or_else(|| CuError::from("missing session identity"))?;
+                            match event {
+                                CuTelemetryEvent::Record(CuTelemetryRecord::CopperList {
+                                    id,
+                                    capture,
+                                }) => {
+                                    let list = writer.list(id, capture).map_err(stream_error)?;
+                                    status.latest = Some(id);
+                                    status.archived += 1;
+                                    status.state = CuTwinRecordingState::Recording;
                                     if let Some(replay) = &replay {
-                                        replay.accept(&event, capture)?;
-                                    }
-                                    match event {
-                                        SessionEvent::Gap { .. } => status.gaps += 1,
-                                        SessionEvent::VerifiedRecoveryPoint {
-                                            recovery_point,
-                                            ..
-                                        } => {
-                                            status.recovery_point =
-                                                Some(recovery_point.copperlist_id)
-                                        }
-                                        _ => {}
-                                    }
-                                    Ok::<(), crate::Error>(())
-                                })
-                                .map_err(|e| CuError::from(format!("Twin receive: {e}")))?;
-                            status.packets = router.stats().datagrams_seen;
-                            publish_status(status);
-                        } else {
-                            thread::park_timeout(POLL_INTERVAL);
-                        }
-                        if let (Some(reporter), Some(tx), Some(identity)) =
-                            (&mut reporter, &mut feedback_tx, status.identity)
-                            && let Some(mut counters) = router.feedback_counters(identity)
-                        {
-                            counters.latest_copperlist = status.latest;
-                            if let Some(report) = reporter.report(feedback_clock.now(), counters) {
-                                let len = report
-                                    .encode_into(&mut feedback_packet)
-                                    .map_err(stream_error)?;
-                                match tx.try_send_feedback(&feedback_packet[..len]) {
-                                    Ok(()) => status.feedback_reports_sent += 1,
-                                    Err(crate::CuStreamTxError::WouldBlock) => {
-                                        status.feedback_reports_dropped += 1
-                                    }
-                                    Err(crate::CuStreamTxError::Failed(_)) => {
-                                        feedback_tx = None;
-                                        status.feedback_failed = true;
+                                        replay.submit(list, identity, Instant::now());
                                     }
                                 }
-                                publish_status(status);
+                                CuTelemetryEvent::Record(CuTelemetryRecord::KeyFrame {
+                                    copperlist_id,
+                                    state,
+                                }) => {
+                                    let frame = writer
+                                        .keyframe(copperlist_id, state)
+                                        .map_err(stream_error)?;
+                                    status.recovery_point = Some(copperlist_id);
+                                    if let Some(replay) = &replay {
+                                        replay.recovery_point(frame);
+                                    }
+                                }
+                                CuTelemetryEvent::Record(CuTelemetryRecord::StructuredLog {
+                                    sequence,
+                                    entry,
+                                }) => {
+                                    let entry = writer.log_entry(entry).map_err(stream_error)?;
+                                    status.structured_logs += 1;
+                                    log_publisher.publish(ReceivedStructuredLog {
+                                        identity,
+                                        sequence,
+                                        entry,
+                                    });
+                                }
+                                CuTelemetryEvent::Gap {
+                                    first_id,
+                                    last_id,
+                                    reason,
+                                } => {
+                                    writer
+                                        .gap(first_id, last_id, reason)
+                                        .map_err(stream_error)?;
+                                    status.gaps += 1;
+                                    if let Some(replay) = &replay {
+                                        replay.recover();
+                                    }
+                                }
+                                CuTelemetryEvent::Record(CuTelemetryRecord::Session(_)) => {
+                                    unreachable!()
+                                }
                             }
+                            Ok(())
+                        })?;
+                        (self.feedback_status)(&rx, &mut status);
+                        match poll {
+                            CuTelemetryPoll::Progress => {
+                                status.last_packet = Some(Instant::now());
+                                status.packets += 1;
+                            }
+                            CuTelemetryPoll::Pending => thread::park_timeout(POLL_INTERVAL),
+                            CuTelemetryPoll::End => break,
+                        }
+                        if status != previous_status {
+                            publish_status(status);
                         }
                     }
                     if let Some(archive) = archive.take() {
@@ -435,7 +458,7 @@ pub type CuTwinLogReader = TelemetryReader<ReceivedStructuredLog, ()>;
 fn validate_sizes(
     slab_bytes: usize,
     section_bytes: usize,
-    limits: SessionRouterLimits,
+    limits: Option<SessionRouterLimits>,
 ) -> CuResult<()> {
     let header = usize::from(cu29_unifiedlog::SECTION_HEADER_COMPACT_SIZE);
     if slab_bytes < 1024 || !slab_bytes.is_multiple_of(512) {
@@ -451,6 +474,9 @@ fn validate_sizes(
     if section_bytes - header > u32::MAX as usize {
         return Err(CuError::from("Twin section payload size exceeds u32"));
     }
+    let Some(limits) = limits else {
+        return Ok(());
+    };
     if limits.max_sessions != 1 {
         return Err(CuError::from(
             "Twin receiver limits must allow exactly one sender session",
@@ -493,9 +519,31 @@ pub struct CuTwin<A: LiveReplay> {
 }
 
 impl<A: LiveReplay> CuTwin<A> {
-    pub fn builder<R: CuStreamRx + 'static>(rx: R) -> CuTwinBuilder<A, R> {
+    pub fn builder<R: CuStreamRx + 'static>(rx: R) -> CuTwinBuilder<A, FecTelemetryRx<R>> {
+        let mut builder =
+            Self::make_builder(move |limits, feedback| FecTelemetryRx::new(rx, limits, feedback));
+        builder.receiver_limits = Some(SessionRouterLimits::default());
+        builder.feedback_status = |rx, status| {
+            status.feedback_reports_sent = rx.sent;
+            status.feedback_reports_dropped = rx.dropped;
+            status.feedback_failed = rx.failed;
+        };
+        builder
+    }
+
+    /// Start a twin using a customer's complete record protocol.
+    pub fn from_telemetry<R: CuTelemetryRx + 'static>(rx: R) -> CuTwinBuilder<A, R> {
+        Self::make_builder(move |_, _| Ok(rx))
+    }
+
+    fn make_builder<R>(
+        open: impl FnOnce(SessionRouterLimits, Option<Box<dyn crate::CuFeedbackTx>>) -> CuResult<R>
+        + Send
+        + 'static,
+    ) -> CuTwinBuilder<A, R> {
         CuTwinBuilder {
-            rx,
+            open: Box::new(open),
+            feedback_status: |_, _| {},
             feedback_tx: None,
             log_base: None,
             log_rollover: None,
@@ -504,7 +552,7 @@ impl<A: LiveReplay> CuTwin<A> {
             replay_capacity: REPLAY_CAPACITY,
             slab_bytes: SLAB_BYTES,
             section_bytes: SECTION_BYTES,
-            receiver_limits: SessionRouterLimits::default(),
+            receiver_limits: None,
             reconstruct: true,
             app: PhantomData,
         }
@@ -548,8 +596,8 @@ mod tests {
             finite_objects: crate::FiniteObjectLimits::new(128, 128, 1),
             ..Default::default()
         };
-        assert!(validate_sizes(2560, 1536, limits).is_ok());
-        assert!(validate_sizes(2560, 1024, limits).is_err());
-        assert!(validate_sizes(2560, 1792, limits).is_err());
+        assert!(validate_sizes(2560, 1536, Some(limits)).is_ok());
+        assert!(validate_sizes(2560, 1024, Some(limits)).is_err());
+        assert!(validate_sizes(2560, 1792, Some(limits)).is_err());
     }
 }

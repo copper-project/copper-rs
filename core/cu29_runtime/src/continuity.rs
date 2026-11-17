@@ -10,6 +10,8 @@ pub enum SourceGapReason {
     LateJoin,
     /// Missing history skipped when resuming at a verified recovery point.
     RecoveryPoint,
+    /// A customer protocol declared this range unrecoverable.
+    ProtocolLoss,
 }
 
 /// Stored in `UnifiedLogType::StreamContinuity`. Ranges are inclusive.
@@ -28,6 +30,10 @@ pub enum StreamContinuityRecord<B = Vec<u8>> {
     RecoveryPoint { copperlist_id: u64, record: B },
     /// Explicit receiver finalization, not a claim about an unobserved sender tail.
     Finished { next_copperlist_id: u64 },
+    /// Native record-protocol session description.
+    TelemetrySession { record: B },
+    /// Native keyframe validated at this capture boundary.
+    TelemetryKeyFrame { copperlist_id: u64 },
 }
 
 /// Rejects replay across missing history unless state is restored at this boundary.

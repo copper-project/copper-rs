@@ -110,26 +110,7 @@ pub fn encode_capture_record_into<P: CaptureDataSet>(
         });
     }
     let (header, payload) = output.split_at_mut(header_len);
-    let len = bincode::encode_into_slice(
-        (list.id, CaptureView(&list.msgs)),
-        payload,
-        bincode::config::standard(),
-    )
-    .map_err(|e| Error::Codec(e.to_string()))?;
-    // A developer build appends one fixed-size digest. Production is exactly
-    // the existing native CopperList format, including its presence planes.
-    #[cfg(feature = "verify-reconstruction")]
-    let len = {
-        let available = payload.len();
-        let trailer = payload
-            .get_mut(len..len + 32)
-            .ok_or(Error::BufferTooSmall {
-                needed: header_len + len + 32,
-                available: header_len + available,
-            })?;
-        trailer.copy_from_slice(&list.msgs.reconstruction_digest()?);
-        len + 32
-    };
+    let len = encode_capture_into(list, payload)?;
     crate::record::encode_record_header(
         crate::RecordKind::CopperList,
         list.id,
@@ -137,6 +118,32 @@ pub fn encode_capture_record_into<P: CaptureDataSet>(
         header,
     )?;
     Ok(header_len + len)
+}
+
+/// Encodes the native selective capture, including any requested verification trailer.
+pub fn encode_capture_into<P: CaptureDataSet>(
+    list: &CopperList<P>,
+    output: &mut [u8],
+) -> Result<usize> {
+    let len = bincode::encode_into_slice(
+        (list.id, CaptureView(&list.msgs)),
+        output,
+        bincode::config::standard(),
+    )
+    .map_err(|e| Error::Codec(e.to_string()))?;
+    // A developer build appends one fixed-size digest. Production is exactly
+    // the existing native CopperList format, including its presence planes.
+    #[cfg(feature = "verify-reconstruction")]
+    let len = {
+        let available = output.len();
+        let trailer = output.get_mut(len..len + 32).ok_or(Error::BufferTooSmall {
+            needed: len + 32,
+            available,
+        })?;
+        trailer.copy_from_slice(&list.msgs.reconstruction_digest()?);
+        len + 32
+    };
+    Ok(len)
 }
 
 /// Decode once and borrow the native bytes for archival. Verification builds

@@ -149,8 +149,13 @@ pub(super) fn runtime_support(
         impl #app {
             /// Start a live twin from this graph; Copper owns receive, archive and replay workers.
             pub fn twin<R: ::cu29::logstream::CuStreamRx + 'static>(rx: R)
-                -> ::cu29::logstream::CuTwinBuilder<Self, R> {
+                -> ::cu29::logstream::CuTwinBuilder<Self, ::cu29::logstream::FecTelemetryRx<R>> {
                 ::cu29::logstream::CuTwin::<Self>::builder(rx)
+            }
+            /// Receive native records decoded by a customer protocol.
+            pub fn from_telemetry<R: ::cu29::logstream::protocol::CuTelemetryRx + 'static>(rx: R)
+                -> ::cu29::logstream::CuTwinBuilder<Self, R> {
+                ::cu29::logstream::CuTwin::<Self>::from_telemetry(rx)
             }
         }
         impl ::cu29::logstream::twin::LiveReplay for #app {
