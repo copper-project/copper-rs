@@ -25,9 +25,16 @@ cu29 = { path = "../../../core/cu29", version = "~1.4.0-dev", default-features =
 ] }
 cu-spatial-payloads = { path = "../cu_spatial_payloads", version = "~1.4.0-dev", default-features = false }
 serde = { workspace = true }
+cu-rerun = { path = "../../libs/cu_rerun", version = "~1.4.0-dev", optional = true }
 
 [features]
 default = ["std"]
 std = ["cu29/std"]
 textlogs = ["cu29/textlogs"]
 reflect = ["cu29/reflect"]
+
+rerun = ["std", "reflect", "dep:cu-rerun", "cu-spatial-payloads/rerun"]
+
+[[example]]
+name = "rerun_gnss"
+required-features = ["rerun"]

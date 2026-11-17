@@ -97,6 +97,7 @@ pub struct GnssEpochTime {
 /// absolute geodetic coordinates, because path planning and local projection
 /// often subtract nearby fixes and `f32` loses sub-meter detail there.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, Encode, Decode, Reflect)]
+#[cfg_attr(feature = "rerun", reflect(@cu_rerun::representation::<Self, cu_rerun::views::MapView>()))]
 pub struct GnssFixSolution {
     pub fix_type: GnssFixType,
     pub gnss_fix_ok: bool,
@@ -167,6 +168,7 @@ impl Default for GnssAccuracy {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Encode, Decode, Reflect)]
+#[cfg_attr(feature = "rerun", reflect(@cu_rerun::representation::<Self, cu_rerun::views::MapView>()))]
 pub struct GnssNavEpoch {
     pub time: GnssEpochTime,
     pub fix: GnssFixSolution,
@@ -295,3 +297,6 @@ pub enum GnssEvent {
     CommandAck(GnssCommandAck),
     RawUbx(GnssRawUbxFrame),
 }
+
+#[cfg(feature = "rerun")]
+mod rerun_components;
