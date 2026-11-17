@@ -72,13 +72,21 @@ impl AsComponents for GeodeticPosition {
 
 impl AsComponents for Transform3D<f32> {
     fn as_serialized_batches(&self) -> Vec<SerializedComponentBatch> {
-        build_rerun_transform(self).as_serialized_batches()
+        {
+            let mut batches = build_rerun_transform(self).as_serialized_batches();
+            batches.extend(crate::rerun_pose::axes());
+            batches
+        }
     }
 }
 
 impl AsComponents for Transform3D<f64> {
     fn as_serialized_batches(&self) -> Vec<SerializedComponentBatch> {
-        build_rerun_transform(self).as_serialized_batches()
+        {
+            let mut batches = build_rerun_transform(self).as_serialized_batches();
+            batches.extend(crate::rerun_pose::axes());
+            batches
+        }
     }
 }
 

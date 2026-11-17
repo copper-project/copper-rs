@@ -42,3 +42,7 @@ rerun = ["dep:rerun", "dep:cu-rerun", "cu29/reflect", "cu29/rerun"]
 [[example]]
 name = "rerun_geometry"
 required-features = ["rerun"]
+
+[[example]]
+name = "rerun_pose"
+required-features = ["rerun"]
