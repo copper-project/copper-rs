@@ -6,6 +6,7 @@
 
 use crate::{ApplicationSchema, StreamIdentity};
 use bincode::{Decode, Encode};
+use cu29_clock::CuTime;
 use cu29_traits::CuResult;
 use cu29_unifiedlog::SectionContext;
 
@@ -26,10 +27,25 @@ pub enum CuTelemetryRecord<'a> {
     StructuredLog { sequence: u64, entry: &'a [u8] },
 }
 
+/// Output worker lifecycle. During drain the worker enforces a finite deadline.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TxMode {
+    Running,
+    Draining,
+}
+
 /// Robot-side protocol, called on the output worker. The first record opens
 /// the session. A retained payload must be moved into protocol-owned storage.
 pub trait CuTelemetryTx: Send {
-    fn send(&mut self, record: CuTelemetryRecord<'_>) -> CuResult<()>;
+    /// Accept one borrowed record. Its enqueue time uses the worker's monotonic clock.
+    fn send(&mut self, queued_at: CuTime, record: CuTelemetryRecord<'_>) -> CuResult<()>;
+
+    /// Perform bounded, nonblocking work and return the next absolute wakeup.
+    /// The worker may also poll early after receiving a record. In draining
+    /// mode, stop periodic repetition and return None when pending work is done.
+    fn poll(&mut self, _now: CuTime, _mode: TxMode) -> CuResult<Option<CuTime>> {
+        Ok(None)
+    }
 }
 
 /// Delivery from a single receiver. Report missing CopperLists in order,
