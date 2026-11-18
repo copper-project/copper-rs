@@ -5,9 +5,9 @@ use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
-use chrono::Utc;
 use cu_sensor_payloads::{PointCloud, PointCloudSoa};
 use cu29::prelude::*;
+use jiff::Timestamp;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use std::io::{ErrorKind, Read};
 use std::net::SocketAddr;
@@ -26,7 +26,7 @@ pub struct Tele15 {
 impl Tele15 {
     /// This give the matching timestamps between the UTC time to the Robot time.
     fn sync(&mut self, robot_clock: &RobotClock) {
-        self.reftime = (Utc::now(), robot_clock.now());
+        self.reftime = (Timestamp::now(), robot_clock.now());
     }
 }
 
@@ -86,7 +86,7 @@ impl CuSrcTask for Tele15 {
         socket.set_nonblocking(true).unwrap();
 
         // just a temporary value, it will be redone at start.
-        let rt: RefTime = (Utc::now(), RobotClock::new().now());
+        let rt: RefTime = (Timestamp::now(), RobotClock::new().now());
         Ok(Tele15 {
             socket,
             reftime: rt,
@@ -130,7 +130,6 @@ impl CuSrcTask for Tele15 {
 mod tests {
     use super::*;
     use crate::parser::LidarFrame;
-    use chrono::DateTime;
     use cu_udp_inject::PcapStreamer;
     use cu29::cutask::CuMsg;
 
@@ -146,9 +145,7 @@ mod tests {
         let mut new_msg = CuMsg::<LidarCuMsgPayload>::new(Some(new_payload));
 
         // Picking a timestamp from the beginning of the pcap file to align the robot clock with the capture + 1s buffer in the past because ref times are negative.
-        let datetime = DateTime::parse_from_rfc3339("2024-09-17T15:47:11.684855Z")
-            .unwrap()
-            .with_timezone(&Utc);
+        let datetime = "2024-09-17T15:47:11.684855Z".parse::<Timestamp>().unwrap();
 
         tele15.reftime = (datetime, ctx.now());
         const PACKET_SIZE: usize = size_of::<LidarFrame>();

@@ -2,14 +2,12 @@
 
 use crate::palette;
 use crate::ui::MonitorUi;
-use chrono::DateTime;
-use chrono::Local;
-use chrono::SecondsFormat;
-use chrono::Utc;
 use cu29::clock::ClockEpoch;
 use cu29::clock::ClockSource;
 use cu29::clock::CuDuration;
 use cu29::clock::sync::SyncState;
+use jiff::Timestamp;
+use jiff::tz::TimeZone;
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Position, Rect, Size};
 use ratatui::style::Style;
@@ -228,10 +226,11 @@ fn tai_local_time(nanos: u64, epoch: ClockEpoch) -> Option<String> {
     let utc_seconds = i64::try_from(nanos / 1_000_000_000)
         .ok()?
         .checked_sub(i64::from(offset))?;
-    let utc = DateTime::<Utc>::from_timestamp(utc_seconds, 0)?;
+    let utc = Timestamp::from_second(utc_seconds).ok()?;
     Some(
-        utc.with_timezone(&Local)
-            .to_rfc3339_opts(SecondsFormat::Secs, false),
+        utc.to_zoned(TimeZone::system())
+            .strftime("%Y-%m-%dT%H:%M:%S%:z")
+            .to_string(),
     )
 }
 
@@ -274,16 +273,13 @@ mod tests {
         };
         let tai = 1_800_000_037_987_654_321;
         let displayed = tai_local_time(tai, epoch).unwrap();
-        let parsed = DateTime::parse_from_rfc3339(&displayed).unwrap();
-        assert_eq!(parsed.timestamp(), 1_800_000_000);
-        assert_eq!(parsed.timestamp_subsec_nanos(), 0);
-        let expected = DateTime::<Utc>::from_timestamp(1_800_000_000, 0)
+        let parsed = jiff::Zoned::strptime("%Y-%m-%dT%H:%M:%S%:z", &displayed).unwrap();
+        assert_eq!(parsed.timestamp().as_second(), 1_800_000_000);
+        assert_eq!(parsed.timestamp().subsec_nanosecond(), 0);
+        let expected = Timestamp::from_second(1_800_000_000)
             .unwrap()
-            .with_timezone(&Local);
-        assert_eq!(
-            parsed.offset().local_minus_utc(),
-            expected.offset().local_minus_utc()
-        );
+            .to_zoned(TimeZone::system());
+        assert_eq!(parsed.offset().seconds(), expected.offset().seconds());
         assert_eq!(displayed.len(), 25);
         assert!(!displayed.contains('.'));
     }
@@ -310,10 +306,11 @@ mod tests {
                 }
             )
             .unwrap(),
-            DateTime::<Utc>::from_timestamp(-37, 0)
+            Timestamp::from_second(-37)
                 .unwrap()
-                .with_timezone(&Local)
-                .to_rfc3339_opts(SecondsFormat::Secs, false)
+                .to_zoned(TimeZone::system())
+                .strftime("%Y-%m-%dT%H:%M:%S%:z")
+                .to_string()
         );
     }
 }

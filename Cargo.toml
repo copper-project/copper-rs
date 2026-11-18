@@ -421,7 +421,7 @@ bytemuck = "1.23.0"
 # Use ZIP >=9 until https://github.com/epwalsh/rust-cached-path/pull/92 is released.
 cached-path = { git = "https://github.com/valkum/rust-cached-path", rev = "651a398e140f081dbf300aa15954204d7bf19c7b", default-features = false }
 cfg_aliases = "0.2.1"
-chrono = "0.4.41"
+jiff = "0.2.46"
 circular-buffer = { version = "2.0.0", default-features = false }
 cortex-m = "0.7"
 cortex-m-rt = "0.7"

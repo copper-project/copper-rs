@@ -1,11 +1,14 @@
 use bytemuck::{Pod, Zeroable};
-use chrono::{DateTime, MappedLocalTime, TimeZone, Utc};
 use cu29::prelude::{CuDuration, CuTime};
 use cu29::units::si::angle::degree;
 use cu29::units::si::angular_velocity::revolution_per_minute;
 use cu29::units::si::f32::{Angle, AngularVelocity, Length, Ratio};
 use cu29::units::si::length::millimeter;
 use cu29::units::si::ratio::{percent, ratio};
+use jiff::SignedDuration;
+use jiff::Timestamp;
+use jiff::civil::DateTime;
+use jiff::tz::Offset;
 use std::error::Error;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
@@ -312,40 +315,38 @@ impl Tail {
         }
     }
 
-    fn utc_tov(&self) -> Result<DateTime<Utc>, HesaiError> {
-        match Utc.with_ymd_and_hms(
-            self.date_time[0] as i32 + 1900,
-            self.date_time[1] as u32,
-            self.date_time[2] as u32,
-            self.date_time[3] as u32,
-            self.date_time[4] as u32,
-            self.date_time[5] as u32,
-        ) {
-            MappedLocalTime::None => Err(HesaiError::InvalidTimestamp("No such local time".into())),
-            MappedLocalTime::Single(t) => {
-                Ok(t + chrono::Duration::microseconds(self.timestamp as i64))
-            }
-            MappedLocalTime::Ambiguous(_t1, _t2) => {
-                Err(HesaiError::InvalidTimestamp("Ambiguous time".into()))
-                // If that happens, good luck. ¯\_(ツ)_/¯
-            }
-        }
+    fn utc_tov(&self) -> Result<Timestamp, HesaiError> {
+        let datetime = DateTime::new(
+            i16::from(self.date_time[0]) + 1900,
+            self.date_time[1] as i8,
+            self.date_time[2] as i8,
+            self.date_time[3] as i8,
+            self.date_time[4] as i8,
+            self.date_time[5] as i8,
+            0,
+        )
+        .map_err(|err| HesaiError::InvalidTimestamp(err.to_string()))?;
+        Offset::UTC
+            .to_timestamp(datetime)
+            .and_then(|timestamp| {
+                timestamp.checked_add(SignedDuration::from_micros(i64::from(self.timestamp)))
+            })
+            .map_err(|err| HesaiError::InvalidTimestamp(err.to_string()))
     }
 
     // Lidar timestamp to monotonic time of validity.
-    // RefTime is a tuple of (DateTime<Utc>, CuTime) to convert the UTC time to a monotonic time.
-    // You can create it and update it doing DateTime<Utc>::now() and CuTime::now() respectively
+    // RefTime is a tuple of (Timestamp, CuTime) to convert the UTC time to a monotonic time.
+    // You can create it and update it doing Timestamp::now() and RobotClock::now() respectively
     // if the system clock is precise enough and sync'ed with the lidar.
-    fn tov(&self, reftime: &(DateTime<Utc>, CuTime)) -> Result<CuTime, HesaiError> {
+    fn tov(&self, reftime: &(Timestamp, CuTime)) -> Result<CuTime, HesaiError> {
         // This hesai API is terrible and based on UTC, here we give a function to convert it to a monotonic robot time.
         // UTC is corrected to match earth rotation so it is NOT suitable for robotic applications.
         let (ref_date, ref_cu_time) = reftime;
         let utc_tov = self.utc_tov()?;
 
-        let elapsed = utc_tov
-            .signed_duration_since(*ref_date)
-            .num_nanoseconds()
-            .unwrap() as u64;
+        let elapsed = i64::try_from(utc_tov.duration_since(*ref_date).as_nanos())
+            .map_err(|_| HesaiError::InvalidTimestamp("Reference time is too distant".into()))?
+            as u64;
 
         let cu_time = *ref_cu_time + CuTime::from(elapsed);
         Ok(cu_time)
@@ -385,7 +386,7 @@ fn u32_endianness(val: u32) -> u32 {
 }
 
 // Type to map the lidar timestamp to the robot monotonic time.
-pub type RefTime = (DateTime<Utc>, CuTime);
+pub type RefTime = (Timestamp, CuTime);
 
 #[repr(C, packed)]
 #[derive(Copy, Clone, Zeroable, Pod, Debug)]
@@ -490,6 +491,52 @@ mod tests {
     use crate::parser::{Packet, RefTime, parse_packet};
     use cu29::clock::CuDuration;
     use cu29::prelude::RobotClock;
+
+    #[test]
+    fn test_utc_timestamp_calendar_and_fraction() {
+        use bytemuck::Zeroable;
+        let mut tail = super::Tail::zeroed();
+        tail.date_time = [124, 2, 29, 23, 59, 59];
+        tail.timestamp = 123_456;
+        assert_eq!(
+            tail.utc_tov().unwrap(),
+            "2024-02-29T23:59:59.123456Z"
+                .parse::<jiff::Timestamp>()
+                .unwrap()
+        );
+        tail.timestamp = 1_000_000;
+        assert_eq!(
+            tail.utc_tov().unwrap(),
+            "2024-03-01T00:00:00Z".parse::<jiff::Timestamp>().unwrap()
+        );
+        let reference = (
+            tail.utc_tov().unwrap(),
+            cu29::clock::CuTime::from_nanos(100),
+        );
+        tail.timestamp += 1;
+        assert_eq!(
+            tail.tov(&reference).unwrap(),
+            cu29::clock::CuTime::from_nanos(1100)
+        );
+    }
+
+    #[test]
+    fn test_utc_timestamp_rejects_invalid_calendar_fields() {
+        use bytemuck::Zeroable;
+        let mut tail = super::Tail::zeroed();
+        for date_time in [
+            [123, 2, 29, 0, 0, 0],
+            [124, 0, 1, 0, 0, 0],
+            [124, 1, 0, 0, 0, 0],
+            [124, 1, 1, 24, 0, 0],
+            [124, 1, 1, 0, 60, 0],
+            [124, 1, 1, 0, 0, 60],
+            [124, 255, 1, 0, 0, 0],
+        ] {
+            tail.date_time = date_time;
+            assert!(tail.utc_tov().is_err(), "{date_time:?}");
+        }
+    }
 
     #[test]
     fn test_packet() {

@@ -21,7 +21,7 @@ environments = ["host"]
 cu29 = { workspace = true }
 cu-sensor-payloads = { workspace = true }
 bytemuck = { workspace = true, features = ["derive"] }
-chrono = { workspace = true, features = ["serde"] }
+jiff = { workspace = true, features = ["serde"] }
 socket2 = { workspace = true, features = ["all"] }
 bincode = { workspace = true }
 serde = { workspace = true }

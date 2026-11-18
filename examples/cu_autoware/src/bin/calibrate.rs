@@ -9,9 +9,9 @@
 //! The search also steers on the median while the KPIs pay the mean, which puts calibrate
 //! on the optimistic side of whatever the app ends up charging.
 
-use chrono::Local;
 use clap::Parser;
 use cu_autoware::tasks::crunch;
+use jiff::Zoned;
 use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -273,7 +273,7 @@ fn write_config(limits: &[(u64, u64)], path: &PathBuf) {
     let out = format!(
         "{HEADER_MARK}{}, {}.\n{HEADER_NOTE}\n{body}",
         cpu_model(),
-        Local::now().format("%Y-%m-%d")
+        Zoned::now().date()
     );
     // fmtron's canonical form has no trailing newline.
     if let Some(parent) = path.parent() {

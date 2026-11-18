@@ -64,11 +64,11 @@ fn clock_panel_reads_the_live_shared_clock_and_shows_expiration() {
     assert!(initial.contains("Epoch"));
     assert!(initial.contains("TAI"));
     assert!(initial.contains("+37 s"));
-    let date =
-        chrono::DateTime::<chrono::Utc>::from_timestamp((epoch / 1_000_000_000) as i64 + 1 - 37, 0)
-            .unwrap()
-            .with_timezone(&chrono::Local)
-            .to_rfc3339_opts(chrono::SecondsFormat::Secs, false);
+    let date = jiff::Timestamp::from_second((epoch / 1_000_000_000) as i64 + 1 - 37)
+        .unwrap()
+        .to_zoned(jiff::tz::TimeZone::system())
+        .strftime("%Y-%m-%dT%H:%M:%S%:z")
+        .to_string();
     assert!(initial.contains(&date));
     assert!(initial.contains("Offset from reference"));
     assert!(initial.contains("-50.000 µs"));

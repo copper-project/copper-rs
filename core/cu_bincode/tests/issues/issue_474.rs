@@ -3,7 +3,7 @@
 extern crate std;
 
 extern crate cu_bincode as bincode;
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::prelude::rust_2021::*;
@@ -19,7 +19,7 @@ pub struct CustomerTest {
     pub id: Option<Uuid>,
     pub email_address: Option<String>,
     pub is_active: Option<bool>,
-    pub date_stamp: Option<DateTime<Utc>>,
+    pub date_stamp: Option<Timestamp>,
 }
 
 #[test]
@@ -38,7 +38,7 @@ fn test() {
         id: Some(Uuid::nil()),
         email_address: Some("foo@bar".into()),
         is_active: None,
-        date_stamp: Some(Utc::now()),
+        date_stamp: Some(Timestamp::now()),
     };
 
     cache.set_data::<CustomerTest>(&cache_id, &test, 5).unwrap();
