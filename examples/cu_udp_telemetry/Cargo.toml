@@ -39,3 +39,7 @@ required-features = ["host"]
 
 [dev-dependencies]
 tempfile.workspace = true
+
+[lints.cargo]
+# Workspace cu29 feature flags can activate the dependency while the host binary is disabled.
+unused_dependencies = "allow"
