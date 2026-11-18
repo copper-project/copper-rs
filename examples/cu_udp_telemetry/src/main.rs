@@ -92,15 +92,19 @@ fn main() -> Result<(), Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cu29_logstream::protocol::CuTelemetryRecord;
+    use cu29_logstream::protocol::{CuTelemetryRecord, TxMode};
 
     struct SkipOne<T>(T);
     impl<T: CuTelemetryTx> CuTelemetryTx for SkipOne<T> {
-        fn send(&mut self, record: CuTelemetryRecord<'_>) -> CuResult<()> {
+        fn send(&mut self, queued_at: CuTime, record: CuTelemetryRecord<'_>) -> CuResult<()> {
             if matches!(record, CuTelemetryRecord::CopperList { id: 17, .. }) {
                 return Ok(());
             }
-            self.0.send(record)
+            self.0.send(queued_at, record)
+        }
+
+        fn poll(&mut self, now: CuTime, mode: TxMode) -> CuResult<Option<CuTime>> {
+            self.0.poll(now, mode)
         }
     }
 

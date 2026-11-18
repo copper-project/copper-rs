@@ -3,7 +3,7 @@
 use crate::feedback::{
     FEEDBACK_BUFFER_BYTES, FeedbackController, FeedbackSnapshot, ReceiverReport,
 };
-use crate::protocol::{CuTelemetryRecord, CuTelemetrySession, CuTelemetryTx};
+use crate::protocol::{CuTelemetryRecord, CuTelemetrySession, CuTelemetryTx, TxMode};
 use crate::{
     CuFeedbackRx, CuStreamRxError, CuStreamTx, LogStreamSenderConfig, OneWay, SenderCore,
     SenderStats,
@@ -330,6 +330,11 @@ impl TelemetryDestination {
     )> {
         let schema = P::stream_schema();
         let selective = !schema.reconstruction.is_empty();
+        let clock = if clock.is_mock() {
+            RobotClock::new()
+        } else {
+            clock
+        };
         let (lists, frames, monitor) = match self {
             Self::Native {
                 tx,
@@ -365,11 +370,6 @@ impl TelemetryDestination {
                     .map_err(|e| CuError::from(e.to_string()))?;
                 let bitrate = config.pacing.bitrate_bps;
                 let baseline = config.continuous.repair_every_source_symbols;
-                let clock = if clock.is_mock() {
-                    RobotClock::new()
-                } else {
-                    clock
-                };
                 let (lists, frames, monitor) = scheduled_sinks(transport, config, clock)?;
                 (
                     lists,
@@ -509,7 +509,6 @@ where
         transport,
         feedback,
         core,
-        now,
         staging: vec![0; staging],
         feedback_failed: false,
     };
@@ -559,15 +558,7 @@ fn telemetry_sinks<P: CopperListTuple + Send + Sync>(
 }
 
 trait Driver: CuTelemetryTx {
-    fn set_time(&mut self, _now: CuTime) {}
-    fn poll(&mut self, _now: CuTime) -> crate::Result<Option<CuTime>> {
-        Ok(None)
-    }
-    fn begin_shutdown(&mut self) {}
     fn discard_pending(&mut self) {}
-    fn is_idle(&self) -> bool {
-        true
-    }
     fn stats(&self) -> Option<SenderStats> {
         None
     }
@@ -581,8 +572,11 @@ trait Driver: CuTelemetryTx {
 
 struct CustomerDriver(Box<dyn CuTelemetryTx>);
 impl CuTelemetryTx for CustomerDriver {
-    fn send(&mut self, record: CuTelemetryRecord<'_>) -> CuResult<()> {
-        self.0.send(record)
+    fn send(&mut self, queued_at: CuTime, record: CuTelemetryRecord<'_>) -> CuResult<()> {
+        self.0.send(queued_at, record)
+    }
+    fn poll(&mut self, now: CuTime, mode: TxMode) -> CuResult<Option<CuTime>> {
+        self.0.poll(now, mode)
     }
 }
 impl Driver for CustomerDriver {}
@@ -591,12 +585,11 @@ struct FecDriver<T> {
     transport: T,
     feedback: Option<FeedbackController>,
     feedback_failed: bool,
-    now: CuTime,
     core: SenderCore,
     staging: Vec<u8>,
 }
-impl<T: CuStreamTx> CuTelemetryTx for FecDriver<T> {
-    fn send(&mut self, record: CuTelemetryRecord<'_>) -> CuResult<()> {
+impl<T: CuStreamTx + CuFeedbackRx> CuTelemetryTx for FecDriver<T> {
+    fn send(&mut self, queued_at: CuTime, record: CuTelemetryRecord<'_>) -> CuResult<()> {
         let (kind, id, bytes) = match record {
             CuTelemetryRecord::CopperList { id, capture } => {
                 (crate::RecordKind::CopperList, id, capture)
@@ -626,16 +619,14 @@ impl<T: CuStreamTx> CuTelemetryTx for FecDriver<T> {
         self.core
             .accept_record(
                 &self.staging[..crate::record::RECORD_HEADER_LEN + bytes.len()],
-                self.now,
+                queued_at,
             )
             .map_err(|e| CuError::from(e.to_string()))
     }
-}
-impl<T: CuStreamTx + CuFeedbackRx> Driver for FecDriver<T> {
-    fn set_time(&mut self, now: CuTime) {
-        self.now = now;
-    }
-    fn poll(&mut self, now: CuTime) -> crate::Result<Option<CuTime>> {
+    fn poll(&mut self, now: CuTime, mode: TxMode) -> CuResult<Option<CuTime>> {
+        if mode == TxMode::Draining {
+            self.core.begin_shutdown();
+        }
         let mut feedback_packet = [0; FEEDBACK_BUFFER_BYTES];
         if let Some(controller) = &mut self.feedback {
             for _ in 0..8 {
@@ -663,19 +654,18 @@ impl<T: CuStreamTx + CuFeedbackRx> Driver for FecDriver<T> {
             }
             controller.tick(now);
             self.core
-                .set_repair_interval(controller.snapshot().effective_repair_every_source_symbols)?;
+                .set_repair_interval(controller.snapshot().effective_repair_every_source_symbols)
+                .map_err(|e| CuError::from(e.to_string()))?;
         }
 
-        self.core.poll(now, &mut self.transport)
+        self.core
+            .poll(now, &mut self.transport)
+            .map_err(|e| CuError::from(e.to_string()))
     }
-    fn begin_shutdown(&mut self) {
-        self.core.begin_shutdown();
-    }
+}
+impl<T: CuStreamTx + CuFeedbackRx> Driver for FecDriver<T> {
     fn discard_pending(&mut self) {
         self.core.discard_pending();
-    }
-    fn is_idle(&self) -> bool {
-        self.core.is_idle()
     }
     fn stats(&self) -> Option<SenderStats> {
         Some(self.core.stats())
@@ -753,10 +743,9 @@ fn spawn_worker<P: CopperListTuple + Send + Sync>(
             let mut structured_id = 0u64;
             // Teardown remains finite even for deliberately frozen scheduler test clocks.
             let result = (|| -> crate::Result<()> {
-                if let Some(session) = &session { driver.send(CuTelemetryRecord::Session(session)).map_err(|e| crate::Error::Codec(e.to_string()))?; }
+                if let Some(session) = &session { driver.send(clock.now(), CuTelemetryRecord::Session(session)).map_err(|e| crate::Error::Codec(e.to_string()))?; }
                 loop {
                     if status.stop.load(Ordering::Acquire) && stop_at.is_none() {
-                        driver.begin_shutdown();
                         stop_at = Some(shutdown_clock.now() + drain_time);
                     }
                     let mut received = 0;
@@ -764,10 +753,9 @@ fn spawn_worker<P: CopperListTuple + Send + Sync>(
                         let Ok(record) = records.try_recv() else {
                             break;
                         };
-                        driver.set_time(record.queued_at);
                         let bytes = &record.bytes[..record.len];
                         let value = if record.keyframe { CuTelemetryRecord::KeyFrame { copperlist_id: record.id, state: bytes } } else { CuTelemetryRecord::CopperList { id: record.id, capture: bytes } };
-                        let result = driver.send(value).map_err(|e| crate::Error::Codec(e.to_string()));
+                        let result = driver.send(record.queued_at, value).map_err(|e| crate::Error::Codec(e.to_string()));
                         let returned = if record.keyframe {
                             &kf_return
                         } else {
@@ -779,15 +767,15 @@ fn spawn_worker<P: CopperListTuple + Send + Sync>(
                     }
                     for _ in 0..STRUCTURED_BUFFERS {
                         let Some(record) = structured_worker.pending.pop() else { break; };
-                        driver.set_time(record.queued_at);
-                        let result = driver.send(CuTelemetryRecord::StructuredLog {sequence: structured_id,entry: &record.bytes[..record.len]}).map_err(|e| crate::Error::Codec(e.to_string()));
+                        let result = driver.send(record.queued_at, CuTelemetryRecord::StructuredLog {sequence: structured_id,entry: &record.bytes[..record.len]}).map_err(|e| crate::Error::Codec(e.to_string()));
                         let _ = structured_worker.free.push(record);
                         result?;
                         structured_id = structured_id.checked_add(1)
                             .ok_or(crate::Error::InvalidConfig("structured log sequence exhausted"))?;
                         received += 1;
                     }
-                    let next = driver.poll(clock.now())?;
+                    let mode = if stop_at.is_some() { TxMode::Draining } else { TxMode::Running };
+                    let next = driver.poll(clock.now(), mode).map_err(|e| crate::Error::Codec(e.to_string()))?;
                     let now = clock.now();
                     if now >= next_snapshot {
                         if let Ok(mut snapshot) = status.snapshot.try_lock() {
@@ -799,7 +787,7 @@ fn spawn_worker<P: CopperListTuple + Send + Sync>(
                         next_snapshot = now + CuDuration::from_millis(100);
                     }
                     if stop_at.is_some_and(|deadline| shutdown_clock.now() >= deadline)
-                        || (stop_at.is_some() && received == 0 && driver.is_idle())
+                        || (stop_at.is_some() && received == 0 && next.is_none())
                     {
                         break;
                     }
