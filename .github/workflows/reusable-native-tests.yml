@@ -144,7 +144,7 @@ jobs:
           -p cu-ratelimit
       - name: Install cargo-generate
         if: inputs.full && runner.os == 'macOS'
-        uses: taiki-e/install-action@v2.90.3
+        uses: taiki-e/install-action@v2.90.4
         with:
           tool: cargo-generate
       - name: Generate and build templates
