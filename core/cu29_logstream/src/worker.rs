@@ -555,7 +555,7 @@ enum FecSession {
 }
 
 impl<T: CuStreamTx> FecTelemetryTx<OneWay<T>> {
-    /// Create a one-way radio sender. The plan budgets this branch's FEC buffers;
+    /// Create a one-way FEC sender. The plan budgets this branch's FEC buffers;
     /// the native worker's shared record pool is sized separately by the app builder.
     pub fn new(transport: T, plan: crate::LogStreamPlan) -> CuResult<Self> {
         Self::waiting(OneWay::new(transport), plan, false)

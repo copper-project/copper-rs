@@ -50,7 +50,7 @@ returns its next absolute wakeup. During shutdown, stop periodic work and
 return `None` once drained. The custom sender worker allows 50 ms to drain.
 Use `protocol::Fanout(a, b)` for multiple protocols on the same session.
 Wrap an optional branch in `protocol::BestEffort` to disable it on its first
-error. The plain UDP example pairs a logger with a paced `FecTelemetryTx`.
+error. The plain UDP example pairs a plain UDP sender with a paced `FecTelemetryTx`.
 
 Implement `protocol::CuTelemetryRx` to deliver those records to
 `Twin::from_telemetry(rx).with_log_path(path).spawn()?`. The receiver owns

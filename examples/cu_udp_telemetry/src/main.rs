@@ -125,9 +125,9 @@ mod tests {
         let mut link = CuUdpLogStreamConfig::new("127.0.0.1:0".parse()?);
         link.remote_addr = Some(rx.local_addr()?);
         let (tx, _) = link.open()?;
-        let radio = FecTelemetryTx::new(tx.unwrap(), plan)?;
+        let fec = FecTelemetryTx::new(tx.unwrap(), plan)?;
         let mut receiver = FecTelemetryRx::new(rx, Default::default(), None)?;
-        let radio_archive = std::thread::spawn(move || -> CuResult<Vec<u64>> {
+        let fec_captures = std::thread::spawn(move || -> CuResult<Vec<u64>> {
             let deadline = Instant::now() + Duration::from_secs(5);
             let mut ids = Vec::new();
             while Instant::now() < deadline && ids.last() != Some(&(CYCLES - 1)) {
@@ -147,12 +147,12 @@ mod tests {
         });
         let status = loopback(dir.path(), |udp| {
             Fanout(
-                radio,
+                fec,
                 BestEffort::new(SkipOne(udp), |err| panic!("UDP output failed: {err}")),
             )
         })?;
         assert_eq!(
-            radio_archive.join().unwrap()?,
+            fec_captures.join().unwrap()?,
             (0..CYCLES).collect::<Vec<_>>()
         );
         assert_eq!(status.gaps, 1);
