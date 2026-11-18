@@ -7,7 +7,7 @@
 use crate::{ApplicationSchema, StreamIdentity};
 use bincode::{Decode, Encode};
 use cu29_clock::CuTime;
-use cu29_traits::CuResult;
+use cu29_traits::{CuError, CuResult};
 use cu29_unifiedlog::SectionContext;
 
 /// Identifies the robot construction, active mission and selected output slots.
@@ -45,6 +45,59 @@ pub trait CuTelemetryTx: Send {
     /// mode, stop periodic repetition and return None when pending work is done.
     fn poll(&mut self, _now: CuTime, _mode: TxMode) -> CuResult<Option<CuTime>> {
         Ok(None)
+    }
+}
+
+/// Deliver each borrowed record to both protocols on the same output worker.
+/// Both children are called on error. The first error in tuple order propagates.
+pub struct Fanout<A, B>(pub A, pub B);
+
+impl<A: CuTelemetryTx, B: CuTelemetryTx> CuTelemetryTx for Fanout<A, B> {
+    fn send(&mut self, queued_at: CuTime, record: CuTelemetryRecord<'_>) -> CuResult<()> {
+        let first = self.0.send(queued_at, record);
+        let second = self.1.send(queued_at, record);
+        first.and(second)
+    }
+
+    fn poll(&mut self, now: CuTime, mode: TxMode) -> CuResult<Option<CuTime>> {
+        let first = self.0.poll(now, mode);
+        let second = self.1.poll(now, mode);
+        Ok(first?.into_iter().chain(second?).min())
+    }
+}
+
+/// Disable an optional output and report its first send or poll error on the worker.
+/// Both the output and its error callback must be nonblocking.
+pub struct BestEffort<T, F>(Option<(T, F)>);
+
+impl<T: CuTelemetryTx, F: FnOnce(CuError) + Send> BestEffort<T, F> {
+    pub fn new(tx: T, on_error: F) -> Self {
+        Self(Some((tx, on_error)))
+    }
+
+    fn attempt<R: Default>(&mut self, op: impl FnOnce(&mut T) -> CuResult<R>) -> R {
+        if let Some((tx, _)) = &mut self.0 {
+            match op(tx) {
+                Ok(value) => return value,
+                Err(error) => {
+                    if let Some((_, report)) = self.0.take() {
+                        report(error);
+                    }
+                }
+            }
+        }
+        R::default()
+    }
+}
+
+impl<T: CuTelemetryTx, F: FnOnce(CuError) + Send> CuTelemetryTx for BestEffort<T, F> {
+    fn send(&mut self, queued_at: CuTime, record: CuTelemetryRecord<'_>) -> CuResult<()> {
+        self.attempt(|tx| tx.send(queued_at, record));
+        Ok(())
+    }
+
+    fn poll(&mut self, now: CuTime, mode: TxMode) -> CuResult<Option<CuTime>> {
+        Ok(self.attempt(|tx| tx.poll(now, mode)))
     }
 }
 

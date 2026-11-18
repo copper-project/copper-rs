@@ -55,8 +55,8 @@ mod worker;
 pub use structured::StructuredLogStream;
 #[cfg(feature = "std")]
 pub use worker::{
-    ScheduledCopperListSink, ScheduledKeyFrameSink, ScheduledStructuredLogSink, SenderMonitor,
-    SenderSnapshot, TelemetryDestination, scheduled_feedback_sinks, scheduled_sinks,
+    FecTelemetryTx, ScheduledCopperListSink, ScheduledKeyFrameSink, ScheduledStructuredLogSink,
+    SenderMonitor, SenderSnapshot, TelemetryDestination, scheduled_feedback_sinks, scheduled_sinks,
 };
 
 /// Utilities for testing log streaming over unreliable datagram links.

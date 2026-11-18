@@ -45,6 +45,13 @@ Install it with `Robot::builder().with_telemetry_tx(tx, max_capture_bytes,
 max_keyframe_bytes)`. Both bounds are native payload sizes. A full capture pool
 drops a record and increments the existing inbox counter.
 
+A sender that needs time between records implements `poll(now, mode)` and
+returns its next absolute wakeup. During shutdown, stop periodic work and
+return `None` once drained. The custom sender worker allows 50 ms to drain.
+Use `protocol::Fanout(a, b)` for multiple protocols on the same session.
+Wrap an optional branch in `protocol::BestEffort` to disable it on its first
+error. The plain UDP example pairs a logger with a paced `FecTelemetryTx`.
+
 Implement `protocol::CuTelemetryRx` to deliver those records to
 `Twin::from_telemetry(rx).with_log_path(path).spawn()?`. The receiver owns
 packet framing, integrity, duplicate suppression and its reordering policy.

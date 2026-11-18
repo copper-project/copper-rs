@@ -52,3 +52,26 @@ cargo test -p cu-udp-telemetry --features host
 
 The loopback regression withholds cycle 17, checks the archive’s missing cycle,
 and verifies the twin produces the final frame after the keyframe at cycle 32.
+
+## Send to a radio and a local UDP logger
+
+Pass both protocols to the same builder slot. The worker hands each branch
+the same session, capture, keyframe and structured-log bytes. The radio
+constructs its manifest from the session and uses its own packet pacing.
+
+```rust
+use cu29_logstream::FecTelemetryTx;
+use cu29_logstream::protocol::{BestEffort, Fanout};
+
+let radio = FecTelemetryTx::new(radio_transport, radio_plan)?;
+let logger = BestEffort::new(PlainUdpTx::new(local_udp), report_logger_error);
+let app = Robot::builder()
+    .with_telemetry_tx(Fanout(radio, logger), MAX_PAYLOAD, MAX_PAYLOAD)
+    .build()?;
+```
+
+Resolve `radio_plan` with `LogStreamPlan::resolve` from the radio destination.
+Choose shared capture and keyframe limits that both protocols can carry.
+`Fanout` attempts both outputs and propagates the first error. `BestEffort`
+reports a logger error once and disables only that output. Sends, polls and
+the error handler share a worker and must all be nonblocking.

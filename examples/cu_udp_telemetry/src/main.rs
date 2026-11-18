@@ -109,11 +109,52 @@ mod tests {
     }
 
     #[test]
-    fn plain_udp_resumes_at_a_keyframe_after_a_missing_capture() -> Result<(), Box<dyn Error>> {
+    fn fec_keeps_every_capture_while_plain_udp_recovers_from_loss() -> Result<(), Box<dyn Error>> {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("logs");
         std::fs::create_dir_all(&root)?;
         let dir = tempfile::tempdir_in(root)?;
-        let status = loopback(dir.path(), SkipOne)?;
+        use cu29_logstream::protocol::{
+            BestEffort, CuTelemetryEvent, CuTelemetryPoll, CuTelemetryRx, Fanout,
+        };
+        use cu29_logstream::{FecTelemetryRx, FecTelemetryTx, LogStreamPlan};
+
+        let config =
+            CuConfig::deserialize_ron(include_str!("../../cu_logstream_demo/copperconfig.ron"))?;
+        let plan = LogStreamPlan::resolve(&config.log_streaming.unwrap().destinations[0])?;
+        let (_, rx) = CuUdpLogStreamConfig::new("127.0.0.1:0".parse()?).open()?;
+        let mut link = CuUdpLogStreamConfig::new("127.0.0.1:0".parse()?);
+        link.remote_addr = Some(rx.local_addr()?);
+        let (tx, _) = link.open()?;
+        let radio = FecTelemetryTx::new(tx.unwrap(), plan)?;
+        let mut receiver = FecTelemetryRx::new(rx, Default::default(), None)?;
+        let radio_archive = std::thread::spawn(move || -> CuResult<Vec<u64>> {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            let mut ids = Vec::new();
+            while Instant::now() < deadline && ids.last() != Some(&(CYCLES - 1)) {
+                let outcome = receiver.try_recv(|event| {
+                    if let CuTelemetryEvent::Record(CuTelemetryRecord::CopperList { id, .. }) =
+                        event
+                    {
+                        ids.push(id);
+                    }
+                    Ok(())
+                })?;
+                if outcome == CuTelemetryPoll::Pending {
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+            }
+            Ok(ids)
+        });
+        let status = loopback(dir.path(), |udp| {
+            Fanout(
+                radio,
+                BestEffort::new(SkipOne(udp), |err| panic!("UDP output failed: {err}")),
+            )
+        })?;
+        assert_eq!(
+            radio_archive.join().unwrap()?,
+            (0..CYCLES).collect::<Vec<_>>()
+        );
         assert_eq!(status.gaps, 1);
         assert_eq!(status.archived, CYCLES - 1);
         assert!(status.structured_logs > 0);
