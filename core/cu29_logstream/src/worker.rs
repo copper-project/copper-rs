@@ -39,7 +39,6 @@ use crate::pacing::STRUCTURED_RECORD_BYTES;
 struct StructuredRecord {
     bytes: Box<[u8]>,
     len: usize,
-    queued_at: CuTime,
 }
 
 struct StructuredInbox {
@@ -54,7 +53,6 @@ pub struct ScheduledStructuredLogSink {
     inbox: Arc<StructuredInbox>,
     status: Arc<Shared>,
     thread: Thread,
-    clock: RobotClock,
     current: Option<StructuredRecord>,
     oversized: bool,
 }
@@ -106,8 +104,7 @@ impl crate::structured::StructuredLogOutput for ScheduledStructuredLogSink {
             if success {
                 self.status.inbox_drops.fetch_add(1, Ordering::Relaxed);
             }
-        } else if let Some(mut record) = record {
-            record.queued_at = self.clock.now();
+        } else if let Some(record) = record {
             // Every owned buffer has a slot in the bounded pending queue.
             if let Err(record) = self.inbox.pending.push(record) {
                 let _ = self.inbox.free.push(record);
@@ -126,7 +123,6 @@ struct Record {
     len: usize,
     keyframe: bool,
     id: u64,
-    queued_at: CuTime,
 }
 
 /// Live worker snapshot. Publication uses try_lock at 10 Hz, never on the RT path.
@@ -195,7 +191,6 @@ impl Drop for Worker {
 
 #[derive(Debug)]
 struct Inbox {
-    clock: RobotClock,
     worker: Arc<Worker>,
     pending: SyncSender<Record>,
     // Mutex supplies Sync for WriteStream; exclusive log() uses get_mut, never lock().
@@ -226,7 +221,6 @@ impl Inbox {
                 return Err(CuError::from("Logstream sender worker stopped"));
             }
         };
-        let queued_at = self.clock.now();
         let len = match encode(&mut bytes) {
             Ok(len) => len,
             Err(error) => {
@@ -242,7 +236,6 @@ impl Inbox {
                 len,
                 keyframe,
                 id,
-                queued_at,
             })
             .map_err(|_| CuError::from("Logstream sender inbox disconnected"))?;
         self.worker.thread.unpark();
@@ -307,12 +300,14 @@ impl WriteStream<KeyFrame> for ScheduledKeyFrameSink {
     }
 }
 
+type TxFactory = Box<dyn FnOnce(RobotClock) -> CuResult<Box<dyn CuTelemetryTx>> + Send>;
+
 /// Injected destination used by generated runtime builders.
 #[doc(hidden)]
 pub enum TelemetryDestination {
     Fec(Box<dyn CuStreamTx>, Box<LogStreamSenderConfig>),
     Native {
-        tx: Box<dyn CuTelemetryTx>,
+        make_tx: TxFactory,
         max_capture_bytes: usize,
         max_keyframe_bytes: usize,
     },
@@ -337,10 +332,11 @@ impl TelemetryDestination {
         };
         let (lists, frames, monitor) = match self {
             Self::Native {
-                tx,
+                make_tx,
                 max_capture_bytes,
                 max_keyframe_bytes,
             } => {
+                let tx = make_tx(clock.clone())?;
                 let session = CuTelemetrySession {
                     identity: crate::StreamIdentity {
                         session_id: crate::new_session_id(),
@@ -506,6 +502,7 @@ where
     let now = clock.now();
     let core = SenderCore::new(config, now, reserved).map_err(|e| CuError::from(e.to_string()))?;
     let driver = FecDriver {
+        clock: clock.clone(),
         transport,
         feedback,
         core,
@@ -572,16 +569,17 @@ trait Driver: CuTelemetryTx {
 
 struct CustomerDriver(Box<dyn CuTelemetryTx>);
 impl CuTelemetryTx for CustomerDriver {
-    fn send(&mut self, queued_at: CuTime, record: CuTelemetryRecord<'_>) -> CuResult<()> {
-        self.0.send(queued_at, record)
+    fn send(&mut self, record: CuTelemetryRecord<'_>) -> CuResult<()> {
+        self.0.send(record)
     }
-    fn poll(&mut self, now: CuTime, mode: TxMode) -> CuResult<Option<CuTime>> {
-        self.0.poll(now, mode)
+    fn poll(&mut self, mode: TxMode) -> CuResult<Option<CuTime>> {
+        self.0.poll(mode)
     }
 }
 impl Driver for CustomerDriver {}
 
 struct FecDriver<T> {
+    clock: RobotClock,
     transport: T,
     feedback: Option<FeedbackController>,
     feedback_failed: bool,
@@ -589,7 +587,8 @@ struct FecDriver<T> {
     staging: Vec<u8>,
 }
 impl<T: CuStreamTx + CuFeedbackRx> CuTelemetryTx for FecDriver<T> {
-    fn send(&mut self, queued_at: CuTime, record: CuTelemetryRecord<'_>) -> CuResult<()> {
+    fn send(&mut self, record: CuTelemetryRecord<'_>) -> CuResult<()> {
+        let now = self.clock.now();
         let (kind, id, bytes) = match record {
             CuTelemetryRecord::CopperList { id, capture } => {
                 (crate::RecordKind::CopperList, id, capture)
@@ -619,11 +618,12 @@ impl<T: CuStreamTx + CuFeedbackRx> CuTelemetryTx for FecDriver<T> {
         self.core
             .accept_record(
                 &self.staging[..crate::record::RECORD_HEADER_LEN + bytes.len()],
-                queued_at,
+                now,
             )
             .map_err(|e| CuError::from(e.to_string()))
     }
-    fn poll(&mut self, now: CuTime, mode: TxMode) -> CuResult<Option<CuTime>> {
+    fn poll(&mut self, mode: TxMode) -> CuResult<Option<CuTime>> {
+        let now = self.clock.now();
         if mode == TxMode::Draining {
             self.core.begin_shutdown();
         }
@@ -719,13 +719,9 @@ fn spawn_worker<P: CopperListTuple + Send + Sync>(
         let _ = structured.free.push(StructuredRecord {
             bytes: vec![0; structured_bytes].into_boxed_slice(),
             len: 0,
-            queued_at: CuTime::default(),
         });
     }
     let structured_worker = structured.clone();
-    let structured_clock = clock.clone();
-    let cl_clock = clock.clone();
-    let kf_clock = clock.clone();
     let shared = Arc::new(Shared::default());
     *shared.snapshot.lock().expect("new snapshot") = SenderSnapshot {
         sampled_at: clock.now(),
@@ -743,7 +739,7 @@ fn spawn_worker<P: CopperListTuple + Send + Sync>(
             let mut structured_id = 0u64;
             // Teardown remains finite even for deliberately frozen scheduler test clocks.
             let result = (|| -> crate::Result<()> {
-                if let Some(session) = &session { driver.send(clock.now(), CuTelemetryRecord::Session(session)).map_err(|e| crate::Error::Codec(e.to_string()))?; }
+                if let Some(session) = &session { driver.send(CuTelemetryRecord::Session(session)).map_err(|e| crate::Error::Codec(e.to_string()))?; }
                 loop {
                     if status.stop.load(Ordering::Acquire) && stop_at.is_none() {
                         stop_at = Some(shutdown_clock.now() + drain_time);
@@ -755,7 +751,7 @@ fn spawn_worker<P: CopperListTuple + Send + Sync>(
                         };
                         let bytes = &record.bytes[..record.len];
                         let value = if record.keyframe { CuTelemetryRecord::KeyFrame { copperlist_id: record.id, state: bytes } } else { CuTelemetryRecord::CopperList { id: record.id, capture: bytes } };
-                        let result = driver.send(record.queued_at, value).map_err(|e| crate::Error::Codec(e.to_string()));
+                        let result = driver.send(value).map_err(|e| crate::Error::Codec(e.to_string()));
                         let returned = if record.keyframe {
                             &kf_return
                         } else {
@@ -767,7 +763,7 @@ fn spawn_worker<P: CopperListTuple + Send + Sync>(
                     }
                     for _ in 0..STRUCTURED_BUFFERS {
                         let Some(record) = structured_worker.pending.pop() else { break; };
-                        let result = driver.send(record.queued_at, CuTelemetryRecord::StructuredLog {sequence: structured_id,entry: &record.bytes[..record.len]}).map_err(|e| crate::Error::Codec(e.to_string()));
+                        let result = driver.send(CuTelemetryRecord::StructuredLog {sequence: structured_id,entry: &record.bytes[..record.len]}).map_err(|e| crate::Error::Codec(e.to_string()));
                         let _ = structured_worker.free.push(record);
                         result?;
                         structured_id = structured_id.checked_add(1)
@@ -775,7 +771,7 @@ fn spawn_worker<P: CopperListTuple + Send + Sync>(
                         received += 1;
                     }
                     let mode = if stop_at.is_some() { TxMode::Draining } else { TxMode::Running };
-                    let next = driver.poll(clock.now(), mode).map_err(|e| crate::Error::Codec(e.to_string()))?;
+                    let next = driver.poll(mode).map_err(|e| crate::Error::Codec(e.to_string()))?;
                     let now = clock.now();
                     if now >= next_snapshot {
                         if let Ok(mut snapshot) = status.snapshot.try_lock() {
@@ -845,7 +841,6 @@ fn spawn_worker<P: CopperListTuple + Send + Sync>(
                 inbox: structured,
                 status: shared.clone(),
                 thread: worker.thread.clone(),
-                clock: structured_clock,
                 current: None,
                 oversized: false,
             }),
@@ -854,7 +849,6 @@ fn spawn_worker<P: CopperListTuple + Send + Sync>(
                     .map_err(|e| crate::Error::Codec(e.to_string()))
             },
             inbox: Inbox {
-                clock: cl_clock,
                 worker: worker.clone(),
                 pending: pending.clone(),
                 free: Mutex::new(cl_free),
@@ -864,7 +858,6 @@ fn spawn_worker<P: CopperListTuple + Send + Sync>(
         },
         ScheduledKeyFrameSink {
             inbox: Inbox {
-                clock: kf_clock,
                 worker,
                 pending,
                 free: Mutex::new(kf_free),

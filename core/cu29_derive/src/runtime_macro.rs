@@ -4592,8 +4592,21 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! {
                 /// Stream native records through a custom protocol on a bounded sender worker.
                 /// Limits are in bytes per CopperList capture and per keyframe.
-                pub fn with_telemetry_tx<T: ::cu29::logstream::protocol::CuTelemetryTx + 'static>(mut self, tx: T, max_capture_bytes: usize, max_keyframe_bytes: usize) -> Self {
-                    self.logstream = Some(::cu29::logstream::TelemetryDestination::Native {tx: Box::new(tx), max_capture_bytes, max_keyframe_bytes});
+                /// The factory receives the same transport clock the worker uses for deadlines.
+                pub fn with_telemetry_tx<T>(
+                    mut self,
+                    make_tx: impl FnOnce(::cu29::clock::RobotClock) -> CuResult<T> + Send + 'static,
+                    max_capture_bytes: usize,
+                    max_keyframe_bytes: usize,
+                ) -> Self
+                where
+                    T: ::cu29::logstream::protocol::CuTelemetryTx + 'static,
+                {
+                    self.logstream = Some(::cu29::logstream::TelemetryDestination::Native {
+                        make_tx: Box::new(move |clock| Ok(Box::new(make_tx(clock)?))),
+                        max_capture_bytes,
+                        max_keyframe_bytes,
+                    });
                     self
                 }
                 /// Adds a nonblocking CopperList plus keyframe/recovery point packet resource.
