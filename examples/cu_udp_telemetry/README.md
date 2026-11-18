@@ -15,7 +15,7 @@ It starts a ground station on an ephemeral port, runs 48 robot iterations, and
 checks the final reconstructed arm pose is present. The output directory contains
 the robot and ground archives. [src/main.rs](src/main.rs) shows where to split
 the two processes. On the robot call
-`with_telemetry_tx(PlainUdpTx::new(tx), MAX_PAYLOAD, MAX_PAYLOAD)`.
+`with_telemetry_tx(move |_| Ok(PlainUdpTx::new(tx)), MAX_PAYLOAD, MAX_PAYLOAD)`.
 On the ground call `Twin::from_telemetry(PlainUdpRx::new(rx))`.
 Use the same graph and encoding features on both ends.
 
@@ -63,10 +63,16 @@ constructs its manifest from the session and uses its own packet pacing.
 use cu29_logstream::FecTelemetryTx;
 use cu29_logstream::protocol::{BestEffort, Fanout};
 
-let fec = FecTelemetryTx::new(fec_transport, fec_plan)?;
-let udp = BestEffort::new(PlainUdpTx::new(udp_transport), report_udp_error);
 let app = Robot::builder()
-    .with_telemetry_tx(Fanout(fec, udp), MAX_PAYLOAD, MAX_PAYLOAD)
+    .with_telemetry_tx(
+        move |clock| {
+            let fec = FecTelemetryTx::new(fec_transport, fec_plan, clock)?;
+            let udp = BestEffort::new(PlainUdpTx::new(udp_transport), report_udp_error);
+            Ok(Fanout(fec, udp))
+        },
+        MAX_PAYLOAD,
+        MAX_PAYLOAD,
+    )
     .build()?;
 ```
 

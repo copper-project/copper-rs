@@ -37,13 +37,14 @@ pub enum TxMode {
 /// Robot-side protocol, called on the output worker. The first record opens
 /// the session. A retained payload must be moved into protocol-owned storage.
 pub trait CuTelemetryTx: Send {
-    /// Accept one borrowed record. Its enqueue time uses the worker's monotonic clock.
-    fn send(&mut self, queued_at: CuTime, record: CuTelemetryRecord<'_>) -> CuResult<()>;
+    /// Accept one borrowed record.
+    fn send(&mut self, record: CuTelemetryRecord<'_>) -> CuResult<()>;
 
-    /// Perform bounded, nonblocking work and return the next absolute wakeup.
+    /// Perform bounded, nonblocking work and return the next absolute wakeup
+    /// on the transport clock supplied at setup.
     /// The worker may also poll early after receiving a record. In draining
     /// mode, stop periodic repetition and return None when pending work is done.
-    fn poll(&mut self, _now: CuTime, _mode: TxMode) -> CuResult<Option<CuTime>> {
+    fn poll(&mut self, _mode: TxMode) -> CuResult<Option<CuTime>> {
         Ok(None)
     }
 }
@@ -53,15 +54,15 @@ pub trait CuTelemetryTx: Send {
 pub struct Fanout<A, B>(pub A, pub B);
 
 impl<A: CuTelemetryTx, B: CuTelemetryTx> CuTelemetryTx for Fanout<A, B> {
-    fn send(&mut self, queued_at: CuTime, record: CuTelemetryRecord<'_>) -> CuResult<()> {
-        let first = self.0.send(queued_at, record);
-        let second = self.1.send(queued_at, record);
+    fn send(&mut self, record: CuTelemetryRecord<'_>) -> CuResult<()> {
+        let first = self.0.send(record);
+        let second = self.1.send(record);
         first.and(second)
     }
 
-    fn poll(&mut self, now: CuTime, mode: TxMode) -> CuResult<Option<CuTime>> {
-        let first = self.0.poll(now, mode);
-        let second = self.1.poll(now, mode);
+    fn poll(&mut self, mode: TxMode) -> CuResult<Option<CuTime>> {
+        let first = self.0.poll(mode);
+        let second = self.1.poll(mode);
         Ok(first?.into_iter().chain(second?).min())
     }
 }
@@ -91,13 +92,13 @@ impl<T: CuTelemetryTx, F: FnOnce(CuError) + Send> BestEffort<T, F> {
 }
 
 impl<T: CuTelemetryTx, F: FnOnce(CuError) + Send> CuTelemetryTx for BestEffort<T, F> {
-    fn send(&mut self, queued_at: CuTime, record: CuTelemetryRecord<'_>) -> CuResult<()> {
-        self.attempt(|tx| tx.send(queued_at, record));
+    fn send(&mut self, record: CuTelemetryRecord<'_>) -> CuResult<()> {
+        self.attempt(|tx| tx.send(record));
         Ok(())
     }
 
-    fn poll(&mut self, now: CuTime, mode: TxMode) -> CuResult<Option<CuTime>> {
-        Ok(self.attempt(|tx| tx.poll(now, mode)))
+    fn poll(&mut self, mode: TxMode) -> CuResult<Option<CuTime>> {
+        Ok(self.attempt(|tx| tx.poll(mode)))
     }
 }
 

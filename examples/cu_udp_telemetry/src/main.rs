@@ -19,12 +19,15 @@ mod ground {
 
 const CYCLES: u64 = 48;
 
-fn run_robot(tx: impl CuTelemetryTx + 'static, log: &Path) -> Result<(), Box<dyn Error>> {
+fn run_robot<T: CuTelemetryTx + 'static>(
+    make_tx: impl FnOnce(RobotClock) -> CuResult<T> + Send + 'static,
+    log: &Path,
+) -> Result<(), Box<dyn Error>> {
     let (clock, mock) = RobotClock::mock();
     let robot = Robot::builder()
         .with_clock(clock)
         .with_log_path(log, Some(cu_logstream_demo::SLAB_BYTES))?
-        .with_telemetry_tx(tx, MAX_PAYLOAD, MAX_PAYLOAD)
+        .with_telemetry_tx(make_tx, MAX_PAYLOAD, MAX_PAYLOAD)
         .build()?;
     let mut running = robot.start()?;
     for id in 0..CYCLES {
@@ -38,7 +41,9 @@ fn run_robot(tx: impl CuTelemetryTx + 'static, log: &Path) -> Result<(), Box<dyn
 
 fn loopback<T: CuTelemetryTx + 'static>(
     dir: &Path,
-    wrap: impl FnOnce(PlainUdpTx<cu29_logstream_udp::CuUdpLogStreamTx>) -> T,
+    make_tx: impl FnOnce(RobotClock, PlainUdpTx<cu29_logstream_udp::CuUdpLogStreamTx>) -> CuResult<T>
+    + Send
+    + 'static,
 ) -> Result<cu29_logstream::CuTwinStatus, Box<dyn Error>> {
     std::fs::create_dir_all(dir)?;
     let (_, rx) = CuUdpLogStreamConfig::new("127.0.0.1:0".parse()?).open()?;
@@ -49,10 +54,8 @@ fn loopback<T: CuTelemetryTx + 'static>(
     let mut sender = CuUdpLogStreamConfig::new("127.0.0.1:0".parse()?);
     sender.remote_addr = Some(address);
     let (tx, _) = sender.open()?;
-    run_robot(
-        wrap(PlainUdpTx::new(tx.ok_or("missing UDP sender")?)),
-        &dir.join("robot.copper"),
-    )?;
+    let udp = PlainUdpTx::new(tx.ok_or("missing UDP sender")?);
+    run_robot(move |clock| make_tx(clock, udp), &dir.join("robot.copper"))?;
 
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
@@ -81,7 +84,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let dir = std::env::args_os()
         .nth(1)
         .ok_or("pass a fresh archive directory")?;
-    let status = loopback(Path::new(&dir), |tx| tx)?;
+    let status = loopback(Path::new(&dir), |_, tx| Ok(tx))?;
     println!(
         "Archived {} CopperLists, {} gaps and {} structured logs.",
         status.archived, status.gaps, status.structured_logs
@@ -96,15 +99,15 @@ mod tests {
 
     struct SkipOne<T>(T);
     impl<T: CuTelemetryTx> CuTelemetryTx for SkipOne<T> {
-        fn send(&mut self, queued_at: CuTime, record: CuTelemetryRecord<'_>) -> CuResult<()> {
+        fn send(&mut self, record: CuTelemetryRecord<'_>) -> CuResult<()> {
             if matches!(record, CuTelemetryRecord::CopperList { id: 17, .. }) {
                 return Ok(());
             }
-            self.0.send(queued_at, record)
+            self.0.send(record)
         }
 
-        fn poll(&mut self, now: CuTime, mode: TxMode) -> CuResult<Option<CuTime>> {
-            self.0.poll(now, mode)
+        fn poll(&mut self, mode: TxMode) -> CuResult<Option<CuTime>> {
+            self.0.poll(mode)
         }
     }
 
@@ -125,7 +128,7 @@ mod tests {
         let mut link = CuUdpLogStreamConfig::new("127.0.0.1:0".parse()?);
         link.remote_addr = Some(rx.local_addr()?);
         let (tx, _) = link.open()?;
-        let fec = FecTelemetryTx::new(tx.unwrap(), plan)?;
+        let transport = tx.unwrap();
         let mut receiver = FecTelemetryRx::new(rx, Default::default(), None)?;
         let fec_captures = std::thread::spawn(move || -> CuResult<Vec<u64>> {
             let deadline = Instant::now() + Duration::from_secs(5);
@@ -145,11 +148,13 @@ mod tests {
             }
             Ok(ids)
         });
-        let status = loopback(dir.path(), |udp| {
-            Fanout(
+        let status = loopback(dir.path(), move |clock, udp| {
+            assert!(!clock.is_mock());
+            let fec = FecTelemetryTx::new(transport, plan, clock)?;
+            Ok(Fanout(
                 fec,
                 BestEffort::new(SkipOne(udp), |err| panic!("UDP output failed: {err}")),
-            )
+            ))
         })?;
         assert_eq!(
             fec_captures.join().unwrap()?,

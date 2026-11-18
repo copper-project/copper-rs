@@ -1,7 +1,6 @@
 #![no_std]
 //! Plain UDP example. Every datagram contains one complete native record.
 
-use cu29_clock::CuTime;
 use cu29_logstream::protocol::{
     CuTelemetryEvent, CuTelemetryPoll, CuTelemetryRecord, CuTelemetryRx, CuTelemetrySession,
     CuTelemetryTx,
@@ -46,7 +45,7 @@ fn send(socket: &mut impl CuStreamTx, packet: &[u8]) -> CuResult<()> {
 }
 
 impl<T: CuStreamTx> CuTelemetryTx for PlainUdpTx<T> {
-    fn send(&mut self, _queued_at: CuTime, record: CuTelemetryRecord<'_>) -> CuResult<()> {
+    fn send(&mut self, record: CuTelemetryRecord<'_>) -> CuResult<()> {
         let (kind, id, bytes) = match record {
             CuTelemetryRecord::Session(session) => {
                 self.session[..4].copy_from_slice(MAGIC);

@@ -41,12 +41,12 @@ The [plain UDP example](../../examples/cu_udp_telemetry) includes both endpoints
 
 Implement `protocol::CuTelemetryTx` to receive a session followed by native
 capture, keyframe and structured-log payloads on the robot's sender worker.
-Install it with `Robot::builder().with_telemetry_tx(tx, max_capture_bytes,
+Install it with `Robot::builder().with_telemetry_tx(move |_| Ok(tx), max_capture_bytes,
 max_keyframe_bytes)`. Both bounds are native payload sizes. A full capture pool
 drops a record and increments the existing inbox counter.
 
-A sender that needs time between records implements `poll(now, mode)` and
-returns its next absolute wakeup. During shutdown, stop periodic work and
+A sender that needs time between records implements `poll(mode)` and
+returns its next absolute wakeup on the transport clock supplied to the factory. During shutdown, stop periodic work and
 return `None` once drained. The custom sender worker allows 50 ms to drain.
 Use `protocol::Fanout(a, b)` for multiple protocols on the same session.
 Wrap an optional branch in `protocol::BestEffort` to disable it on its first
@@ -192,7 +192,7 @@ whole-process allocator ceiling. Unsupported bounds fail during construction.
 Four pending CL boundaries and two pending keyframes accommodate independently
 ordered output workers. Under sustained skew, oldest pending entries are replaced
 and counted; the last complete bundle remains usable. Ordinary data expires after
-`max_latency_ms`, measured from encoded-record admission. Retained recovery stays
+`max_latency_ms`, measured from the instant the FEC backend accepts the record. Time spent waiting in the worker inbox precedes this budget. Retained recovery stays
 useful after that deadline and is repeated until replaced or stopped.
 
 Pool exhaustion, packet-queue overflow, expiry, carrier backpressure, and shutdown

@@ -2,8 +2,8 @@ use cu29_clock::{CuDuration, CuTime, RobotClock};
 use cu29_logstream::*;
 use cu29_runtime::curuntime::KeyFrame;
 
-fn config() -> LogStreamSenderConfig {
-    let plan = LogStreamPlan {
+fn plan() -> LogStreamPlan {
+    LogStreamPlan {
         feedback: None,
         destination_id: "ground".into(),
         mtu_bytes: 1200,
@@ -24,23 +24,27 @@ fn config() -> LogStreamSenderConfig {
         },
         recovery_interval: 1,
         max_record_bytes: 4096,
-    };
-    plan.sender_config(
-        StreamIdentity {
-            session_id: *b"paced-session001",
-            sender_id: 1,
-        },
-        ApplicationSchema {
-            outputs: vec![],
-            reconstruction: vec![],
-        },
-        cu29_unifiedlog::SectionContext {
-            run_id: 1,
-            instance_id: 1,
-            mission_index: 0,
-        },
-    )
-    .unwrap()
+    }
+}
+
+fn config() -> LogStreamSenderConfig {
+    plan()
+        .sender_config(
+            StreamIdentity {
+                session_id: *b"paced-session001",
+                sender_id: 1,
+            },
+            ApplicationSchema {
+                outputs: vec![],
+                reconstruction: vec![],
+            },
+            cu29_unifiedlog::SectionContext {
+                run_id: 1,
+                instance_id: 1,
+                mission_index: 0,
+            },
+        )
+        .unwrap()
 }
 
 fn cl(id: u64) -> Vec<u8> {
@@ -408,4 +412,50 @@ fn structured_pressure_preserves_replay_recovery_and_shared_budget() {
     core.begin_shutdown();
     core.discard_pending();
     assert!(core.is_idle());
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn fec_expiry_starts_at_send_on_the_injected_clock() {
+    use cu29_logstream::protocol::{CuTelemetryRecord, CuTelemetrySession, CuTelemetryTx, TxMode};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
+
+    #[derive(Debug)]
+    struct ObserveLog(Arc<AtomicBool>);
+    impl CuStreamTx for ObserveLog {
+        fn try_send(&mut self, packet: &[u8]) -> std::result::Result<(), CuStreamTxError> {
+            if WirePacketRef::decode(packet).unwrap().header.record_kind
+                == RecordKind::StructuredLog
+            {
+                self.0.store(true, Ordering::Relaxed);
+            }
+            Ok(())
+        }
+    }
+
+    let manifest = SessionManifest::decode_record(&config().recovery.manifest_record).unwrap();
+    let session = CuTelemetrySession {
+        identity: manifest.identity,
+        schema: manifest.application_schema,
+        context: manifest.context,
+    };
+    for (age_ms, expected) in [(249, true), (250, false)] {
+        let (clock, mock) = RobotClock::mock();
+        let seen = Arc::new(AtomicBool::new(false));
+        let mut tx = FecTelemetryTx::new(ObserveLog(seen.clone()), plan(), clock).unwrap();
+        tx.send(CuTelemetryRecord::Session(&session)).unwrap();
+        // Time before the backend accepts this record does not consume its 250 ms budget.
+        mock.set_value(1_000_000_000);
+        tx.send(CuTelemetryRecord::StructuredLog {
+            sequence: 0,
+            entry: &[42],
+        })
+        .unwrap();
+        mock.set_value(1_000_000_000 + age_ms * 1_000_000);
+        tx.poll(TxMode::Draining).unwrap();
+        assert_eq!(seen.load(Ordering::Relaxed), expected);
+    }
 }
