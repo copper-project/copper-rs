@@ -17,7 +17,6 @@ host = ["dep:cu29", "dep:cu29-logstream-udp", "dep:cu-logstream-demo"]
 
 [dependencies]
 bincode.workspace = true
-cu29-clock.workspace = true
 cu29-logstream.workspace = true
 cu29-runtime.workspace = true
 cu29-traits.workspace = true

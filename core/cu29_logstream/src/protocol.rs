@@ -37,13 +37,14 @@ pub enum TxMode {
 /// Robot-side protocol, called on the output worker. The first record opens
 /// the session. A retained payload must be moved into protocol-owned storage.
 pub trait CuTelemetryTx: Send {
-    /// Accept one borrowed record. Its enqueue time uses the worker's monotonic clock.
-    fn send(&mut self, queued_at: CuTime, record: CuTelemetryRecord<'_>) -> CuResult<()>;
+    /// Accept one borrowed record.
+    fn send(&mut self, record: CuTelemetryRecord<'_>) -> CuResult<()>;
 
-    /// Perform bounded, nonblocking work and return the next absolute wakeup.
+    /// Perform bounded, nonblocking work and return the next absolute wakeup
+    /// on the transport clock supplied at setup.
     /// The worker may also poll early after receiving a record. In draining
     /// mode, stop periodic repetition and return None when pending work is done.
-    fn poll(&mut self, _now: CuTime, _mode: TxMode) -> CuResult<Option<CuTime>> {
+    fn poll(&mut self, _mode: TxMode) -> CuResult<Option<CuTime>> {
         Ok(None)
     }
 }

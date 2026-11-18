@@ -15,7 +15,7 @@ It starts a ground station on an ephemeral port, runs 48 robot iterations, and
 checks the final reconstructed arm pose is present. The output directory contains
 the robot and ground archives. [src/main.rs](src/main.rs) shows where to split
 the two processes. On the robot call
-`with_telemetry_tx(PlainUdpTx::new(tx), MAX_PAYLOAD, MAX_PAYLOAD)`.
+`with_telemetry_tx(move |_| Ok(PlainUdpTx::new(tx)), MAX_PAYLOAD, MAX_PAYLOAD)`.
 On the ground call `Twin::from_telemetry(PlainUdpRx::new(rx))`.
 Use the same graph and encoding features on both ends.
 
