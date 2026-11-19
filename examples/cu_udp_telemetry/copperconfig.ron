@@ -1,0 +1,22 @@
+(
+    logging: (
+        enable_task_logging: true,
+        enable_keyframe_logging: true,
+        keyframe_interval: 16,
+        slab_size_mib: 16,
+        section_size_mib: 1,
+        copperlist_count: 8,
+    ),
+    tasks: [
+        (id: "encoders", type: "cu_logstream_demo::tasks::Encoders"),
+        (
+            id: "kinematics",
+            type: "cu_logstream_demo::tasks::Kinematics",
+            streaming: (replay: reconstruct),
+        ),
+    ],
+    cnx: [
+        (src: "encoders", dst: "kinematics", msg: "cu_logstream_demo::tasks::JointAngles"),
+        (src: "kinematics", dst: "__nc__", msg: "cu_logstream_demo::tasks::ArmPose"),
+    ],
+)
