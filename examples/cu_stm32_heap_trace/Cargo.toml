@@ -1,0 +1,31 @@
+[package]
+name = "cu-stm32-heap-trace"
+version = "1.4.0-dev"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+bincode = { package = "cu-bincode", path = "../../core/cu_bincode", default-features = false, features = [
+  "alloc",
+  "derive",
+] }
+cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
+cortex-m-rt = "0.7"
+cu29 = { path = "../../core/cu29", default-features = false }
+embedded-alloc = { version = "0.7", default-features = false, features = [
+  "llff",
+] }
+serde = { version = "1", default-features = false, features = [
+  "alloc",
+  "derive",
+] }
+spin = "0.12"
+
+[build-dependencies]
+cu29-build = { path = "../../core/cu29_build" }
+
+[profile.release]
+debug = 2
+opt-level = "s"
