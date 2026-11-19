@@ -1,5 +1,15 @@
 # Release notes
 
+## 1.2.8
+
+### 32-bit clock optimization
+
+On 32-bit targets, `RobotClock` reduces the ratio of nanoseconds to counter ticks once during calibration. At 480 MHz, for example, 12 ticks equal 25 nanoseconds. Clock reads at that rate use 64-bit arithmetic even when the intermediate product would overflow. Unusually wide denominators retain the full-precision fallback. The conversion gives the same nanosecond results as Copper 1.2.7. [Clock backport (#1619)](https://github.com/copper-project/copper-rs/pull/1619)
+
+### Packages and upgrading
+
+`cu29` and `cu29-clock` advance to **1.2.8**. Set `cu29 = "~1.2.8"` and run `cargo update`. Applications that use the clock directly can set `cu29-clock = "~1.2.8"`.
+
 ## 1.2.7
 
 ### Fixes

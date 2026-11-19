@@ -237,7 +237,7 @@ cu-serial-bridge = { path = "components/bridges/cu_serial_bridge", version = "~1
 cu29 = { path = "core/cu29", version = "~1.2.2" } # default std
 cu29-build = { path = "core/cu29_build", version = "~1.2.1" }
 cu29-reflect-derive = { path = "core/cu29_reflect_derive", version = "~1.2.1" }
-cu29-clock = { path = "core/cu29_clock", default-features = false, version = "~1.2.7" }
+cu29-clock = { path = "core/cu29_clock", default-features = false, version = "~1.2.8" }
 cu29-derive = { path = "core/cu29_derive", default-features = false, version = "~1.2.5" }
 cu29-export = { path = "core/cu29_export", version = "~1.2.1" } # std only
 cu29-helpers = { path = "core/cu29_helpers", version = "~1.2.1" } # compatibility stub
