@@ -25,46 +25,54 @@ use crate::{Decode, Encode};
 #[repr(transparent)]
 pub struct Uleb128<T>(pub T);
 
-#[inline]
-fn encode<E: Encoder>(mut value: u128, encoder: &mut E) -> Result<(), EncodeError> {
-    loop {
-        let mut byte = (value & 0x7f) as u8;
-        value >>= 7;
-        if value != 0 {
-            byte |= 0x80;
+macro_rules! word_codec {
+    ($word:ty, $encode:ident, $decode:ident) => {
+        #[inline]
+        fn $encode<E: Encoder>(mut value: $word, encoder: &mut E) -> Result<(), EncodeError> {
+            loop {
+                let mut byte = (value & 0x7f) as u8;
+                value >>= 7;
+                if value != 0 {
+                    byte |= 0x80;
+                }
+                encoder.writer().write(&[byte])?;
+                if value == 0 {
+                    return Ok(());
+                }
+            }
         }
-        encoder.writer().write(&[byte])?;
-        if value == 0 {
-            return Ok(());
+
+        #[inline]
+        fn $decode<D: Decoder>(bits: u32, decoder: &mut D) -> Result<$word, DecodeError> {
+            let mut value = 0 as $word;
+            for shift in (0..bits).step_by(7) {
+                let mut byte = [0];
+                decoder.reader().read(&mut byte)?;
+                let chunk = <$word>::from(byte[0] & 0x7f);
+                let remaining = bits - shift;
+                if remaining < 7 && chunk >= ((1 as $word) << remaining) {
+                    return Err(DecodeError::Other("ULEB128 integer overflow"));
+                }
+                value |= chunk << shift;
+                if byte[0] & 0x80 == 0 {
+                    return Ok(value);
+                }
+            }
+            Err(DecodeError::Other("ULEB128 integer is too long"))
         }
-    }
+    };
 }
 
-#[inline]
-fn decode<D: Decoder>(bits: u32, decoder: &mut D) -> Result<u128, DecodeError> {
-    let mut value = 0u128;
-    for shift in (0..bits).step_by(7) {
-        let mut byte = [0];
-        decoder.reader().read(&mut byte)?;
-        let chunk = u128::from(byte[0] & 0x7f);
-        let remaining = bits - shift;
-        if remaining < 7 && chunk >= (1u128 << remaining) {
-            return Err(DecodeError::Other("ULEB128 integer overflow"));
-        }
-        value |= chunk << shift;
-        if byte[0] & 0x80 == 0 {
-            return Ok(value);
-        }
-    }
-    Err(DecodeError::Other("ULEB128 integer is too long"))
-}
+word_codec!(u32, encode32, decode32);
+word_codec!(u64, encode64, decode64);
+word_codec!(u128, encode128, decode128);
 
 macro_rules! unsigned {
-    ($($ty:ty),* $(,)?) => {$ (
+    ($enc:ident, $dec:ident; $($ty:ty),* $(,)?) => {$ (
         impl Encode for Uleb128<$ty> {
             #[inline]
             fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-                encode(self.0 as u128, encoder)
+                $enc(self.0 as _, encoder)
             }
         }
 
@@ -72,7 +80,7 @@ macro_rules! unsigned {
             #[inline]
             fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
                 decoder.claim_bytes_read(core::mem::size_of::<$ty>())?;
-                decode(<$ty>::BITS, decoder).map(|value| Self(value as $ty))
+                $dec(<$ty>::BITS, decoder).map(|value| Self(value as $ty))
             }
         }
         crate::impl_borrow_decode!(Uleb128<$ty>);
@@ -80,13 +88,13 @@ macro_rules! unsigned {
 }
 
 macro_rules! signed {
-    ($($ty:ty => $unsigned:ty),* $(,)?) => {$ (
+    ($enc:ident, $dec:ident; $($ty:ty => $unsigned:ty),* $(,)?) => {$ (
         impl Encode for Uleb128<$ty> {
             #[inline]
             fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
                 let value = self.0;
                 let zigzag = ((value as $unsigned) << 1) ^ ((value >> (<$ty>::BITS - 1)) as $unsigned);
-                encode(zigzag as u128, encoder)
+                $enc(zigzag as _, encoder)
             }
         }
 
@@ -94,7 +102,7 @@ macro_rules! signed {
             #[inline]
             fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
                 decoder.claim_bytes_read(core::mem::size_of::<$ty>())?;
-                let value = decode(<$ty>::BITS, decoder)? as $unsigned;
+                let value = $dec(<$ty>::BITS, decoder)? as $unsigned;
                 Ok(Self(((value >> 1) as $ty) ^ -((value & 1) as $ty)))
             }
         }
@@ -102,5 +110,17 @@ macro_rules! signed {
     )*};
 }
 
-unsigned!(u8, u16, u32, u64, u128, usize);
-signed!(i8 => u8, i16 => u16, i32 => u32, i64 => u64, i128 => u128, isize => usize);
+unsigned!(encode32, decode32; u8, u16, u32);
+unsigned!(encode64, decode64; u64);
+unsigned!(encode128, decode128; u128);
+signed!(encode32, decode32; i8 => u8, i16 => u16, i32 => u32);
+signed!(encode64, decode64; i64 => u64);
+signed!(encode128, decode128; i128 => u128);
+#[cfg(target_pointer_width = "64")]
+unsigned!(encode64, decode64; usize);
+#[cfg(not(target_pointer_width = "64"))]
+unsigned!(encode32, decode32; usize);
+#[cfg(target_pointer_width = "64")]
+signed!(encode64, decode64; isize => usize);
+#[cfg(not(target_pointer_width = "64"))]
+signed!(encode32, decode32; isize => usize);
