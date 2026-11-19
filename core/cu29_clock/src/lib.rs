@@ -787,8 +787,9 @@ impl From<CuTime> for Tov {
 #[derive(Clone, Debug)]
 struct InternalClock {
     mock_state: Option<Arc<AtomicU64>>,
-    // Hardware-counter anchor and measured frequency in Hz, copied by clones.
     frequency: (u64, u64),
+    #[cfg(target_pointer_width = "32")]
+    scale: CounterScale,
 }
 
 // Implements the std version of the RTC clock
@@ -828,7 +829,84 @@ fn sleep_ns(ns: u64) {
     }
 }
 
+#[cfg(any(target_pointer_width = "32", test))]
+#[derive(Clone, Copy, Debug)]
+struct CounterScale {
+    numerator: u64,
+    denominator: u64,
+}
+
+#[cfg(any(target_pointer_width = "32", test))]
+impl CounterScale {
+    fn new(hz: u64) -> Self {
+        let (mut a, mut b) = (1_000_000_000, hz);
+        while b != 0 {
+            (a, b) = (b, a % b);
+        }
+        Self {
+            numerator: 1_000_000_000 / a,
+            denominator: hz / a,
+        }
+    }
+
+    fn nanos(self, ticks: u64) -> u64 {
+        let (num, den) = (self.numerator, self.denominator);
+        if den.is_power_of_two() {
+            let whole = ticks >> den.trailing_zeros();
+            if let Some(fraction) = (ticks & (den - 1)).checked_mul(num) {
+                return whole
+                    .saturating_mul(num)
+                    .saturating_add(fraction >> den.trailing_zeros());
+            }
+        } else if let Some(product) = ticks.checked_mul(num) {
+            return product / den;
+        } else if den <= u32::MAX as u64 {
+            return (ticks / den)
+                .saturating_mul(num)
+                .saturating_add((ticks % den) * num / den);
+        }
+        (u128::from(ticks) * u128::from(num) / u128::from(den)).min(u128::from(u64::MAX)) as u64
+    }
+}
+
+#[test]
+fn narrow_counter_scale_matches_full_precision() {
+    for hz in [
+        1,
+        24_000_000,
+        400_000_000,
+        999_999_937,
+        1_000_000_000,
+        1 << 60,
+        u64::MAX,
+    ] {
+        for ticks in [
+            0,
+            1,
+            3,
+            hz,
+            u64::MAX / 5,
+            u64::MAX / 2,
+            u64::MAX - 1,
+            u64::MAX,
+        ] {
+            let expected =
+                (u128::from(ticks) * 1_000_000_000 / u128::from(hz)).min(u128::from(u64::MAX));
+            assert_eq!(u128::from(CounterScale::new(hz).nanos(ticks)), expected);
+        }
+    }
+}
+
 impl InternalClock {
+    fn hardware(anchor: u64, hz: u64) -> Self {
+        Self {
+            mock_state: None,
+            frequency: (anchor, hz),
+            #[cfg(target_pointer_width = "32")]
+            scale: CounterScale::new(hz),
+        }
+    }
+
     fn new(
         read_rtc_ns: impl Fn() -> u64 + Send + Sync + 'static,
         sleep_ns: impl Fn(u64) + Send + Sync + 'static,
@@ -837,17 +915,14 @@ impl InternalClock {
 
         let calibration = calibration::measure(read_raw_counter, read_rtc_ns, sleep_ns)
             .expect("cu29_clock calibration failed: raw counter did not advance");
-        InternalClock {
-            mock_state: None,
-            frequency: (calibration.counter, calibration.frequency_hz),
-        }
+        Self::hardware(calibration.counter, calibration.frequency_hz)
     }
 
     fn mock() -> (Self, Arc<AtomicU64>) {
         let mock_state = Arc::new(AtomicU64::new(0));
         let clock = InternalClock {
             mock_state: Some(Arc::clone(&mock_state)),
-            frequency: (0, 1_000_000_000),
+            ..Self::hardware(0, 1_000_000_000)
         };
         (clock, mock_state)
     }
@@ -856,9 +931,13 @@ impl InternalClock {
         if let Some(ref mock_state) = self.mock_state {
             return mock_state.load(Ordering::Relaxed);
         }
-        let (anchor, hz) = self.frequency;
+        let anchor = self.frequency.0;
         let ticks = read_raw_counter().saturating_sub(anchor);
-        (u128::from(ticks) * 1_000_000_000 / u128::from(hz)).min(u128::from(u64::MAX)) as u64
+        #[cfg(target_pointer_width = "32")]
+        return self.scale.nanos(ticks);
+        #[cfg(not(target_pointer_width = "32"))]
+        return (u128::from(ticks) * 1_000_000_000 / u128::from(self.frequency.1))
+            .min(u128::from(u64::MAX)) as u64;
     }
 
     fn recent(&self) -> u64 {
@@ -984,6 +1063,12 @@ impl RobotClock {
         Self::from_inner(InternalClock::new(read_rtc_ns, sleep_ns), 0)
     }
 
+    /// Starts a local clock from an already initialized architecture counter.
+    /// The caller supplies its actual tick frequency and keeps it fixed while the clock runs.
+    pub fn from_counter_frequency(hz: core::num::NonZeroU64) -> Self {
+        Self::from_inner(InternalClock::hardware(read_raw_counter(), hz.get()), 0)
+    }
+
     /// Creates a clock from a known positive architecture-counter frequency.
     ///
     /// The BSP initializes its counter before calling this method.
@@ -992,16 +1077,8 @@ impl RobotClock {
     /// often enough to extend the hardware counter before it wraps.
     #[cfg(feature = "clock-sync")]
     pub fn new_with_frequency(hz: u64) -> Result<Self, sync::SyncError> {
-        if hz == 0 {
-            return Err(sync::SyncError::InvalidConfig);
-        }
-        let anchor = read_raw_counter();
-        Ok(Self::from_inner(
-            InternalClock {
-                mock_state: None,
-                frequency: (anchor, hz),
-            },
-            0,
+        Ok(Self::from_counter_frequency(
+            core::num::NonZeroU64::new(hz).ok_or(sync::SyncError::InvalidConfig)?,
         ))
     }
 

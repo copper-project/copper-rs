@@ -109,7 +109,8 @@ option select constructions discovered from section context, including runs whos
 The clock surface includes `cu29_clock::{CuInstant, sync}`, `RobotClockMock::raw_now`,
 and `RobotClock::{raw_now, busy_wait_for, busy_wait_until, sync_status, origin,
 new_with_frequency}`. Raw reads, busy waits, status, and origin are available without
-`clock-sync`; live discipline and known-frequency construction require it.
+`clock-sync`; live discipline requires it. The experimental
+`RobotClock::from_counter_frequency` constructor accepts a known nonzero frequency on every target.
 `ClockSync` owns discipline; `ClockSnapshot` preserves mapping, quality, and origin
 for replay. `ClockOrigin`, `ClockSource`, and `ClockEpoch` separate provenance from
 timestamp interpretation. Named-reference constructors are
