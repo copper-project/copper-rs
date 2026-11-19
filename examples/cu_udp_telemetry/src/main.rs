@@ -1,6 +1,7 @@
 //! Run a robot and ground station over loopback, keeping both native archives.
 use cu_udp_telemetry::{MAX_PAYLOAD, PlainUdpRx, PlainUdpTx};
 use cu29::prelude::*;
+use cu29_logstream::TelemetryBufferConfig;
 use cu29_logstream::protocol::CuTelemetryTx;
 use cu29_logstream_udp::CuUdpLogStreamConfig;
 use std::error::Error;
@@ -27,7 +28,15 @@ fn run_robot<T: CuTelemetryTx + 'static>(
     let robot = Robot::builder()
         .with_clock(clock)
         .with_log_path(log, Some(cu_logstream_demo::SLAB_BYTES))?
-        .with_telemetry_tx(make_tx, MAX_PAYLOAD, MAX_PAYLOAD)
+        .with_telemetry_tx(
+            make_tx,
+            TelemetryBufferConfig {
+                capture_count: 1,
+                keyframe_count: 1,
+                structured_log_count: 1,
+                ..TelemetryBufferConfig::new(MAX_PAYLOAD, MAX_PAYLOAD)
+            },
+        )
         .build()?;
     let mut running = robot.start()?;
     for id in 0..CYCLES {

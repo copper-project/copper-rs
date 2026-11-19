@@ -357,3 +357,77 @@ fn scheduled_worker_reports_carrier_failure_to_its_producer() -> CuResult<()> {
     drop(keyframes);
     Ok(())
 }
+
+#[test]
+fn telemetry_pools_drop_independently_at_the_configured_depth() -> CuResult<()> {
+    use cu29::logstream::protocol::{CuTelemetryRecord, CuTelemetryTx};
+    use cu29::logstream::structured::StructuredLogOutput;
+    use cu29::logstream::{TelemetryBufferConfig, TelemetryDestination};
+    use std::sync::mpsc;
+
+    struct HeldSender {
+        release: mpsc::Receiver<()>,
+        delivered: mpsc::Sender<RecordKind>,
+    }
+
+    impl CuTelemetryTx for HeldSender {
+        fn send(&mut self, record: CuTelemetryRecord<'_>) -> CuResult<()> {
+            let kind = match record {
+                CuTelemetryRecord::Session(_) => {
+                    self.release
+                        .recv_timeout(std::time::Duration::from_secs(5))
+                        .unwrap();
+                    return Ok(());
+                }
+                CuTelemetryRecord::CopperList { .. } => RecordKind::CopperList,
+                CuTelemetryRecord::KeyFrame { .. } => RecordKind::KeyFrame,
+                CuTelemetryRecord::StructuredLog { .. } => RecordKind::StructuredLog,
+            };
+            self.delivered.send(kind).unwrap();
+            Ok(())
+        }
+    }
+
+    let (release, wait) = mpsc::channel();
+    let (delivered, received) = mpsc::channel();
+    let destination = TelemetryDestination::Native {
+        buffers: TelemetryBufferConfig {
+            capture_count: 1,
+            keyframe_count: 2,
+            structured_log_count: 3,
+            ..TelemetryBufferConfig::new(RECORD_BYTES, RECORD_BYTES)
+        },
+        make_tx: Box::new(move |_| {
+            Ok(Box::new(HeldSender {
+                release: wait,
+                delivered,
+            }))
+        }),
+    };
+    let (mut captures, mut keyframes, _) = destination
+        .start::<default::CuStampedDataSet>(SectionContext::default(), RobotClock::new())?;
+    let mut logs = captures.take_structured_log_sink().unwrap();
+    for id in 0..4 {
+        captures.log(&default::CuList::default())?;
+        keyframes.log(&cu29::curuntime::KeyFrame {
+            culistid: id,
+            timestamp: CuTime::default(),
+            serialized_tasks: Vec::new(),
+        })?;
+        logs.begin();
+        logs.write(&[42]);
+        logs.finish(true);
+    }
+    release.send(()).unwrap();
+    drop(captures);
+    drop(keyframes);
+    let records: Vec<_> = received.into_iter().collect();
+    for (kind, expected) in [
+        (RecordKind::CopperList, 1),
+        (RecordKind::KeyFrame, 2),
+        (RecordKind::StructuredLog, 3),
+    ] {
+        assert_eq!(records.iter().filter(|&&k| k == kind).count(), expected);
+    }
+    Ok(())
+}

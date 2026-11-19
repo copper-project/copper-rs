@@ -31,10 +31,65 @@ use std::{
     thread::{JoinHandle, Thread},
 };
 
-const CL_BUFFERS: usize = 4;
-const KF_BUFFERS: usize = 2;
-const STRUCTURED_BUFFERS: usize = 4;
 use crate::pacing::STRUCTURED_RECORD_BYTES;
+
+// Limit work between protocol polls independently of the configured queue capacities.
+const MAX_RECORDS_PER_POLL: usize = 6;
+const MAX_LOGS_PER_POLL: usize = 4;
+
+/// Preallocated native records shared by all destinations on one telemetry worker.
+/// A full pool drops the incoming record of that kind. Counts and byte limits must be positive.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TelemetryBufferConfig {
+    /// Maximum encoded payload per CopperList capture.
+    pub max_capture_bytes: usize,
+    /// Maximum encoded payload per keyframe. Structured logs use the smaller of this and 4096 bytes.
+    pub max_keyframe_bytes: usize,
+    /// Number of capture buffers.
+    pub capture_count: u16,
+    /// Number of keyframe buffers.
+    pub keyframe_count: u16,
+    /// Number of structured-log buffers.
+    pub structured_log_count: u16,
+}
+
+impl TelemetryBufferConfig {
+    /// Reserve four captures, two keyframes and four structured logs.
+    pub const fn new(max_capture_bytes: usize, max_keyframe_bytes: usize) -> Self {
+        Self {
+            max_capture_bytes,
+            max_keyframe_bytes,
+            capture_count: 4,
+            keyframe_count: 2,
+            structured_log_count: 4,
+        }
+    }
+
+    fn structured_bytes(self) -> usize {
+        self.max_keyframe_bytes.min(STRUCTURED_RECORD_BYTES)
+    }
+
+    fn payload_bytes(self) -> CuResult<usize> {
+        if self.max_capture_bytes == 0 || self.max_keyframe_bytes == 0 {
+            return Err("telemetry record limits must be positive".into());
+        }
+        if self.capture_count == 0 || self.keyframe_count == 0 || self.structured_log_count == 0 {
+            return Err("telemetry buffer counts must be positive".into());
+        }
+        let pools = [
+            (self.max_capture_bytes, self.capture_count),
+            (self.max_keyframe_bytes, self.keyframe_count),
+            (self.structured_bytes(), self.structured_log_count),
+        ];
+        pools
+            .into_iter()
+            .try_fold(0usize, |total, (bytes, count)| {
+                total.checked_add(bytes.checked_mul(usize::from(count))?)
+            })
+            .filter(|&bytes| bytes <= isize::MAX as usize)
+            .ok_or_else(|| CuError::from("telemetry buffer size overflow"))
+    }
+}
 
 struct StructuredRecord {
     bytes: Box<[u8]>,
@@ -308,8 +363,7 @@ pub enum TelemetryDestination {
     Fec(Box<dyn CuStreamTx>, Box<LogStreamSenderConfig>),
     Native {
         make_tx: TxFactory,
-        max_capture_bytes: usize,
-        max_keyframe_bytes: usize,
+        buffers: TelemetryBufferConfig,
     },
 }
 
@@ -331,11 +385,8 @@ impl TelemetryDestination {
             clock
         };
         let (lists, frames, monitor) = match self {
-            Self::Native {
-                make_tx,
-                max_capture_bytes,
-                max_keyframe_bytes,
-            } => {
+            Self::Native { make_tx, buffers } => {
+                buffers.payload_bytes()?;
                 let tx = make_tx(clock.clone())?;
                 let session = CuTelemetrySession {
                     identity: crate::StreamIdentity {
@@ -345,8 +396,15 @@ impl TelemetryDestination {
                     context,
                     schema,
                 };
-                let (lists, frames, _) =
-                    telemetry_sinks(tx, session, max_capture_bytes, max_keyframe_bytes, clock)?;
+                let (lists, frames, _) = spawn_worker(
+                    CustomerDriver(tx),
+                    clock,
+                    buffers,
+                    buffers.structured_bytes(),
+                    1,
+                    CuDuration::from_millis(50),
+                    Some(session),
+                )?;
                 (lists, frames, None)
             }
             Self::Fec(transport, config) => {
@@ -438,19 +496,13 @@ where
     let cl_bytes = config.continuous.max_record_bytes;
     let kf_bytes = usize::try_from(config.recovery.finite.max_object_bytes)
         .map_err(|_| CuError::from("Keyframe limit exceeds usize"))?;
-    let structured_bytes = kf_bytes.min(STRUCTURED_RECORD_BYTES);
-    let reserved = cl_bytes
-        .checked_mul(CL_BUFFERS)
-        .and_then(|v| {
-            kf_bytes
-                .checked_mul(KF_BUFFERS)
-                .and_then(|k| v.checked_add(k))
-        })
-        .and_then(|v| {
-            v.checked_add(
-                STRUCTURED_BUFFERS * (structured_bytes + 2 * size_of::<StructuredRecord>()),
-            )
-        })
+    let framed_buffers = TelemetryBufferConfig::new(cl_bytes, kf_bytes);
+    let structured_bytes = framed_buffers.structured_bytes();
+    let reserved = framed_buffers
+        .payload_bytes()?
+        .checked_add(
+            usize::from(framed_buffers.structured_log_count) * 2 * size_of::<StructuredRecord>(),
+        )
         .ok_or_else(|| CuError::from("Sender pool size overflow"))?;
     let header = crate::record::RECORD_HEADER_LEN;
     if cl_bytes <= header || kf_bytes <= header {
@@ -478,40 +530,11 @@ where
     spawn_worker(
         driver,
         clock,
-        cl_bytes - header,
-        kf_bytes - header,
+        TelemetryBufferConfig::new(cl_bytes - header, kf_bytes - header),
         structured_bytes - header,
         interval,
         drain_time,
         session,
-    )
-}
-
-/// Starts the same bounded capture worker with a customer-supplied packet protocol.
-/// Byte limits bound one native capture and one native keyframe respectively.
-fn telemetry_sinks<P: CopperListTuple + Send + Sync>(
-    tx: Box<dyn CuTelemetryTx>,
-    session: CuTelemetrySession,
-    cl_bytes: usize,
-    kf_bytes: usize,
-    clock: RobotClock,
-) -> CuResult<(
-    ScheduledCopperListSink<P>,
-    ScheduledKeyFrameSink,
-    SenderMonitor,
-)> {
-    if cl_bytes == 0 || kf_bytes == 0 {
-        return Err("telemetry record limits must be positive".into());
-    }
-    spawn_worker(
-        CustomerDriver(tx),
-        clock,
-        cl_bytes,
-        kf_bytes,
-        kf_bytes.min(STRUCTURED_RECORD_BYTES),
-        1,
-        CuDuration::from_millis(50),
-        Some(session),
     )
 }
 
@@ -783,12 +806,10 @@ impl<T: CuStreamTx + CuFeedbackRx> Driver for FecTelemetryTx<T> {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn spawn_worker<P: CopperListTuple + Send + Sync>(
     mut driver: impl Driver + 'static,
     clock: RobotClock,
-    cl_bytes: usize,
-    kf_bytes: usize,
+    buffers: TelemetryBufferConfig,
     structured_bytes: usize,
     interval: u32,
     drain_time: CuDuration,
@@ -803,24 +824,28 @@ fn spawn_worker<P: CopperListTuple + Send + Sync>(
     } else {
         clock.clone()
     };
-    let (pending, records) = mpsc::sync_channel::<Record>(CL_BUFFERS + KF_BUFFERS);
-    let (cl_return, cl_free) = mpsc::sync_channel(CL_BUFFERS);
-    let (kf_return, kf_free) = mpsc::sync_channel(KF_BUFFERS);
-    for _ in 0..CL_BUFFERS {
+    let capture_count = usize::from(buffers.capture_count);
+    let keyframe_count = usize::from(buffers.keyframe_count);
+    let structured_count = usize::from(buffers.structured_log_count);
+    let record_count = capture_count + keyframe_count;
+    let (pending, records) = mpsc::sync_channel::<Record>(record_count);
+    let (cl_return, cl_free) = mpsc::sync_channel(capture_count);
+    let (kf_return, kf_free) = mpsc::sync_channel(keyframe_count);
+    for _ in 0..capture_count {
         cl_return
-            .try_send(vec![0; cl_bytes].into_boxed_slice())
+            .try_send(vec![0; buffers.max_capture_bytes].into_boxed_slice())
             .expect("new pool");
     }
-    for _ in 0..KF_BUFFERS {
+    for _ in 0..keyframe_count {
         kf_return
-            .try_send(vec![0; kf_bytes].into_boxed_slice())
+            .try_send(vec![0; buffers.max_keyframe_bytes].into_boxed_slice())
             .expect("new pool");
     }
     let structured = Arc::new(StructuredInbox {
-        free: crossbeam_queue::ArrayQueue::new(STRUCTURED_BUFFERS),
-        pending: crossbeam_queue::ArrayQueue::new(STRUCTURED_BUFFERS),
+        free: crossbeam_queue::ArrayQueue::new(structured_count),
+        pending: crossbeam_queue::ArrayQueue::new(structured_count),
     });
-    for _ in 0..STRUCTURED_BUFFERS {
+    for _ in 0..structured_count {
         let _ = structured.free.push(StructuredRecord {
             bytes: vec![0; structured_bytes].into_boxed_slice(),
             len: 0,
@@ -850,7 +875,7 @@ fn spawn_worker<P: CopperListTuple + Send + Sync>(
                         stop_at = Some(shutdown_clock.now() + drain_time);
                     }
                     let mut received = 0;
-                    for _ in 0..CL_BUFFERS + KF_BUFFERS {
+                    for _ in 0..MAX_RECORDS_PER_POLL {
                         let Ok(record) = records.try_recv() else {
                             break;
                         };
@@ -866,7 +891,7 @@ fn spawn_worker<P: CopperListTuple + Send + Sync>(
                         result?;
                         received += 1;
                     }
-                    for _ in 0..STRUCTURED_BUFFERS {
+                    for _ in 0..MAX_LOGS_PER_POLL {
                         let Some(record) = structured_worker.pending.pop() else { break; };
                         let result = driver.send(CuTelemetryRecord::StructuredLog {sequence: structured_id,entry: &record.bytes[..record.len]}).map_err(|e| crate::Error::Codec(e.to_string()));
                         let _ = structured_worker.free.push(record);
@@ -1043,6 +1068,45 @@ impl cu29_runtime::monitoring::LogStreamStatsSource for SenderMonitor {
                     expired_records: report.expired_records,
                 }
             }),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TelemetryBufferConfig;
+
+    #[test]
+    fn native_pool_payload_budget_uses_configured_sizes_and_counts() {
+        let defaults = TelemetryBufferConfig::new(1171, 1171);
+        assert_eq!(defaults.payload_bytes().unwrap(), 11_710);
+        let small = TelemetryBufferConfig {
+            capture_count: 1,
+            keyframe_count: 1,
+            structured_log_count: 1,
+            ..defaults
+        };
+        assert_eq!(small.payload_bytes().unwrap(), 3513);
+        assert_eq!(
+            TelemetryBufferConfig::new(1, 8192).payload_bytes().unwrap(),
+            4 + 2 * 8192 + 4 * 4096
+        );
+        for invalid in [
+            TelemetryBufferConfig {
+                capture_count: 0,
+                ..small
+            },
+            TelemetryBufferConfig {
+                keyframe_count: 0,
+                ..small
+            },
+            TelemetryBufferConfig {
+                structured_log_count: 0,
+                ..small
+            },
+            TelemetryBufferConfig::new(usize::MAX, 1),
+        ] {
+            assert!(invalid.payload_bytes().is_err());
         }
     }
 }

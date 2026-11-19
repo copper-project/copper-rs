@@ -41,9 +41,12 @@ The [plain UDP example](../../examples/cu_udp_telemetry) includes both endpoints
 
 Implement `protocol::CuTelemetryTx` to receive a session followed by native
 capture, keyframe and structured-log payloads on the robot's sender worker.
-Install it with `Robot::builder().with_telemetry_tx(move |_| Ok(tx), max_capture_bytes,
-max_keyframe_bytes)`. Both bounds are native payload sizes. A full capture pool
-drops a record and increments the existing inbox counter.
+Install it with `Robot::builder().with_telemetry_tx(move |_| Ok(tx), buffers)`.
+`TelemetryBufferConfig::new(max_capture_bytes, max_keyframe_bytes)` reserves
+four captures, two keyframes and four structured logs. Set `capture_count`,
+`keyframe_count` and `structured_log_count` to reduce memory use. Each must be
+at least one. A full pool drops the incoming record and counts the drop.
+Fan-out destinations share these buffers. Disk logging uses separate storage.
 
 A sender that needs time between records implements `poll(mode)` and
 returns its next absolute wakeup on the transport clock supplied to the factory. During shutdown, stop periodic work and

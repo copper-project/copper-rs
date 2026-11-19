@@ -15,7 +15,7 @@ It starts a ground station on an ephemeral port, runs 48 robot iterations, and
 checks the final reconstructed arm pose is present. The output directory contains
 the robot and ground archives. [src/main.rs](src/main.rs) shows where to split
 the two processes. On the robot call
-`with_telemetry_tx(move |_| Ok(PlainUdpTx::new(tx)), MAX_PAYLOAD, MAX_PAYLOAD)`.
+`with_telemetry_tx(move |_| Ok(PlainUdpTx::new(tx)), buffers)`.
 On the ground call `Twin::from_telemetry(PlainUdpRx::new(rx))`.
 Use the same graph and encoding features on both ends.
 
@@ -60,9 +60,15 @@ the same session, capture, keyframe and structured-log bytes. The FEC sender
 constructs its manifest from the session and uses its own packet pacing.
 
 ```rust
-use cu29_logstream::FecTelemetryTx;
+use cu29_logstream::{FecTelemetryTx, TelemetryBufferConfig};
 use cu29_logstream::protocol::{BestEffort, Fanout};
 
+let buffers = TelemetryBufferConfig {
+    capture_count: 1,
+    keyframe_count: 1,
+    structured_log_count: 1,
+    ..TelemetryBufferConfig::new(MAX_PAYLOAD, MAX_PAYLOAD)
+};
 let app = Robot::builder()
     .with_telemetry_tx(
         move |clock| {
@@ -70,11 +76,15 @@ let app = Robot::builder()
             let udp = BestEffort::new(PlainUdpTx::new(udp_transport), report_udp_error);
             Ok(Fanout(fec, udp))
         },
-        MAX_PAYLOAD,
-        MAX_PAYLOAD,
+        buffers,
     )
     .build()?;
 ```
+
+With 1171 bytes per record, the example reserves 3513 bytes for payloads
+across both destinations. The default counts reserve 11,710 bytes. Queue
+metadata and protocol-owned storage are additional. A new record drops when
+all buffers of its kind are busy.
 
 Resolve `fec_plan` with `LogStreamPlan::resolve` from the FEC destination.
 Choose shared capture and keyframe limits that both protocols can carry.
