@@ -76,14 +76,14 @@ use std::thread::{JoinHandle, Thread};
 #[cfg(feature = "std")]
 #[doc(hidden)]
 pub type TasksInstantiator<CT> = for<'c> fn(
-    Vec<Option<&'c ComponentConfig>>,
+    &[Option<&'c ComponentConfig>],
     &mut ResourceManager,
     &[Option<Arc<ThreadPool>>],
 ) -> CuResult<CT>;
 #[cfg(not(feature = "std"))]
 #[doc(hidden)]
 pub type TasksInstantiator<CT> =
-    for<'c> fn(Vec<Option<&'c ComponentConfig>>, &mut ResourceManager) -> CuResult<CT>;
+    for<'c> fn(&[Option<&'c ComponentConfig>], &mut ResourceManager) -> CuResult<CT>;
 #[doc(hidden)]
 pub type BridgesInstantiator<CB> = fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>;
 /// Instantiates the rayon thread pools described by `runtime.thread_pools`.
@@ -101,6 +101,8 @@ pub type MonitorInstantiator<M> = fn(&CuConfig, CuMonitoringMetadata, CuMonitori
 #[doc(hidden)]
 pub struct CuRuntimeParts<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, MI> {
     topology: fn(&CuConfig, &str) -> CuResult<crate::monitoring::MonitorTopology>,
+    #[cfg(feature = "static-config")]
+    task_configs: &'static [Option<&'static ComponentConfig>],
     pub tasks_instanciator: TI,
     pub monitored_components: &'static [MonitorComponentMetadata],
     pub culist_component_mapping: &'static [ComponentId],
@@ -122,6 +124,9 @@ impl<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, MI>
         self
     }
     pub const fn new(
+        #[cfg(feature = "static-config")] task_configs: &'static [Option<
+            &'static ComponentConfig,
+        >],
         tasks_instanciator: TI,
         monitored_components: &'static [MonitorComponentMetadata],
         culist_component_mapping: &'static [ComponentId],
@@ -131,6 +136,8 @@ impl<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, MI>
     ) -> Self {
         Self {
             topology: build_monitor_topology,
+            #[cfg(feature = "static-config")]
+            task_configs,
             tasks_instanciator,
             monitored_components,
             culist_component_mapping,
@@ -2062,7 +2069,7 @@ impl<
 > CuRuntimeBuilder<'cfg, CT, CB, P, M, NBCL, TI, BI, MI, CLS, KFS>
 where
     TI: for<'c> Fn(
-        Vec<Option<&'c ComponentConfig>>,
+        &[Option<&'c ComponentConfig>],
         &mut ResourceManager,
         &[Option<Arc<ThreadPool>>],
     ) -> CuResult<CT>,
@@ -2090,7 +2097,7 @@ where
         let thread_pools = thread_pools.unwrap_or_default();
 
         #[cfg(feature = "static-config")]
-        let all_instances_configs = Vec::new();
+        let all_instances_configs = parts.task_configs;
         #[cfg(not(feature = "static-config"))]
         let graph = config.get_graph(Some(mission))?;
         #[cfg(not(feature = "static-config"))]
@@ -2100,8 +2107,11 @@ where
             .map(|(_, node)| node.get_instance_config())
             .collect();
 
-        let tasks =
-            (parts.tasks_instanciator)(all_instances_configs, &mut resources, &thread_pools)?;
+        let tasks = (parts.tasks_instanciator)(
+            all_instances_configs.as_ref(),
+            &mut resources,
+            &thread_pools,
+        )?;
 
         #[cfg(feature = "std")]
         let execution_probe = std::sync::Arc::new(RuntimeExecutionProbe::default());
@@ -2202,7 +2212,7 @@ impl<
     KFS,
 > CuRuntimeBuilder<'cfg, CT, CB, P, M, NBCL, TI, BI, MI, CLS, KFS>
 where
-    TI: for<'c> Fn(Vec<Option<&'c ComponentConfig>>, &mut ResourceManager) -> CuResult<CT>,
+    TI: for<'c> Fn(&[Option<&'c ComponentConfig>], &mut ResourceManager) -> CuResult<CT>,
     BI: Fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>,
     MI: Fn(&CuConfig, CuMonitoringMetadata, CuMonitoringRuntime) -> M,
     CLS: WriteStream<CopperList<P>> + 'static,
@@ -2225,7 +2235,7 @@ where
             resources.ok_or_else(|| CuError::from("Resources missing from CuRuntimeBuilder"))?;
 
         #[cfg(feature = "static-config")]
-        let all_instances_configs = Vec::new();
+        let all_instances_configs = parts.task_configs;
         #[cfg(not(feature = "static-config"))]
         let graph = config.get_graph(Some(mission))?;
         #[cfg(not(feature = "static-config"))]
@@ -2235,7 +2245,7 @@ where
             .map(|(_, node)| node.get_instance_config())
             .collect();
 
-        let tasks = (parts.tasks_instanciator)(all_instances_configs, &mut resources)?;
+        let tasks = (parts.tasks_instanciator)(all_instances_configs.as_ref(), &mut resources)?;
 
         let execution_probe = RuntimeExecutionProbe::default();
         let monitor_metadata = CuMonitoringMetadata::new(
@@ -3632,7 +3642,7 @@ mod tests {
 
     #[cfg(feature = "std")]
     fn tasks_instanciator(
-        all_instances_configs: Vec<Option<&ComponentConfig>>,
+        all_instances_configs: &[Option<&ComponentConfig>],
         _resources: &mut ResourceManager,
         _thread_pools: &[Option<Arc<rayon::ThreadPool>>],
     ) -> CuResult<Tasks> {
@@ -3644,7 +3654,7 @@ mod tests {
 
     #[cfg(not(feature = "std"))]
     fn tasks_instanciator(
-        all_instances_configs: Vec<Option<&ComponentConfig>>,
+        all_instances_configs: &[Option<&ComponentConfig>],
         _resources: &mut ResourceManager,
     ) -> CuResult<Tasks> {
         Ok((
@@ -3767,6 +3777,8 @@ mod tests {
                 &config,
                 crate::config::DEFAULT_MISSION_ID,
                 CuRuntimeParts::new(
+                    #[cfg(feature = "static-config")]
+                    &[None, None],
                     tasks_instanciator,
                     &[],
                     &[],
@@ -3807,6 +3819,8 @@ mod tests {
                 &config,
                 crate::config::DEFAULT_MISSION_ID,
                 CuRuntimeParts::new(
+                    #[cfg(feature = "static-config")]
+                    &[None, None],
                     tasks_instanciator,
                     &[],
                     &[],
@@ -3902,6 +3916,8 @@ mod tests {
                 &config,
                 crate::config::DEFAULT_MISSION_ID,
                 CuRuntimeParts::new(
+                    #[cfg(feature = "static-config")]
+                    &[None, None],
                     tasks_instanciator,
                     &[],
                     &[],

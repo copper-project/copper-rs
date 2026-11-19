@@ -2383,9 +2383,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 .into_iter()
                 .map(|(_, n)| static_config::component(n.get_instance_config()));
             quote! {
-                static CONFIGS: [Option<ComponentConfig>; #count] = [#(#configs),*];
-                static REFERENCES: &[Option<&ComponentConfig>] = &[#(CONFIGS[#indices].as_ref()),*];
-                let all_instances_configs = REFERENCES;
+                static TASK_CONFIG_VALUES: [Option<ComponentConfig>; #count] = [#(#configs),*];
+                pub(super) static TASK_CONFIGS: &[Option<&ComponentConfig>] = &[#(TASK_CONFIG_VALUES[#indices].as_ref()),*];
             }
         });
         let sim_callback_on_new_calls = task_specs.ids.iter().enumerate().map(|(i, id)| {
@@ -2415,9 +2414,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         });
 
-        let sim_configs = static_task_configs.clone().unwrap_or_else(|| quote! {
-            let all_instances_configs = config.get_all_instances_configs(Some(#mission));
-        });
+        let static_task_config_arg = static_config.then(|| quote!(#mission_mod::TASK_CONFIGS,));
+        let sim_configs = if static_config {
+            quote!(let all_instances_configs = #mission_mod::TASK_CONFIGS;)
+        } else {
+            quote!(let all_instances_configs = config.get_all_instances_configs(Some(#mission));)
+        };
         let sim_callback_on_new = if sim_mode {
             Some(quote! {
                 #sim_configs
@@ -4280,6 +4282,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     &config,
                     #mission,
                     CuRuntimeParts::new(
+                        #static_task_config_arg
                         #mission_mod::#tasks_instanciator_fn,
                         #mission_mod::MONITORED_COMPONENTS,
                         #mission_mod::CULIST_COMPONENT_MAPPING,
@@ -5201,11 +5204,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let sim_tasks_instanciator = if sim_mode {
             Some(quote! {
                 pub fn tasks_instanciator_sim<'c>(
-                    all_instances_configs: Vec<Option<&'c ComponentConfig>>,
+                    all_instances_configs: &[Option<&'c ComponentConfig>],
                     resources: &mut ResourceManager,
                     thread_pools: &[Option<Arc<ThreadPool>>],
                 ) -> CuResult<CuSimTasks> {
-                    #static_task_configs
                     #sim_inst_body
             }})
         } else {
@@ -5233,11 +5235,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let tasks_instanciator = if std {
             quote! {
                 pub fn tasks_instanciator<'c>(
-                    all_instances_configs: Vec<Option<&'c ComponentConfig>>,
+                    all_instances_configs: &[Option<&'c ComponentConfig>],
                     resources: &mut ResourceManager,
                     thread_pools: &[Option<Arc<ThreadPool>>],
                 ) -> CuResult<CuTasks> {
-                    #static_task_configs
                     #tasks_inst_body_std
                 }
             }
@@ -5245,10 +5246,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             // no thread pool in the no-std impl
             quote! {
                 pub fn tasks_instanciator<'c>(
-                    all_instances_configs: Vec<Option<&'c ComponentConfig>>,
+                    all_instances_configs: &[Option<&'c ComponentConfig>],
                     resources: &mut ResourceManager,
                 ) -> CuResult<CuTasks> {
-                    #static_task_configs
                     #tasks_inst_body_nostd
                 }
             }
@@ -5381,6 +5381,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #sim_bridge_channel_defs
                 #resources_module
                 #resources_instanciator_fn
+                #static_task_configs
                 #clock_reference_factory
                 #task_mapping_defs
                 #bridge_mapping_defs
