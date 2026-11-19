@@ -1,9 +1,8 @@
-//! Borrowed component parameters emitted by the runtime generator.
-extern crate alloc;
+//! A value tree backed by static data.
 use serde::de::{self, DeserializeSeed, IntoDeserializer, Visitor};
 use serde::{Deserializer, forward_to_deserialize_any};
 
-#[doc(hidden)]
+/// A value whose strings, sequences, and maps can be borrowed directly from firmware.
 #[derive(Clone, Copy, Debug)]
 pub enum StaticValue {
     Bool(bool),
@@ -126,8 +125,30 @@ impl<'de> de::VariantAccess<'de> for StaticValue {
 }
 
 impl StaticValue {
-    pub fn decode<T: serde::de::DeserializeOwned>(self) -> cu29_traits::CuResult<T> {
+    /// Deserialize a typed value directly from static storage.
+    pub fn deserialize_into<'de, T: serde::Deserialize<'de>>(self) -> Result<T, de::value::Error> {
         T::deserialize(self)
-            .map_err(|e| cu29_traits::CuError::from(alloc::string::ToString::to_string(&e)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::StaticValue as S;
+    use crate::Value;
+
+    #[test]
+    fn static_and_owned_values_decode_the_same_nested_data() {
+        let owned = Value::Seq(alloc::vec![
+            Value::String("axis".into()),
+            Value::Option(Some(alloc::boxed::Box::new(Value::U16(42))))
+        ]);
+        let baked = S::Seq(&[S::String("axis"), S::Option(Some(&S::U16(42)))]);
+        let expected = owned
+            .deserialize_into::<(alloc::string::String, Option<u16>)>()
+            .unwrap();
+        assert_eq!(
+            baked.deserialize_into::<(&str, Option<u16>)>().unwrap(),
+            (expected.0.as_str(), expected.1)
+        );
     }
 }

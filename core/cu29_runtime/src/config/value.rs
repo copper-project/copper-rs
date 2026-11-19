@@ -1,8 +1,8 @@
 //! Scalar and component configuration values.
 
+use super::BTreeMap;
 #[cfg(not(feature = "std"))]
 use super::imp::*;
-use super::{BTreeMap, StaticValue};
 #[cfg(not(feature = "std"))]
 use alloc::borrow::Cow;
 #[cfg(not(feature = "std"))]
@@ -13,6 +13,7 @@ use core::any::type_name;
 use core::fmt;
 use core::fmt::Display;
 use cu29_traits::CuError;
+use cu29_value::StaticValue;
 use cu29_value::Value as CuValue;
 use hashbrown::HashMap;
 use ron::Number;
@@ -105,7 +106,7 @@ impl ComponentConfig {
             Storage::Static(table) => table
                 .iter()
                 .find(|(k, _)| *k == key)
-                .map(|(_, value)| Cow::Owned(value.to_value())),
+                .map(|(_, value)| Cow::Owned(Value::from_static(*value))),
         }
     }
 
@@ -123,7 +124,7 @@ impl ComponentConfig {
                 baked
                     .into_iter()
                     .flatten()
-                    .map(|(k, v)| (*k, Cow::Owned(v.to_value()))),
+                    .map(|(k, v)| (*k, Cow::Owned(Value::from_static(*v)))),
             )
     }
 
@@ -132,7 +133,7 @@ impl ComponentConfig {
             self.0 = Storage::Owned(
                 table
                     .iter()
-                    .map(|(k, v)| (k.to_string(), v.to_value()))
+                    .map(|(k, v)| (k.to_string(), Value::from_static(*v)))
                     .collect(),
             );
         }
@@ -309,9 +310,9 @@ impl Value {
     }
 }
 
-impl StaticValue {
-    fn to_value(self) -> Value {
-        Value(RonValue::deserialize(self).expect("static config must represent a RON value"))
+impl Value {
+    fn from_static(value: StaticValue) -> Self {
+        Self(RonValue::deserialize(value).expect("static config must represent a RON value"))
     }
 }
 

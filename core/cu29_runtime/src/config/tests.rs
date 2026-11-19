@@ -1,6 +1,7 @@
 use super::*;
 #[cfg(not(feature = "std"))]
 use alloc::vec;
+use cu29_value::StaticValue;
 use serde::Deserialize;
 #[cfg(feature = "std")]
 use std::path::{Path, PathBuf};

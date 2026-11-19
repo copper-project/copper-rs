@@ -192,6 +192,7 @@ pub use rayon;
 
 #[doc(hidden)]
 pub mod __private {
+    pub use cu29_value::StaticValue;
     #[doc(hidden)]
     pub mod sync {
         #[cfg(not(feature = "std"))]
