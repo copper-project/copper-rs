@@ -97,7 +97,9 @@ pub(super) fn topology(
 }
 
 /// Lower Serde settings to the same flash-backed scalars, lists and maps as task parameters.
-pub(super) fn settings<T: serde::Serialize>(settings: &T) -> cu29_traits::CuResult<TokenStream> {
+pub(super) fn settings<T: serde::Serialize>(
+    settings: &Option<T>,
+) -> cu29_traits::CuResult<TokenStream> {
     fn lower(v: serde_value::Value) -> Value {
         use serde_value::Value as V;
         match v {
@@ -122,8 +124,25 @@ pub(super) fn settings<T: serde::Serialize>(settings: &T) -> cu29_traits::CuResu
             V::Map(v) => Value::Map(v.into_iter().map(|(k, v)| (lower(k), lower(v))).collect()),
         }
     }
+    if settings.is_none() {
+        return Ok(quote!(::core::option::Option::None));
+    }
     let tree =
         serde_value::to_value(settings).map_err(|e| cu29_traits::CuError::from(e.to_string()))?;
     let expr = value(&lower(tree));
     Ok(quote!(#expr.deserialize_into().map_err(|error| ::cu29::CuError::from(error.to_string()))?))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn absent_settings_emit_a_literal_none() {
+        let tokens = settings(&None::<u32>).unwrap();
+        assert_eq!(
+            tokens.to_string(),
+            quote!(::core::option::Option::None).to_string()
+        );
+    }
 }
