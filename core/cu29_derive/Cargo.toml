@@ -16,6 +16,7 @@ repository.workspace = true
 proc-macro = true
 
 [dependencies]
+ron = { version = "0.12", default-features = false }
 cu29-build = { workspace = true }
 cu29-runtime = { workspace = true, features = ["std"] }
 cu29-traits = { workspace = true }
@@ -33,6 +34,7 @@ ui_test = { version = "0.30.7", default-features = false, features = ["rustc"] }
 cu29 = { workspace = true }
 
 [features]
+static-config = []
 clock-sync = ["cu29-runtime/clock-sync"]
 self-describing-logs = []
 default = ["std", "signal-handler"]

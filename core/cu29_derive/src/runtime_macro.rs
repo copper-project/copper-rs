@@ -137,14 +137,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     } else if monitor_configs.len() == 1 {
         let only_monitor_type = parse_str::<Type>(monitor_configs[0].get_type())
             .expect("Could not transform the monitor type name into a Rust type.");
+        let monitor_config = if cfg!(feature = "static-config") { static_config::component(monitor_configs[0].get_config()) } else {quote!(config.get_monitor_configs().first().and_then(|entry| entry.get_config().cloned()))};
         (
             quote! { #only_monitor_type },
             quote! {
                 let monitor_metadata = metadata.with_monitor_config(
-                    config
-                        .get_monitor_configs()
-                        .first()
-                        .and_then(|entry| entry.get_config().cloned())
+                    #monitor_config
                 )
                 .with_subsystem_id(#subsystem_id_tokens);
                 let monitor = #only_monitor_type::new(monitor_metadata, runtime)
@@ -171,11 +169,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             .zip(monitor_bindings.iter())
             .zip(monitor_indices.iter())
             .map(|((monitor_ty, monitor_binding), monitor_idx)| {
-                quote! {
-                    let __cu_monitor_cfg_entry = config
+                let entry = if cfg!(feature = "static-config") {static_config::component(monitor_configs[monitor_idx.index as usize].get_config())} else {quote!(config
                         .get_monitor_configs()
                         .get(#monitor_idx)
-                        .and_then(|entry| entry.get_config().cloned());
+                        .and_then(|entry| entry.get_config().cloned()))};
+                quote! {
+                    let __cu_monitor_cfg_entry = #entry;
                     let __cu_monitor_metadata = metadata
                         .clone()
                         .with_monitor_config(__cu_monitor_cfg_entry)
@@ -803,6 +802,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     &format!("Failed to bind resources for bridge '{}'", bridge_name),
                     Span::call_site(),
                 );
+                let original_bridge = &copper_config.bridges[spec.config_index];
+                let bridge_params = if cfg!(feature = "static-config") {let cfg=static_config::component(original_bridge.config.as_ref()); quote!(#cfg.as_ref())} else {quote!(bridge_cfg.config.as_ref())};
                 let tx_configs: Vec<proc_macro2::TokenStream> = spec
                     .tx_channels
                     .iter()
@@ -810,6 +811,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         let const_ident = &channel.const_ident;
                         let channel_name = channel.id.clone();
                         let channel_config_index = syn::Index::from(channel.config_index);
+                        if cfg!(feature = "static-config") {
+                            let BridgeChannelConfigRepresentation::Tx {route, config, ..} = &original_bridge.channels[channel.config_index] else {unreachable!("validated channel direction")};
+                            let route = route.as_ref().map_or_else(||quote!(None), |v|quote!(Some(#v.into())));
+                            let params = static_config::component(config.as_ref());
+                            return quote!(cu29::cubridge::BridgeChannelConfig::from_static(&<#bridge_type as cu29::cubridge::CuBridge>::Tx::#const_ident,#route,#params));
+                        }
                         quote! {
                             {
                         let (channel_route, channel_config) = match &bridge_cfg.channels[#channel_config_index] {
@@ -838,6 +845,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         let const_ident = &channel.const_ident;
                         let channel_name = channel.id.clone();
                         let channel_config_index = syn::Index::from(channel.config_index);
+                        if cfg!(feature = "static-config") {
+                            let BridgeChannelConfigRepresentation::Rx {route, config, ..} = &original_bridge.channels[channel.config_index] else {unreachable!("validated channel direction")};
+                            let route = route.as_ref().map_or_else(||quote!(None), |v|quote!(Some(#v.into())));
+                            let params = static_config::component(config.as_ref());
+                            return quote!(cu29::cubridge::BridgeChannelConfig::from_static(&<#bridge_type as cu29::cubridge::CuBridge>::Rx::#const_ident,#route,#params));
+                        }
                         quote! {
                             {
                                 let (channel_route, channel_config) = match &bridge_cfg.channels[#channel_config_index] {
@@ -878,7 +891,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             <<#bridge_type as cu29::cubridge::CuBridge>::Rx as cu29::cubridge::BridgeChannelSet>::Id,
                         >] = &[#(#rx_configs),*];
                         <#bridge_type as cu29::cubridge::CuBridge>::new(
-                            bridge_cfg.config.as_ref(),
+                            #bridge_params,
                             tx_channels,
                             rx_channels,
                             bridge_resources,
@@ -5098,6 +5111,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! { Ok(( #(#task_instances_init_code),*, )) }
         };
 
+        let static_task_configs = cfg!(feature = "static-config").then(|| {
+            let count = graph.get_all_nodes().len();
+            let configs = graph.get_all_nodes().into_iter().map(|(_, n)| static_config::component(n.get_instance_config()));
+            quote! {
+                static CONFIGS: [Option<ComponentConfig>; #count] = [#(#configs),*];
+                let all_instances_configs = CONFIGS.each_ref().map(Option::as_ref);
+            }
+        });
         let tasks_instanciator = if std {
             quote! {
                 pub fn tasks_instanciator<'c>(
@@ -5105,6 +5126,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     resources: &mut ResourceManager,
                     thread_pools: &[Option<Arc<ThreadPool>>],
                 ) -> CuResult<CuTasks> {
+                    #static_task_configs
                     #tasks_inst_body_std
                 }
             }
@@ -5115,6 +5137,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     all_instances_configs: Vec<Option<&'c ComponentConfig>>,
                     resources: &mut ResourceManager,
                 ) -> CuResult<CuTasks> {
+                    #static_task_configs
                     #tasks_inst_body_nostd
                 }
             }

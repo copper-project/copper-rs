@@ -33,7 +33,10 @@ pub struct OwnedStorage(HashMap<String, Value>);
 #[derive(Debug, Clone, Copy, Default)]
 pub struct StaticStorage(&'static [(&'static str, StaticValue)]);
 
+#[cfg(not(feature = "static-config"))]
 pub type ComponentConfig = Config<OwnedStorage>;
+#[cfg(feature = "static-config")]
+pub type ComponentConfig = Config<StaticStorage>;
 
 /// Read operations shared by owned and flash-backed settings.
 pub trait ConfigRead {
