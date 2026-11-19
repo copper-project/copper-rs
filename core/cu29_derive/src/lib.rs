@@ -1978,7 +1978,7 @@ fn extract_output_packs(runtime_plan: &CuExecutionLoop) -> Vec<OutputPack> {
 
 #[derive(Clone)]
 struct SlotCodecBinding {
-    config: Option<cu29_runtime::config::ComponentConfig>,
+    config: Option<cu29_runtime::config::Config<cu29_runtime::config::OwnedStorage>>,
     payload_type: Type,
     task_id: String,
     msg_type: String,
@@ -2113,7 +2113,8 @@ fn build_culist_codec_helpers(
                 )
             };
             let build = quote!(|| {
-                let settings = ::cu29::logcodec::deserialize_codec_config::<#codec_type,#payload_type>(#config.as_ref())?;
+                let params: Option<::cu29::config::ComponentConfig> = #config;
+                let settings = ::cu29::logcodec::deserialize_codec_config::<#codec_type,#payload_type>(params.as_ref())?;
                 <#codec_type as ::cu29::logcodec::CuLogCodec<#payload_type>>::new(settings)
             });
             quote! {
@@ -3484,7 +3485,7 @@ fn build_bundle_list<'a>(config: &'a CuConfig, mission: &str) -> Vec<&'a Resourc
 }
 
 struct BundleSpec {
-    config: Option<cu29_runtime::config::ComponentConfig>,
+    config: Option<cu29_runtime::config::Config<cu29_runtime::config::OwnedStorage>>,
     inputs: Vec<(String, String)>,
     id: String,
     provider_path: syn::Path,

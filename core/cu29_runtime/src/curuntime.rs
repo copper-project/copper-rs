@@ -2089,7 +2089,11 @@ where
             resources.ok_or_else(|| CuError::from("Resources missing from CuRuntimeBuilder"))?;
         let thread_pools = thread_pools.unwrap_or_default();
 
+        #[cfg(feature = "static-config")]
+        let all_instances_configs = Vec::new();
+        #[cfg(not(feature = "static-config"))]
         let graph = config.get_graph(Some(mission))?;
+        #[cfg(not(feature = "static-config"))]
         let all_instances_configs: Vec<Option<&ComponentConfig>> = graph
             .get_all_nodes()
             .iter()
@@ -2220,7 +2224,11 @@ where
         let mut resources =
             resources.ok_or_else(|| CuError::from("Resources missing from CuRuntimeBuilder"))?;
 
+        #[cfg(feature = "static-config")]
+        let all_instances_configs = Vec::new();
+        #[cfg(not(feature = "static-config"))]
         let graph = config.get_graph(Some(mission))?;
+        #[cfg(not(feature = "static-config"))]
         let all_instances_configs: Vec<Option<&ComponentConfig>> = graph
             .get_all_nodes()
             .iter()

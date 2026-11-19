@@ -10,9 +10,9 @@ use super::Serial;
 use super::assemble_runtime_plan_with_planner;
 use super::mission_graphs;
 use super::schedule::PlanShape;
-use crate::config::ComponentConfig;
 use crate::config::RT_POOL;
 use crate::config::SchedulingPolicy;
+use crate::config::{Config, OwnedStorage};
 use crate::curuntime::CuExecutionUnit;
 use crate::curuntime::CuStepPhase;
 use alloc::collections::BTreeMap;
@@ -28,7 +28,7 @@ pub struct Pipeline {
 }
 
 impl Pipeline {
-    pub(super) fn new(params: Option<&ComponentConfig>) -> CuResult<Self> {
+    pub(super) fn new(params: Option<&Config<OwnedStorage>>) -> CuResult<Self> {
         let max_in_flight = params
             .map(|params| params.get_value::<u32>("max_in_flight"))
             .transpose()
