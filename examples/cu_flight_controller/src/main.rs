@@ -106,19 +106,9 @@ fn main() -> ! {
 
 const SYSCLK_HZ: u64 = 400_000_000;
 
-fn read_rtc_ns() -> u64 {
-    let cycles = cu29::clock::read_raw_counter() as u128;
-    ((cycles * 1_000_000_000u128) / SYSCLK_HZ as u128) as u64
-}
-
-fn sleep_ns(ns: u64) {
-    let cycles = ((ns as u128 * SYSCLK_HZ as u128) / 1_000_000_000u128) as u32;
-    asm::delay(cycles.max(1));
-}
-
 fn build_clock() -> RobotClock {
     cu29::clock::initialize();
-    RobotClock::new_with_rtc(read_rtc_ns, sleep_ns)
+    RobotClock::from_counter_frequency(core::num::NonZeroU64::new(SYSCLK_HZ).unwrap())
 }
 
 fn report_last_fault() {
