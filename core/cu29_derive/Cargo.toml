@@ -16,6 +16,8 @@ repository.workspace = true
 proc-macro = true
 
 [dependencies]
+serde = { workspace = true }
+serde-value = "0.7"
 ron = { version = "0.12", default-features = false }
 cu29-build = { workspace = true }
 cu29-runtime = { workspace = true, features = ["std"] }

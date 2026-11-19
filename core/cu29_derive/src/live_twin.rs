@@ -145,6 +145,16 @@ pub(super) fn runtime_support(
         lifecycle_arms
             .push(quote! { #mission::SimStep::#variant(_) => SimOverride::ExecuteByRuntime, });
     }
+    let twin_builder = if cfg!(feature = "static-config") {
+        quote! {let builder = Self::builder().with_clock(clock);}
+    } else {
+        quote! {                let mut config = CuConfig::deserialize_ron(&Self::original_config())?;
+                        let logging = config.logging.get_or_insert_with(Default::default);
+                        logging.enable_task_logging = false;
+                        logging.enable_keyframe_logging = false;
+                        let builder = Self::builder().with_clock(clock).with_config(config)
+        ;}
+    };
     quote! {
         impl #app {
             /// Start a live twin from this graph; Copper owns receive, archive and replay workers.
@@ -163,11 +173,8 @@ pub(super) fn runtime_support(
             #[allow(deprecated)]
             fn build_twin() -> CuResult<(Self, RobotClockMock)> {
                 let (clock, mock) = RobotClock::mock();
-                let mut config = CuConfig::deserialize_ron(&Self::original_config())?;
-                let logging = config.logging.get_or_insert_with(Default::default);
-                logging.enable_task_logging = false;
-                logging.enable_keyframe_logging = false;
-                let mut app = Self::builder().with_clock(clock).with_config(config)
+                #twin_builder
+                let mut app = builder
                     .with_sim_callback(&mut |_| SimOverride::ExecutedBySim).build()?.into_inner();
                 <Self as CuSimApplication<NoopSectionStorage, NoopLogger>>::start_all_tasks(&mut app,
                     &mut |step| match step { #(#lifecycle_arms)* _ => SimOverride::ExecutedBySim })?;

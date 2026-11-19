@@ -399,7 +399,8 @@ pub fn read_effective_config_ron_from_log(log_base: &Path) -> CuResult<Option<St
 
     Ok(read_logger
         .application_metadata()?
-        .map(|metadata| metadata.effective_config_ron))
+        .map(|metadata| metadata.effective_config_ron)
+        .filter(|ron| !ron.is_empty()))
 }
 
 #[cfg(feature = "std")]

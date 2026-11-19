@@ -3726,7 +3726,8 @@ fn build_resources_module(
                     .is_some_and(|value| value == #path)
             }
         });
-        validations.push(quote! {
+        if !cfg!(feature = "static-config") {
+            validations.push(quote! {
             let bundle_cfg = config.resources.iter().find(|b| b.id == #bundle_id)
                 .ok_or_else(|| cu29::CuError::from(concat!("Missing resource bundle: ", #bundle_id)))?;
             if bundle_cfg.resources.as_ref().map_or(0, |map| map.len()) != #input_count
@@ -3734,6 +3735,7 @@ fn build_resources_module(
                 return Err(cu29::CuError::from(concat!("Resource input topology differs from compiled configuration: ", #bundle_id)));
             }
         });
+        }
         let mut entries = Vec::new();
         for (name, path) in &bundle.inputs {
             let (source_id, slot) = parse_resource_path(path)?;
@@ -3755,6 +3757,9 @@ fn build_resources_module(
         } else {
             quote!(bundle_cfg.config.as_ref())
         };
+        let find_bundle = (!cfg!(feature="static-config")).then(|| quote!{
+            let bundle_cfg = config.resources.iter().find(|b| b.id == #bundle_id).expect("validated resource bundle");
+        });
         bundle_inits.push(quote! {
             {
                 const INPUT_KEYS: [cu29::resource::ResourceKey;
@@ -3763,8 +3768,7 @@ fn build_resources_module(
                         <#provider_path as cu29::resource::ResourceBundle>::INPUT_NAMES,
                         &[#(#entries),*],
                     );
-                let bundle_cfg = config.resources.iter().find(|b| b.id == #bundle_id)
-                    .expect("validated resource bundle");
+                #find_bundle
                 let bundle_ctx = cu29::resource::BundleContext::<#provider_path>::new(
                     cu29::resource::BundleIndex::new(#index), #bundle_id,
                 ).with_input_keys(&INPUT_KEYS);
@@ -3775,8 +3779,13 @@ fn build_resources_module(
         });
     }
 
+    let resource_config_ty = if cfg!(feature = "static-config") {
+        quote!(())
+    } else {
+        quote!(CuConfig)
+    };
     let resources_instanciator = quote! {
-        pub fn resources_instanciator(config: &CuConfig) -> CuResult<cu29::resource::ResourceManager> {
+        pub fn resources_instanciator(config: &#resource_config_ty) -> CuResult<cu29::resource::ResourceManager> {
             #(#validations)*
             let bundle_counts: &[usize] = &[ #(#bundle_counts),* ];
             let mut manager = cu29::resource::ResourceManager::new(bundle_counts);

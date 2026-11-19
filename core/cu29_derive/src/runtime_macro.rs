@@ -54,7 +54,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let subsystem_code = resolved_runtime_config.subsystem_code;
     let subsystem_id = resolved_runtime_config.subsystem_id.clone();
     let config_features = resolved_runtime_config.active_features.clone();
-    let copper_config_content = resolved_runtime_config.bundled_local_config_content.clone();
+    let static_config = cfg!(feature = "static-config");
+    let copper_config_content = if static_config {
+        String::new()
+    } else {
+        resolved_runtime_config.bundled_local_config_content.clone()
+    };
     let copper_config = resolved_runtime_config.local_config;
     if copper_config.log_streaming.is_some() && !logstream_enabled {
         return return_error(
@@ -137,7 +142,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     } else if monitor_configs.len() == 1 {
         let only_monitor_type = parse_str::<Type>(monitor_configs[0].get_type())
             .expect("Could not transform the monitor type name into a Rust type.");
-        let monitor_config = if cfg!(feature = "static-config") { static_config::component(monitor_configs[0].get_config()) } else {quote!(config.get_monitor_configs().first().and_then(|entry| entry.get_config().cloned()))};
+        let monitor_config = if cfg!(feature = "static-config") {
+            static_config::component(monitor_configs[0].get_config())
+        } else {
+            quote!(
+                config
+                    .get_monitor_configs()
+                    .first()
+                    .and_then(|entry| entry.get_config().cloned())
+            )
+        };
         (
             quote! { #only_monitor_type },
             quote! {
@@ -169,10 +183,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             .zip(monitor_bindings.iter())
             .zip(monitor_indices.iter())
             .map(|((monitor_ty, monitor_binding), monitor_idx)| {
-                let entry = if cfg!(feature = "static-config") {static_config::component(monitor_configs[monitor_idx.index as usize].get_config())} else {quote!(config
+                let entry = if cfg!(feature = "static-config") {
+                    static_config::component(
+                        monitor_configs[monitor_idx.index as usize].get_config(),
+                    )
+                } else {
+                    quote!(config
                         .get_monitor_configs()
                         .get(#monitor_idx)
-                        .and_then(|entry| entry.get_config().cloned()))};
+                        .and_then(|entry| entry.get_config().cloned()))
+                };
                 quote! {
                     let __cu_monitor_cfg_entry = #entry;
                     let __cu_monitor_metadata = metadata
@@ -803,7 +823,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     Span::call_site(),
                 );
                 let original_bridge = &copper_config.bridges[spec.config_index];
-                let bridge_params = if cfg!(feature = "static-config") {let cfg=static_config::component(original_bridge.config.as_ref()); quote!(#cfg.as_ref())} else {quote!(bridge_cfg.config.as_ref())};
+                let bridge_params = if static_config {
+                    let cfg = static_config::component(original_bridge.config.as_ref());
+                    quote!(#cfg.as_ref())
+                } else {
+                    quote!(bridge_cfg.config.as_ref())
+                };
                 let tx_configs: Vec<proc_macro2::TokenStream> = spec
                     .tx_channels
                     .iter()
@@ -812,10 +837,17 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         let channel_name = channel.id.clone();
                         let channel_config_index = syn::Index::from(channel.config_index);
                         if cfg!(feature = "static-config") {
-                            let BridgeChannelConfigRepresentation::Tx {route, config, ..} = &original_bridge.channels[channel.config_index] else {unreachable!("validated channel direction")};
-                            let route = route.as_ref().map_or_else(||quote!(None), |v|quote!(Some(#v.into())));
+                            let BridgeChannelConfigRepresentation::Tx { route, config, .. } =
+                                &original_bridge.channels[channel.config_index]
+                            else { unreachable!("validated channel direction") };
+                            let route = route.as_ref().map_or_else(|| quote!(None), |v| quote!(Some(#v.into())));
                             let params = static_config::component(config.as_ref());
-                            return quote!(cu29::cubridge::BridgeChannelConfig::from_static(&<#bridge_type as cu29::cubridge::CuBridge>::Tx::#const_ident,#route,#params));
+                            return quote! {
+                                cu29::cubridge::BridgeChannelConfig::from_static(
+                                    &<#bridge_type as cu29::cubridge::CuBridge>::Tx::#const_ident,
+                                    #route, #params,
+                                )
+                            };
                         }
                         quote! {
                             {
@@ -846,10 +878,17 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         let channel_name = channel.id.clone();
                         let channel_config_index = syn::Index::from(channel.config_index);
                         if cfg!(feature = "static-config") {
-                            let BridgeChannelConfigRepresentation::Rx {route, config, ..} = &original_bridge.channels[channel.config_index] else {unreachable!("validated channel direction")};
-                            let route = route.as_ref().map_or_else(||quote!(None), |v|quote!(Some(#v.into())));
+                            let BridgeChannelConfigRepresentation::Rx { route, config, .. } =
+                                &original_bridge.channels[channel.config_index]
+                            else { unreachable!("validated channel direction") };
+                            let route = route.as_ref().map_or_else(|| quote!(None), |v| quote!(Some(#v.into())));
                             let params = static_config::component(config.as_ref());
-                            return quote!(cu29::cubridge::BridgeChannelConfig::from_static(&<#bridge_type as cu29::cubridge::CuBridge>::Rx::#const_ident,#route,#params));
+                            return quote! {
+                                cu29::cubridge::BridgeChannelConfig::from_static(
+                                    &<#bridge_type as cu29::cubridge::CuBridge>::Rx::#const_ident,
+                                    #route, #params,
+                                )
+                            };
                         }
                         quote! {
                             {
@@ -872,12 +911,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         }
                     })
                     .collect();
+                let find_bridge = (!static_config).then(|| quote! {
+                    let bridge_cfg = config.bridges.get(#config_index).expect("compiled bridge configuration");
+                });
                 quote! {
                     let #binding_ident = {
-                        let bridge_cfg = config
-                            .bridges
-                            .get(#config_index)
-                            .unwrap_or_else(|| panic!("Bridge '{}' missing from configuration", #bridge_name));
+                        #find_bridge
                         let bridge_mapping = #bridge_mapping_ref;
                         let bridge_resources = <<#bridge_type as cu29::cubridge::CuBridge>::Resources<'_> as ResourceBindings>::from_bindings(
                             resources,
@@ -2336,6 +2375,19 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote!(CuApplication)
         };
 
+        let static_task_configs = cfg!(feature = "static-config").then(|| {
+            let nodes = graph.get_all_nodes();
+            let count = nodes.len();
+            let indices = 0..count;
+            let configs = nodes
+                .into_iter()
+                .map(|(_, n)| static_config::component(n.get_instance_config()));
+            quote! {
+                static CONFIGS: [Option<ComponentConfig>; #count] = [#(#configs),*];
+                static REFERENCES: &[Option<&ComponentConfig>] = &[#(CONFIGS[#indices].as_ref()),*];
+                let all_instances_configs = REFERENCES;
+            }
+        });
         let sim_callback_on_new_calls = task_specs.ids.iter().enumerate().map(|(i, id)| {
             let enum_name = config_id_to_enum(id);
             let enum_ident = Ident::new(&enum_name, Span::call_site());
@@ -2351,21 +2403,24 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 Span::call_site(),
             );
             let cfg_index = syn::Index::from(spec.config_index);
+            let bridge_params = if static_config {
+                static_config::component(copper_config.bridges[spec.config_index].config.as_ref())
+            } else {
+                quote!(config.bridges[#cfg_index].config.clone())
+            };
             quote! {
                 sim_callback(SimStep::#enum_ident(
-                    cu29::simulation::CuBridgeLifecycleState::New(config.bridges[#cfg_index].config.clone())
+                    cu29::simulation::CuBridgeLifecycleState::New(#bridge_params)
                 ));
             }
         });
 
+        let sim_configs = static_task_configs.clone().unwrap_or_else(|| quote! {
+            let all_instances_configs = config.get_all_instances_configs(Some(#mission));
+        });
         let sim_callback_on_new = if sim_mode {
             Some(quote! {
-                let graph = config.get_graph(Some(#mission)).expect("Could not find the mission #mission");
-                let all_instances_configs: Vec<Option<&ComponentConfig>> = graph
-                    .get_all_nodes()
-                    .iter()
-                    .map(|(_, node)| node.get_instance_config())
-                    .collect();
+                #sim_configs
                 #(#sim_callback_on_new_calls)*
                 #(#sim_callback_on_new_bridges)*
             })
@@ -2636,12 +2691,33 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! {}
         };
 
-        let config_load_stmt = build_config_load_stmt(
-            std,
-            application_name,
-            subsystem_id.as_deref(),
-            &config_features,
-        );
+        let config_load_stmt = if static_config {
+            let mut logging = copper_config.logging.clone();
+            if let Some(l) = &mut logging {
+                l.codecs.clear();
+            }
+            let (runtime, logging, streaming) = match (
+                static_config::settings(&copper_config.runtime),
+                static_config::settings(&logging),
+                static_config::settings(&copper_config.log_streaming),
+            ) {
+                (Ok(r), Ok(l), Ok(s)) => (r, l, s),
+                _ => return return_error("Could not lower static runtime settings".into()),
+            };
+            let reject_override = std.then(|| quote!{if config_override.is_some() {return Err("Runtime overrides are disabled by static-config".into());}});
+            quote! {
+                #reject_override
+                let config = CuConfig {runtime: #runtime, logging: #logging, log_streaming: #streaming, ..Default::default()};
+                let config_source = RuntimeLifecycleConfigSource::BundledDefault;
+            }
+        } else {
+            build_config_load_stmt(
+                std,
+                application_name,
+                subsystem_id.as_deref(),
+                &config_features,
+            )
+        };
         let constant_override_warning = if std {
             let comparisons = constant_fingerprints
                 .iter()
@@ -3725,9 +3801,20 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote!()
         };
 
+        let config_visibility = (!static_config).then(|| quote!(pub));
+        let resource_config_ty = if static_config {
+            quote!(())
+        } else {
+            quote!(CuConfig)
+        };
+        let resource_config_ref = if static_config {
+            quote!(&())
+        } else {
+            quote!(&config)
+        };
         let app_resources_struct = quote! {
             pub struct AppResources {
-                pub config: CuConfig,
+                #config_visibility config: CuConfig,
                 pub config_source: RuntimeLifecycleConfigSource,
                 pub log_context: Option<cu29::prelude::SectionContext>,
                 pub resources: ResourceManager,
@@ -3788,7 +3875,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp init: building resources");
-                let resources = #mission_mod::resources_instanciator(&config)?;
+                let resources = #mission_mod::resources_instanciator(#resource_config_ref)?;
                 #prepare_resources_thread_pools_stmt
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp init: resources ready");
@@ -4103,6 +4190,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             )
         };
 
+        let generated_params = static_config.then(|| quote!(.with_generated_task_configs()));
         let topology_factory = if cfg!(feature = "static-config") {
             if monitor_configs.is_empty() {
                 quote!(.with_topology(|_, _| Ok(Default::default())))
@@ -4112,7 +4200,22 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     Err(error) => return return_error(error.to_string()),
                 }
             }
-        } else { quote!() };
+        } else {
+            quote!()
+        };
+        let register_codecs = if static_config {
+            quote!(#mission_mod::CuStampedDataSet::reset_static_codecs();)
+        } else {
+            quote! {
+                let effective_config_ron = config.serialize_ron()?;
+                ::cu29::logcodec::set_effective_config_ron::<super::#mission_mod::CuStampedDataSet>(&effective_config_ron);
+            }
+        };
+        let metadata_ron = if static_config {
+            quote!(String::new())
+        } else {
+            quote!(config.serialize_ron()?)
+        };
         let build_with_resources_fn = quote! {
             #build_with_resources_sig {
                 let AppResources {
@@ -4166,8 +4269,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: creating runtime lifecycle stream");
-                let effective_config_ron = config.serialize_ron()?;
-                ::cu29::logcodec::set_effective_config_ron::<super::#mission_mod::CuStampedDataSet>(&effective_config_ron);
+                #register_codecs
                 let mut local_lifecycle_sink = cu29::prelude::stream_write_context::<RuntimeLifecycleRecord, S>(
                     unified_logger.clone(), UnifiedLogType::RuntimeLifecycle, 4096, log_context,
                 )?;
@@ -4185,7 +4287,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         #parallel_rt_metadata_arg
                         #monitor_instanciator,
                         #mission_mod::bridges_instanciator,
-                    ) #topology_factory,
+                    ) #topology_factory #generated_params,
                     copperlist_sink,
                     keyframe_sink,
                     output_requirements,
@@ -4275,7 +4377,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 fn prepare_log_metadata<S: SectionStorage, L: UnifiedLogWrite<S>>(
                     logger: &Arc<Mutex<L>>, config: &CuConfig, instance_id: u32,
                 ) -> CuResult<cu29::prelude::SectionContext> {
-                    let metadata = Self::application_log_metadata(config.serialize_ron()?);
+                    let metadata = Self::application_log_metadata(#metadata_ron);
                     #metadata_log_lock
                     Self::seal_log_metadata::<S, L>(&mut *logger, &metadata)?;
                     logger.construction_context(instance_id, #mission_index)
@@ -4517,6 +4619,17 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             None
         };
 
+        let replay_override = if static_config {
+            quote! {if config_override.is_some() {return Err("Runtime overrides are disabled by static-config".into());}}
+        } else {
+            quote! {
+                let builder = if let Some(config_override) = config_override {
+                    builder.with_config(config_override)
+                } else {
+                    builder
+                };
+            }
+        };
         let distributed_replay_app_impl = if sim_mode {
             Some(quote! {
                 impl<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static>
@@ -4534,11 +4647,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             .with_logger::<S, L>(unified_logger)
                             .with_clock(clock)
                             .with_instance_id(instance_id);
-                        let builder = if let Some(config_override) = config_override {
-                            builder.with_config(config_override)
-                        } else {
-                            builder
-                        };
+                        #replay_override
                         builder.with_sim_callback(&mut noop).build_impl()
                     }
                 }
@@ -4567,7 +4676,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }}
         };
 
-        let builder_with_config_method = if std {
+        let builder_with_config_method = if std && !static_config {
             Some(quote! {
                 #[allow(dead_code)]
                 pub fn with_config(mut self, config_override: CuConfig) -> Self {
@@ -4672,7 +4781,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     where
                         S: SectionStorage + 'static,
                         L: UnifiedLogWrite<S> + 'static,
-                        R: FnOnce(&CuConfig) -> CuResult<ResourceManager>,
+                        R: FnOnce(&#resource_config_ty) -> CuResult<ResourceManager>,
                         F: FnMut(SimStep) -> SimOverride,
                     {
                         clock: Option<RobotClock>,
@@ -4691,12 +4800,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     where
                         S: SectionStorage + 'static,
                         L: UnifiedLogWrite<S> + 'static,
-                        R: FnOnce(&CuConfig) -> CuResult<ResourceManager>,
+                        R: FnOnce(&#resource_config_ty) -> CuResult<ResourceManager>,
                         F: FnMut(SimStep) -> SimOverride,
                 },
                 quote! {
                     #[allow(dead_code)]
-                    pub fn builder<'a, F>() -> #builder_name<'a, F, cu29::prelude::NoopSectionStorage, cu29::prelude::NoopLogger, fn(&CuConfig) -> CuResult<ResourceManager>>
+                    pub fn builder<'a, F>() -> #builder_name<'a, F, cu29::prelude::NoopSectionStorage, cu29::prelude::NoopLogger, fn(&#resource_config_ty) -> CuResult<ResourceManager>>
                     where
                         F: FnMut(SimStep) -> SimOverride,
                     {
@@ -4705,7 +4814,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             unified_logger: Arc::new(Mutex::new(cu29::prelude::NoopLogger::new())),
                             instance_id: 0,
                             config_override: None,
-                            resources_factory: #mission_mod::resources_instanciator as fn(&CuConfig) -> CuResult<ResourceManager>,
+                            resources_factory: #mission_mod::resources_instanciator as fn(&#resource_config_ty) -> CuResult<ResourceManager>,
                             sim_callback: None,
                             #builder_logstream_init
                             #builder_clock_reference_none
@@ -4734,7 +4843,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     where
                         S: SectionStorage + 'static,
                         L: UnifiedLogWrite<S> + 'static,
-                        R: FnOnce(&CuConfig) -> CuResult<ResourceManager>,
+                        R: FnOnce(&#resource_config_ty) -> CuResult<ResourceManager>,
                     {
                         clock: Option<RobotClock>,
                         unified_logger: Arc<Mutex<L>>,
@@ -4751,17 +4860,17 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     where
                         S: SectionStorage + 'static,
                         L: UnifiedLogWrite<S> + 'static,
-                        R: FnOnce(&CuConfig) -> CuResult<ResourceManager>,
+                        R: FnOnce(&#resource_config_ty) -> CuResult<ResourceManager>,
                 },
                 quote! {
                     #[allow(dead_code)]
-                    pub fn builder() -> #builder_name<cu29::prelude::NoopSectionStorage, cu29::prelude::NoopLogger, fn(&CuConfig) -> CuResult<ResourceManager>> {
+                    pub fn builder() -> #builder_name<cu29::prelude::NoopSectionStorage, cu29::prelude::NoopLogger, fn(&#resource_config_ty) -> CuResult<ResourceManager>> {
                         #builder_name {
                             clock: #builder_default_clock,
                             unified_logger: Arc::new(Mutex::new(cu29::prelude::NoopLogger::new())),
                             instance_id: 0,
                             config_override: None,
-                            resources_factory: #mission_mod::resources_instanciator as fn(&CuConfig) -> CuResult<ResourceManager>,
+                            resources_factory: #mission_mod::resources_instanciator as fn(&#resource_config_ty) -> CuResult<ResourceManager>,
                             #builder_logstream_init
                             #builder_clock_reference_none
                             _storage: core::marker::PhantomData,
@@ -4990,7 +5099,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 pub fn with_resources<R2>(self, resources_factory: R2) -> #builder_name<#builder_with_resources_generics>
                 where
-                    R2: FnOnce(&CuConfig) -> CuResult<ResourceManager>,
+                    R2: FnOnce(&#resource_config_ty) -> CuResult<ResourceManager>,
                 {
                     #builder_name {
                         clock: self.clock,
@@ -5026,7 +5135,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     let (config, config_source) = #builder_prepare_config_call;
                     let log_context = #application_name::prepare_log_metadata::<S, L>(&self.unified_logger, &config, self.instance_id)?;
                     #[allow(unused_mut)]
-                    let mut resources = (self.resources_factory)(&config)?;
+                    let mut resources = (self.resources_factory)(#resource_config_ref)?;
                     #builder_clock_setup
                     #builder_build_thread_pools_stmt
                     let app_resources = AppResources {
@@ -5097,6 +5206,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     resources: &mut ResourceManager,
                     thread_pools: &[Option<Arc<ThreadPool>>],
                 ) -> CuResult<CuSimTasks> {
+                    #static_task_configs
                     #sim_inst_body
             }})
         } else {
@@ -5121,14 +5231,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! { Ok(( #(#task_instances_init_code),*, )) }
         };
 
-        let static_task_configs = cfg!(feature = "static-config").then(|| {
-            let count = graph.get_all_nodes().len();
-            let configs = graph.get_all_nodes().into_iter().map(|(_, n)| static_config::component(n.get_instance_config()));
-            quote! {
-                static CONFIGS: [Option<ComponentConfig>; #count] = [#(#configs),*];
-                let all_instances_configs = CONFIGS.each_ref().map(Option::as_ref);
-            }
-        });
         let tasks_instanciator = if std {
             quote! {
                 pub fn tasks_instanciator<'c>(

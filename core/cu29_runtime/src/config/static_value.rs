@@ -1,4 +1,5 @@
 //! Borrowed component parameters emitted by the runtime generator.
+extern crate alloc;
 use serde::de::{self, DeserializeSeed, IntoDeserializer, Visitor};
 use serde::{Deserializer, forward_to_deserialize_any};
 
@@ -121,5 +122,12 @@ impl<'de> de::VariantAccess<'de> for StaticValue {
         visitor: V,
     ) -> Result<V::Value, Error> {
         self.deserialize_any(visitor)
+    }
+}
+
+impl StaticValue {
+    pub fn decode<T: serde::de::DeserializeOwned>(self) -> cu29_traits::CuResult<T> {
+        T::deserialize(self)
+            .map_err(|e| cu29_traits::CuError::from(alloc::string::ToString::to_string(&e)))
     }
 }

@@ -4520,6 +4520,11 @@ where
     L: UnifiedLogWrite<S> + 'static,
 {
     let config_str = <App as CuSimApplication<S, L>>::get_original_config();
+    if config_str.is_empty() {
+        return Err(CuError::from(
+            "Stack schema requires the host application built with the configuration from the recorded Git revision and static-config disabled",
+        ));
+    }
     let config = read_configuration_str(config_str, None)?;
     let mission_id = <App as CuSimApplication<S, L>>::mission_id();
     let graph = config.get_graph(mission_id)?;

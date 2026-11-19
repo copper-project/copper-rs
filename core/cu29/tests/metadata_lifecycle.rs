@@ -16,7 +16,8 @@ impl Freezable for Source {}
 impl CuSrcTask for Source {
     type Resources<'r> = ();
     type Output<'m> = output_msg!(u32);
-    fn new(_: Option<&ComponentConfig>, _: ()) -> CuResult<Self> {
+    fn new(config: Option<&ComponentConfig>, _: ()) -> CuResult<Self> {
+        assert_eq!(config.unwrap().get_value::<[u8; 2]>("axes")?, Some([3, 7]));
         fail(1)?;
         Ok(Self)
     }
@@ -48,7 +49,11 @@ impl CuSinkTask for Sink {
 }
 struct FatalMonitor;
 impl CuMonitor for FatalMonitor {
-    fn new(_: CuMonitoringMetadata, _: CuMonitoringRuntime) -> CuResult<Self> {
+    fn new(metadata: CuMonitoringMetadata, _: CuMonitoringRuntime) -> CuResult<Self> {
+        let topology = metadata.topology();
+        assert_eq!(topology.nodes.len(), 2);
+        assert_eq!(topology.connections[0].src, "source");
+        assert_eq!(topology.connections[0].dst, "sink");
         Ok(Self)
     }
     fn process_copperlist(&self, _: &CuContext, _: CopperListView<'_>) -> CuResult<()> {
@@ -75,7 +80,11 @@ fn logger(path: &std::path::Path) -> Arc<Mutex<UnifiedLoggerWrite>> {
 }
 fn events(path: &std::path::Path) -> Vec<(SectionContext, RuntimeLifecycleEvent)> {
     let mut reader = UnifiedLoggerRead::new(path).unwrap();
-    assert!(reader.application_metadata().unwrap().is_some());
+    let metadata = reader.application_metadata().unwrap().unwrap();
+    assert_eq!(
+        metadata.effective_config_ron.is_empty(),
+        cfg!(feature = "static-config")
+    );
     let mut events = Vec::new();
     loop {
         let (header, content) = reader.raw_read_section().unwrap();
