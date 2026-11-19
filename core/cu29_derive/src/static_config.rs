@@ -1,5 +1,5 @@
 //! Emit borrowed parameter tables in the application binary.
-use cu29_runtime::config::ComponentConfig;
+use cu29_runtime::config::{Config, OwnedStorage};
 use proc_macro2::TokenStream;
 use quote::quote;
 use ron::{Number, Value};
@@ -51,7 +51,7 @@ fn value(v: &Value) -> TokenStream {
     }
 }
 
-pub(super) fn component(config: Option<&ComponentConfig>) -> TokenStream {
+pub(super) fn component(config: Option<&Config<OwnedStorage>>) -> TokenStream {
     let Some(config) = config else {
         return quote!(None);
     };

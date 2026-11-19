@@ -1160,7 +1160,7 @@ fn build_port_column(
 }
 
 /// Render config entries in a stable order for readability and diffs.
-fn build_config_rows(config: &config::ComponentConfig) -> Vec<TableNode> {
+fn build_config_rows(config: &config::Config<config::OwnedStorage>) -> Vec<TableNode> {
     if config.keys().next().is_none() {
         return Vec::new();
     }

@@ -171,11 +171,11 @@ pub cu29_runtime::config::BackgroundConfig::Pool
 pub cu29_runtime::config::BackgroundConfig::Pool::pool: alloc::string::String
 pub enum cu29_runtime::config::BridgeChannelConfigRepresentation
 pub cu29_runtime::config::BridgeChannelConfigRepresentation::Rx
-pub cu29_runtime::config::BridgeChannelConfigRepresentation::Rx::config: core::option::Option<cu29_runtime::config::ComponentConfig>
+pub cu29_runtime::config::BridgeChannelConfigRepresentation::Rx::config: core::option::Option<cu29_runtime::config::Config<cu29_runtime::config::OwnedStorage>>
 pub cu29_runtime::config::BridgeChannelConfigRepresentation::Rx::id: alloc::string::String
 pub cu29_runtime::config::BridgeChannelConfigRepresentation::Rx::route: core::option::Option<alloc::string::String>
 pub cu29_runtime::config::BridgeChannelConfigRepresentation::Tx
-pub cu29_runtime::config::BridgeChannelConfigRepresentation::Tx::config: core::option::Option<cu29_runtime::config::ComponentConfig>
+pub cu29_runtime::config::BridgeChannelConfigRepresentation::Tx::config: core::option::Option<cu29_runtime::config::Config<cu29_runtime::config::OwnedStorage>>
 pub cu29_runtime::config::BridgeChannelConfigRepresentation::Tx::id: alloc::string::String
 pub cu29_runtime::config::BridgeChannelConfigRepresentation::Tx::route: core::option::Option<alloc::string::String>
 impl cu29_runtime::config::BridgeChannelConfigRepresentation
@@ -253,7 +253,7 @@ pub cu29_runtime::config::AnytimeConfig::quality_target: core::option::Option<f3
 pub cu29_runtime::config::AnytimeConfig::time_budget_ms: core::option::Option<f64>
 pub struct cu29_runtime::config::BridgeConfig
 pub cu29_runtime::config::BridgeConfig::channels: alloc::vec::Vec<cu29_runtime::config::BridgeChannelConfigRepresentation>
-pub cu29_runtime::config::BridgeConfig::config: core::option::Option<cu29_runtime::config::ComponentConfig>
+pub cu29_runtime::config::BridgeConfig::config: core::option::Option<cu29_runtime::config::Config<cu29_runtime::config::OwnedStorage>>
 pub cu29_runtime::config::BridgeConfig::id: alloc::string::String
 pub cu29_runtime::config::BridgeConfig::missions: core::option::Option<alloc::vec::Vec<alloc::string::String>>
 pub cu29_runtime::config::BridgeConfig::resources: core::option::Option<hashbrown::map::HashMap<alloc::string::String, alloc::string::String>>
@@ -279,24 +279,23 @@ pub cu29_runtime::config::Cnx::msg: alloc::string::String
 pub cu29_runtime::config::Cnx::order: usize
 pub cu29_runtime::config::Cnx::src: alloc::string::String
 pub cu29_runtime::config::Cnx::src_channel: core::option::Option<alloc::string::String>
-pub struct cu29_runtime::config::ComponentConfig(_)
-impl cu29_runtime::config::ComponentConfig
-pub fn cu29_runtime::config::ComponentConfig::deserialize_into<T>(&self) -> core::result::Result<T, cu29_runtime::config::ConfigError> where T: serde_core::de::DeserializeOwned
-pub fn cu29_runtime::config::ComponentConfig::entries(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&str, alloc::borrow::Cow<'_, cu29_runtime::config::Value>)>
-pub fn cu29_runtime::config::ComponentConfig::get<T>(&self, key: &str) -> core::result::Result<core::option::Option<T>, cu29_runtime::config::ConfigError> where T: for<'a> core::convert::TryFrom<&'a cu29_runtime::config::Value, Error = cu29_runtime::config::ConfigError>
-pub fn cu29_runtime::config::ComponentConfig::get_value<T>(&self, key: &str) -> core::result::Result<core::option::Option<T>, cu29_runtime::config::ConfigError> where T: serde_core::de::DeserializeOwned
-pub fn cu29_runtime::config::ComponentConfig::keys(&self) -> impl core::iter::traits::iterator::Iterator<Item = &str>
-pub fn cu29_runtime::config::ComponentConfig::merge_from(&mut self, other: &cu29_runtime::config::ComponentConfig)
-pub fn cu29_runtime::config::ComponentConfig::new() -> Self
-pub fn cu29_runtime::config::ComponentConfig::set<T: core::convert::Into<cu29_runtime::config::Value>>(&mut self, key: &str, value: T)
-impl core::default::Default for cu29_runtime::config::ComponentConfig
-pub fn cu29_runtime::config::ComponentConfig::default() -> Self
-impl core::fmt::Display for cu29_runtime::config::ComponentConfig
-pub fn cu29_runtime::config::ComponentConfig::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-impl serde_core::ser::Serialize for cu29_runtime::config::ComponentConfig
-pub fn cu29_runtime::config::ComponentConfig::serialize<S: serde_core::ser::Serializer>(&self, serializer: S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
-impl<'de> serde_core::de::Deserialize<'de> for cu29_runtime::config::ComponentConfig
-pub fn cu29_runtime::config::ComponentConfig::deserialize<D: serde_core::de::Deserializer<'de>>(deserializer: D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct cu29_runtime::config::Config<S>(_)
+impl cu29_runtime::config::Config<cu29_runtime::config::OwnedStorage>
+pub fn cu29_runtime::config::Config<cu29_runtime::config::OwnedStorage>::merge_from(&mut self, other: &Self)
+pub fn cu29_runtime::config::Config<cu29_runtime::config::OwnedStorage>::new() -> Self
+pub fn cu29_runtime::config::Config<cu29_runtime::config::OwnedStorage>::set<T: core::convert::Into<cu29_runtime::config::Value>>(&mut self, key: &str, value: T)
+impl<S: cu29_runtime::config::ConfigRead> cu29_runtime::config::Config<S>
+pub fn cu29_runtime::config::Config<S>::deserialize_into<T: serde_core::de::DeserializeOwned>(&self) -> core::result::Result<T, cu29_runtime::config::ConfigError>
+pub fn cu29_runtime::config::Config<S>::entries(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&str, alloc::borrow::Cow<'_, cu29_runtime::config::Value>)>
+pub fn cu29_runtime::config::Config<S>::get<T>(&self, key: &str) -> core::result::Result<core::option::Option<T>, cu29_runtime::config::ConfigError> where T: for<'a> core::convert::TryFrom<&'a cu29_runtime::config::Value, Error = cu29_runtime::config::ConfigError>
+pub fn cu29_runtime::config::Config<S>::get_value<T: serde_core::de::DeserializeOwned>(&self, key: &str) -> core::result::Result<core::option::Option<T>, cu29_runtime::config::ConfigError>
+pub fn cu29_runtime::config::Config<S>::keys(&self) -> impl core::iter::traits::iterator::Iterator<Item = &str>
+impl<'de> serde_core::de::Deserialize<'de> for cu29_runtime::config::Config<cu29_runtime::config::OwnedStorage>
+pub fn cu29_runtime::config::Config<cu29_runtime::config::OwnedStorage>::deserialize<D: serde_core::de::Deserializer<'de>>(deserializer: D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+impl<S: cu29_runtime::config::ConfigRead> core::fmt::Display for cu29_runtime::config::Config<S>
+pub fn cu29_runtime::config::Config<S>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<S: cu29_runtime::config::ConfigRead> serde_core::ser::Serialize for cu29_runtime::config::Config<S>
+pub fn cu29_runtime::config::Config<S>::serialize<Ser: serde_core::ser::Serializer>(&self, serializer: Ser) -> core::result::Result<<Ser as serde_core::ser::Serializer>::Ok, <Ser as serde_core::ser::Serializer>::Error>
 pub struct cu29_runtime::config::ConfigError
 impl core::convert::From<cu29_runtime::config::ConfigError> for cu29_traits::CuError
 pub fn cu29_traits::CuError::from(err: cu29_runtime::config::ConfigError) -> Self
@@ -315,7 +314,7 @@ impl cu29_runtime::config::CuConfig
 pub fn cu29_runtime::config::CuConfig::deserialize_ron(ron: &str) -> cu29_traits::CuResult<Self>
 pub fn cu29_runtime::config::CuConfig::find_logging_codec_spec(&self, codec_id: &str) -> core::option::Option<&cu29_runtime::config::LoggingCodecSpec>
 pub fn cu29_runtime::config::CuConfig::find_task_node(&self, mission_id: core::option::Option<&str>, task_id: &str) -> core::option::Option<&cu29_runtime::config::Node>
-pub fn cu29_runtime::config::CuConfig::get_all_instances_configs(&self, mission_id: core::option::Option<&str>) -> alloc::vec::Vec<core::option::Option<&cu29_runtime::config::ComponentConfig>>
+pub fn cu29_runtime::config::CuConfig::get_all_instances_configs(&self, mission_id: core::option::Option<&str>) -> alloc::vec::Vec<core::option::Option<&cu29_runtime::config::Config<cu29_runtime::config::OwnedStorage>>>
 pub fn cu29_runtime::config::CuConfig::get_graph(&self, mission_id: core::option::Option<&str>) -> cu29_traits::CuResult<&cu29_runtime::config::CuGraph>
 pub fn cu29_runtime::config::CuConfig::get_graph_mut(&mut self, mission_id: core::option::Option<&str>) -> cu29_traits::CuResult<&mut cu29_runtime::config::CuGraph>
 pub fn cu29_runtime::config::CuConfig::get_monitor_config(&self) -> core::option::Option<&cu29_runtime::config::MonitorConfig>
@@ -382,7 +381,7 @@ pub cu29_runtime::config::IncludesConfig::path: alloc::string::String
 pub cu29_runtime::config::IncludesConfig::when: core::option::Option<cu29_runtime::config::ConfigPredicate>
 pub struct cu29_runtime::config::InstanceConfigSetOperation
 pub cu29_runtime::config::InstanceConfigSetOperation::path: alloc::string::String
-pub cu29_runtime::config::InstanceConfigSetOperation::value: cu29_runtime::config::ComponentConfig
+pub cu29_runtime::config::InstanceConfigSetOperation::value: cu29_runtime::config::Config<cu29_runtime::config::OwnedStorage>
 pub struct cu29_runtime::config::LogStreamAdaptationConfig
 pub cu29_runtime::config::LogStreamAdaptationConfig::max_repair_every_source_symbols: u16
 pub cu29_runtime::config::LogStreamAdaptationConfig::min_repair_every_source_symbols: u16
@@ -422,7 +421,7 @@ pub cu29_runtime::config::LogStreamTransportConfig::type_: alloc::string::String
 pub struct cu29_runtime::config::LogStreamingConfig
 pub cu29_runtime::config::LogStreamingConfig::destinations: alloc::vec::Vec<cu29_runtime::config::LogStreamDestinationConfig>
 pub struct cu29_runtime::config::LoggingCodecSpec
-pub cu29_runtime::config::LoggingCodecSpec::config: core::option::Option<cu29_runtime::config::ComponentConfig>
+pub cu29_runtime::config::LoggingCodecSpec::config: core::option::Option<cu29_runtime::config::Config<cu29_runtime::config::OwnedStorage>>
 pub cu29_runtime::config::LoggingCodecSpec::id: alloc::string::String
 pub cu29_runtime::config::LoggingCodecSpec::type_: alloc::string::String
 pub struct cu29_runtime::config::LoggingConfig
@@ -441,7 +440,7 @@ pub struct cu29_runtime::config::MissionsConfig
 pub cu29_runtime::config::MissionsConfig::id: alloc::string::String
 pub struct cu29_runtime::config::MonitorConfig
 impl cu29_runtime::config::MonitorConfig
-pub fn cu29_runtime::config::MonitorConfig::get_config(&self) -> core::option::Option<&cu29_runtime::config::ComponentConfig>
+pub fn cu29_runtime::config::MonitorConfig::get_config(&self) -> core::option::Option<&cu29_runtime::config::Config<cu29_runtime::config::OwnedStorage>>
 pub fn cu29_runtime::config::MonitorConfig::get_type(&self) -> &str
 pub struct cu29_runtime::config::MultiCopperConfig
 pub cu29_runtime::config::MultiCopperConfig::instance_overrides_root: core::option::Option<alloc::string::String>
@@ -482,7 +481,7 @@ pub fn cu29_runtime::config::Node::background_pool(&self) -> &str
 pub fn cu29_runtime::config::Node::get_declared_task_kind(&self) -> core::option::Option<cu29_runtime::config::TaskKind>
 pub fn cu29_runtime::config::Node::get_flavor(&self) -> cu29_runtime::config::Flavor
 pub fn cu29_runtime::config::Node::get_id(&self) -> alloc::string::String
-pub fn cu29_runtime::config::Node::get_instance_config(&self) -> core::option::Option<&cu29_runtime::config::ComponentConfig>
+pub fn cu29_runtime::config::Node::get_instance_config(&self) -> core::option::Option<&cu29_runtime::config::Config<cu29_runtime::config::OwnedStorage>>
 pub fn cu29_runtime::config::Node::get_logging(&self) -> core::option::Option<&cu29_runtime::config::NodeLogging>
 pub fn cu29_runtime::config::Node::get_param<T>(&self, key: &str) -> core::result::Result<core::option::Option<T>, cu29_runtime::config::ConfigError> where T: for<'a> core::convert::TryFrom<&'a cu29_runtime::config::Value, Error = cu29_runtime::config::ConfigError>
 pub fn cu29_runtime::config::Node::get_resources(&self) -> core::option::Option<&hashbrown::map::HashMap<alloc::string::String, alloc::string::String>>
@@ -514,13 +513,20 @@ impl core::default::Default for cu29_runtime::config::NodeLogging
 pub fn cu29_runtime::config::NodeLogging::default() -> Self
 pub struct cu29_runtime::config::NodeStreaming
 pub cu29_runtime::config::NodeStreaming::replay: cu29_runtime::config::StreamReplay
+pub struct cu29_runtime::config::OwnedStorage(_)
+impl cu29_runtime::config::ConfigRead for cu29_runtime::config::OwnedStorage
+pub fn cu29_runtime::config::OwnedStorage::deserialize<T: serde_core::de::DeserializeOwned>(&self) -> core::result::Result<T, cu29_runtime::config::ConfigError>
+pub fn cu29_runtime::config::OwnedStorage::entries(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&str, alloc::borrow::Cow<'_, cu29_runtime::config::Value>)>
+pub fn cu29_runtime::config::OwnedStorage::keys(&self) -> impl core::iter::traits::iterator::Iterator<Item = &str>
+pub fn cu29_runtime::config::OwnedStorage::scalar(&self, key: &str) -> core::option::Option<impl core::borrow::Borrow<cu29_runtime::config::Value>>
+pub fn cu29_runtime::config::OwnedStorage::structured<T: serde_core::de::DeserializeOwned>(&self, key: &str) -> core::result::Result<core::option::Option<T>, cu29_runtime::config::ConfigError>
 pub struct cu29_runtime::config::PlannerConfig
 impl cu29_runtime::config::PlannerConfig
-pub fn cu29_runtime::config::PlannerConfig::get_config(&self) -> core::option::Option<&cu29_runtime::config::ComponentConfig>
+pub fn cu29_runtime::config::PlannerConfig::get_config(&self) -> core::option::Option<&cu29_runtime::config::Config<cu29_runtime::config::OwnedStorage>>
 pub fn cu29_runtime::config::PlannerConfig::kind(&self) -> cu29_runtime::config::PlannerKind
 pub fn cu29_runtime::config::PlannerConfig::max_in_flight(&self, copperlist_count: usize) -> cu29_traits::CuResult<usize>
 pub struct cu29_runtime::config::ResourceBundleConfig
-pub cu29_runtime::config::ResourceBundleConfig::config: core::option::Option<cu29_runtime::config::ComponentConfig>
+pub cu29_runtime::config::ResourceBundleConfig::config: core::option::Option<cu29_runtime::config::Config<cu29_runtime::config::OwnedStorage>>
 pub cu29_runtime::config::ResourceBundleConfig::id: alloc::string::String
 pub cu29_runtime::config::ResourceBundleConfig::missions: core::option::Option<alloc::vec::Vec<alloc::string::String>>
 pub cu29_runtime::config::ResourceBundleConfig::provider: alloc::string::String
@@ -532,6 +538,13 @@ pub cu29_runtime::config::RuntimeConfig::thread_pools: alloc::vec::Vec<cu29_runt
 impl cu29_runtime::config::RuntimeConfig
 pub fn cu29_runtime::config::RuntimeConfig::clock_sync_config(&self) -> core::option::Option<&cu29_runtime::config::ClockSyncConfig>
 pub fn cu29_runtime::config::RuntimeConfig::validate(&self) -> cu29_traits::CuResult<()>
+pub struct cu29_runtime::config::StaticStorage(_)
+impl cu29_runtime::config::ConfigRead for cu29_runtime::config::StaticStorage
+pub fn cu29_runtime::config::StaticStorage::deserialize<T: serde_core::de::DeserializeOwned>(&self) -> core::result::Result<T, cu29_runtime::config::ConfigError>
+pub fn cu29_runtime::config::StaticStorage::entries(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&str, alloc::borrow::Cow<'_, cu29_runtime::config::Value>)>
+pub fn cu29_runtime::config::StaticStorage::keys(&self) -> impl core::iter::traits::iterator::Iterator<Item = &str>
+pub fn cu29_runtime::config::StaticStorage::scalar(&self, key: &str) -> core::option::Option<impl core::borrow::Borrow<cu29_runtime::config::Value>>
+pub fn cu29_runtime::config::StaticStorage::structured<T: serde_core::de::DeserializeOwned>(&self, key: &str) -> core::result::Result<core::option::Option<T>, cu29_runtime::config::ConfigError>
 pub struct cu29_runtime::config::ThreadPoolConfig
 pub cu29_runtime::config::ThreadPoolConfig::affinity: core::option::Option<alloc::vec::Vec<usize>>
 pub cu29_runtime::config::ThreadPoolConfig::id: alloc::string::String
@@ -633,6 +646,24 @@ pub const cu29_runtime::config::MIN_NICE: i8
 pub const cu29_runtime::config::MIN_RT_PRIORITY: u8
 pub const cu29_runtime::config::NC_ENDPOINT: &str
 pub const cu29_runtime::config::RT_POOL: &str
+pub trait cu29_runtime::config::ConfigRead
+pub fn cu29_runtime::config::ConfigRead::deserialize<T: serde_core::de::DeserializeOwned>(&self) -> core::result::Result<T, cu29_runtime::config::ConfigError>
+pub fn cu29_runtime::config::ConfigRead::entries(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&str, alloc::borrow::Cow<'_, cu29_runtime::config::Value>)>
+pub fn cu29_runtime::config::ConfigRead::keys(&self) -> impl core::iter::traits::iterator::Iterator<Item = &str>
+pub fn cu29_runtime::config::ConfigRead::scalar(&self, key: &str) -> core::option::Option<impl core::borrow::Borrow<cu29_runtime::config::Value>>
+pub fn cu29_runtime::config::ConfigRead::structured<T: serde_core::de::DeserializeOwned>(&self, key: &str) -> core::result::Result<core::option::Option<T>, cu29_runtime::config::ConfigError>
+impl cu29_runtime::config::ConfigRead for cu29_runtime::config::OwnedStorage
+pub fn cu29_runtime::config::OwnedStorage::deserialize<T: serde_core::de::DeserializeOwned>(&self) -> core::result::Result<T, cu29_runtime::config::ConfigError>
+pub fn cu29_runtime::config::OwnedStorage::entries(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&str, alloc::borrow::Cow<'_, cu29_runtime::config::Value>)>
+pub fn cu29_runtime::config::OwnedStorage::keys(&self) -> impl core::iter::traits::iterator::Iterator<Item = &str>
+pub fn cu29_runtime::config::OwnedStorage::scalar(&self, key: &str) -> core::option::Option<impl core::borrow::Borrow<cu29_runtime::config::Value>>
+pub fn cu29_runtime::config::OwnedStorage::structured<T: serde_core::de::DeserializeOwned>(&self, key: &str) -> core::result::Result<core::option::Option<T>, cu29_runtime::config::ConfigError>
+impl cu29_runtime::config::ConfigRead for cu29_runtime::config::StaticStorage
+pub fn cu29_runtime::config::StaticStorage::deserialize<T: serde_core::de::DeserializeOwned>(&self) -> core::result::Result<T, cu29_runtime::config::ConfigError>
+pub fn cu29_runtime::config::StaticStorage::entries(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&str, alloc::borrow::Cow<'_, cu29_runtime::config::Value>)>
+pub fn cu29_runtime::config::StaticStorage::keys(&self) -> impl core::iter::traits::iterator::Iterator<Item = &str>
+pub fn cu29_runtime::config::StaticStorage::scalar(&self, key: &str) -> core::option::Option<impl core::borrow::Borrow<cu29_runtime::config::Value>>
+pub fn cu29_runtime::config::StaticStorage::structured<T: serde_core::de::DeserializeOwned>(&self, key: &str) -> core::result::Result<core::option::Option<T>, cu29_runtime::config::ConfigError>
 pub fn cu29_runtime::config::infer_task_kind_for_id(graph: &cu29_runtime::config::CuGraph, node_id: cu29_runtime::config::NodeId) -> core::option::Option<cu29_runtime::config::TaskKind>
 pub fn cu29_runtime::config::read_configuration(config_filename: &str) -> cu29_traits::CuResult<cu29_runtime::config::CuConfig>
 pub fn cu29_runtime::config::read_configuration_str(config_content: alloc::string::String, file_path: core::option::Option<&str>) -> cu29_traits::CuResult<cu29_runtime::config::CuConfig>
@@ -643,6 +674,7 @@ pub fn cu29_runtime::config::read_multi_configuration_str(config_content: alloc:
 pub fn cu29_runtime::config::read_multi_configuration_str_with_features(config_content: alloc::string::String, file_path: core::option::Option<&str>, active_features: &[&str]) -> cu29_traits::CuResult<cu29_runtime::config::MultiCopperConfig>
 pub fn cu29_runtime::config::read_multi_configuration_with_features(config_filename: &str, active_features: &[&str]) -> cu29_traits::CuResult<cu29_runtime::config::MultiCopperConfig>
 pub fn cu29_runtime::config::resolve_task_kind_for_id(graph: &cu29_runtime::config::CuGraph, node_id: cu29_runtime::config::NodeId) -> cu29_traits::CuResult<cu29_runtime::config::TaskKind>
+pub type cu29_runtime::config::ComponentConfig = cu29_runtime::config::Config<cu29_runtime::config::OwnedStorage>
 pub type cu29_runtime::config::NodeId = u32
 pub mod cu29_runtime::context
 pub struct cu29_runtime::context::CuContext

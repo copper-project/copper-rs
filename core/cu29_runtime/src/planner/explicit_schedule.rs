@@ -15,7 +15,6 @@ use super::build_plan_graph;
 use super::mission_graphs;
 use super::schedule::PlanShape;
 use super::step_key;
-use crate::config::ComponentConfig;
 use crate::config::CuConfig;
 use crate::config::CuGraph;
 use crate::config::NodeId;
@@ -23,6 +22,7 @@ use crate::config::PlannerConfig;
 use crate::config::PlannerKind;
 use crate::config::RuntimeConfig;
 use crate::config::Value;
+use crate::config::{Config, OwnedStorage};
 use crate::curuntime::CuExecutionUnit;
 use crate::curuntime::CuStepPhase;
 use alloc::collections::BTreeMap;
@@ -189,7 +189,7 @@ impl ExplicitSchedule {
             .map_err(|error| CuError::new_with_cause("Could not encode execution plan", error))?;
         let value = Value::deserialize(value)
             .map_err(|error| CuError::new_with_cause("Could not embed execution plan", error))?;
-        let mut params = ComponentConfig::default();
+        let mut params = Config::<OwnedStorage>::default();
         params.set("plan", value);
         prepared
             .runtime
