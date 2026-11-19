@@ -5,7 +5,7 @@ use quote::quote;
 use ron::{Number, Value};
 
 fn value(v: &Value) -> TokenStream {
-    let ty = quote!(::cu29::config::StaticValue);
+    let ty = quote!(::cu29::__private::StaticValue);
     match v {
         Value::Bool(x) => quote!(#ty::Bool(#x)),
         Value::Char(x) => quote!(#ty::Char(#x)),
@@ -125,5 +125,5 @@ pub(super) fn settings<T: serde::Serialize>(settings: &T) -> cu29_traits::CuResu
     let tree =
         serde_value::to_value(settings).map_err(|e| cu29_traits::CuError::from(e.to_string()))?;
     let expr = value(&lower(tree));
-    Ok(quote!(#expr.decode()?))
+    Ok(quote!(#expr.deserialize_into().map_err(|error| ::cu29::CuError::from(error.to_string()))?))
 }
