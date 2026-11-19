@@ -140,6 +140,24 @@ pub struct SenderCore {
 }
 
 impl SenderCore {
+    #[cfg(feature = "std")]
+    pub(crate) fn check_session(
+        &self,
+        session: &crate::protocol::CuTelemetrySession,
+    ) -> Result<()> {
+        let manifest =
+            crate::SessionManifest::decode_record(&self.config.recovery.manifest_record)?;
+        if manifest.identity != session.identity
+            || manifest.context != session.context
+            || manifest.application_schema != session.schema
+        {
+            return Err(Error::InvalidConfig(
+                "telemetry session differs from FEC manifest",
+            ));
+        }
+        Ok(())
+    }
+
     /// Changes only future repair scheduling; retained packets and budgets are untouched.
     pub fn set_repair_interval(&mut self, every: u16) -> Result<()> {
         if every == 0 {

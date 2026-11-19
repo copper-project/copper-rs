@@ -2925,10 +2925,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         let build_with_resources_logstream_param = if logstream_enabled {
             quote! {
-                logstream: Option<(
-                    Box<dyn ::cu29::logstream::CuStreamTx>,
-                    ::cu29::logstream::LogStreamSenderConfig,
-                )>,
+                logstream: Option<::cu29::logstream::TelemetryDestination>,
             }
         } else {
             quote! {}
@@ -4032,7 +4029,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let #continuous_ident = if logstream_schema.reconstruction.is_empty() {
                     #continuous_ident
                 } else {
-                    #continuous_ident.with_encoder(::cu29::logstream::capture::encode_capture_record_into)
+                    #continuous_ident.with_payload_encoder(::cu29::logstream::capture::encode_capture_into)
                 };
             }
         });
@@ -4073,29 +4070,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #configured_logstream_session
                 #(#configured_logstream_initializers)*
                 let injected_logstream_sinks = logstream
-                    .map(|(transport, mut sender_config)| {
-                        sender_config.continuous.identity.sender_id = instance_id;
-                        sender_config.recovery.finite.identity.sender_id = instance_id;
-                        let schema = <#mission_mod::CuStampedDataSet as ::cu29::logstream::capture::CaptureDataSet>::stream_schema();
-                        let mut manifest = ::cu29::logstream::SessionManifest::decode_record(&sender_config.recovery.manifest_record)
-                            .map_err(|e| CuError::from(e.to_string()))?;
-                        if manifest.application_schema != schema {
-                            return Err(CuError::from("injected sender must use the generated application schema"));
-                        }
-                        manifest.identity = sender_config.continuous.identity;
-                        manifest.context = log_context;
-                        sender_config.recovery.manifest_record = manifest.encode_record()
-                            .map_err(|e| CuError::from(e.to_string()))?;
-                        let bitrate = sender_config.pacing.bitrate_bps;
-                        let baseline = sender_config.continuous.repair_every_source_symbols;
-                        let (mut copperlist, keyframe, sender_monitor) = ::cu29::logstream::scheduled_sinks::<
-                            #mission_mod::CuStampedDataSet, _
-                        >(transport, sender_config,
-                            if clock.is_mock() { RobotClock::new() } else { clock.clone() })?;
-                        stream_monitors.push(sender_monitor.into_runtime_monitor("injected", bitrate, baseline));
+                    .map(|destination| {
+                        let (mut copperlist,keyframe,monitor) = destination.start::<#mission_mod::CuStampedDataSet>(log_context, clock.clone())?;
+                        stream_monitors.extend(monitor);
                         let structured = copperlist.take_structured_log_sink();
-                        let copperlist = if schema.reconstruction.is_empty() { copperlist }
-                            else { copperlist.with_encoder(::cu29::logstream::capture::encode_capture_record_into) };
                         Ok::<_, CuError>(((copperlist, keyframe), structured))
                     })
                     .transpose()?;
@@ -4738,10 +4716,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         let builder_logstream_field = logstream_enabled.then(|| {
             quote! {
-                logstream: Option<(
-                    Box<dyn ::cu29::logstream::CuStreamTx>,
-                    ::cu29::logstream::LogStreamSenderConfig,
-                )>,
+                logstream: Option<::cu29::logstream::TelemetryDestination>,
             }
         });
         let builder_logstream_init = logstream_enabled.then(|| quote! { logstream: None, });
@@ -4749,6 +4724,25 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             logstream_enabled.then(|| quote! { logstream: self.logstream, });
         let builder_with_logstream_method = logstream_enabled.then(|| {
             quote! {
+                /// Stream native records through a custom protocol on a bounded sender worker.
+                /// Limits are in bytes per CopperList capture and per keyframe.
+                /// The factory receives the same transport clock the worker uses for deadlines.
+                pub fn with_telemetry_tx<T>(
+                    mut self,
+                    make_tx: impl FnOnce(::cu29::clock::RobotClock) -> CuResult<T> + Send + 'static,
+                    max_capture_bytes: usize,
+                    max_keyframe_bytes: usize,
+                ) -> Self
+                where
+                    T: ::cu29::logstream::protocol::CuTelemetryTx + 'static,
+                {
+                    self.logstream = Some(::cu29::logstream::TelemetryDestination::Native {
+                        make_tx: Box::new(move |clock| Ok(Box::new(make_tx(clock)?))),
+                        max_capture_bytes,
+                        max_keyframe_bytes,
+                    });
+                    self
+                }
                 /// Adds a nonblocking CopperList plus keyframe/recovery point packet resource.
                 ///
                 /// One sender worker owns the endpoint and schedules both semantic lanes
@@ -4762,7 +4756,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 where
                     T: ::cu29::logstream::CuStreamTx + 'static,
                 {
-                    self.logstream = Some((Box::new(transport), config));
+                    self.logstream = Some(::cu29::logstream::TelemetryDestination::Fec(Box::new(transport),Box::new(config)));
                     self
                 }
             }

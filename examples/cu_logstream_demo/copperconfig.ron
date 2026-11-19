@@ -27,7 +27,7 @@
                 link: (
                     mtu_bytes: 1200,
                     bitrate_bps: 2000000,
-                    memory_budget_kib: 576,
+                    memory_budget_kib: 640,
                     max_latency_ms: 250,
                     burst_packets: 8,
                 ),

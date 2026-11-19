@@ -13,7 +13,11 @@ pub use cu_fec::{DensityThreshold, EncodingSymbolId, Field, RlcConfig};
 #[cfg(feature = "std")]
 mod archive;
 #[cfg(feature = "std")]
+mod fec_receiver;
+#[cfg(feature = "std")]
 pub use archive::{CaptureArchive, NativeArchive};
+#[cfg(feature = "std")]
+pub use fec_receiver::FecTelemetryRx;
 #[cfg(feature = "std")]
 pub mod twin;
 #[cfg(feature = "std")]
@@ -52,7 +56,7 @@ pub use structured::StructuredLogStream;
 #[cfg(feature = "std")]
 pub use worker::{
     ScheduledCopperListSink, ScheduledKeyFrameSink, ScheduledStructuredLogSink, SenderMonitor,
-    SenderSnapshot, scheduled_feedback_sinks, scheduled_sinks,
+    SenderSnapshot, TelemetryDestination, scheduled_feedback_sinks, scheduled_sinks,
 };
 
 /// Utilities for testing log streaming over unreliable datagram links.

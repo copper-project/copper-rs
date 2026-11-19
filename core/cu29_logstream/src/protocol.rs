@@ -54,7 +54,11 @@ pub trait CuTelemetryTx: Send {
 #[derive(Clone, Copy, Debug)]
 pub enum CuTelemetryEvent<'a> {
     Record(CuTelemetryRecord<'a>),
-    Gap { first_id: u64, last_id: u64 },
+    Gap {
+        first_id: u64,
+        last_id: u64,
+        reason: cu29_runtime::continuity::SourceGapReason,
+    },
 }
 
 /// Outcome of one bounded nonblocking receive operation.

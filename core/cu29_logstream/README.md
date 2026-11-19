@@ -35,6 +35,23 @@ its manifest. Feed its events to `NativeArchive<P>`, where `P` is your applicati
 generated dataset type. The archive checks that the sender's schema matches and
 preserves the received payloads and timestamps.
 
+## Custom telemetry protocols
+
+Implement `protocol::CuTelemetryTx` to receive a session followed by native
+capture, keyframe and structured-log payloads on the robot's sender worker.
+Install it with `Robot::builder().with_telemetry_tx(move |_| Ok(tx), max_capture_bytes,
+max_keyframe_bytes)`. A paced sender retains the transport clock provided to its factory and uses it for absolute poll deadlines. Both bounds are native payload sizes. A full capture pool
+drops a record and increments the existing inbox counter.
+
+Implement `protocol::CuTelemetryRx` to deliver those records to
+`Twin::from_telemetry(rx).with_log_path(path).spawn()?`. The receiver owns
+packet framing, integrity, duplicate suppression and its reordering policy.
+Report gaps in CopperList ID order, including missing history before a late
+join. Copper validates native IDs and the session schema, archives the records
+and restores replay from matching keyframes. The sender and twin must use the
+same application encoding. The traits support `no_std`; the generated sender
+worker, archive and live-twin builder use `std`.
+
 ## What to expect
 
 - Recovery uses bounded memory. Packet loss beyond those bounds leaves gaps.
@@ -73,7 +90,8 @@ The sender reserves four structured-record buffers per destination, each capped
 at 4096 bytes including the existing record header, or `max_object_bytes` when
 smaller. Size overflow, exhausted pools, and stopped destinations increment
 `inbox_drops` while the local record remains intact. These buffers and their
-queue storage count toward `memory_budget_kib`. The demo uses 576 KiB to cover
+queue storage count toward `memory_budget_kib`. The demo uses 640 KiB to cover
+the FEC worker’s reusable native-record framing buffer,
 its CL/keyframe pools, structured buffers, recovery retention, and packet queues.
 A section rollover resets the copied entry before the local serialization retry;
 only a successful local write admits the completed entry for transmission.
@@ -165,7 +183,7 @@ whole-process allocator ceiling. Unsupported bounds fail during construction.
 Four pending CL boundaries and two pending keyframes accommodate independently
 ordered output workers. Under sustained skew, oldest pending entries are replaced
 and counted; the last complete bundle remains usable. Ordinary data expires after
-`max_latency_ms`, measured from encoded-record admission. Retained recovery stays
+`max_latency_ms`, measured from the instant the FEC backend accepts the record. Time spent waiting in the worker inbox precedes this budget. Retained recovery stays
 useful after that deadline and is repeated until replaced or stopped.
 
 Pool exhaustion, packet-queue overflow, expiry, carrier backpressure, and shutdown

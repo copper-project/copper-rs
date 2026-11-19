@@ -120,45 +120,15 @@ impl<P: CopperListTuple> NativeArchive<P> {
                 "archive requires the matching application schema",
             ));
         }
-        let logger = Arc::new(Mutex::new(logger));
-        let mut archive = Self {
-            last_structured: None,
-            copperlists: NativeStream::with_context(
-                UnifiedLogType::CopperList,
-                logger.clone(),
-                section_bytes,
-                manifest.context,
-            )
-            .map_err(io_error)?,
-            keyframes: NativeStream::with_context(
-                UnifiedLogType::FrozenTasks,
-                logger.clone(),
-                section_bytes,
-                manifest.context,
-            )
-            .map_err(io_error)?,
-            structured: NativeStream::with_context(
-                UnifiedLogType::StructuredLogLine,
-                logger.clone(),
-                section_bytes,
-                manifest.context,
-            )
-            .map_err(io_error)?,
-            continuity: NativeStream::with_context(
-                UnifiedLogType::StreamContinuity,
-                logger,
-                section_bytes,
-                manifest.context,
-            )
-            .map_err(io_error)?,
-            identity: manifest.identity,
-            manifest_digest: received.record().decoded().digest,
-            manifest_object_id: received.record().decoded().object_id,
-            next_id: 0,
-            poisoned: false,
-            payload: PhantomData,
+        let mut archive = Self::open_streams(
+            logger,
+            section_bytes,
+            manifest.context,
+            manifest.identity,
             decode,
-        };
+        )?;
+        archive.manifest_digest = received.record().decoded().digest;
+        archive.manifest_object_id = received.record().decoded().object_id;
         archive
             .continuity
             .log(&StreamContinuityRecord::Manifest {
@@ -166,6 +136,54 @@ impl<P: CopperListTuple> NativeArchive<P> {
             })
             .map_err(io_error)?;
         Ok(archive)
+    }
+
+    fn open_streams(
+        logger: UnifiedLoggerWrite,
+        section_bytes: usize,
+        context: cu29_unifiedlog::SectionContext,
+        identity: StreamIdentity,
+        decode: ArchiveDecoder<P>,
+    ) -> Result<Self> {
+        let logger = Arc::new(Mutex::new(logger));
+        Ok(Self {
+            last_structured: None,
+            copperlists: NativeStream::with_context(
+                UnifiedLogType::CopperList,
+                logger.clone(),
+                section_bytes,
+                context,
+            )
+            .map_err(io_error)?,
+            keyframes: NativeStream::with_context(
+                UnifiedLogType::FrozenTasks,
+                logger.clone(),
+                section_bytes,
+                context,
+            )
+            .map_err(io_error)?,
+            structured: NativeStream::with_context(
+                UnifiedLogType::StructuredLogLine,
+                logger.clone(),
+                section_bytes,
+                context,
+            )
+            .map_err(io_error)?,
+            continuity: NativeStream::with_context(
+                UnifiedLogType::StreamContinuity,
+                logger,
+                section_bytes,
+                context,
+            )
+            .map_err(io_error)?,
+            identity,
+            manifest_digest: [0; 32],
+            manifest_object_id: 0,
+            next_id: 0,
+            poisoned: false,
+            payload: PhantomData,
+            decode,
+        })
     }
 
     /// Validates a typed CopperList once, appends its original canonical bytes,
@@ -211,46 +229,21 @@ impl<P: CopperListTuple> NativeArchive<P> {
             }
             SessionEvent::ContinuousRecord { record, .. } => {
                 let decoded = record.decoded();
-                if decoded.kind != RecordKind::CopperList || decoded.object_id != self.next_id {
+                if decoded.kind != RecordKind::CopperList {
                     return Err(Error::InconsistentObject);
                 }
-                let (capture, native) = (self.decode)(decoded.payload)?;
-                let copperlist = &capture.copperlist;
-                if copperlist.id != decoded.object_id {
-                    return Err(Error::InconsistentObject);
-                }
-                let next = self
-                    .next_id
-                    .checked_add(1)
-                    .ok_or(Error::InconsistentObject)?;
-                self.copperlists
-                    .log(&CanonicalEntry(native))
-                    .map_err(io_error)?;
-                self.next_id = next;
-                return Ok(Some(capture));
+                return self
+                    .append_list(decoded.object_id, decoded.payload)
+                    .map(Some);
             }
             SessionEvent::Gap { gap, .. } => {
-                if gap.first_id != self.next_id || gap.last_id < gap.first_id {
-                    return Err(Error::InconsistentObject);
-                }
-                let next = gap
-                    .last_id
-                    .checked_add(1)
-                    .ok_or(Error::InconsistentObject)?;
                 let reason = match gap.reason {
                     crate::GapReason::RlcWindowExpired => SourceGapReason::RlcWindowExpired,
                     crate::GapReason::SessionEnded => SourceGapReason::SessionEnded,
                     crate::GapReason::LateJoin => SourceGapReason::LateJoin,
                     crate::GapReason::RecoveryPoint => SourceGapReason::RecoveryPoint,
                 };
-                self.continuity
-                    .log(&StreamContinuityRecord::<&[u8]>::Gap {
-                        first_id: gap.first_id,
-                        last_id: gap.last_id,
-                        reason,
-                    })
-                    .map_err(io_error)?;
-                self.next_id = next;
+                self.append_gap(gap.first_id, gap.last_id, reason)?;
             }
             SessionEvent::VerifiedRecoveryPoint {
                 recovery_point,
@@ -283,24 +276,61 @@ impl<P: CopperListTuple> NativeArchive<P> {
             SessionEvent::Object { record, .. } => {
                 let decoded = record.decoded();
                 if decoded.kind == RecordKind::StructuredLog {
-                    let (entry, used): (cu29_log::CuLogEntry, usize) = bincode::decode_from_slice(
-                        decoded.payload,
-                        bincode::config::standard().with_limit::<4_194_304>(),
-                    )
-                    .map_err(|_| Error::InvalidConfig("invalid structured log entry"))?;
-                    if used != decoded.payload.len() {
-                        return Err(Error::InvalidConfig("trailing structured log bytes"));
-                    }
-                    self.structured
-                        .log(&CanonicalEntry(decoded.payload))
-                        .map_err(io_error)?;
-                    self.last_structured = Some(entry);
+                    self.last_structured = Some(self.append_log(decoded.payload)?);
                 }
             }
         }
         Ok(None)
     }
 
+    fn append_list(&mut self, id: u64, payload: &[u8]) -> Result<CapturedList<P>> {
+        if id != self.next_id {
+            return Err(Error::InconsistentObject);
+        }
+        let (capture, native) = (self.decode)(payload)?;
+        let copperlist = &capture.copperlist;
+        if copperlist.id != id {
+            return Err(Error::InconsistentObject);
+        }
+        let next = self
+            .next_id
+            .checked_add(1)
+            .ok_or(Error::InconsistentObject)?;
+        self.copperlists
+            .log(&CanonicalEntry(native))
+            .map_err(io_error)?;
+        self.next_id = next;
+        Ok(capture)
+    }
+    fn append_log(&mut self, payload: &[u8]) -> Result<cu29_log::CuLogEntry> {
+        let (entry, used): (cu29_log::CuLogEntry, usize) = bincode::decode_from_slice(
+            payload,
+            bincode::config::standard().with_limit::<4_194_304>(),
+        )
+        .map_err(|_| Error::InvalidConfig("invalid structured log entry"))?;
+        if used != payload.len() {
+            return Err(Error::InvalidConfig("trailing structured log bytes"));
+        }
+        self.structured
+            .log(&CanonicalEntry(payload))
+            .map_err(io_error)?;
+        Ok(entry)
+    }
+    fn append_gap(&mut self, first_id: u64, last_id: u64, reason: SourceGapReason) -> Result<()> {
+        if first_id != self.next_id || last_id < first_id {
+            return Err(Error::InconsistentObject);
+        }
+        let next = last_id.checked_add(1).ok_or(Error::InconsistentObject)?;
+        self.continuity
+            .log(&StreamContinuityRecord::<&[u8]>::Gap {
+                first_id,
+                last_id,
+                reason,
+            })
+            .map_err(io_error)?;
+        self.next_id = next;
+        Ok(())
+    }
     /// Move the structured entry decoded during the most recent successful accept.
     /// Call before accepting another event; publication can reuse this owned value.
     pub fn take_structured_log(&mut self) -> Option<cu29_log::CuLogEntry> {
@@ -330,6 +360,63 @@ fn io_error(error: impl core::fmt::Display) -> Error {
 /// StreamContinuity retains the reconstruction contract and source gaps.
 pub struct CaptureArchive<P: crate::capture::CaptureDataSet>(NativeArchive<P>);
 impl<P: crate::capture::CaptureDataSet> CaptureArchive<P> {
+    pub(crate) fn from_session(
+        session: &crate::protocol::CuTelemetrySession,
+        section_bytes: usize,
+        logger: UnifiedLoggerWrite,
+    ) -> Result<Self> {
+        if session.schema != P::stream_schema()
+            || session.context.instance_id != session.identity.sender_id
+        {
+            return Err(Error::InvalidConfig(
+                "telemetry session requires matching sender identity and application schema",
+            ));
+        }
+        let mut archive = NativeArchive::open_streams(
+            logger,
+            section_bytes,
+            session.context,
+            session.identity,
+            crate::capture::decode_capture,
+        )?;
+        let record =
+            bincode::encode_to_vec(session, bincode::config::standard()).map_err(io_error)?;
+        archive
+            .continuity
+            .log(&StreamContinuityRecord::TelemetrySession { record })
+            .map_err(io_error)?;
+        Ok(Self(archive))
+    }
+
+    pub(crate) fn list(&mut self, id: u64, capture: &[u8]) -> Result<CapturedList<P>> {
+        self.0.append_list(id, capture)
+    }
+    pub(crate) fn log_entry(&mut self, entry: &[u8]) -> Result<cu29_log::CuLogEntry> {
+        self.0.append_log(entry)
+    }
+    pub(crate) fn gap(&mut self, first: u64, last: u64, reason: SourceGapReason) -> Result<()> {
+        self.0.append_gap(first, last, reason)
+    }
+    pub(crate) fn keyframe(
+        &mut self,
+        id: u64,
+        state: &[u8],
+    ) -> Result<cu29_runtime::curuntime::KeyFrame> {
+        let frame = crate::decode_keyframe(state)?;
+        if frame.culistid != id {
+            return Err(Error::InconsistentObject);
+        }
+        self.0
+            .keyframes
+            .log(&CanonicalEntry(state))
+            .map_err(io_error)?;
+        self.0
+            .continuity
+            .log(&StreamContinuityRecord::<&[u8]>::TelemetryKeyFrame { copperlist_id: id })
+            .map_err(io_error)?;
+        Ok(frame)
+    }
+
     /// Open capture streams after the application has sealed static metadata.
     #[doc(hidden)]
     pub fn new_with_logger(

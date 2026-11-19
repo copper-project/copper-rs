@@ -3,6 +3,7 @@
 use crate::feedback::{
     FEEDBACK_BUFFER_BYTES, FeedbackController, FeedbackSnapshot, ReceiverReport,
 };
+use crate::protocol::{CuTelemetryRecord, CuTelemetrySession, CuTelemetryTx, TxMode};
 use crate::{
     CuFeedbackRx, CuStreamRxError, CuStreamTx, LogStreamSenderConfig, OneWay, SenderCore,
     SenderStats,
@@ -38,7 +39,6 @@ use crate::pacing::STRUCTURED_RECORD_BYTES;
 struct StructuredRecord {
     bytes: Box<[u8]>,
     len: usize,
-    queued_at: CuTime,
 }
 
 struct StructuredInbox {
@@ -53,7 +53,6 @@ pub struct ScheduledStructuredLogSink {
     inbox: Arc<StructuredInbox>,
     status: Arc<Shared>,
     thread: Thread,
-    clock: RobotClock,
     current: Option<StructuredRecord>,
     oversized: bool,
 }
@@ -74,7 +73,7 @@ impl crate::structured::StructuredLogOutput for ScheduledStructuredLogSink {
             self.current = self.inbox.free.pop();
         }
         if let Some(record) = &mut self.current {
-            record.len = crate::record::RECORD_HEADER_LEN;
+            record.len = 0;
         }
         self.oversized = false;
     }
@@ -105,8 +104,7 @@ impl crate::structured::StructuredLogOutput for ScheduledStructuredLogSink {
             if success {
                 self.status.inbox_drops.fetch_add(1, Ordering::Relaxed);
             }
-        } else if let Some(mut record) = record {
-            record.queued_at = self.clock.now();
+        } else if let Some(record) = record {
             // Every owned buffer has a slot in the bounded pending queue.
             if let Err(record) = self.inbox.pending.push(record) {
                 let _ = self.inbox.free.push(record);
@@ -124,7 +122,7 @@ struct Record {
     bytes: Box<[u8]>,
     len: usize,
     keyframe: bool,
-    queued_at: CuTime,
+    id: u64,
 }
 
 /// Live worker snapshot. Publication uses try_lock at 10 Hz, never on the RT path.
@@ -193,7 +191,6 @@ impl Drop for Worker {
 
 #[derive(Debug)]
 struct Inbox {
-    clock: RobotClock,
     worker: Arc<Worker>,
     pending: SyncSender<Record>,
     // Mutex supplies Sync for WriteStream; exclusive log() uses get_mut, never lock().
@@ -205,6 +202,7 @@ impl Inbox {
     fn submit(
         &mut self,
         keyframe: bool,
+        id: u64,
         encode: impl FnOnce(&mut [u8]) -> CuResult<usize>,
     ) -> CuResult<()> {
         if self.worker.shared.failed.load(Ordering::Acquire) {
@@ -223,7 +221,6 @@ impl Inbox {
                 return Err(CuError::from("Logstream sender worker stopped"));
             }
         };
-        let queued_at = self.clock.now();
         let len = match encode(&mut bytes) {
             Ok(len) => len,
             Err(error) => {
@@ -238,7 +235,7 @@ impl Inbox {
                 bytes,
                 len,
                 keyframe,
-                queued_at,
+                id,
             })
             .map_err(|_| CuError::from("Logstream sender inbox disconnected"))?;
         self.worker.thread.unpark();
@@ -260,7 +257,7 @@ impl<P: CopperListTuple> ScheduledCopperListSink<P> {
     }
 
     /// Select the generated capture encoder before handing the sink to its output worker.
-    pub fn with_encoder(
+    pub fn with_payload_encoder(
         mut self,
         encoder: fn(&CopperList<P>, &mut [u8]) -> crate::Result<usize>,
     ) -> Self
@@ -279,7 +276,7 @@ impl<P: CopperListTuple> Debug for ScheduledCopperListSink<P> {
 }
 impl<P: CopperListTuple + Send + Sync> WriteStream<CopperList<P>> for ScheduledCopperListSink<P> {
     fn log(&mut self, record: &CopperList<P>) -> CuResult<()> {
-        self.inbox.submit(false, |bytes| {
+        self.inbox.submit(false, record.id, |bytes| {
             (self.encoder)(record, bytes).map_err(|error| CuError::from(error.to_string()))
         })
     }
@@ -296,22 +293,93 @@ impl WriteStream<KeyFrame> for ScheduledKeyFrameSink {
         if !keyframe.culistid.is_multiple_of(u64::from(self.interval)) {
             return Ok(());
         }
-        self.inbox.submit(true, |bytes| {
-            if bytes.len() < crate::record::RECORD_HEADER_LEN {
-                return Err(CuError::from("Keyframe buffer too small"));
-            }
-            let (header, payload) = bytes.split_at_mut(crate::record::RECORD_HEADER_LEN);
-            let len = bincode::encode_into_slice(keyframe, payload, bincode::config::standard())
-                .map_err(|error| CuError::from(error.to_string()))?;
-            crate::record::encode_record_header(
-                crate::RecordKind::KeyFrame,
-                keyframe.culistid,
-                &payload[..len],
-                header,
-            )
-            .map_err(|error| CuError::from(error.to_string()))?;
-            Ok(header.len() + len)
+        self.inbox.submit(true, keyframe.culistid, |bytes| {
+            bincode::encode_into_slice(keyframe, bytes, bincode::config::standard())
+                .map_err(|error| CuError::from(error.to_string()))
         })
+    }
+}
+
+type TxFactory = Box<dyn FnOnce(RobotClock) -> CuResult<Box<dyn CuTelemetryTx>> + Send>;
+
+/// Injected destination used by generated runtime builders.
+#[doc(hidden)]
+pub enum TelemetryDestination {
+    Fec(Box<dyn CuStreamTx>, Box<LogStreamSenderConfig>),
+    Native {
+        make_tx: TxFactory,
+        max_capture_bytes: usize,
+        max_keyframe_bytes: usize,
+    },
+}
+
+impl TelemetryDestination {
+    pub fn start<P: crate::capture::CaptureDataSet + Send + Sync>(
+        self,
+        context: cu29_unifiedlog::SectionContext,
+        clock: RobotClock,
+    ) -> CuResult<(
+        ScheduledCopperListSink<P>,
+        ScheduledKeyFrameSink,
+        Option<cu29_runtime::monitoring::LogStreamMonitor>,
+    )> {
+        let schema = P::stream_schema();
+        let selective = !schema.reconstruction.is_empty();
+        let clock = if clock.is_mock() {
+            RobotClock::new()
+        } else {
+            clock
+        };
+        let (lists, frames, monitor) = match self {
+            Self::Native {
+                make_tx,
+                max_capture_bytes,
+                max_keyframe_bytes,
+            } => {
+                let tx = make_tx(clock.clone())?;
+                let session = CuTelemetrySession {
+                    identity: crate::StreamIdentity {
+                        session_id: crate::new_session_id(),
+                        sender_id: context.instance_id,
+                    },
+                    context,
+                    schema,
+                };
+                let (lists, frames, _) =
+                    telemetry_sinks(tx, session, max_capture_bytes, max_keyframe_bytes, clock)?;
+                (lists, frames, None)
+            }
+            Self::Fec(transport, config) => {
+                let mut config = *config;
+                let mut manifest =
+                    crate::SessionManifest::decode_record(&config.recovery.manifest_record)
+                        .map_err(|e| CuError::from(e.to_string()))?;
+                if manifest.application_schema != schema {
+                    return Err("injected sender must use the generated application schema".into());
+                }
+                config.continuous.identity.sender_id = context.instance_id;
+                config.recovery.finite.identity.sender_id = context.instance_id;
+                manifest.identity = config.continuous.identity;
+                manifest.context = context;
+                config.recovery.manifest_record = manifest
+                    .encode_record()
+                    .map_err(|e| CuError::from(e.to_string()))?;
+                let bitrate = config.pacing.bitrate_bps;
+                let baseline = config.continuous.repair_every_source_symbols;
+                let (lists, frames, monitor) = scheduled_sinks(transport, config, clock)?;
+                (
+                    lists,
+                    frames,
+                    Some(monitor.into_runtime_monitor("injected", bitrate, baseline)),
+                )
+            }
+        };
+        let lists = if selective {
+            lists.with_payload_encoder(crate::capture::encode_capture_into)
+        } else {
+            lists
+        };
+        Ok((lists, frames, monitor))
     }
 }
 
@@ -389,7 +457,7 @@ where
             "Feedback manifest identity and cadence must match the sender",
         ));
     }
-    let mut feedback = policy
+    let feedback = policy
         .map(|policy| {
             let baseline = u16::try_from(config.continuous.repair_every_source_symbols)
                 .map_err(|_| crate::Error::InvalidConfig("feedback baseline exceeds u16"))?;
@@ -421,15 +489,215 @@ where
             )
         })
         .ok_or_else(|| CuError::from("Sender pool size overflow"))?;
+    let header = crate::record::RECORD_HEADER_LEN;
+    if cl_bytes <= header || kf_bytes <= header {
+        return Err("FEC record budgets must leave room for payloads".into());
+    }
+    let staging = cl_bytes.max(kf_bytes);
+    let reserved = reserved
+        .checked_add(staging)
+        .ok_or_else(|| CuError::from("sender pool size overflow"))?;
+    let interval = config.recovery.recovery_interval;
+    let drain_time = config.pacing.max_latency;
+    let now = clock.now();
+    let core = SenderCore::new(config, now, reserved).map_err(|e| CuError::from(e.to_string()))?;
+    let driver = FecDriver {
+        clock: clock.clone(),
+        transport,
+        feedback,
+        core,
+        staging: vec![0; staging],
+        feedback_failed: false,
+    };
+    let session = manifest.ok().map(|m| CuTelemetrySession {
+        identity: m.identity,
+        schema: m.application_schema,
+        context: m.context,
+    });
+    spawn_worker(
+        driver,
+        clock,
+        cl_bytes - header,
+        kf_bytes - header,
+        structured_bytes - header,
+        interval,
+        drain_time,
+        session,
+    )
+}
+
+/// Starts the same bounded capture worker with a customer-supplied packet protocol.
+/// Byte limits bound one native capture and one native keyframe respectively.
+fn telemetry_sinks<P: CopperListTuple + Send + Sync>(
+    tx: Box<dyn CuTelemetryTx>,
+    session: CuTelemetrySession,
+    cl_bytes: usize,
+    kf_bytes: usize,
+    clock: RobotClock,
+) -> CuResult<(
+    ScheduledCopperListSink<P>,
+    ScheduledKeyFrameSink,
+    SenderMonitor,
+)> {
+    if cl_bytes == 0 || kf_bytes == 0 {
+        return Err("telemetry record limits must be positive".into());
+    }
+    spawn_worker(
+        CustomerDriver(tx),
+        clock,
+        cl_bytes,
+        kf_bytes,
+        kf_bytes.min(STRUCTURED_RECORD_BYTES),
+        1,
+        CuDuration::from_millis(50),
+        Some(session),
+    )
+}
+
+trait Driver: CuTelemetryTx {
+    fn discard_pending(&mut self) {}
+    fn stats(&self) -> Option<SenderStats> {
+        None
+    }
+    fn feedback(&self) -> Option<FeedbackSnapshot> {
+        None
+    }
+    fn feedback_failed(&self) -> bool {
+        false
+    }
+}
+
+struct CustomerDriver(Box<dyn CuTelemetryTx>);
+impl CuTelemetryTx for CustomerDriver {
+    fn send(&mut self, record: CuTelemetryRecord<'_>) -> CuResult<()> {
+        self.0.send(record)
+    }
+    fn poll(&mut self, mode: TxMode) -> CuResult<Option<CuTime>> {
+        self.0.poll(mode)
+    }
+}
+impl Driver for CustomerDriver {}
+
+struct FecDriver<T> {
+    clock: RobotClock,
+    transport: T,
+    feedback: Option<FeedbackController>,
+    feedback_failed: bool,
+    core: SenderCore,
+    staging: Vec<u8>,
+}
+impl<T: CuStreamTx + CuFeedbackRx> CuTelemetryTx for FecDriver<T> {
+    fn send(&mut self, record: CuTelemetryRecord<'_>) -> CuResult<()> {
+        let now = self.clock.now();
+        let (kind, id, bytes) = match record {
+            CuTelemetryRecord::CopperList { id, capture } => {
+                (crate::RecordKind::CopperList, id, capture)
+            }
+            CuTelemetryRecord::KeyFrame {
+                copperlist_id,
+                state,
+            } => (crate::RecordKind::KeyFrame, copperlist_id, state),
+            CuTelemetryRecord::StructuredLog { sequence, entry } => {
+                (crate::RecordKind::StructuredLog, sequence, entry)
+            }
+            CuTelemetryRecord::Session(session) => {
+                // The pacing core has the repeated manifest from setup.
+                return self
+                    .core
+                    .check_session(session)
+                    .map_err(|e| CuError::from(e.to_string()));
+            }
+        };
+        let (header, payload) = self.staging.split_at_mut(crate::record::RECORD_HEADER_LEN);
+        let out = payload
+            .get_mut(..bytes.len())
+            .ok_or_else(|| CuError::from("FEC record exceeds configured bound"))?;
+        out.copy_from_slice(bytes);
+        crate::record::encode_record_header(kind, id, out, header)
+            .map_err(|e| CuError::from(e.to_string()))?;
+        self.core
+            .accept_record(
+                &self.staging[..crate::record::RECORD_HEADER_LEN + bytes.len()],
+                now,
+            )
+            .map_err(|e| CuError::from(e.to_string()))
+    }
+    fn poll(&mut self, mode: TxMode) -> CuResult<Option<CuTime>> {
+        let now = self.clock.now();
+        if mode == TxMode::Draining {
+            self.core.begin_shutdown();
+        }
+        let mut feedback_packet = [0; FEEDBACK_BUFFER_BYTES];
+        if let Some(controller) = &mut self.feedback {
+            for _ in 0..8 {
+                if self.feedback_failed {
+                    break;
+                }
+                match self.transport.try_recv_feedback(&mut feedback_packet) {
+                    Ok(Some(len)) => match feedback_packet
+                        .get(..len)
+                        .and_then(|p| ReceiverReport::decode(p).ok())
+                    {
+                        Some(report) => {
+                            if controller.receive(report, now) {
+                                self.core.request_recovery();
+                            }
+                        }
+                        None => controller.invalid_report(),
+                    },
+                    Ok(None) => break,
+                    Err(CuStreamRxError::BufferTooSmall { .. }) => controller.invalid_report(),
+                    Err(CuStreamRxError::Failed(_)) => {
+                        self.feedback_failed = true;
+                    }
+                }
+            }
+            controller.tick(now);
+            self.core
+                .set_repair_interval(controller.snapshot().effective_repair_every_source_symbols)
+                .map_err(|e| CuError::from(e.to_string()))?;
+        }
+
+        self.core
+            .poll(now, &mut self.transport)
+            .map_err(|e| CuError::from(e.to_string()))
+    }
+}
+impl<T: CuStreamTx + CuFeedbackRx> Driver for FecDriver<T> {
+    fn discard_pending(&mut self) {
+        self.core.discard_pending();
+    }
+    fn stats(&self) -> Option<SenderStats> {
+        Some(self.core.stats())
+    }
+    fn feedback(&self) -> Option<FeedbackSnapshot> {
+        self.feedback.as_ref().map(FeedbackController::snapshot)
+    }
+    fn feedback_failed(&self) -> bool {
+        self.feedback_failed
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn spawn_worker<P: CopperListTuple + Send + Sync>(
+    mut driver: impl Driver + 'static,
+    clock: RobotClock,
+    cl_bytes: usize,
+    kf_bytes: usize,
+    structured_bytes: usize,
+    interval: u32,
+    drain_time: CuDuration,
+    session: Option<CuTelemetrySession>,
+) -> CuResult<(
+    ScheduledCopperListSink<P>,
+    ScheduledKeyFrameSink,
+    SenderMonitor,
+)> {
     let shutdown_clock = if clock.is_mock() {
         RobotClock::new()
     } else {
         clock.clone()
     };
-    let interval = config.recovery.recovery_interval;
-    let drain_time = config.pacing.max_latency;
-    let mut core = SenderCore::new(config, clock.now(), reserved)
-        .map_err(|error| CuError::from(error.to_string()))?;
     let (pending, records) = mpsc::sync_channel::<Record>(CL_BUFFERS + KF_BUFFERS);
     let (cl_return, cl_free) = mpsc::sync_channel(CL_BUFFERS);
     let (kf_return, kf_free) = mpsc::sync_channel(KF_BUFFERS);
@@ -451,17 +719,13 @@ where
         let _ = structured.free.push(StructuredRecord {
             bytes: vec![0; structured_bytes].into_boxed_slice(),
             len: 0,
-            queued_at: CuTime::default(),
         });
     }
     let structured_worker = structured.clone();
-    let structured_clock = clock.clone();
-    let cl_clock = clock.clone();
-    let kf_clock = clock.clone();
     let shared = Arc::new(Shared::default());
     *shared.snapshot.lock().expect("new snapshot") = SenderSnapshot {
         sampled_at: clock.now(),
-        feedback: feedback.as_ref().map(FeedbackController::snapshot),
+        feedback: driver.feedback(),
         ..Default::default()
     };
     let status = shared.clone();
@@ -470,42 +734,24 @@ where
     let handle = std::thread::Builder::new()
         .name("cu-logstream".into())
         .spawn(move || {
-            let mut transport = transport;
-            let mut feedback_packet = [0; FEEDBACK_BUFFER_BYTES];
-            let mut feedback_failed = false;
             let mut next_snapshot = clock.now();
             let mut stop_at = None;
             let mut structured_id = 0u64;
             // Teardown remains finite even for deliberately frozen scheduler test clocks.
             let result = (|| -> crate::Result<()> {
+                if let Some(session) = &session { driver.send(CuTelemetryRecord::Session(session)).map_err(|e| crate::Error::Codec(e.to_string()))?; }
                 loop {
                     if status.stop.load(Ordering::Acquire) && stop_at.is_none() {
-                        core.begin_shutdown();
                         stop_at = Some(shutdown_clock.now() + drain_time);
-                    }
-                    if let Some(controller) = &mut feedback {
-                        for _ in 0..8 {
-                            if feedback_failed { break; }
-                            match transport.try_recv_feedback(&mut feedback_packet) {
-                                Ok(Some(len)) => match feedback_packet.get(..len).and_then(|p| ReceiverReport::decode(p).ok()) {
-                                    Some(report) => { if controller.receive(report, clock.now()) { core.request_recovery(); } }
-                                    None => controller.invalid_report(),
-                                },
-                                Ok(None) => break,
-                                Err(CuStreamRxError::BufferTooSmall { .. }) => controller.invalid_report(),
-                                Err(CuStreamRxError::Failed(_)) => { feedback_failed = true; }
-                            }
-                        }
-                        controller.tick(clock.now());
-                        core.set_repair_interval(controller.snapshot().effective_repair_every_source_symbols)?;
                     }
                     let mut received = 0;
                     for _ in 0..CL_BUFFERS + KF_BUFFERS {
                         let Ok(record) = records.try_recv() else {
                             break;
                         };
-                        let result =
-                            core.accept_record(&record.bytes[..record.len], record.queued_at);
+                        let bytes = &record.bytes[..record.len];
+                        let value = if record.keyframe { CuTelemetryRecord::KeyFrame { copperlist_id: record.id, state: bytes } } else { CuTelemetryRecord::CopperList { id: record.id, capture: bytes } };
+                        let result = driver.send(value).map_err(|e| crate::Error::Codec(e.to_string()));
                         let returned = if record.keyframe {
                             &kf_return
                         } else {
@@ -516,30 +762,28 @@ where
                         received += 1;
                     }
                     for _ in 0..STRUCTURED_BUFFERS {
-                        let Some(mut record) = structured_worker.pending.pop() else { break; };
-                        let (header, payload) = record.bytes[..record.len].split_at_mut(crate::record::RECORD_HEADER_LEN);
-                        let result = crate::record::encode_record_header(
-                            crate::RecordKind::StructuredLog, structured_id, payload, header,
-                        ).and_then(|()| core.accept_record(&record.bytes[..record.len], record.queued_at));
+                        let Some(record) = structured_worker.pending.pop() else { break; };
+                        let result = driver.send(CuTelemetryRecord::StructuredLog {sequence: structured_id,entry: &record.bytes[..record.len]}).map_err(|e| crate::Error::Codec(e.to_string()));
                         let _ = structured_worker.free.push(record);
                         result?;
                         structured_id = structured_id.checked_add(1)
                             .ok_or(crate::Error::InvalidConfig("structured log sequence exhausted"))?;
                         received += 1;
                     }
-                    let next = core.poll(clock.now(), &mut transport)?;
+                    let mode = if stop_at.is_some() { TxMode::Draining } else { TxMode::Running };
+                    let next = driver.poll(mode).map_err(|e| crate::Error::Codec(e.to_string()))?;
                     let now = clock.now();
                     if now >= next_snapshot {
                         if let Ok(mut snapshot) = status.snapshot.try_lock() {
-                            *snapshot = SenderSnapshot { sampled_at: now, stats: core.stats(),
+                            *snapshot = SenderSnapshot { sampled_at: now, stats: driver.stats().unwrap_or_default(),
                                 inbox_drops: status.inbox_drops.load(Ordering::Relaxed),
-                                feedback: feedback.as_ref().map(FeedbackController::snapshot), feedback_failed,
+                                feedback: driver.feedback(), feedback_failed: driver.feedback_failed(),
                                 ..Default::default() };
                         }
                         next_snapshot = now + CuDuration::from_millis(100);
                     }
                     if stop_at.is_some_and(|deadline| shutdown_clock.now() >= deadline)
-                        || (stop_at.is_some() && received == 0 && core.is_idle())
+                        || (stop_at.is_some() && received == 0 && next.is_none())
                     {
                         break;
                     }
@@ -561,21 +805,25 @@ where
                 Ok(())
             })();
             status.failed.store(result.is_err(), Ordering::Release);
-            core.discard_pending();
+            driver.discard_pending();
             while let Some(record) = structured_worker.pending.pop() {
                 status.inbox_drops.fetch_add(1, Ordering::Relaxed);
                 let _ = structured_worker.free.push(record);
             }
-            let stats = core.stats();
-            *status.final_stats.lock().expect("sender stats") = Some(stats);
+            let stats = driver.stats();
+            *status.final_stats.lock().expect("sender stats") = stats;
             *status.snapshot.lock().expect("sender snapshot") = SenderSnapshot {
-                sampled_at: clock.now(), stats, inbox_drops: status.inbox_drops.load(Ordering::Relaxed),
-                stopped: true, failed: result.is_err(), feedback_failed,
-                feedback: feedback.as_ref().map(FeedbackController::snapshot),
+                sampled_at: clock.now(), stats: stats.unwrap_or_default(), inbox_drops: status.inbox_drops.load(Ordering::Relaxed),
+                stopped: true, failed: result.is_err(), feedback_failed: driver.feedback_failed(),
+                feedback: driver.feedback(),
             };
-            cu29_log_derive::info!("Logstream sender stopped: sent={} bytes={} queue_drops={} expired={} transport_drops={} inbox_drops={} shutdown_drops={}",
+            if let Some(stats) = stats {
+                cu29_log_derive::info!("Logstream sender stopped: sent={} bytes={} queue_drops={} expired={} transport_drops={} inbox_drops={} shutdown_drops={}",
                 stats.packets_sent, stats.bytes_sent, stats.queue_drops, stats.expired_packets, stats.transport_drops,
                 status.inbox_drops.load(Ordering::Relaxed), stats.shutdown_drops);
+            } else {
+                cu29_log_derive::info!("Telemetry sender stopped: inbox_drops={}", status.inbox_drops.load(Ordering::Relaxed));
+            }
             if let Err(error) = result {
                 status.failed.store(true, Ordering::Release);
                 cu29_log_derive::error!("Logstream sender failed: {}", error.to_string());
@@ -593,13 +841,14 @@ where
                 inbox: structured,
                 status: shared.clone(),
                 thread: worker.thread.clone(),
-                clock: structured_clock,
                 current: None,
                 oversized: false,
             }),
-            encoder: crate::encode_copperlist_record_into,
+            encoder: |list, bytes| {
+                bincode::encode_into_slice(list, bytes, bincode::config::standard())
+                    .map_err(|e| crate::Error::Codec(e.to_string()))
+            },
             inbox: Inbox {
-                clock: cl_clock,
                 worker: worker.clone(),
                 pending: pending.clone(),
                 free: Mutex::new(cl_free),
@@ -609,7 +858,6 @@ where
         },
         ScheduledKeyFrameSink {
             inbox: Inbox {
-                clock: kf_clock,
                 worker,
                 pending,
                 free: Mutex::new(kf_free),
