@@ -54,6 +54,8 @@ mod de;
 #[cfg(feature = "python")]
 mod python;
 mod ser;
+mod static_value;
+pub use static_value::StaticValue;
 
 pub use de::*;
 #[cfg(feature = "python")]
