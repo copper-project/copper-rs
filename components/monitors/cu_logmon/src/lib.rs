@@ -48,7 +48,7 @@ struct WindowState {
     last_report_at: Option<CuTime>,
     last_log_duration: CuDuration,
     end_to_end: CuDurationStatistics,
-    per_component: Vec<CuDurationStatistics>,
+    per_component: Vec<Option<CuDuration>>,
 }
 
 impl WindowState {
@@ -61,10 +61,10 @@ impl WindowState {
         #[cfg(target_os = "none")]
         info!(
             "WindowState::new: stats_size={} per_component_bytes={}",
-            core::mem::size_of::<CuDurationStatistics>(),
-            core::mem::size_of::<CuDurationStatistics>() * component_count
+            core::mem::size_of::<Option<CuDuration>>(),
+            core::mem::size_of::<Option<CuDuration>>() * component_count
         );
-        let per_component = vec![CuDurationStatistics::new(max_sample); component_count];
+        let per_component = vec![None; component_count];
         #[cfg(target_os = "none")]
         info!("WindowState::new: init done");
         Self {
@@ -81,9 +81,7 @@ impl WindowState {
         self.window_copperlists = 0;
         self.last_report_at = Some(now);
         self.end_to_end.reset();
-        for stat in &mut self.per_component {
-            stat.reset();
-        }
+        self.per_component.fill(None);
     }
 }
 
@@ -215,15 +213,13 @@ fn end_to_end_latency(msgs: &[&CuMsgMetadata]) -> Option<CuDuration> {
 }
 
 fn find_top_components_by_max(
-    per_component: &[CuDurationStatistics],
+    per_component: &[Option<CuDuration>],
     limit: usize,
 ) -> Vec<(ComponentId, CuDuration)> {
     let mut ranked: Vec<(ComponentId, CuDuration)> = per_component
         .iter()
         .enumerate()
-        .filter_map(|(idx, stats)| {
-            (!stats.is_empty()).then_some((ComponentId::new(idx), stats.max()))
-        })
+        .filter_map(|(idx, stats)| stats.map(|max| (ComponentId::new(idx), max)))
         .collect();
     ranked.sort_unstable_by(|a, b| {
         b.1.as_nanos()
@@ -331,7 +327,8 @@ impl CuMonitor for CuLogMon {
                 if let Some(component_stat) = window.per_component.get_mut(component_index)
                     && let Some(duration) = component_duration(entry.msg)
                 {
-                    component_stat.record(duration);
+                    *component_stat =
+                        Some(component_stat.map_or(duration, |max| max.max(duration)));
                 } else {
                     debug_assert!(
                         component_index < window.per_component.len(),
@@ -420,4 +417,26 @@ impl CuMonitor for CuLogMon {
         unregister_live_log_listener();
         Ok(())
     }
+}
+
+#[test]
+fn ranks_zero_duration_samples_and_clears_window_maxima() {
+    let mut window = WindowState::new(4, CuDuration(100));
+    window.per_component.copy_from_slice(&[
+        None,
+        Some(CuDuration(0)),
+        Some(CuDuration(9)),
+        Some(CuDuration(9)),
+    ]);
+    let ranked = find_top_components_by_max(&window.per_component, 4);
+    assert_eq!(
+        ranked,
+        vec![
+            (ComponentId::new(2), CuDuration(9)),
+            (ComponentId::new(3), CuDuration(9)),
+            (ComponentId::new(1), CuDuration(0))
+        ]
+    );
+    window.reset_window(CuTime(1));
+    assert!(find_top_components_by_max(&window.per_component, 4).is_empty());
 }
