@@ -435,43 +435,6 @@ where
     T: CuStreamTx + CuFeedbackRx + 'static,
 {
     let manifest = crate::SessionManifest::decode_record(&config.recovery.manifest_record);
-    let policy = config.feedback;
-    let advertised = manifest
-        .as_ref()
-        .ok()
-        .and_then(|manifest| manifest.requirements.feedback);
-    if policy.is_some() != feedback_enabled || advertised.is_some() != feedback_enabled {
-        return Err(CuError::from(
-            "Feedback transport wiring must match manifest capability",
-        ));
-    }
-    if let (Some(policy), Some(advertised)) = (policy, advertised)
-        && (manifest
-            .as_ref()
-            .expect("validated feedback manifest")
-            .identity
-            != config.continuous.identity
-            || advertised.report_interval_ms != policy.report_interval_ms)
-    {
-        return Err(CuError::from(
-            "Feedback manifest identity and cadence must match the sender",
-        ));
-    }
-    let feedback = policy
-        .map(|policy| {
-            let baseline = u16::try_from(config.continuous.repair_every_source_symbols)
-                .map_err(|_| crate::Error::InvalidConfig("feedback baseline exceeds u16"))?;
-            FeedbackController::new(
-                policy,
-                config.continuous.identity,
-                advertised
-                    .expect("validated feedback capability")
-                    .destination,
-                baseline,
-            )
-        })
-        .transpose()
-        .map_err(|error| CuError::from(error.to_string()))?;
     let cl_bytes = config.continuous.max_record_bytes;
     let kf_bytes = usize::try_from(config.recovery.finite.max_object_bytes)
         .map_err(|_| CuError::from("Keyframe limit exceeds usize"))?;
@@ -493,21 +456,19 @@ where
     if cl_bytes <= header || kf_bytes <= header {
         return Err("FEC record budgets must leave room for payloads".into());
     }
-    let staging = cl_bytes.max(kf_bytes);
-    let reserved = reserved
-        .checked_add(staging)
-        .ok_or_else(|| CuError::from("sender pool size overflow"))?;
     let interval = config.recovery.recovery_interval;
     let drain_time = config.pacing.max_latency;
-    let now = clock.now();
-    let core = SenderCore::new(config, now, reserved).map_err(|e| CuError::from(e.to_string()))?;
-    let driver = FecDriver {
+    let state = FecState::new(
+        config,
+        manifest.as_ref().ok(),
+        feedback_enabled,
+        clock.now(),
+        reserved,
+    )?;
+    let driver = FecTelemetryTx {
         clock: clock.clone(),
         transport,
-        feedback,
-        core,
-        staging: vec![0; staging],
-        feedback_failed: false,
+        session: FecSession::Active(Box::new(state)),
     };
     let session = manifest.ok().map(|m| CuTelemetrySession {
         identity: m.identity,
@@ -578,17 +539,149 @@ impl CuTelemetryTx for CustomerDriver {
 }
 impl Driver for CustomerDriver {}
 
-struct FecDriver<T> {
+/// Record-level FEC sender driven by the telemetry worker. The opening session
+/// supplies the shared identity, schema and mission for the repeated FEC manifest.
+pub struct FecTelemetryTx<T> {
     clock: RobotClock,
     transport: T,
+    session: FecSession,
+}
+
+enum FecSession {
+    Waiting(crate::LogStreamPlan),
+    Active(Box<FecState>),
+}
+
+impl<T: CuStreamTx> FecTelemetryTx<OneWay<T>> {
+    /// Create a one-way FEC sender. The plan budgets this branch's FEC buffers;
+    /// the native worker's shared record pool is sized separately by the app builder.
+    pub fn new(transport: T, plan: crate::LogStreamPlan, clock: RobotClock) -> CuResult<Self> {
+        Self::waiting(OneWay::new(transport), plan, clock, false)
+    }
+}
+
+impl<T: CuStreamTx + CuFeedbackRx> FecTelemetryTx<T> {
+    /// Use the transport's return channel for advisory receiver feedback.
+    pub fn new_with_feedback(
+        transport: T,
+        plan: crate::LogStreamPlan,
+        clock: RobotClock,
+    ) -> CuResult<Self> {
+        Self::waiting(transport, plan, clock, true)
+    }
+
+    fn waiting(
+        transport: T,
+        plan: crate::LogStreamPlan,
+        clock: RobotClock,
+        feedback: bool,
+    ) -> CuResult<Self> {
+        plan.validate().map_err(|e| CuError::from(e.to_string()))?;
+        if plan.feedback.is_some() != feedback {
+            return Err("feedback policy must match the transport wiring".into());
+        }
+        Ok(Self {
+            clock,
+            transport,
+            session: FecSession::Waiting(plan),
+        })
+    }
+}
+
+impl<T: CuStreamTx + CuFeedbackRx> CuTelemetryTx for FecTelemetryTx<T> {
+    fn send(&mut self, record: CuTelemetryRecord<'_>) -> CuResult<()> {
+        let now = self.clock.now();
+        match &mut self.session {
+            FecSession::Active(state) => state.send(now, record),
+            FecSession::Waiting(plan) => {
+                let CuTelemetryRecord::Session(session) = record else {
+                    return Err("FEC sender requires an opening session".into());
+                };
+                let config = plan
+                    .sender_config(session.identity, session.schema.clone(), session.context)
+                    .map_err(|e| CuError::from(e.to_string()))?;
+                let manifest =
+                    crate::SessionManifest::decode_record(&config.recovery.manifest_record)
+                        .map_err(|e| CuError::from(e.to_string()))?;
+                let state =
+                    FecState::new(config, Some(&manifest), plan.feedback.is_some(), now, 0)?;
+                self.session = FecSession::Active(Box::new(state));
+                Ok(())
+            }
+        }
+    }
+
+    fn poll(&mut self, mode: TxMode) -> CuResult<Option<CuTime>> {
+        match &mut self.session {
+            FecSession::Active(state) => state.poll(&mut self.transport, self.clock.now(), mode),
+            FecSession::Waiting(_) => Ok(None),
+        }
+    }
+}
+
+struct FecState {
     feedback: Option<FeedbackController>,
     feedback_failed: bool,
     core: SenderCore,
     staging: Vec<u8>,
 }
-impl<T: CuStreamTx + CuFeedbackRx> CuTelemetryTx for FecDriver<T> {
-    fn send(&mut self, record: CuTelemetryRecord<'_>) -> CuResult<()> {
-        let now = self.clock.now();
+impl FecState {
+    fn new(
+        config: LogStreamSenderConfig,
+        manifest: Option<&crate::SessionManifest>,
+        feedback_enabled: bool,
+        now: CuTime,
+        reserved: usize,
+    ) -> CuResult<Self> {
+        let policy = config.feedback;
+        let advertised = manifest.and_then(|manifest| manifest.requirements.feedback);
+        if policy.is_some() != feedback_enabled || advertised.is_some() != feedback_enabled {
+            return Err(CuError::from(
+                "Feedback transport wiring must match manifest capability",
+            ));
+        }
+        if let (Some(policy), Some(advertised)) = (policy, advertised)
+            && (manifest.expect("validated feedback manifest").identity
+                != config.continuous.identity
+                || advertised.report_interval_ms != policy.report_interval_ms)
+        {
+            return Err(CuError::from(
+                "Feedback manifest identity and cadence must match the sender",
+            ));
+        }
+        let feedback = policy
+            .map(|policy| {
+                let baseline = u16::try_from(config.continuous.repair_every_source_symbols)
+                    .map_err(|_| crate::Error::InvalidConfig("feedback baseline exceeds u16"))?;
+                FeedbackController::new(
+                    policy,
+                    config.continuous.identity,
+                    advertised
+                        .expect("validated feedback capability")
+                        .destination,
+                    baseline,
+                )
+            })
+            .transpose()
+            .map_err(|error| CuError::from(error.to_string()))?;
+        let staging = config.continuous.max_record_bytes.max(
+            usize::try_from(config.recovery.finite.max_object_bytes)
+                .map_err(|_| CuError::from("Keyframe limit exceeds usize"))?,
+        );
+        let reserved = reserved
+            .checked_add(staging)
+            .ok_or_else(|| CuError::from("sender pool size overflow"))?;
+        let core =
+            SenderCore::new(config, now, reserved).map_err(|e| CuError::from(e.to_string()))?;
+        Ok(Self {
+            feedback,
+            core,
+            staging: vec![0; staging],
+            feedback_failed: false,
+        })
+    }
+
+    fn send(&mut self, now: CuTime, record: CuTelemetryRecord<'_>) -> CuResult<()> {
         let (kind, id, bytes) = match record {
             CuTelemetryRecord::CopperList { id, capture } => {
                 (crate::RecordKind::CopperList, id, capture)
@@ -622,8 +715,12 @@ impl<T: CuStreamTx + CuFeedbackRx> CuTelemetryTx for FecDriver<T> {
             )
             .map_err(|e| CuError::from(e.to_string()))
     }
-    fn poll(&mut self, mode: TxMode) -> CuResult<Option<CuTime>> {
-        let now = self.clock.now();
+    fn poll(
+        &mut self,
+        transport: &mut (impl CuStreamTx + CuFeedbackRx),
+        now: CuTime,
+        mode: TxMode,
+    ) -> CuResult<Option<CuTime>> {
         if mode == TxMode::Draining {
             self.core.begin_shutdown();
         }
@@ -633,7 +730,7 @@ impl<T: CuStreamTx + CuFeedbackRx> CuTelemetryTx for FecDriver<T> {
                 if self.feedback_failed {
                     break;
                 }
-                match self.transport.try_recv_feedback(&mut feedback_packet) {
+                match transport.try_recv_feedback(&mut feedback_packet) {
                     Ok(Some(len)) => match feedback_packet
                         .get(..len)
                         .and_then(|p| ReceiverReport::decode(p).ok())
@@ -659,22 +756,30 @@ impl<T: CuStreamTx + CuFeedbackRx> CuTelemetryTx for FecDriver<T> {
         }
 
         self.core
-            .poll(now, &mut self.transport)
+            .poll(now, transport)
             .map_err(|e| CuError::from(e.to_string()))
     }
 }
-impl<T: CuStreamTx + CuFeedbackRx> Driver for FecDriver<T> {
+impl<T: CuStreamTx + CuFeedbackRx> Driver for FecTelemetryTx<T> {
     fn discard_pending(&mut self) {
-        self.core.discard_pending();
+        if let FecSession::Active(state) = &mut self.session {
+            state.core.discard_pending();
+        }
     }
     fn stats(&self) -> Option<SenderStats> {
-        Some(self.core.stats())
+        match &self.session {
+            FecSession::Active(state) => Some(state.core.stats()),
+            FecSession::Waiting(_) => None,
+        }
     }
     fn feedback(&self) -> Option<FeedbackSnapshot> {
-        self.feedback.as_ref().map(FeedbackController::snapshot)
+        match &self.session {
+            FecSession::Active(state) => state.feedback.as_ref().map(FeedbackController::snapshot),
+            FecSession::Waiting(_) => None,
+        }
     }
     fn feedback_failed(&self) -> bool {
-        self.feedback_failed
+        matches!(&self.session, FecSession::Active(state) if state.feedback_failed)
     }
 }
 
