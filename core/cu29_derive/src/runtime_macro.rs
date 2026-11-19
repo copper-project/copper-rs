@@ -4103,6 +4103,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             )
         };
 
+        let topology_factory = if cfg!(feature = "static-config") {
+            if monitor_configs.is_empty() {
+                quote!(.with_topology(|_, _| Ok(Default::default())))
+            } else {
+                match static_config::topology(&copper_config, mission) {
+                    Ok(topology) => quote!(.with_topology(|_, _| Ok(#topology))),
+                    Err(error) => return return_error(error.to_string()),
+                }
+            }
+        } else { quote!() };
         let build_with_resources_fn = quote! {
             #build_with_resources_sig {
                 let AppResources {
@@ -4175,7 +4185,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         #parallel_rt_metadata_arg
                         #monitor_instanciator,
                         #mission_mod::bridges_instanciator,
-                    ),
+                    ) #topology_factory,
                     copperlist_sink,
                     keyframe_sink,
                     output_requirements,
