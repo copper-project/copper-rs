@@ -86,6 +86,7 @@ pub trait CuSubsystemMetadata {
 pub trait CuApplication<S: SectionStorage, L: UnifiedLogWrite<S> + 'static> {
     /// Returns the original configuration as a string, typically loaded from a RON file.
     /// This configuration represents the default settings for the application before any overrides.
+    /// Static-config builds return an empty string. Recover the build configuration from Git provenance.
     fn get_original_config() -> String;
 
     /// Starts all tasks managed by the application/runtime.
@@ -160,6 +161,7 @@ pub trait CuSimApplication<S: SectionStorage, L: UnifiedLogWrite<S> + 'static> {
 
     /// Returns the original configuration as a string, typically loaded from a RON file.
     /// This configuration represents the default settings for the application before any overrides.
+    /// Static-config builds return an empty string. Recover the build configuration from Git provenance.
     fn get_original_config() -> String;
 
     /// Returns the mission id this generated application is bound to, when applicable.

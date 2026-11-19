@@ -151,6 +151,7 @@ pub struct ApplicationMetadata {
     pub git_dirty: Option<bool>,
     pub subsystem_id: Option<alloc::string::String>,
     pub subsystem_code: u16,
+    /// Empty for static-config builds. Use the recorded Git revision to recover the configuration.
     pub effective_config_ron: alloc::string::String,
     pub missions: Vec<alloc::string::String>,
     pub catalog_offset: u64,

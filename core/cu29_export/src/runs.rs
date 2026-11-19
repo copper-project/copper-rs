@@ -96,7 +96,8 @@ pub(crate) fn discover(path: &Path) -> CuResult<Vec<RecordedRun>> {
             run.run_id = run_id;
             run.mission_index = header.context.mission_index;
             if let Some(metadata) = &metadata {
-                run.config = Some(metadata.effective_config_ron.clone());
+                run.config = (!metadata.effective_config_ron.is_empty())
+                    .then(|| metadata.effective_config_ron.clone());
                 run.stack = Some(RuntimeLifecycleStackInfo {
                     app_name: metadata.app_name.clone(),
                     app_version: metadata.app_version.clone(),
@@ -165,7 +166,8 @@ pub(crate) fn discover(path: &Path) -> CuResult<Vec<RecordedRun>> {
     if runs.is_empty() {
         let mut run = RecordedRun::new(0, beginning);
         if let Some(metadata) = metadata {
-            run.config = Some(metadata.effective_config_ron);
+            run.config = (!metadata.effective_config_ron.is_empty())
+                .then_some(metadata.effective_config_ron);
             run.missions.extend(metadata.missions.into_iter().take(1));
         }
         runs.push(run);

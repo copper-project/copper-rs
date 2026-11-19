@@ -362,7 +362,9 @@ where
         clock_mock: RobotClockMock,
         log_base: &Path,
     ) -> CuResult<Self> {
-        crate::logcodec::set_effective_config_ron::<P>(&assignment.log.effective_config_ron);
+        if !assignment.log.effective_config_ron.is_empty() {
+            crate::logcodec::set_effective_config_ron::<P>(&assignment.log.effective_config_ron);
+        }
         let (sections, keyframes, total_entries) =
             index_log::<P, _>(log_base, &recorded_copperlist_timestamp::<P>)?;
         let log_reader = build_read_logger(log_base)?;
@@ -1121,7 +1123,9 @@ where
         + CuDistributedReplayApplication<MmapSectionStorage, UnifiedLoggerWrite>
         + 'static,
 {
-    let config = read_configuration_str(assignment.log.effective_config_ron.clone(), None)
+    let config = (!assignment.log.effective_config_ron.is_empty())
+        .then(|| read_configuration_str(assignment.log.effective_config_ron.clone(), None))
+        .transpose()
         .map_err(|err| {
             CuError::from(format!(
                 "Failed to parse recorded effective config from '{}': {err}",
@@ -1134,13 +1138,13 @@ where
         let output_log_path = replay_output_log_path(output_root, assignment)?;
         let logger = build_replay_output_logger(
             &output_log_path,
-            replay_output_log_size_bytes(assignment, &config),
+            replay_output_log_size_bytes(assignment, config.as_ref()),
         )?;
         let app = <App as CuDistributedReplayApplication<
             MmapSectionStorage,
             UnifiedLoggerWrite,
         >>::build_distributed_replay(
-            clock.clone(), logger, assignment.instance_id, Some(config)
+            clock.clone(), logger, assignment.instance_id, config
         )?;
         let mut session = RecordedReplaySession::<
             App,
@@ -1164,7 +1168,7 @@ where
         clock,
         logger,
         assignment.instance_id,
-        Some(config),
+        config,
     )?;
     let mut session = RecordedReplaySession::<
         App,
@@ -1241,7 +1245,7 @@ fn build_replay_output_logger(
 
 fn replay_output_log_size_bytes(
     assignment: &DistributedReplayAssignment,
-    config: &crate::config::CuConfig,
+    config: Option<&crate::config::CuConfig>,
 ) -> usize {
     if let Some(slab_zero) = slab_zero_path(&assignment.log.base_path)
         && let Ok(metadata) = fs::metadata(slab_zero)
@@ -1251,8 +1255,7 @@ fn replay_output_log_size_bytes(
     }
 
     config
-        .logging
-        .as_ref()
+        .and_then(|config| config.logging.as_ref())
         .and_then(|logging| logging.slab_size_mib)
         .and_then(|size_mib| usize::try_from(size_mib).ok())
         .and_then(|size_mib| size_mib.checked_mul(1024 * 1024))

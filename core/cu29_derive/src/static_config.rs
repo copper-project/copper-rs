@@ -95,3 +95,35 @@ pub(super) fn topology(
         quote!(#m::MonitorTopology { nodes: vec![#(#nodes),*], connections: vec![#(#connections),*] }),
     )
 }
+
+/// Lower Serde settings to the same flash-backed scalars, lists and maps as task parameters.
+pub(super) fn settings<T: serde::Serialize>(settings: &T) -> cu29_traits::CuResult<TokenStream> {
+    fn lower(v: serde_value::Value) -> Value {
+        use serde_value::Value as V;
+        match v {
+            V::Bool(v) => v.into(),
+            V::Char(v) => v.into(),
+            V::String(v) => v.into(),
+            V::U8(v) => v.into(),
+            V::U16(v) => v.into(),
+            V::U32(v) => v.into(),
+            V::U64(v) => v.into(),
+            V::I8(v) => v.into(),
+            V::I16(v) => v.into(),
+            V::I32(v) => v.into(),
+            V::I64(v) => v.into(),
+            V::F32(v) => v.into(),
+            V::F64(v) => v.into(),
+            V::Bytes(v) => Value::Bytes(v),
+            V::Unit => Value::Unit,
+            V::Option(v) => Value::Option(v.map(|x| Box::new(lower(*x)))),
+            V::Newtype(v) => lower(*v),
+            V::Seq(v) => Value::Seq(v.into_iter().map(lower).collect()),
+            V::Map(v) => Value::Map(v.into_iter().map(|(k, v)| (lower(k), lower(v))).collect()),
+        }
+    }
+    let tree =
+        serde_value::to_value(settings).map_err(|e| cu29_traits::CuError::from(e.to_string()))?;
+    let expr = value(&lower(tree));
+    Ok(quote!(#expr.deserialize_into().map_err(|error| ::cu29::CuError::from(error.to_string()))?))
+}

@@ -46,8 +46,11 @@ struct App {}
 
 #[test]
 fn construction_is_dependency_ordered_with_stable_keys() {
+    #[cfg(not(feature = "static-config"))]
     let config =
         cu29::config::CuConfig::deserialize_ron(include_str!("resource_stack.ron")).unwrap();
+    #[cfg(feature = "static-config")]
+    let config = ();
     let mut manager = default::resources_instanciator(&config).unwrap();
     let value = manager
         .take::<u32>(BundleIndex::new(0).key(WrappedId::Value))
@@ -60,6 +63,7 @@ fn construction_is_dependency_ordered_with_stable_keys() {
     );
 }
 
+#[cfg(not(feature = "static-config"))]
 #[test]
 fn runtime_configuration_cannot_rewire_compiled_inputs() {
     let mut config =
