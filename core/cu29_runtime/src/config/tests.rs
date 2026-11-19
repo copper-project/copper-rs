@@ -674,7 +674,7 @@ fn test_bridge_parsing() {
 #[test]
 fn test_bridge_roundtrip() {
     let mut config = CuConfig::default();
-    let mut bridge_config = ComponentConfig::default();
+    let mut bridge_config = Config::<OwnedStorage>::default();
     bridge_config.set("port", "/dev/ttyACM0".to_string());
     config.bridges.push(BridgeConfig {
         id: "radio".to_string(),
@@ -759,7 +759,7 @@ fn test_resource_parsing() {
 #[test]
 fn test_resource_roundtrip() {
     let mut config = CuConfig::default();
-    let mut bundle_cfg = ComponentConfig::default();
+    let mut bundle_cfg = Config::<OwnedStorage>::default();
     bundle_cfg.set("path", "/dev/ttyACM0".to_string());
     config.resources.push(ResourceBundleConfig {
         resources: None,
@@ -2609,26 +2609,28 @@ fn static_metadata_config_is_deterministic_across_independent_constructions() {
 }
 
 #[test]
-fn static_component_config_matches_owned_and_detaches_on_write() {
-    static CONFIG: ComponentConfig = ComponentConfig::from_static(&[
+fn static_and_owned_configs_share_read_and_serialization_behavior() {
+    static CONFIG: Config<StaticStorage> = Config::from_static(&[
         ("count", StaticValue::U16(7)),
         ("threshold", StaticValue::U32(42)),
     ]);
-    let mut owned = ComponentConfig::new();
+    let mut owned = Config::new();
     owned.set("count", 7u16);
     owned.set("threshold", 42u32);
-    for config in [&owned, &CONFIG] {
+    fn check<S: ConfigRead>(config: &Config<S>) {
         assert_eq!(config.keys().count(), 2);
         assert_eq!(config.get::<u16>("count").unwrap(), Some(7));
         assert_eq!(config.get_value::<u32>("threshold").unwrap(), Some(42));
         assert_eq!(config.get::<u8>("absent").unwrap(), None);
         assert!(config.get::<bool>("count").is_err());
     }
+    check(&owned);
+    check(&CONFIG);
     assert_eq!(
         ron::to_string(&owned).unwrap(),
         ron::to_string(&CONFIG).unwrap()
     );
-    let mut copy = CONFIG.clone();
+    let mut copy = owned.clone();
     copy.set("count", 9u16);
     assert_eq!(copy.get::<u16>("count").unwrap(), Some(9));
     assert_eq!(CONFIG.get::<u16>("count").unwrap(), Some(7));
@@ -2650,7 +2652,7 @@ fn static_structured_values_deserialize_directly() {
         ("axes", V::Seq(&[V::I16(-3), V::I16(5)])),
         ("mode", V::Map(&[(V::String("Active"), V::U8(7))])),
     ];
-    let config = ComponentConfig::from_static(VALUES);
+    let config = Config::from_static(VALUES);
     assert_eq!(config.get_value::<[i16; 2]>("axes").unwrap(), Some([-3, 5]));
     assert_eq!(
         config.deserialize_into::<Settings>().unwrap(),

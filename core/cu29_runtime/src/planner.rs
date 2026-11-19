@@ -2,8 +2,8 @@
 //! plan.
 
 use crate::config::{
-    BridgeChannelConfigRepresentation, ComponentConfig, ConfigGraphs, CuConfig, CuDirection,
-    CuGraph, Flavor, Node, NodeId, PlannerKind, TaskKind,
+    BridgeChannelConfigRepresentation, Config, ConfigGraphs, CuConfig, CuDirection, CuGraph,
+    Flavor, Node, NodeId, OwnedStorage, PlannerKind, TaskKind,
 };
 use crate::curuntime::{
     CuExecutionLoop, CuExecutionStep, CuExecutionUnit, CuInputMsg, CuOutputPack, CuStepPhase,
@@ -191,7 +191,7 @@ pub struct TaskOrder {
 }
 
 impl TaskOrder {
-    fn new(config: Option<&ComponentConfig>) -> CuResult<Self> {
+    fn new(config: Option<&Config<OwnedStorage>>) -> CuResult<Self> {
         const NEEDS_ORDER: &str = "TaskOrder needs config: { \"order\": [..task ids..] }";
         let order = config
             .ok_or(CuError::from(NEEDS_ORDER))?
