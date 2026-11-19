@@ -48,9 +48,6 @@ mod imp {
 
 use imp::*;
 
-mod static_value;
-#[doc(hidden)]
-pub use static_value::StaticValue;
 mod value;
 
 pub use value::{

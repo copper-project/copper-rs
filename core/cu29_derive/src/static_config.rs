@@ -5,7 +5,7 @@ use quote::quote;
 use ron::{Number, Value};
 
 fn value(v: &Value) -> TokenStream {
-    let ty = quote!(::cu29::config::StaticValue);
+    let ty = quote!(::cu29::__private::StaticValue);
     match v {
         Value::Bool(x) => quote!(#ty::Bool(#x)),
         Value::Char(x) => quote!(#ty::Char(#x)),
