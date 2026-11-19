@@ -35,6 +35,7 @@ pub mod feedback;
 mod manifest;
 mod object;
 mod pacing;
+pub mod protocol;
 mod record;
 mod recovery;
 mod rlc;
