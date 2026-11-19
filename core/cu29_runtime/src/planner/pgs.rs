@@ -355,7 +355,7 @@ pub fn graph_signature(graph: &crate::config::CuGraph, mission: Option<&str>) ->
             }
         }
         if let Some(config) = node.get_instance_config() {
-            let mut values: Vec<_> = config.0.iter().collect();
+            let mut values: Vec<_> = config.entries().collect();
             values.sort_by_key(|(key, _)| *key);
             for (key, value) in values {
                 parts.push(format!("config|{}|{key}|{value}", node.get_id()));

@@ -123,14 +123,11 @@ impl CuSinkTask for RPGpio {
 
 #[cfg(mock)]
 fn pin_from_config(config: Option<&ComponentConfig>) -> CuResult<u8> {
-    let ComponentConfig(kv) =
-        config.ok_or("RPGpio needs a config, None was passed as ComponentConfig")?;
+    let cfg = config.ok_or("RPGpio needs a config, None was passed as ComponentConfig")?;
 
-    let pin_nb: u8 = kv
-        .get("pin")
-        .ok_or("RPGpio expects a pin config value pointing to output pin you want to address")?
-        .clone()
-        .into();
+    let pin_nb: u8 = cfg
+        .get::<u8>("pin")?
+        .ok_or("RPGpio expects a pin config value pointing to output pin you want to address")?;
 
     Ok(pin_nb)
 }

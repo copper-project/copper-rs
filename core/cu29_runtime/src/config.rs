@@ -51,7 +51,8 @@ use imp::*;
 mod value;
 
 pub use value::{
-    ComponentConfig, ConfigError, ConstantConfig, ConstantNumber, ConstantStorage, Value,
+    ComponentConfig, Config, ConfigError, ConfigRead, ConstantConfig, ConstantNumber,
+    ConstantStorage, OwnedStorage, StaticStorage, Value,
 };
 
 /// NodeId is the unique identifier of a node in the configuration graph for petgraph
@@ -377,7 +378,7 @@ pub struct Node {
 
     /// Config passed to the task.
     #[serde(skip_serializing_if = "Option::is_none")]
-    config: Option<ComponentConfig>,
+    config: Option<Config<OwnedStorage>>,
 
     /// Resources requested by the task.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -541,7 +542,7 @@ impl Node {
     }
 
     #[allow(dead_code)]
-    pub fn get_instance_config(&self) -> Option<&ComponentConfig> {
+    pub fn get_instance_config(&self) -> Option<&Config<OwnedStorage>> {
         self.config.as_ref()
     }
 
@@ -596,20 +597,14 @@ impl Node {
             Some(pc) => pc,
             None => return Ok(None),
         };
-        let ComponentConfig(pc) = pc;
-        match pc.get(key) {
-            Some(v) => T::try_from(v).map(Some),
-            None => Ok(None),
-        }
+        pc.get(key)
     }
 
     #[allow(dead_code)]
     pub fn set_param<T: Into<Value>>(&mut self, key: &str, value: T) {
-        if self.config.is_none() {
-            self.config = Some(ComponentConfig(HashMap::new()));
-        }
-        let ComponentConfig(config) = self.config.as_mut().unwrap();
-        config.insert(key.to_string(), value.into());
+        self.config
+            .get_or_insert_with(Config::<OwnedStorage>::new)
+            .set(key, value);
     }
 
     /// Returns whether this node is treated as a normal task or as a bridge.
@@ -667,7 +662,7 @@ pub enum BridgeChannelConfigRepresentation {
         route: Option<String>,
         /// Optional per-channel configuration forwarded to the bridge implementation.
         #[serde(skip_serializing_if = "Option::is_none")]
-        config: Option<ComponentConfig>,
+        config: Option<Config<OwnedStorage>>,
     },
     /// Channel that transmits data from the graph into the bridge.
     Tx {
@@ -677,7 +672,7 @@ pub enum BridgeChannelConfigRepresentation {
         route: Option<String>,
         /// Optional per-channel configuration forwarded to the bridge implementation.
         #[serde(skip_serializing_if = "Option::is_none")]
-        config: Option<ComponentConfig>,
+        config: Option<Config<OwnedStorage>>,
     },
 }
 
@@ -747,7 +742,7 @@ pub struct ResourceBundleConfig {
     #[serde(rename = "provider")]
     pub provider: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub config: Option<ComponentConfig>,
+    pub config: Option<Config<OwnedStorage>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub missions: Option<Vec<String>>,
 }
@@ -866,7 +861,7 @@ pub struct BridgeConfig {
     #[serde(rename = "type")]
     pub type_: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub config: Option<ComponentConfig>,
+    pub config: Option<Config<OwnedStorage>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(serialize_with = "serialize_optional_ordered_map")]
     pub resources: Option<HashMap<String, String>>,
@@ -1907,7 +1902,7 @@ pub struct MonitorConfig {
     #[serde(rename = "type")]
     type_: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    config: Option<ComponentConfig>,
+    config: Option<Config<OwnedStorage>>,
 }
 
 impl MonitorConfig {
@@ -1917,7 +1912,7 @@ impl MonitorConfig {
     }
 
     #[allow(dead_code)]
-    pub fn get_config(&self) -> Option<&ComponentConfig> {
+    pub fn get_config(&self) -> Option<&Config<OwnedStorage>> {
         self.config.as_ref()
     }
 }
@@ -1993,7 +1988,7 @@ pub struct LoggingCodecSpec {
     #[serde(rename = "type")]
     pub type_: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub config: Option<ComponentConfig>,
+    pub config: Option<Config<OwnedStorage>>,
 }
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
@@ -2159,7 +2154,7 @@ impl ClockSyncConfig {
 pub struct PlannerConfig {
     pub(crate) kind: PlannerKind,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) config: Option<ComponentConfig>,
+    pub(crate) config: Option<Config<OwnedStorage>>,
 }
 
 impl PlannerConfig {
@@ -2169,7 +2164,7 @@ impl PlannerConfig {
     }
 
     #[allow(dead_code)]
-    pub fn get_config(&self) -> Option<&ComponentConfig> {
+    pub fn get_config(&self) -> Option<&Config<OwnedStorage>> {
         self.config.as_ref()
     }
 
@@ -2432,7 +2427,7 @@ pub struct MultiCopperInterconnectConfig {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct InstanceConfigSetOperation {
     pub path: String,
-    pub value: ComponentConfig,
+    pub value: Config<OwnedStorage>,
 }
 
 /// Typed endpoint reference used by validated multi-Copper interconnects.
@@ -3161,7 +3156,7 @@ impl CuConfig {
     pub fn get_all_instances_configs(
         &self,
         mission_id: Option<&str>,
-    ) -> Vec<Option<&ComponentConfig>> {
+    ) -> Vec<Option<&Config<OwnedStorage>>> {
         let graph = self.graphs.get_graph(mission_id).unwrap();
         graph
             .get_all_nodes()
@@ -3983,14 +3978,12 @@ fn build_port_table(
 
 #[cfg(feature = "std")]
 #[allow(dead_code)]
-fn build_config_table(config: &ComponentConfig) -> Option<String> {
+fn build_config_table(config: &Config<OwnedStorage>) -> Option<String> {
     use std::fmt::Write as FmtWrite;
 
-    if config.0.is_empty() {
-        return None;
-    }
+    config.keys().next()?;
 
-    let mut entries: Vec<_> = config.0.iter().collect();
+    let mut entries: Vec<_> = config.entries().collect();
     entries.sort_by(|a, b| a.0.cmp(b.0));
 
     let mut html = String::new();
@@ -4324,7 +4317,7 @@ fn parse_instance_config_overrides_string(
 }
 
 #[cfg(feature = "std")]
-fn merge_component_config(target: &mut Option<ComponentConfig>, value: &ComponentConfig) {
+fn merge_component_config(target: &mut Option<Config<OwnedStorage>>, value: &Config<OwnedStorage>) {
     if let Some(existing) = target {
         existing.merge_from(value);
     } else {
@@ -4336,7 +4329,7 @@ fn merge_component_config(target: &mut Option<ComponentConfig>, value: &Componen
 fn apply_task_config_override_to_graph(
     graph: &mut CuGraph,
     task_id: &str,
-    value: &ComponentConfig,
+    value: &Config<OwnedStorage>,
 ) -> usize {
     let mut matches = 0usize;
     let node_indices: Vec<_> = graph.0.node_indices().collect();
@@ -4354,7 +4347,7 @@ fn apply_task_config_override_to_graph(
 fn apply_bridge_node_config_override_to_graph(
     graph: &mut CuGraph,
     bridge_id: &str,
-    value: &ComponentConfig,
+    value: &Config<OwnedStorage>,
 ) {
     let node_indices: Vec<_> = graph.0.node_indices().collect();
     for node_index in node_indices {

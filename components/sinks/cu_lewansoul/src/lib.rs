@@ -215,13 +215,12 @@ impl CuSinkTask for Lewansoul {
     where
         Self: Sized,
     {
-        let ComponentConfig(kv) =
-            config.ok_or("RPGpio needs a config, None was passed as ComponentConfig")?;
+        let cfg = config.ok_or("RPGpio needs a config, None was passed as ComponentConfig")?;
 
         let mut ids = [0u8; 8];
         for (i, id) in ids.iter_mut().enumerate() {
-            match kv.get(format!("servo{i}").as_str()) {
-                Some(servo) => *id = servo.clone().into(),
+            match cfg.get::<u8>(format!("servo{i}").as_str())? {
+                Some(servo) => *id = servo,
                 None if i == 0 => {
                     return Err(
                         "You need to specify at least one servo ID to address (as \"servo0\")"
@@ -250,8 +249,8 @@ mod tests {
     #[ignore]
     fn end2end_2_servos() {
         let mut config = ComponentConfig::default();
-        config.0.insert("servo0".to_string(), 1.into());
-        config.0.insert("servo1".to_string(), 2.into());
+        config.set("servo0", 1u8);
+        config.set("servo1", 2u8);
 
         let serial = cu_linux_resources::LinuxSerialPort::open("/dev/ttyACM0", 115_200, 100)
             .expect("open /dev/ttyACM0");

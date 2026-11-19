@@ -4,6 +4,8 @@ use super::BTreeMap;
 #[cfg(not(feature = "std"))]
 use super::imp::*;
 #[cfg(not(feature = "std"))]
+use alloc::borrow::Cow;
+#[cfg(not(feature = "std"))]
 use alloc::boxed::Box;
 #[cfg(not(feature = "std"))]
 use alloc::vec;
@@ -11,125 +13,195 @@ use core::any::type_name;
 use core::fmt;
 use core::fmt::Display;
 use cu29_traits::CuError;
+use cu29_value::StaticValue;
 use cu29_value::Value as CuValue;
 use hashbrown::HashMap;
 use ron::Number;
 use ron::value::Value as RonValue;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize};
+#[cfg(feature = "std")]
+use std::borrow::Cow;
 
-/// This is the configuration of a component (like a task config or a monitoring config):w
-/// It is a map of key-value pairs.
-/// It is given to the new method of the task implementation.
-#[derive(Serialize, Deserialize, Debug, Clone, Default)]
-pub struct ComponentConfig(
-    #[serde(serialize_with = "super::serialize_ordered_map")] pub HashMap<String, Value>,
-);
+/// Component parameters with storage selected at compile time.
+#[derive(Debug, Clone, Default)]
+pub struct Config<S>(S);
 
-/// Mapping between resource binding names and bundle-scoped resource ids.
-#[allow(dead_code)]
-impl Display for ComponentConfig {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut first = true;
-        let ComponentConfig(config) = self;
-        write!(f, "{{")?;
-        for (key, value) in config.iter() {
-            if !first {
-                write!(f, ", ")?;
-            }
-            write!(f, "{key}: {value}")?;
-            first = false;
+#[derive(Debug, Clone, Default)]
+pub struct OwnedStorage(HashMap<String, Value>);
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct StaticStorage(&'static [(&'static str, StaticValue)]);
+
+pub type ComponentConfig = Config<OwnedStorage>;
+
+/// Read operations shared by owned and flash-backed settings.
+pub trait ConfigRead {
+    fn keys(&self) -> impl Iterator<Item = &str>;
+    fn entries(&self) -> impl Iterator<Item = (&str, Cow<'_, Value>)>;
+    fn scalar(&self, key: &str) -> Option<impl core::borrow::Borrow<Value>>;
+    fn structured<T: DeserializeOwned>(&self, key: &str) -> Result<Option<T>, ConfigError>;
+    fn deserialize<T: DeserializeOwned>(&self) -> Result<T, ConfigError>;
+}
+
+impl ConfigRead for OwnedStorage {
+    fn keys(&self) -> impl Iterator<Item = &str> {
+        self.0.keys().map(String::as_str)
+    }
+    fn entries(&self) -> impl Iterator<Item = (&str, Cow<'_, Value>)> {
+        self.0.iter().map(|(k, v)| (k.as_str(), Cow::Borrowed(v)))
+    }
+    fn scalar(&self, key: &str) -> Option<impl core::borrow::Borrow<Value>> {
+        self.0.get(key)
+    }
+    fn structured<T: DeserializeOwned>(&self, key: &str) -> Result<Option<T>, ConfigError> {
+        let Some(value) = self.0.get(key) else {
+            return Ok(None);
+        };
+        ron_value_to_cu_value(&value.0)
+            .map_err(|err| err.with_key(key))?
+            .deserialize_into::<T>()
+            .map(Some)
+            .map_err(|e| key_error::<T>(key, e))
+    }
+    fn deserialize<T: DeserializeOwned>(&self) -> Result<T, ConfigError> {
+        let mut map = BTreeMap::new();
+        for (key, value) in &self.0 {
+            let value = ron_value_to_cu_value(&value.0).map_err(|err| err.with_key(key))?;
+            map.insert(CuValue::String(key.clone()), value);
         }
-        write!(f, "}}")
+        CuValue::Map(map)
+            .deserialize_into::<T>()
+            .map_err(config_error::<T>)
     }
 }
 
-// forward map interface
-impl ComponentConfig {
-    #[allow(dead_code)]
-    pub fn new() -> Self {
-        ComponentConfig(HashMap::new())
+impl StaticStorage {
+    fn find(&self, key: &str) -> Option<StaticValue> {
+        self.0.iter().find(|(k, _)| *k == key).map(|(_, v)| *v)
     }
+}
 
-    #[allow(dead_code)]
+impl ConfigRead for StaticStorage {
+    fn keys(&self) -> impl Iterator<Item = &str> {
+        self.0.iter().map(|(k, _)| *k)
+    }
+    fn entries(&self) -> impl Iterator<Item = (&str, Cow<'_, Value>)> {
+        self.0
+            .iter()
+            .map(|(k, v)| (*k, Cow::Owned(Value::from_static(*v))))
+    }
+    fn scalar(&self, key: &str) -> Option<impl core::borrow::Borrow<Value>> {
+        self.find(key).map(Value::from_static)
+    }
+    fn structured<T: DeserializeOwned>(&self, key: &str) -> Result<Option<T>, ConfigError> {
+        self.find(key)
+            .map(T::deserialize)
+            .transpose()
+            .map_err(|e| key_error::<T>(key, e))
+    }
+    fn deserialize<T: DeserializeOwned>(&self) -> Result<T, ConfigError> {
+        T::deserialize(serde::de::value::MapDeserializer::<
+            _,
+            serde::de::value::Error,
+        >::new(self.0.iter().copied()))
+        .map_err(config_error::<T>)
+    }
+}
+
+fn key_error<T>(key: &str, error: impl Display) -> ConfigError {
+    ConfigError {
+        message: format!(
+            "Config key '{key}' failed to deserialize as {}: {error}",
+            type_name::<T>()
+        ),
+    }
+}
+fn config_error<T>(error: impl Display) -> ConfigError {
+    ConfigError {
+        message: format!(
+            "Config failed to deserialize as {}: {error}",
+            type_name::<T>()
+        ),
+    }
+}
+
+impl<S: ConfigRead> Config<S> {
+    pub fn keys(&self) -> impl Iterator<Item = &str> {
+        self.0.keys()
+    }
+    pub fn entries(&self) -> impl Iterator<Item = (&str, Cow<'_, Value>)> {
+        self.0.entries()
+    }
     pub fn get<T>(&self, key: &str) -> Result<Option<T>, ConfigError>
     where
         T: for<'a> TryFrom<&'a Value, Error = ConfigError>,
     {
-        let ComponentConfig(config) = self;
-        match config.get(key) {
-            Some(value) => T::try_from(value).map(Some),
-            None => Ok(None),
-        }
+        use core::borrow::Borrow;
+        self.0
+            .scalar(key)
+            .map(|value| T::try_from(value.borrow()))
+            .transpose()
     }
-
-    #[allow(dead_code)]
-    /// Retrieve a structured config value by deserializing it with cu29-value.
-    ///
-    /// Example RON:
-    /// `{ "calibration": { "matrix": [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]], "enabled": true } }`
-    ///
-    /// ```rust,ignore
-    /// #[derive(serde::Deserialize)]
-    /// struct CalibrationCfg {
-    ///     matrix: [[f32; 3]; 3],
-    ///     enabled: bool,
-    /// }
-    /// let cfg: CalibrationCfg = config.get_value("calibration")?.unwrap();
-    /// ```
-    pub fn get_value<T>(&self, key: &str) -> Result<Option<T>, ConfigError>
-    where
-        T: DeserializeOwned,
-    {
-        let ComponentConfig(config) = self;
-        let Some(value) = config.get(key) else {
-            return Ok(None);
-        };
-        let cu_value = ron_value_to_cu_value(&value.0).map_err(|err| err.with_key(key))?;
-        cu_value
-            .deserialize_into::<T>()
-            .map(Some)
-            .map_err(|err| ConfigError {
-                message: format!(
-                    "Config key '{key}' failed to deserialize as {}: {err}",
-                    type_name::<T>()
-                ),
-            })
+    /// Deserialize a structured parameter directly from the backing storage.
+    pub fn get_value<T: DeserializeOwned>(&self, key: &str) -> Result<Option<T>, ConfigError> {
+        self.0.structured(key)
     }
-
-    #[allow(dead_code)]
-    pub fn deserialize_into<T>(&self) -> Result<T, ConfigError>
-    where
-        T: DeserializeOwned,
-    {
-        let mut map = BTreeMap::new();
-        for (key, value) in &self.0 {
-            let mapped_value = ron_value_to_cu_value(&value.0).map_err(|err| err.with_key(key))?;
-            map.insert(CuValue::String(key.clone()), mapped_value);
-        }
-
-        CuValue::Map(map)
-            .deserialize_into::<T>()
-            .map_err(|err| ConfigError {
-                message: format!(
-                    "Config failed to deserialize as {}: {err}",
-                    type_name::<T>()
-                ),
-            })
+    pub fn deserialize_into<T: DeserializeOwned>(&self) -> Result<T, ConfigError> {
+        self.0.deserialize()
     }
+}
 
-    #[allow(dead_code)]
+impl Config<OwnedStorage> {
+    pub fn new() -> Self {
+        Self::default()
+    }
     pub fn set<T: Into<Value>>(&mut self, key: &str, value: T) {
-        let ComponentConfig(config) = self;
-        config.insert(key.to_string(), value.into());
+        self.0.0.insert(key.to_string(), value.into());
     }
+    pub fn merge_from(&mut self, other: &Self) {
+        self.0
+            .0
+            .extend(other.0.0.iter().map(|(k, v)| (k.clone(), v.clone())));
+    }
+}
 
-    #[allow(dead_code)]
-    pub fn merge_from(&mut self, other: &ComponentConfig) {
-        let ComponentConfig(config) = self;
-        for (key, value) in &other.0 {
-            config.insert(key.clone(), value.clone());
+impl Config<StaticStorage> {
+    /// Construct a generated table. Keys must be unique.
+    #[doc(hidden)]
+    pub const fn from_static(entries: &'static [(&'static str, StaticValue)]) -> Self {
+        Self(StaticStorage(entries))
+    }
+}
+
+impl<S: ConfigRead> Serialize for Config<S> {
+    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
+        serializer.serialize_newtype_struct(
+            "ComponentConfig",
+            &self.entries().collect::<BTreeMap<_, _>>(),
+        )
+    }
+}
+
+impl<'de> Deserialize<'de> for Config<OwnedStorage> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(rename = "ComponentConfig")]
+        struct Owned(HashMap<String, Value>);
+        Ok(Self(OwnedStorage(Owned::deserialize(deserializer)?.0)))
+    }
+}
+
+impl<S: ConfigRead> Display for Config<S> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{{")?;
+        for (index, (key, value)) in self.entries().enumerate() {
+            if index != 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{key}: {value}")?;
         }
+        write!(f, "}}")
     }
 }
 
@@ -191,6 +263,19 @@ fn ron_value_to_cu_value(value: &RonValue) -> Result<CuValue, ConfigError> {
 /// Wrapper around the ron::Value to allow for custom serialization.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Value(pub(super) RonValue);
+
+impl Value {
+    #[doc(hidden)]
+    pub fn as_ron(&self) -> &RonValue {
+        &self.0
+    }
+}
+
+impl Value {
+    fn from_static(value: StaticValue) -> Self {
+        Self(RonValue::deserialize(value).expect("static config must represent a RON value"))
+    }
+}
 
 /// Scalar representation used by compile-time constants after RON parsing.
 #[doc(hidden)]

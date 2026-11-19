@@ -1160,12 +1160,12 @@ fn build_port_column(
 }
 
 /// Render config entries in a stable order for readability and diffs.
-fn build_config_rows(config: &config::ComponentConfig) -> Vec<TableNode> {
-    if config.0.is_empty() {
+fn build_config_rows(config: &config::Config<config::OwnedStorage>) -> Vec<TableNode> {
+    if config.keys().next().is_none() {
         return Vec::new();
     }
 
-    let mut entries: Vec<_> = config.0.iter().collect();
+    let mut entries: Vec<_> = config.entries().collect();
     entries.sort_by(|a, b| a.0.cmp(b.0));
 
     let header = TableNode::Cell(
@@ -1179,7 +1179,7 @@ fn build_config_rows(config: &config::ComponentConfig) -> Vec<TableNode> {
         let value_str = wrap_text(&format!("{value}"), CONFIG_WRAP_WIDTH);
         let value_parts: Vec<_> = value_str.split('\n').collect();
         for (idx, part) in value_parts.iter().enumerate() {
-            let key_text = if idx == 0 { key.as_str() } else { "" };
+            let key_text = if idx == 0 { key } else { "" };
             key_lines.push(CellLine::code(key_text, DIM_GRAY, true, CONFIG_FONT_SIZE));
             value_lines.push(CellLine::code(*part, DIM_GRAY, false, CONFIG_FONT_SIZE));
         }
