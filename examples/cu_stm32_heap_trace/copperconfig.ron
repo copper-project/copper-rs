@@ -1,0 +1,5 @@
+(
+    tasks: [(id: "source", type: "Source"), (id: "sink", type: "Sink")],
+    cnx: [(src: "source", dst: "sink", msg: "u32")],
+    logging: (enable_task_logging: false),
+)
