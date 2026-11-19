@@ -23,12 +23,12 @@ done
 | Bytes | Dynamic | Static |
 | --- | ---: | ---: |
 | Heap used before builder | 36 | 36 |
-| Startup high-water mark | 5,176 | 1,096 |
-| Heap used after first iteration | 1,848 | 1,096 |
-| Minimum arena through first iteration | 5,832 | 1,120 |
-| Free after first iteration | 96,456 | 97,208 |
-| Largest successful 4-byte-aligned allocation | 94,352 | 97,184 |
-| Free bytes outside that allocation | 2,104 | 24 |
+| Startup high-water mark | 5,152 | 1,088 |
+| Heap used after first iteration | 1,840 | 1,088 |
+| Minimum arena through first iteration | 5,768 | 1,112 |
+| Free after first iteration | 96,464 | 97,216 |
+| Largest successful 4-byte-aligned allocation | 94,416 | 97,192 |
+| Free bytes outside that allocation | 2,048 | 24 |
 
 Each capacity trial boots a fresh emulator. Starting at the measured high-water mark, GDB tries every word-aligned
 arena size until the first successful iteration. In the
