@@ -1,7 +1,7 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
-use crate::config::{ComponentConfig, CuConfig, LoggingCodecSpec};
+use crate::config::{ComponentConfig, Config, ConfigRead, CuConfig, LoggingCodecSpec};
 use crate::cutask::{CuMsg, CuMsgMetadata, CuMsgPayload};
 use crate::sync_compat::{Mutex, OnceLock, lock as lock_mutex, once_get_or_init};
 use alloc::boxed::Box;
@@ -247,11 +247,19 @@ where
         )));
     }
 
-    let codec_config = deserialize_codec_config::<C, P>(spec.config.as_ref())?;
+    let codec_config = read_codec_config::<C, P>(spec.config.as_ref())?;
     C::new(codec_config)
 }
 
 pub fn deserialize_codec_config<C, P>(config: Option<&ComponentConfig>) -> CuResult<C::Config>
+where
+    C: CuLogCodec<P>,
+    P: CuMsgPayload,
+{
+    read_codec_config::<C, P>(config)
+}
+
+fn read_codec_config<C, P>(config: Option<&Config<impl ConfigRead>>) -> CuResult<C::Config>
 where
     C: CuLogCodec<P>,
     P: CuMsgPayload,
