@@ -1,5 +1,19 @@
 # Release notes
 
+## 1.2.7
+
+### Fixes
+
+- On STM32, Copper leaves the DWT cycle counter running between clock reads. Firmware can sample the same counter independently. Copper must sample it at least once per wrap, with fewer than 2³² core cycles between reads.
+- `cu-logmon` tracks each component’s maximum duration directly within the reporting window. A zero-duration sample counts toward the ranking, and each new window starts with a fresh set of maxima.
+- The runtime stores per-message I/O byte counts in pointer-width atomics, avoiding 64-bit atomic operations on 32-bit targets. The public monitoring statistics still expose 64-bit byte counts.
+
+[Backport for Copper 1.2 (#1617)](https://github.com/copper-project/copper-rs/pull/1617)
+
+### Packages and upgrading
+
+`cu29`, `cu29-clock`, `cu29-runtime`, and `cu-logmon` advance to **1.2.7**. Set `cu29 = "~1.2.7"` and run `cargo update` to pick up the clock and runtime fixes. Applications using the monitor can select `cu-logmon = "~1.2.7"`.
+
 ## 1.2.6
 
 This patch fixes section byte accounting while preserving the Copper 1.2 public APIs, configuration, Rust 1.95 minimum, and log encapsulation.
