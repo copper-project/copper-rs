@@ -148,7 +148,7 @@ runtime, then records messages, timing, and state into one replayable log.
   </tr>
   <tr>
     <td><strong>Project</strong></td>
-    <td><a href="https://copper-project.github.io/copper-rs/Supported-Platforms">Supported platforms</a> · <a href="https://copper-project.github.io/copper-rs/Copper-Release-Notes">Release notes</a></td>
+    <td><a href="https://copper-project.github.io/copper-rs/Supported-Platforms">Supported platforms</a> · <a href="https://github.com/copper-project/copper-rs/blob/master/RELEASING.md#maintained-releases">Maintained releases</a> · <a href="https://copper-project.github.io/copper-rs/Copper-Release-Notes">Release notes</a></td>
   </tr>
   <tr>
     <td><strong>Community</strong></td>

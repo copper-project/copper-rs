@@ -7,8 +7,10 @@ Security fixes are provided for:
 | Version | Supported |
 |--------|-----------|
 | `master` | ✅ |
-| Latest stable release | ✅ |
-| Older releases | ❌ |
+| Two most recent stable minor release lines | ✅ |
+| Earlier release lines | ❌ |
+
+See [Maintained releases](RELEASING.md#maintained-releases) for when support ends.
 
 Users should upgrade to a supported version before reporting issues when possible.
 
