@@ -4190,7 +4190,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             )
         };
 
-        let generated_params = static_config.then(|| quote!(.with_generated_task_configs()));
         let topology_factory = if cfg!(feature = "static-config") {
             if monitor_configs.is_empty() {
                 quote!(.with_topology(|_, _| Ok(Default::default())))
@@ -4287,7 +4286,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         #parallel_rt_metadata_arg
                         #monitor_instanciator,
                         #mission_mod::bridges_instanciator,
-                    ) #topology_factory #generated_params,
+                    ) #topology_factory,
                     copperlist_sink,
                     keyframe_sink,
                     output_requirements,

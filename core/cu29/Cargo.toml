@@ -53,7 +53,7 @@ ctrlc = { workspace = true, optional = true }
 [features]
 # Compile component parameters and monitor topology into the app. Runtime overrides and
 # embedded RON are disabled. Replay requires the config matching the recorded Git revision.
-static-config = ["cu29-derive/static-config"]
+static-config = ["cu29-derive/static-config", "cu29-runtime/static-config"]
 # Compatibility alias: remote debugging always includes Rerun representations.
 rerun = ["remote-debug"]
 clock-sync = [

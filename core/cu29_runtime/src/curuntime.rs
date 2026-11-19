@@ -100,7 +100,6 @@ pub type MonitorInstantiator<M> = fn(&CuConfig, CuMonitoringMetadata, CuMonitori
 
 #[doc(hidden)]
 pub struct CuRuntimeParts<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, MI> {
-    generated_task_configs: bool,
     topology: fn(&CuConfig, &str) -> CuResult<crate::monitoring::MonitorTopology>,
     pub tasks_instanciator: TI,
     pub monitored_components: &'static [MonitorComponentMetadata],
@@ -115,10 +114,6 @@ pub struct CuRuntimeParts<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: 
 impl<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, MI>
     CuRuntimeParts<CT, CB, P, M, NBCL, TI, BI, MI>
 {
-    pub const fn with_generated_task_configs(mut self) -> Self {
-        self.generated_task_configs = true;
-        self
-    }
     pub const fn with_topology(
         mut self,
         topology: fn(&CuConfig, &str) -> CuResult<crate::monitoring::MonitorTopology>,
@@ -135,7 +130,6 @@ impl<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, MI>
         bridges_instanciator: BI,
     ) -> Self {
         Self {
-            generated_task_configs: false,
             topology: build_monitor_topology,
             tasks_instanciator,
             monitored_components,
@@ -2095,16 +2089,16 @@ where
             resources.ok_or_else(|| CuError::from("Resources missing from CuRuntimeBuilder"))?;
         let thread_pools = thread_pools.unwrap_or_default();
 
-        let all_instances_configs = if parts.generated_task_configs {
-            Vec::new()
-        } else {
-            config
-                .get_graph(Some(mission))?
-                .get_all_nodes()
-                .into_iter()
-                .map(|(_, node)| node.get_instance_config())
-                .collect()
-        };
+        #[cfg(feature = "static-config")]
+        let all_instances_configs = Vec::new();
+        #[cfg(not(feature = "static-config"))]
+        let graph = config.get_graph(Some(mission))?;
+        #[cfg(not(feature = "static-config"))]
+        let all_instances_configs: Vec<Option<&ComponentConfig>> = graph
+            .get_all_nodes()
+            .iter()
+            .map(|(_, node)| node.get_instance_config())
+            .collect();
 
         let tasks =
             (parts.tasks_instanciator)(all_instances_configs, &mut resources, &thread_pools)?;
@@ -2230,16 +2224,16 @@ where
         let mut resources =
             resources.ok_or_else(|| CuError::from("Resources missing from CuRuntimeBuilder"))?;
 
-        let all_instances_configs = if parts.generated_task_configs {
-            Vec::new()
-        } else {
-            config
-                .get_graph(Some(mission))?
-                .get_all_nodes()
-                .into_iter()
-                .map(|(_, node)| node.get_instance_config())
-                .collect()
-        };
+        #[cfg(feature = "static-config")]
+        let all_instances_configs = Vec::new();
+        #[cfg(not(feature = "static-config"))]
+        let graph = config.get_graph(Some(mission))?;
+        #[cfg(not(feature = "static-config"))]
+        let all_instances_configs: Vec<Option<&ComponentConfig>> = graph
+            .get_all_nodes()
+            .iter()
+            .map(|(_, node)| node.get_instance_config())
+            .collect();
 
         let tasks = (parts.tasks_instanciator)(all_instances_configs, &mut resources)?;
 
