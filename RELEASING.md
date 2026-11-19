@@ -1,5 +1,12 @@
 # Releasing Copper
 
+## Maintained releases
+
+Copper maintains the two most recently published stable minor release lines.
+For example, while 1.4 is in development, 1.3.x and 1.2.x receive maintenance
+fixes. When 1.4.0 is published, maintenance ends for 1.2.x and continues for
+1.4.x and 1.3.x. Patch releases do not change the maintenance window.
+
 ## Branches and versions
 
 ```text
@@ -70,6 +77,8 @@ backports to supported maintenance branches.
 1. Update the version's entry in the global
    [Copper Release Notes](https://github.com/copper-project/copper-rs/wiki/Copper-Release-Notes).
    Include upgrade instructions and compatibility warnings where needed.
+   For a new stable minor release, name both maintained lines and the line
+   reaching end of maintenance.
 2. Push `vMAJOR.MINOR.PATCH` on the exact commit used to publish the crates.
    Verify the commit's manifests and release changes before tagging it.
 3. Copy that version's complete notes into a Markdown file inside the worktree.
