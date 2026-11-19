@@ -85,6 +85,10 @@ fn encode_timestamp<E: Encoder>(
     value: CuTime,
     anchor: CuTime,
 ) -> Result<(), EncodeError> {
+    let magnitude = value.as_nanos().abs_diff(anchor.as_nanos());
+    if let Ok(delta) = i32::try_from(magnitude) {
+        return Uleb128(if value < anchor { -delta } else { delta }).encode(encoder);
+    }
     let delta = i128::from(value.as_nanos()) - i128::from(anchor.as_nanos());
     Uleb128(delta).encode(encoder)
 }
@@ -244,7 +248,7 @@ pub fn encode_common_metadata<const N: usize, E: Encoder>(
             .iter()
             .position(|previous| previous.metadata.status_txt == slot.metadata.status_txt)
             .map_or(0, |previous| previous + 1);
-        Uleb128(backref as u128).encode(encoder)?;
+        Uleb128(backref).encode(encoder)?;
         if backref == 0 {
             slot.metadata.status_txt.encode(encoder)?;
         }
@@ -258,7 +262,7 @@ pub fn encode_common_metadata<const N: usize, E: Encoder>(
             .iter()
             .position(|previous| previous.metadata.origin.as_ref() == Some(origin))
             .map_or(0, |previous| previous + 1);
-        Uleb128(backref as u128).encode(encoder)?;
+        Uleb128(backref).encode(encoder)?;
         if backref == 0 {
             origin.encode(encoder)?;
         }
