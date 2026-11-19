@@ -57,9 +57,9 @@ impl CuUdpLogStreamConfig {
 
     /// Parse the resource-bundle configuration, rejecting unknown or mistyped keys.
     pub fn from_component(config: &ComponentConfig) -> CuResult<Self> {
-        for key in config.0.keys() {
+        for key in config.keys() {
             if !matches!(
-                key.as_str(),
+                key,
                 "bind_addr"
                     | "remote_addr"
                     | "send_buffer_bytes"

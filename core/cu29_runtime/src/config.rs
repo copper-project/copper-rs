@@ -48,6 +48,9 @@ mod imp {
 
 use imp::*;
 
+mod static_value;
+#[doc(hidden)]
+pub use static_value::StaticValue;
 mod value;
 
 pub use value::{
@@ -596,20 +599,14 @@ impl Node {
             Some(pc) => pc,
             None => return Ok(None),
         };
-        let ComponentConfig(pc) = pc;
-        match pc.get(key) {
-            Some(v) => T::try_from(v).map(Some),
-            None => Ok(None),
-        }
+        pc.get(key)
     }
 
     #[allow(dead_code)]
     pub fn set_param<T: Into<Value>>(&mut self, key: &str, value: T) {
-        if self.config.is_none() {
-            self.config = Some(ComponentConfig(HashMap::new()));
-        }
-        let ComponentConfig(config) = self.config.as_mut().unwrap();
-        config.insert(key.to_string(), value.into());
+        self.config
+            .get_or_insert_with(ComponentConfig::new)
+            .set(key, value);
     }
 
     /// Returns whether this node is treated as a normal task or as a bridge.
@@ -3986,11 +3983,9 @@ fn build_port_table(
 fn build_config_table(config: &ComponentConfig) -> Option<String> {
     use std::fmt::Write as FmtWrite;
 
-    if config.0.is_empty() {
-        return None;
-    }
+    config.keys().next()?;
 
-    let mut entries: Vec<_> = config.0.iter().collect();
+    let mut entries: Vec<_> = config.entries().collect();
     entries.sort_by(|a, b| a.0.cmp(b.0));
 
     let mut html = String::new();

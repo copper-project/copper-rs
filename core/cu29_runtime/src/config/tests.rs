@@ -468,9 +468,9 @@ fn test_monitor_plural_syntax() {
             .config
             .as_ref()
             .unwrap()
-            .0["toto"]
-            .0,
-        4u8.into()
+            .get::<u8>("toto")
+            .unwrap(),
+        Some(4)
     );
 }
 
@@ -488,9 +488,9 @@ fn test_monitor_singular_syntax() {
             .config
             .as_ref()
             .unwrap()
-            .0["toto"]
-            .0,
-        4u8.into()
+            .get::<u8>("toto")
+            .unwrap(),
+        Some(4)
     );
 }
 
@@ -2605,4 +2605,57 @@ fn static_metadata_config_is_deterministic_across_independent_constructions() {
             expected
         );
     }
+}
+
+#[test]
+fn static_component_config_matches_owned_and_detaches_on_write() {
+    static CONFIG: ComponentConfig = ComponentConfig::from_static(&[
+        ("count", StaticValue::U16(7)),
+        ("threshold", StaticValue::U32(42)),
+    ]);
+    let mut owned = ComponentConfig::new();
+    owned.set("count", 7u16);
+    owned.set("threshold", 42u32);
+    for config in [&owned, &CONFIG] {
+        assert_eq!(config.keys().count(), 2);
+        assert_eq!(config.get::<u16>("count").unwrap(), Some(7));
+        assert_eq!(config.get_value::<u32>("threshold").unwrap(), Some(42));
+        assert_eq!(config.get::<u8>("absent").unwrap(), None);
+        assert!(config.get::<bool>("count").is_err());
+    }
+    assert_eq!(
+        ron::to_string(&owned).unwrap(),
+        ron::to_string(&CONFIG).unwrap()
+    );
+    let mut copy = CONFIG.clone();
+    copy.set("count", 9u16);
+    assert_eq!(copy.get::<u16>("count").unwrap(), Some(9));
+    assert_eq!(CONFIG.get::<u16>("count").unwrap(), Some(7));
+}
+
+#[test]
+fn static_structured_values_deserialize_directly() {
+    #[derive(Deserialize, Debug, PartialEq)]
+    struct Settings {
+        axes: [i16; 2],
+        mode: Mode,
+    }
+    #[derive(Deserialize, Debug, PartialEq)]
+    enum Mode {
+        Active(u8),
+    }
+    use StaticValue as V;
+    static VALUES: &[(&str, V)] = &[
+        ("axes", V::Seq(&[V::I16(-3), V::I16(5)])),
+        ("mode", V::Map(&[(V::String("Active"), V::U8(7))])),
+    ];
+    let config = ComponentConfig::from_static(VALUES);
+    assert_eq!(config.get_value::<[i16; 2]>("axes").unwrap(), Some([-3, 5]));
+    assert_eq!(
+        config.deserialize_into::<Settings>().unwrap(),
+        Settings {
+            axes: [-3, 5],
+            mode: Mode::Active(7)
+        }
+    );
 }

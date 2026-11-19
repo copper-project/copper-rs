@@ -279,16 +279,24 @@ pub cu29_runtime::config::Cnx::msg: alloc::string::String
 pub cu29_runtime::config::Cnx::order: usize
 pub cu29_runtime::config::Cnx::src: alloc::string::String
 pub cu29_runtime::config::Cnx::src_channel: core::option::Option<alloc::string::String>
-pub struct cu29_runtime::config::ComponentConfig(pub hashbrown::map::HashMap<alloc::string::String, cu29_runtime::config::Value>)
+pub struct cu29_runtime::config::ComponentConfig(_)
 impl cu29_runtime::config::ComponentConfig
 pub fn cu29_runtime::config::ComponentConfig::deserialize_into<T>(&self) -> core::result::Result<T, cu29_runtime::config::ConfigError> where T: serde_core::de::DeserializeOwned
+pub fn cu29_runtime::config::ComponentConfig::entries(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&str, alloc::borrow::Cow<'_, cu29_runtime::config::Value>)>
 pub fn cu29_runtime::config::ComponentConfig::get<T>(&self, key: &str) -> core::result::Result<core::option::Option<T>, cu29_runtime::config::ConfigError> where T: for<'a> core::convert::TryFrom<&'a cu29_runtime::config::Value, Error = cu29_runtime::config::ConfigError>
 pub fn cu29_runtime::config::ComponentConfig::get_value<T>(&self, key: &str) -> core::result::Result<core::option::Option<T>, cu29_runtime::config::ConfigError> where T: serde_core::de::DeserializeOwned
+pub fn cu29_runtime::config::ComponentConfig::keys(&self) -> impl core::iter::traits::iterator::Iterator<Item = &str>
 pub fn cu29_runtime::config::ComponentConfig::merge_from(&mut self, other: &cu29_runtime::config::ComponentConfig)
 pub fn cu29_runtime::config::ComponentConfig::new() -> Self
 pub fn cu29_runtime::config::ComponentConfig::set<T: core::convert::Into<cu29_runtime::config::Value>>(&mut self, key: &str, value: T)
+impl core::default::Default for cu29_runtime::config::ComponentConfig
+pub fn cu29_runtime::config::ComponentConfig::default() -> Self
 impl core::fmt::Display for cu29_runtime::config::ComponentConfig
 pub fn cu29_runtime::config::ComponentConfig::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for cu29_runtime::config::ComponentConfig
+pub fn cu29_runtime::config::ComponentConfig::serialize<S: serde_core::ser::Serializer>(&self, serializer: S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for cu29_runtime::config::ComponentConfig
+pub fn cu29_runtime::config::ComponentConfig::deserialize<D: serde_core::de::Deserializer<'de>>(deserializer: D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 pub struct cu29_runtime::config::ConfigError
 impl core::convert::From<cu29_runtime::config::ConfigError> for cu29_traits::CuError
 pub fn cu29_traits::CuError::from(err: cu29_runtime::config::ConfigError) -> Self

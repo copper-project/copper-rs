@@ -1,8 +1,10 @@
 //! Scalar and component configuration values.
 
-use super::BTreeMap;
 #[cfg(not(feature = "std"))]
 use super::imp::*;
+use super::{BTreeMap, StaticValue};
+#[cfg(not(feature = "std"))]
+use alloc::borrow::Cow;
 #[cfg(not(feature = "std"))]
 use alloc::boxed::Box;
 #[cfg(not(feature = "std"))]
@@ -17,23 +19,50 @@ use ron::Number;
 use ron::value::Value as RonValue;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize};
+#[cfg(feature = "std")]
+use std::borrow::Cow;
 
-/// This is the configuration of a component (like a task config or a monitoring config):w
-/// It is a map of key-value pairs.
-/// It is given to the new method of the task implementation.
-#[derive(Serialize, Deserialize, Debug, Clone, Default)]
-pub struct ComponentConfig(
-    #[serde(serialize_with = "super::serialize_ordered_map")] pub HashMap<String, Value>,
-);
+/// Component parameters, stored in an owned map or a generated static table.
+#[derive(Debug, Clone)]
+pub struct ComponentConfig(Storage);
+
+#[derive(Debug, Clone)]
+enum Storage {
+    Owned(HashMap<String, Value>),
+    Static(&'static [(&'static str, StaticValue)]),
+}
+
+impl Default for ComponentConfig {
+    fn default() -> Self {
+        Self(Storage::Owned(HashMap::new()))
+    }
+}
+
+impl Serialize for ComponentConfig {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_newtype_struct(
+            "ComponentConfig",
+            &self.entries().collect::<BTreeMap<_, _>>(),
+        )
+    }
+}
+
+impl<'de> Deserialize<'de> for ComponentConfig {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(rename = "ComponentConfig")]
+        struct Owned(HashMap<String, Value>);
+        Ok(Self(Storage::Owned(Owned::deserialize(deserializer)?.0)))
+    }
+}
 
 /// Mapping between resource binding names and bundle-scoped resource ids.
 #[allow(dead_code)]
 impl Display for ComponentConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut first = true;
-        let ComponentConfig(config) = self;
         write!(f, "{{")?;
-        for (key, value) in config.iter() {
+        for (key, value) in self.entries() {
             if !first {
                 write!(f, ", ")?;
             }
@@ -48,7 +77,69 @@ impl Display for ComponentConfig {
 impl ComponentConfig {
     #[allow(dead_code)]
     pub fn new() -> Self {
-        ComponentConfig(HashMap::new())
+        Self::default()
+    }
+
+    /// Construct a generated table. Keys must be unique.
+    #[doc(hidden)]
+    pub const fn from_static(entries: &'static [(&'static str, StaticValue)]) -> Self {
+        Self(Storage::Static(entries))
+    }
+
+    /// Enumerate parameter names without materializing their values.
+    pub fn keys(&self) -> impl Iterator<Item = &str> {
+        let (owned, baked) = match &self.0 {
+            Storage::Owned(map) => (Some(map.keys()), None),
+            Storage::Static(table) => (None, Some(table.iter())),
+        };
+        owned
+            .into_iter()
+            .flatten()
+            .map(String::as_str)
+            .chain(baked.into_iter().flatten().map(|(key, _)| *key))
+    }
+
+    fn lookup(&self, key: &str) -> Option<Cow<'_, Value>> {
+        match &self.0 {
+            Storage::Owned(map) => map.get(key).map(Cow::Borrowed),
+            Storage::Static(table) => table
+                .iter()
+                .find(|(k, _)| *k == key)
+                .map(|(_, value)| Cow::Owned(value.to_value())),
+        }
+    }
+
+    /// Visit entries for graph inspection and serialization.
+    pub fn entries(&self) -> impl Iterator<Item = (&str, Cow<'_, Value>)> {
+        let (owned, baked) = match &self.0 {
+            Storage::Owned(map) => (Some(map.iter()), None),
+            Storage::Static(table) => (None, Some(table.iter())),
+        };
+        owned
+            .into_iter()
+            .flatten()
+            .map(|(k, v)| (k.as_str(), Cow::Borrowed(v)))
+            .chain(
+                baked
+                    .into_iter()
+                    .flatten()
+                    .map(|(k, v)| (*k, Cow::Owned(v.to_value()))),
+            )
+    }
+
+    fn make_owned(&mut self) -> &mut HashMap<String, Value> {
+        if let Storage::Static(table) = &self.0 {
+            self.0 = Storage::Owned(
+                table
+                    .iter()
+                    .map(|(k, v)| (k.to_string(), v.to_value()))
+                    .collect(),
+            );
+        }
+        match &mut self.0 {
+            Storage::Owned(map) => map,
+            Storage::Static(_) => unreachable!(),
+        }
     }
 
     #[allow(dead_code)]
@@ -56,8 +147,7 @@ impl ComponentConfig {
     where
         T: for<'a> TryFrom<&'a Value, Error = ConfigError>,
     {
-        let ComponentConfig(config) = self;
-        match config.get(key) {
+        match self.lookup(key).as_deref() {
             Some(value) => T::try_from(value).map(Some),
             None => Ok(None),
         }
@@ -81,8 +171,21 @@ impl ComponentConfig {
     where
         T: DeserializeOwned,
     {
-        let ComponentConfig(config) = self;
-        let Some(value) = config.get(key) else {
+        if let Storage::Static(table) = &self.0 {
+            return table
+                .iter()
+                .find(|(k, _)| *k == key)
+                .map(|(_, v)| {
+                    T::deserialize(*v).map_err(|e| ConfigError {
+                        message: format!(
+                            "Config key '{key}' failed to deserialize as {}: {e}",
+                            type_name::<T>()
+                        ),
+                    })
+                })
+                .transpose();
+        }
+        let Some(value) = self.lookup(key) else {
             return Ok(None);
         };
         let cu_value = ron_value_to_cu_value(&value.0).map_err(|err| err.with_key(key))?;
@@ -102,10 +205,18 @@ impl ComponentConfig {
     where
         T: DeserializeOwned,
     {
+        if let Storage::Static(table) = &self.0 {
+            return T::deserialize(serde::de::value::MapDeserializer::new(
+                table.iter().copied(),
+            ))
+            .map_err(|e: serde::de::value::Error| ConfigError {
+                message: format!("Config failed to deserialize as {}: {e}", type_name::<T>()),
+            });
+        }
         let mut map = BTreeMap::new();
-        for (key, value) in &self.0 {
+        for (key, value) in self.entries() {
             let mapped_value = ron_value_to_cu_value(&value.0).map_err(|err| err.with_key(key))?;
-            map.insert(CuValue::String(key.clone()), mapped_value);
+            map.insert(CuValue::String(key.to_string()), mapped_value);
         }
 
         CuValue::Map(map)
@@ -120,15 +231,14 @@ impl ComponentConfig {
 
     #[allow(dead_code)]
     pub fn set<T: Into<Value>>(&mut self, key: &str, value: T) {
-        let ComponentConfig(config) = self;
-        config.insert(key.to_string(), value.into());
+        self.make_owned().insert(key.to_string(), value.into());
     }
 
     #[allow(dead_code)]
     pub fn merge_from(&mut self, other: &ComponentConfig) {
-        let ComponentConfig(config) = self;
-        for (key, value) in &other.0 {
-            config.insert(key.clone(), value.clone());
+        for (key, value) in other.entries() {
+            self.make_owned()
+                .insert(key.to_string(), value.into_owned());
         }
     }
 }
@@ -191,6 +301,19 @@ fn ron_value_to_cu_value(value: &RonValue) -> Result<CuValue, ConfigError> {
 /// Wrapper around the ron::Value to allow for custom serialization.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Value(pub(super) RonValue);
+
+impl Value {
+    #[doc(hidden)]
+    pub fn as_ron(&self) -> &RonValue {
+        &self.0
+    }
+}
+
+impl StaticValue {
+    fn to_value(self) -> Value {
+        Value(RonValue::deserialize(self).expect("static config must represent a RON value"))
+    }
+}
 
 /// Scalar representation used by compile-time constants after RON parsing.
 #[doc(hidden)]
