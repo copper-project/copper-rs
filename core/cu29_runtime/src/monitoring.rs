@@ -37,7 +37,8 @@ use cu29_traits::{
     finish_observed_encode,
 };
 use portable_atomic::{
-    AtomicBool as PortableAtomicBool, AtomicU64 as PortableAtomicU64, Ordering as PortableOrdering,
+    AtomicBool as PortableAtomicBool, AtomicUsize as PortableAtomicUsize,
+    Ordering as PortableOrdering,
 };
 use serde_derive::{Deserialize, Serialize};
 
@@ -1237,9 +1238,9 @@ pub struct CuMsgIoStats {
 
 struct CuMsgIoEntry {
     present: PortableAtomicBool,
-    resident_bytes: PortableAtomicU64,
-    encoded_bytes: PortableAtomicU64,
-    handle_bytes: PortableAtomicU64,
+    resident_bytes: PortableAtomicUsize,
+    encoded_bytes: PortableAtomicUsize,
+    handle_bytes: PortableAtomicUsize,
 }
 
 impl CuMsgIoEntry {
@@ -1257,20 +1258,20 @@ impl CuMsgIoEntry {
 
         CuMsgIoStats {
             present: true,
-            resident_bytes: self.resident_bytes.load(PortableOrdering::Relaxed),
-            encoded_bytes: self.encoded_bytes.load(PortableOrdering::Relaxed),
-            handle_bytes: self.handle_bytes.load(PortableOrdering::Relaxed),
+            resident_bytes: self.resident_bytes.load(PortableOrdering::Relaxed) as u64,
+            encoded_bytes: self.encoded_bytes.load(PortableOrdering::Relaxed) as u64,
+            handle_bytes: self.handle_bytes.load(PortableOrdering::Relaxed) as u64,
         }
     }
 
-    fn set(&self, stats: CuMsgIoStats) {
+    fn set(&self, stats: PayloadIoStats) {
         self.resident_bytes
             .store(stats.resident_bytes, PortableOrdering::Relaxed);
         self.encoded_bytes
             .store(stats.encoded_bytes, PortableOrdering::Relaxed);
         self.handle_bytes
             .store(stats.handle_bytes, PortableOrdering::Relaxed);
-        self.present.store(stats.present, PortableOrdering::Release);
+        self.present.store(true, PortableOrdering::Release);
     }
 }
 
@@ -1278,9 +1279,9 @@ impl Default for CuMsgIoEntry {
     fn default() -> Self {
         Self {
             present: PortableAtomicBool::new(false),
-            resident_bytes: PortableAtomicU64::new(0),
-            encoded_bytes: PortableAtomicU64::new(0),
-            handle_bytes: PortableAtomicU64::new(0),
+            resident_bytes: PortableAtomicUsize::new(0),
+            encoded_bytes: PortableAtomicUsize::new(0),
+            handle_bytes: PortableAtomicUsize::new(0),
         }
     }
 }
@@ -1531,11 +1532,10 @@ pub(crate) fn record_current_slot_payload_io_stats(
         // SAFETY: the capture guard holds the cache alive for the duration of the encode pass.
         let cache_ptr = capture.cache_addr as *const CuMsgIoEntry;
         let entry = unsafe { &*cache_ptr.add(slot) };
-        entry.set(CuMsgIoStats {
-            present: true,
-            resident_bytes: (fixed_bytes.saturating_add(handle_bytes)) as u64,
-            encoded_bytes: encoded_bytes as u64,
-            handle_bytes: handle_bytes as u64,
+        entry.set(PayloadIoStats {
+            resident_bytes: fixed_bytes.saturating_add(handle_bytes),
+            encoded_bytes,
+            handle_bytes,
         });
     });
 }
