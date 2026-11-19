@@ -54,6 +54,25 @@ pub struct CodecState<C> {
 }
 
 impl<C> CodecState<C> {
+    #[doc(hidden)]
+    pub fn reset(&self) {
+        *lock_mutex(&self.inner) = None;
+    }
+
+    #[doc(hidden)]
+    pub fn with_static<R, E>(
+        &self,
+        build: impl FnOnce() -> CuResult<C>,
+        use_codec: impl FnOnce(&mut C) -> Result<R, E>,
+        error: impl FnOnce(CuError) -> E,
+    ) -> Result<R, E> {
+        let mut guard = lock_mutex(&self.inner);
+        if guard.is_none() {
+            *guard = Some((0, build().map_err(error)?));
+        }
+        use_codec(&mut guard.as_mut().expect("initialized codec").1)
+    }
+
     pub const fn new() -> Self {
         Self {
             inner: Mutex::new(None),

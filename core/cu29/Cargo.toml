@@ -51,6 +51,7 @@ rayon = { workspace = true, optional = true }
 ctrlc = { workspace = true, optional = true }
 
 [features]
+static-config = ["cu29-derive/static-config"]
 # Compatibility alias: remote debugging always includes Rerun representations.
 rerun = ["remote-debug"]
 clock-sync = [

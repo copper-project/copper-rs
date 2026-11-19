@@ -39,6 +39,7 @@ mod bundle_resources;
 mod constants;
 mod resources;
 mod safety;
+mod static_config;
 mod utils;
 
 use constants::build_constant_modules;
@@ -451,22 +452,31 @@ fn gen_culist_support(
     )
     .unwrap_or_else(|err| panic!("Could not resolve log codec bindings: {err}"));
     let default_config_ron_ident = format_ident!("__CU_LOGCODEC_DEFAULT_CONFIG_RON");
-    let default_config_ron = cuconfig
-        .serialize_ron()
-        .unwrap_or_else(|_| "<failed to serialize config>".to_string());
-    let default_config_ron_lit = LitStr::new(&default_config_ron, Span::call_site());
     let (codec_helper_fns, encode_helper_names, decode_helper_names) = build_culist_codec_helpers(
         &flat_codec_bindings,
         &default_config_ron_ident,
         mission_label,
     );
-    let default_config_ron_const = if flat_codec_bindings.iter().any(Option::is_some) {
-        quote! {
-            const #default_config_ron_ident: &str = #default_config_ron_lit;
-        }
-    } else {
-        quote! {}
-    };
+    let reset_static_codecs = cfg!(feature = "static-config").then(|| {
+        let slots = flat_codec_bindings
+            .iter()
+            .enumerate()
+            .filter(|(_, binding)| binding.is_some())
+            .map(|(i, _)| {
+                let (encode, decode) = static_codec_states(i);
+                quote! { #encode.reset(); #decode.reset(); }
+            });
+        quote! { #[doc(hidden)] pub fn reset_static_codecs() { #(#slots)* } }
+    });
+    let default_config_ron_const =
+        if !cfg!(feature = "static-config") && flat_codec_bindings.iter().any(Option::is_some) {
+            let default_config_ron_lit = cuconfig.serialize_ron().expect("validated codec config");
+            quote! {
+                const #default_config_ron_ident: &str = #default_config_ron_lit;
+            }
+        } else {
+            quote! {}
+        };
 
     #[cfg(feature = "macro_debug")]
     eprintln!("[build the copperlist tuple bincode support]");
@@ -900,6 +910,7 @@ fn gen_culist_support(
         ];
 
         impl CuStampedDataSet {
+            #reset_static_codecs
             #(#methods)*
 
             #[allow(dead_code)]
@@ -1967,6 +1978,7 @@ fn extract_output_packs(runtime_plan: &CuExecutionLoop) -> Vec<OutputPack> {
 
 #[derive(Clone)]
 struct SlotCodecBinding {
+    config: Option<cu29_runtime::config::ComponentConfig>,
     payload_type: Type,
     task_id: String,
     msg_type: String,
@@ -2025,6 +2037,7 @@ fn build_flat_slot_codec_bindings(
                     ))
                 })?;
                 bindings.push(Some(SlotCodecBinding {
+                    config: spec.config.clone(),
                     payload_type: payload_type.clone(),
                     task_id: task_id.clone(),
                     msg_type: msg_type.clone(),
@@ -2038,6 +2051,13 @@ fn build_flat_slot_codec_bindings(
     }
 
     Ok(bindings)
+}
+
+fn static_codec_states(slot: usize) -> (Ident, Ident) {
+    (
+        format_ident!("ENCODE_CODEC_{slot}"),
+        format_ident!("DECODE_CODEC_{slot}"),
+    )
 }
 
 fn build_culist_codec_helpers(
@@ -2076,7 +2096,38 @@ fn build_culist_codec_helpers(
         let msg_type = LitStr::new(&binding.msg_type, Span::call_site());
         let codec_type_path = LitStr::new(&binding.codec_type_path, Span::call_site());
 
-        let helper = if compressed {
+        let helper = if cfg!(feature = "static-config") {
+            let (encode_state, decode_state) = static_codec_states(flat_idx);
+            let config = static_config::component(binding.config.as_ref());
+            let (ty, enc, dec) = if compressed {
+                (
+                    quote!(#payload_type),
+                    quote!(encode_payload_with_codec),
+                    quote!(decode_payload_with_codec),
+                )
+            } else {
+                (
+                    quote!(CuMsg<#payload_type>),
+                    quote!(encode_msg_with_codec),
+                    quote!(decode_msg_with_codec),
+                )
+            };
+            let build = quote!(|| {
+                let settings = ::cu29::logcodec::deserialize_codec_config::<#codec_type,#payload_type>(#config.as_ref())?;
+                <#codec_type as ::cu29::logcodec::CuLogCodec<#payload_type>>::new(settings)
+            });
+            quote! {
+                static #encode_state: ::cu29::logcodec::CodecState<#codec_type> = ::cu29::logcodec::CodecState::new();
+                static #decode_state: ::cu29::logcodec::CodecState<#codec_type> = ::cu29::logcodec::CodecState::new();
+
+                fn #encode_fn<E: Encoder>(payload: &#ty, encoder: &mut E) -> Result<(), EncodeError> {
+                    #encode_state.with_static(#build, |codec| ::cu29::logcodec::#enc(payload, codec, encoder), |e| EncodeError::OtherString(e.to_string()))
+                }
+                fn #decode_fn<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<#ty, DecodeError> {
+                    #decode_state.with_static(#build, |codec| ::cu29::logcodec::#dec(decoder, codec), |e| DecodeError::OtherString(e.to_string()))
+                }
+            }
+        } else if compressed {
             quote! {
             fn #encode_fn<E: Encoder>(payload: &#payload_type, encoder: &mut E) -> Result<(), EncodeError> {
                 static STATE: ::cu29::logcodec::CodecState<#codec_type> = ::cu29::logcodec::CodecState::new();
@@ -3433,6 +3484,7 @@ fn build_bundle_list<'a>(config: &'a CuConfig, mission: &str) -> Vec<&'a Resourc
 }
 
 struct BundleSpec {
+    config: Option<cu29_runtime::config::ComponentConfig>,
     inputs: Vec<(String, String)>,
     id: String,
     provider_path: syn::Path,
@@ -3538,6 +3590,7 @@ fn build_bundle_specs(config: &CuConfig, mission: &str) -> CuResult<Vec<BundleSp
                 .collect();
             inputs.sort();
             Ok(BundleSpec {
+                config: bundle.config.clone(),
                 inputs,
                 id: bundle.id.clone(),
                 provider_path,
@@ -3599,6 +3652,7 @@ mod resource_stack_tests {
         entries
             .iter()
             .map(|(id, inputs)| BundleSpec {
+                config: None,
                 id: (*id).into(),
                 provider_path: syn::parse_str("Provider").unwrap(),
                 inputs: inputs
@@ -3695,6 +3749,12 @@ fn build_resources_module(
                 ))
             });
         }
+        let bundle_config = if cfg!(feature = "static-config") {
+            let cfg = static_config::component(bundle.config.as_ref());
+            quote!(#cfg.as_ref())
+        } else {
+            quote!(bundle_cfg.config.as_ref())
+        };
         bundle_inits.push(quote! {
             {
                 const INPUT_KEYS: [cu29::resource::ResourceKey;
@@ -3709,7 +3769,7 @@ fn build_resources_module(
                     cu29::resource::BundleIndex::new(#index), #bundle_id,
                 ).with_input_keys(&INPUT_KEYS);
                 <#provider_path as cu29::resource::ResourceBundle>::build(
-                    bundle_ctx, bundle_cfg.config.as_ref(), &mut manager,
+                    bundle_ctx, #bundle_config, &mut manager,
                 )?;
             }
         });
