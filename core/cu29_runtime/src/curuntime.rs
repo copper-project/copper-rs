@@ -100,6 +100,7 @@ pub type MonitorInstantiator<M> = fn(&CuConfig, CuMonitoringMetadata, CuMonitori
 
 #[doc(hidden)]
 pub struct CuRuntimeParts<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, MI> {
+    topology: fn(&CuConfig, &str) -> CuResult<crate::monitoring::MonitorTopology>,
     pub tasks_instanciator: TI,
     pub monitored_components: &'static [MonitorComponentMetadata],
     pub culist_component_mapping: &'static [ComponentId],
@@ -113,6 +114,13 @@ pub struct CuRuntimeParts<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: 
 impl<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, MI>
     CuRuntimeParts<CT, CB, P, M, NBCL, TI, BI, MI>
 {
+    pub const fn with_topology(
+        mut self,
+        topology: fn(&CuConfig, &str) -> CuResult<crate::monitoring::MonitorTopology>,
+    ) -> Self {
+        self.topology = topology;
+        self
+    }
     pub const fn new(
         tasks_instanciator: TI,
         monitored_components: &'static [MonitorComponentMetadata],
@@ -122,6 +130,7 @@ impl<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, MI>
         bridges_instanciator: BI,
     ) -> Self {
         Self {
+            topology: build_monitor_topology,
             tasks_instanciator,
             monitored_components,
             culist_component_mapping,
@@ -2099,7 +2108,7 @@ where
             parts.monitored_components,
             parts.culist_component_mapping,
             CopperListInfo::new(core::mem::size_of::<CopperList<P>>(), NBCL),
-            build_monitor_topology(config, mission)?,
+            (parts.topology)(config, mission)?,
             None,
         )?
         .with_subsystem_id(subsystem.id())
@@ -2226,7 +2235,7 @@ where
             parts.monitored_components,
             parts.culist_component_mapping,
             CopperListInfo::new(core::mem::size_of::<CopperList<P>>(), NBCL),
-            build_monitor_topology(config, mission)?,
+            (parts.topology)(config, mission)?,
             None,
         )?
         .with_subsystem_id(subsystem.id())

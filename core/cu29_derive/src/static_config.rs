@@ -63,3 +63,35 @@ pub(super) fn component(config: Option<&ComponentConfig>) -> TokenStream {
     });
     quote!(Some(::cu29::config::ComponentConfig::from_static(&[#(#entries),*])))
 }
+
+pub(super) fn topology(
+    config: &cu29_runtime::config::CuConfig,
+    mission: &str,
+) -> cu29_traits::CuResult<TokenStream> {
+    use cu29_runtime::monitoring::build_monitor_topology;
+    let mut topology = build_monitor_topology(config, mission)?;
+    topology.nodes.sort_by(|a, b| a.id.cmp(&b.id));
+    let m = quote!(::cu29::monitoring);
+    let optional = |s: Option<&str>| match s {
+        Some(s) => quote!(Some(#s.into())),
+        None => quote!(None),
+    };
+    let nodes = topology.nodes.iter().map(|n| {
+        let id = &n.id;
+        let name = optional(n.type_name.as_deref());
+        let kind = syn::Ident::new(&format!("{:?}", n.kind), proc_macro2::Span::call_site());
+        let inputs = &n.inputs;
+        let outputs = &n.outputs;
+        quote!(#m::MonitorNode { id: #id.into(), type_name: #name, kind: #m::ComponentType::#kind,
+            inputs: vec![#(#inputs.into()),*], outputs: vec![#(#outputs.into()),*] })
+    });
+    let connections = topology.connections.iter().map(|c| {
+        let (src,dst,msg) = (&c.src,&c.dst,&c.msg);
+        let src_port = optional(c.src_port.as_deref());
+        let dst_port = optional(c.dst_port.as_deref());
+        quote!(#m::MonitorConnection { src: #src.into(), dst: #dst.into(), msg: #msg.into(), src_port: #src_port, dst_port: #dst_port })
+    });
+    Ok(
+        quote!(#m::MonitorTopology { nodes: vec![#(#nodes),*], connections: vec![#(#connections),*] }),
+    )
+}
