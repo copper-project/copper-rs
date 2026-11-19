@@ -755,8 +755,15 @@ mod tests {
 
     #[test]
     fn bridge_trait_compiles_and_accesses_configs() {
-        let mut bridge_cfg = ComponentConfig::default();
-        bridge_cfg.set("port", "ttyUSB0".to_string());
+        #[cfg(feature = "static-config")]
+        let bridge_cfg =
+            ComponentConfig::from_static(&[("port", cu29_value::StaticValue::String("ttyUSB0"))]);
+        #[cfg(not(feature = "static-config"))]
+        let bridge_cfg = {
+            let mut config = ComponentConfig::default();
+            config.set("port", "ttyUSB0".to_string());
+            config
+        };
 
         let tx_descriptors = [
             BridgeChannelConfig::from_static(&TxChannels::IMU, None, None),
