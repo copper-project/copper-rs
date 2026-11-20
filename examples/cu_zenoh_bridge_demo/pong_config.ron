@@ -1,4 +1,5 @@
 (
+    runtime: (rate_target_hz: 5),
     tasks: [
         (id: "responder_bin", type: "tasks::PongResponder", config: {"label": "pong-bincode"}),
         (id: "responder_json", type: "tasks::PongResponder", config: {"label": "pong-json"}),
