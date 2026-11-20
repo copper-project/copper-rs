@@ -139,12 +139,12 @@ the application; the supplied observations must be nonblocking.
 
 ```rust
 let mut app = App::builder().with_clock(clock.clone()).build()?.start()?;
-app.wait_until_ready(Duration::from_secs(5), || cameras.ready())?;
+app.wait_until_ready(CuDuration::from_secs(5), || cameras.ready())?;
 
 let run_result = app.run_until(|| stop_requested.load(Ordering::Acquire));
 
 cameras.request_eos();
-let drain_result = app.drain_until(Duration::from_secs(2), || cameras.drained());
+let drain_result = app.drain_until(CuDuration::from_secs(2), || cameras.drained());
 let stop_result = app.stop();
 
 run_result?;

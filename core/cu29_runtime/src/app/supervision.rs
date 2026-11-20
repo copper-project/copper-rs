@@ -1,7 +1,6 @@
 use super::*;
 use alloc::{format, string::ToString};
-use core::time::Duration;
-use cu29_clock::ClockProvider;
+use cu29_clock::{ClockProvider, CuDuration};
 
 /// Reason a managed application loop returned.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -40,12 +39,12 @@ where
 {
     fn wait_for(
         &mut self,
-        timeout: Duration,
+        timeout: CuDuration,
         mut observed: impl FnMut() -> bool,
     ) -> Result<(), CuWaitError> {
         let clock = self.app.get_clock();
         let start = clock.raw_now();
-        let expired = || u128::from((clock.raw_now() - start).as_nanos()) >= timeout.as_nanos();
+        let expired = || clock.raw_now() - start >= timeout;
         let mut passed = false;
         let mut first = true;
         let exit = self
@@ -68,7 +67,7 @@ where
     /// Run iterations until the device reports readiness, the deadline expires, or Copper requests shutdown.
     pub fn wait_until_ready(
         &mut self,
-        timeout: Duration,
+        timeout: CuDuration,
         ready: impl FnMut() -> bool,
     ) -> Result<(), CuWaitError> {
         self.wait_for(timeout, ready)
@@ -77,7 +76,7 @@ where
     /// Run iterations until the device finishes draining, the deadline expires, or Copper requests shutdown.
     pub fn drain_until(
         &mut self,
-        timeout: Duration,
+        timeout: CuDuration,
         drained: impl FnMut() -> bool,
     ) -> Result<(), CuWaitError> {
         self.wait_for(timeout, drained)
