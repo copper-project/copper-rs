@@ -463,3 +463,28 @@ mod tests {
         assert_eq!(entry.origin, CuLogOrigin::default());
     }
 }
+
+#[cfg(all(feature = "std", feature = "signal-handler"))]
+static SHUTDOWN_REQUESTED: core::sync::atomic::AtomicBool =
+    core::sync::atomic::AtomicBool::new(false);
+
+/// Shared by generated run loops across mission builds.
+#[doc(hidden)]
+#[cfg(all(feature = "std", feature = "signal-handler"))]
+pub fn install_shutdown_handler() -> cu29_traits::CuResult<()> {
+    static INSTALLED: std::sync::OnceLock<cu29_traits::CuResult<()>> = std::sync::OnceLock::new();
+    INSTALLED
+        .get_or_init(|| {
+            ctrlc::set_handler(|| {
+                SHUTDOWN_REQUESTED.store(true, core::sync::atomic::Ordering::Release)
+            })
+            .map_err(|error| cu29_traits::CuError::from(error.to_string()))
+        })
+        .clone()
+}
+
+#[doc(hidden)]
+#[cfg(all(feature = "std", feature = "signal-handler"))]
+pub fn shutdown_requested() -> bool {
+    SHUTDOWN_REQUESTED.load(core::sync::atomic::Ordering::Acquire)
+}

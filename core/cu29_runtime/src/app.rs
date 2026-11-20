@@ -1,3 +1,8 @@
+#[cfg(feature = "std")]
+mod host;
+#[cfg(feature = "std")]
+pub use host::*;
+
 mod supervision;
 pub use supervision::*;
 

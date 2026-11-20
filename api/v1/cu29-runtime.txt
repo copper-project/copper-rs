@@ -47,6 +47,16 @@ pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Initialized
 pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::run_one_iteration(&mut self) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::start_all_tasks(&mut self) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::stop_all_tasks(&mut self) -> cu29_traits::CuResult<()>
+pub struct cu29_runtime::app::CuRunner
+impl cu29_runtime::app::CuRunner
+pub fn cu29_runtime::app::CuRunner::control(&self) -> cu29_runtime::app::CuRunnerControl
+pub fn cu29_runtime::app::CuRunner::join(self) -> cu29_traits::CuResult<cu29_runtime::app::CuRunExit>
+pub fn cu29_runtime::app::CuRunner::spawn<S, L, A>(factory: impl core::ops::function::FnOnce() -> cu29_traits::CuResult<cu29_runtime::app::CuAppLifecycle<S, L, A>> + core::marker::Send + 'static) -> cu29_traits::CuResult<Self> where S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static, A: cu29_runtime::app::CuManagedApplication<S, L>
+impl core::ops::drop::Drop for cu29_runtime::app::CuRunner
+pub fn cu29_runtime::app::CuRunner::drop(&mut self)
+pub struct cu29_runtime::app::CuRunnerControl
+impl cu29_runtime::app::CuRunnerControl
+pub fn cu29_runtime::app::CuRunnerControl::request_stop(&self)
 pub struct cu29_runtime::app::CuSimAppLifecycle<S, L, A, State>
 impl<S, L, A, State> cu29_runtime::app::CuSimAppLifecycle<S, L, A, State> where S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static, A: cu29_runtime::app::CuSimApplication<S, L>, State: cu29_runtime::app::Startable
 pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, State>::run_until_shutdown(self, sim_callback: &mut impl for<'z> core::ops::function::FnMut(<A as cu29_runtime::app::CuSimApplication<S, L>>::Step) -> cu29_runtime::simulation::SimOverride) -> cu29_runtime::app::SimTransitionResult<S, L, A, cu29_runtime::app::Stopped>
