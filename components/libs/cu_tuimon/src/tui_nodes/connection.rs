@@ -648,90 +648,6 @@ fn resolve_mixed_symbol(
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_aliases_beyond_greek_alphabet() {
-        let mut layout = ConnectionsLayout::new(4, 3);
-        // Isolate the endpoints so every connection must use an alias.
-        layout.block_zone(Rect::new(0, 0, 4, 3));
-        for source in 0..100 {
-            layout.insert_port(false, source, 0, (1, 1));
-            for destination in [100 + source, 200 + source] {
-                layout.insert_port(true, destination, 0, (2, 1));
-                layout.push_connection((Connection::new(source, 0, destination, 0), source + 1));
-            }
-        }
-        layout.calculate();
-
-        let mut aliases = std::collections::BTreeSet::<&str>::new();
-        for source in 0..100 {
-            let alias = &layout.alias_connections[&(false, source, 0)];
-            assert!(aliases.insert(alias.as_ref()));
-            for destination in [100 + source, 200 + source] {
-                assert_eq!(alias, &layout.alias_connections[&(true, destination, 0)]);
-            }
-        }
-        assert_eq!(layout.alias_connections[&(false, 0, 0)], "α");
-        assert_eq!(layout.alias_connections[&(false, 23, 0)], "ω");
-        assert_eq!(layout.alias_connections[&(false, 24, 0)], "α1");
-        assert_eq!(layout.alias_connections[&(false, 48, 0)], "α2");
-    }
-
-    fn symbol_for(north: Edge, south: Edge, east: Edge, west: Edge) -> &'static str {
-        resolve_mixed_symbol(north, south, east, west, &|edge| {
-            if edge == Edge::Blocked {
-                line::THICK
-            } else {
-                line::NORMAL
-            }
-        })
-        .map(|(symbol, _)| symbol)
-        .unwrap()
-    }
-
-    #[test]
-    fn mixed_four_way_prefers_coherent_vertical_run() {
-        assert_eq!(
-            symbol_for(
-                Edge::Connection(1),
-                Edge::Connection(1),
-                Edge::Connection(2),
-                Edge::Connection(3),
-            ),
-            line::NORMAL.vertical
-        );
-    }
-
-    #[test]
-    fn mixed_four_way_prefers_coherent_horizontal_run() {
-        assert_eq!(
-            symbol_for(
-                Edge::Connection(1),
-                Edge::Connection(2),
-                Edge::Connection(3),
-                Edge::Connection(3),
-            ),
-            line::NORMAL.horizontal
-        );
-    }
-
-    #[test]
-    fn fully_mixed_four_way_still_renders_a_line() {
-        assert_eq!(
-            symbol_for(
-                Edge::Connection(1),
-                Edge::Connection(2),
-                Edge::Connection(3),
-                Edge::Connection(4),
-            ),
-            line::NORMAL.vertical
-        );
-    }
-}
-
 fn neighbors(pos: (usize, usize), width: usize, height: usize) -> Vec<((usize, usize), Direction)> {
     let mut out = Vec::new();
     if pos.0 < width - 1 {
@@ -864,5 +780,89 @@ impl<T: Default> Betweens<T> {
             }
             println!();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_aliases_beyond_greek_alphabet() {
+        let mut layout = ConnectionsLayout::new(4, 3);
+        // Isolate the endpoints so every connection must use an alias.
+        layout.block_zone(Rect::new(0, 0, 4, 3));
+        for source in 0..100 {
+            layout.insert_port(false, source, 0, (1, 1));
+            for destination in [100 + source, 200 + source] {
+                layout.insert_port(true, destination, 0, (2, 1));
+                layout.push_connection((Connection::new(source, 0, destination, 0), source + 1));
+            }
+        }
+        layout.calculate();
+
+        let mut aliases = std::collections::BTreeSet::<&str>::new();
+        for source in 0..100 {
+            let alias = &layout.alias_connections[&(false, source, 0)];
+            assert!(aliases.insert(alias.as_ref()));
+            for destination in [100 + source, 200 + source] {
+                assert_eq!(alias, &layout.alias_connections[&(true, destination, 0)]);
+            }
+        }
+        assert_eq!(layout.alias_connections[&(false, 0, 0)], "α");
+        assert_eq!(layout.alias_connections[&(false, 23, 0)], "ω");
+        assert_eq!(layout.alias_connections[&(false, 24, 0)], "α1");
+        assert_eq!(layout.alias_connections[&(false, 48, 0)], "α2");
+    }
+
+    fn symbol_for(north: Edge, south: Edge, east: Edge, west: Edge) -> &'static str {
+        resolve_mixed_symbol(north, south, east, west, &|edge| {
+            if edge == Edge::Blocked {
+                line::THICK
+            } else {
+                line::NORMAL
+            }
+        })
+        .map(|(symbol, _)| symbol)
+        .unwrap()
+    }
+
+    #[test]
+    fn mixed_four_way_prefers_coherent_vertical_run() {
+        assert_eq!(
+            symbol_for(
+                Edge::Connection(1),
+                Edge::Connection(1),
+                Edge::Connection(2),
+                Edge::Connection(3),
+            ),
+            line::NORMAL.vertical
+        );
+    }
+
+    #[test]
+    fn mixed_four_way_prefers_coherent_horizontal_run() {
+        assert_eq!(
+            symbol_for(
+                Edge::Connection(1),
+                Edge::Connection(2),
+                Edge::Connection(3),
+                Edge::Connection(3),
+            ),
+            line::NORMAL.horizontal
+        );
+    }
+
+    #[test]
+    fn fully_mixed_four_way_still_renders_a_line() {
+        assert_eq!(
+            symbol_for(
+                Edge::Connection(1),
+                Edge::Connection(2),
+                Edge::Connection(3),
+                Edge::Connection(4),
+            ),
+            line::NORMAL.vertical
+        );
     }
 }
