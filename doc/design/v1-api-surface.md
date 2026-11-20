@@ -228,3 +228,9 @@ The checked-in V1 audit baseline lives under [`api/v1/`](../../api/v1/).
 
 Use `just api-check` to verify the baseline and `just api-update` only for an
 intentional contract update. See [contributor workflow](../../CONTRIBUTING.md).
+
+### Application supervision (experimental)
+
+Live applications opt into paced iteration through `CuManagedApplication`.
+The running lifecycle's `run_until` returns `CuRunExit`. Host mission policies
+implement `CuMissionPolicy` and readiness and drain failures use `CuWaitError`.
