@@ -1386,6 +1386,11 @@
 <p><a href="https://github.com/copper-project/copper-rs/pull/1616">Backport for Copper 1.3 (#1616)</a></p>
 <h2 id="packages-and-upgrading">Packages and upgrading<a class="headerlink" href="#packages-and-upgrading" title="Permanent link">&para;</a></h2>
 <p><code>cu29</code>, <code>cu29-clock</code>, <code>cu29-runtime</code>, and <code>cu-logmon</code> advance to <strong>1.3.3</strong>. Set <code>cu29 = "~1.3.3"</code> and run <code>cargo update</code> to pick up the clock and runtime fixes. Applications using the monitor can select <code>cu-logmon = "~1.3.3"</code>.</p>
+<h1 id="v128-2026-11-19">v1.2.8 - 2026-11-19<a class="headerlink" href="#v128-2026-11-19" title="Permanent link">&para;</a></h1>
+<h2 id="32-bit-clock-optimization">32-bit clock optimization<a class="headerlink" href="#32-bit-clock-optimization" title="Permanent link">&para;</a></h2>
+<p>On 32-bit targets, <code>RobotClock</code> reduces the ratio of nanoseconds to counter ticks once during calibration. At 480 MHz, for example, 12 ticks equal 25 nanoseconds. Clock reads at that rate use 64-bit arithmetic even when the intermediate product would overflow. Unusually wide denominators retain the full-precision fallback. The conversion gives the same nanosecond results as Copper 1.2.7. <a href="https://github.com/copper-project/copper-rs/pull/1619">Clock backport (#1619)</a></p>
+<h2 id="packages-and-upgrading_1">Packages and upgrading<a class="headerlink" href="#packages-and-upgrading_1" title="Permanent link">&para;</a></h2>
+<p><code>cu29</code> and <code>cu29-clock</code> advance to <strong>1.2.8</strong>. Set <code>cu29 = "~1.2.8"</code> and run <code>cargo update</code>. Applications that use the clock directly can set <code>cu29-clock = "~1.2.8"</code>.</p>
 <h1 id="v127-2026-11-19">v1.2.7 - 2026-11-19<a class="headerlink" href="#v127-2026-11-19" title="Permanent link">&para;</a></h1>
 <h2 id="fixes_1">Fixes<a class="headerlink" href="#fixes_1" title="Permanent link">&para;</a></h2>
 <ul>
@@ -1394,7 +1399,7 @@
 <li>The runtime stores per-message I/O byte counts in pointer-width atomics, avoiding 64-bit atomic operations on 32-bit targets. The public monitoring statistics still expose 64-bit byte counts.</li>
 </ul>
 <p><a href="https://github.com/copper-project/copper-rs/pull/1617">Backport for Copper 1.2 (#1617)</a></p>
-<h2 id="packages-and-upgrading_1">Packages and upgrading<a class="headerlink" href="#packages-and-upgrading_1" title="Permanent link">&para;</a></h2>
+<h2 id="packages-and-upgrading_2">Packages and upgrading<a class="headerlink" href="#packages-and-upgrading_2" title="Permanent link">&para;</a></h2>
 <p><code>cu29</code>, <code>cu29-clock</code>, <code>cu29-runtime</code>, and <code>cu-logmon</code> advance to <strong>1.2.7</strong>. Set <code>cu29 = "~1.2.7"</code> and run <code>cargo update</code> to pick up the clock and runtime fixes. Applications using the monitor can select <code>cu-logmon = "~1.2.7"</code>.</p>
 <h1 id="v132-2026-11-08">v1.3.2 - 2026-11-08<a class="headerlink" href="#v132-2026-11-08" title="Permanent link">&para;</a></h1>
 <p>This patch fixes section byte accounting while preserving the Copper 1.3 public APIs, configuration, Rust 1.95 minimum, and log encapsulation.</p>
@@ -1403,7 +1408,7 @@
 <li>The no-op logger rotates sections at their configured capacity, rejects entries that cannot fit in an empty section, and rejects section sizes that cannot be represented by the log format. This prevents long-running no-op logging from overflowing section counters. (<a href="https://github.com/copper-project/copper-rs/pull/1553">#1553</a>)</li>
 <li>Log streams check encoded byte counts before updating section headers. Oversized or overflowing counts return an error without publishing a truncated or wrapped header. Stream position comes from the section byte counter. (<a href="https://github.com/copper-project/copper-rs/pull/1555">#1555</a>)</li>
 </ul>
-<h2 id="packages-and-upgrading_2">Packages and upgrading<a class="headerlink" href="#packages-and-upgrading_2" title="Permanent link">&para;</a></h2>
+<h2 id="packages-and-upgrading_3">Packages and upgrading<a class="headerlink" href="#packages-and-upgrading_3" title="Permanent link">&para;</a></h2>
 <p>Only <code>cu29</code> and <code>cu29-unifiedlog</code> advance to <strong>1.3.2</strong>. <code>cu29</code> requires <code>cu29-unifiedlog = "~1.3.2"</code> so upgrading the main crate selects the fixed logger. Other packages retain their released versions.</p>
 <p>Use <code>cu29 = "~1.3.2"</code>, then run <code>cargo update</code>. Applications depending directly on <code>cu29-unifiedlog</code> can use <code>~1.3.2</code>. Existing log encodings remain unchanged; use the producing application's matching decoder for replay.</p>
 <h1 id="v126-2026-11-08">v1.2.6 - 2026-11-08<a class="headerlink" href="#v126-2026-11-08" title="Permanent link">&para;</a></h1>
@@ -1413,7 +1418,7 @@
 <li>The no-op logger rotates sections at their configured capacity, rejects entries that cannot fit in an empty section, and rejects section sizes that cannot be represented by the log format. This prevents long-running no-op logging from overflowing section counters. (<a href="https://github.com/copper-project/copper-rs/pull/1553">#1553</a>)</li>
 <li>Log streams check encoded byte counts before updating section headers. Oversized or overflowing counts return an error without publishing a truncated or wrapped header. Stream position comes from the section byte counter. (<a href="https://github.com/copper-project/copper-rs/pull/1555">#1555</a>)</li>
 </ul>
-<h2 id="packages-and-upgrading_3">Packages and upgrading<a class="headerlink" href="#packages-and-upgrading_3" title="Permanent link">&para;</a></h2>
+<h2 id="packages-and-upgrading_4">Packages and upgrading<a class="headerlink" href="#packages-and-upgrading_4" title="Permanent link">&para;</a></h2>
 <p>Only <code>cu29</code> and <code>cu29-unifiedlog</code> advance to <strong>1.2.6</strong>. <code>cu29</code> requires <code>cu29-unifiedlog = "~1.2.6"</code> so upgrading the main crate selects the fixed logger. Other packages retain their released versions.</p>
 <p>Use <code>cu29 = "~1.2.6"</code>, then run <code>cargo update</code>. Applications depending directly on <code>cu29-unifiedlog</code> can use <code>~1.2.6</code>. Existing log encodings remain unchanged; use the producing application's matching decoder for replay.</p>
 <h1 id="v131-2026-10-20">v1.3.1 - 2026-10-20<a class="headerlink" href="#v131-2026-10-20" title="Permanent link">&para;</a></h1>
