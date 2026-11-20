@@ -14,11 +14,6 @@ use std::path::Path;
 )]
 struct App {}
 
-#[cfg(not(feature = "smoketest"))]
-use kitti::App as KittiApp;
-#[cfg(not(feature = "smoketest"))]
-use synthetic::App as SyntheticApp;
-
 /// Must agree with `slab_size_mib` in `copperconfig.ron`: the writer only sees
 /// this value, while config validation checks section sizes against the RON one.
 const SLAB_SIZE: Option<usize> = Some(32 * 1024 * 1024);
@@ -52,23 +47,19 @@ fn run() -> CuResult<()> {
     let log_path = format!("examples/cu_anytime_anynet/logs/anynet_fg_{mission}.copper");
     prepare_log(&log_path)?;
 
-    match mission.as_str() {
-        "synthetic" => {
-            let app = SyntheticApp::builder()
-                .with_log_path(&log_path, SLAB_SIZE)?
-                .build()?;
-            app.run_until_shutdown()?;
-            Ok(())
+    let selected = match mission.as_str() {
+        "synthetic" => AppMission::Synthetic,
+        "kitti" => AppMission::Kitti,
+        _ => {
+            return Err(CuError::from(format!(
+                "Unknown mission '{mission}'; expected 'synthetic' or 'kitti'"
+            )));
         }
-        "kitti" => {
-            let app = KittiApp::builder()
-                .with_log_path(&log_path, SLAB_SIZE)?
-                .build()?;
-            app.run_until_shutdown()?;
-            Ok(())
-        }
-        _ => Err(CuError::from(format!(
-            "Unknown mission '{mission}'; expected 'synthetic' or 'kitti'"
-        ))),
-    }
+    };
+    let mut runner = AppRunner::builder()
+        .with_log_path(&log_path, SLAB_SIZE)?
+        .build()?;
+    runner.start(selected)?;
+    runner.run_until(|| false)?;
+    runner.stop()
 }
