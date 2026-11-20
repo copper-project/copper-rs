@@ -14,20 +14,7 @@ use std::path::Path;
 #[copper_runtime(config = "copperconfig.ron")]
 struct FeetechDemoApp {}
 
-use arm_publisher::FeetechDemoApp as ArmPublisherApp;
-use leader_follower::FeetechDemoApp as LeaderFollowerApp;
-
 const SLAB_SIZE: Option<usize> = Some(64 * 1024 * 1024);
-
-fn run_mission<App>(
-    app: CuAppLifecycle<memmap::MmapSectionStorage, UnifiedLoggerWrite, App>,
-) -> CuResult<()>
-where
-    App: CuApplication<memmap::MmapSectionStorage, UnifiedLoggerWrite>,
-{
-    app.run_until_shutdown()?;
-    Ok(())
-}
 
 fn main() {
     let mission = std::env::args().nth(1).unwrap_or_else(|| {
@@ -44,35 +31,9 @@ fn main() {
         fs::create_dir_all(parent).expect("Failed to create logs directory");
     }
 
-    match mission.as_str() {
-        "arm_publisher" => {
-            debug!("Starting ARM_PUBLISHER mission – reading positions.");
-            let app = ArmPublisherApp::builder()
-                .with_log_path(logger_path, SLAB_SIZE)
-                .expect("Failed to setup logger.")
-                .build()
-                .unwrap_or_else(|e| {
-                    print_setup_help(&e);
-                    std::process::exit(1);
-                });
-            if let Err(e) = run_mission(app) {
-                debug!("Arm publisher ended: {}", e);
-            }
-        }
-        "leader_follower" => {
-            debug!("Starting LEADER_FOLLOWER mission – leader drives follower.");
-            let app = LeaderFollowerApp::builder()
-                .with_log_path(logger_path, SLAB_SIZE)
-                .expect("Failed to setup logger.")
-                .build()
-                .unwrap_or_else(|e| {
-                    print_setup_help(&e);
-                    std::process::exit(1);
-                });
-            if let Err(e) = run_mission(app) {
-                debug!("Leader-follower ended: {}", e);
-            }
-        }
+    let selected = match mission.as_str() {
+        "arm_publisher" => FeetechDemoAppMission::ArmPublisher,
+        "leader_follower" => FeetechDemoAppMission::LeaderFollower,
         other => {
             eprintln!(
                 "Unknown mission: '{}'. Use 'arm_publisher' or 'leader_follower'.",
@@ -80,6 +41,19 @@ fn main() {
             );
             std::process::exit(1);
         }
+    };
+    let mut runner = FeetechDemoAppRunner::builder()
+        .with_log_path(logger_path, SLAB_SIZE)
+        .expect("Failed to setup logger.")
+        .build()
+        .expect("Failed to create mission runner");
+    if let Err(error) = runner.start(selected) {
+        print_setup_help(&error);
+        std::process::exit(1);
+    }
+    debug!("Starting Feetech mission {}", mission.as_str());
+    if let Err(error) = runner.run_until(|| false).and_then(|_| runner.stop()) {
+        debug!("Feetech mission ended: {}", error);
     }
 }
 
