@@ -24,9 +24,6 @@ where
 {
     /// Run on this thread until `should_stop` returns true or Copper requests shutdown.
     /// The predicate must be nonblocking. The app remains running on return.
-    ///
-    /// The optional `rate_target_hz` setting controls iteration timing. With a target,
-    /// each call starts a fresh rate-limiter schedule. Without one, iterations run freely.
     pub fn run_until(&mut self, should_stop: impl FnMut() -> bool) -> CuResult<CuRunExit> {
         self.app.run_managed(should_stop)
     }
