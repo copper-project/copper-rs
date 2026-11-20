@@ -16,16 +16,11 @@ pub(crate) struct MonitorState {
     pub(crate) cycles: AtomicU64,
     pub(crate) errors: AtomicU64,
     pub(crate) running: AtomicBool,
-    pub(crate) stop_requested: AtomicBool,
 }
 
 pub(crate) struct GraphMonitor {
     state: Arc<MonitorState>,
-}
-impl GraphMonitor {
-    pub(crate) fn state(&self) -> Arc<MonitorState> {
-        Arc::clone(&self.state)
-    }
+    pub(crate) on_start: Option<std::sync::mpsc::Sender<Arc<MonitorState>>>,
 }
 impl CuMonitor for GraphMonitor {
     fn new(metadata: CuMonitoringMetadata, _runtime: CuMonitoringRuntime) -> CuResult<Self> {
@@ -36,18 +31,21 @@ impl CuMonitor for GraphMonitor {
             })
             .collect();
         Ok(Self {
+            on_start: None,
             state: Arc::new(MonitorState {
                 metadata,
                 components,
                 cycles: AtomicU64::new(0),
                 errors: AtomicU64::new(0),
                 running: AtomicBool::new(false),
-                stop_requested: AtomicBool::new(false),
             }),
         })
     }
     fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
         self.state.running.store(true, Ordering::Relaxed);
+        if let Some(sender) = self.on_start.take() {
+            let _ = sender.send(Arc::clone(&self.state));
+        }
         Ok(())
     }
     fn process_copperlist(&self, _ctx: &CuContext, view: CopperListView<'_>) -> CuResult<()> {
