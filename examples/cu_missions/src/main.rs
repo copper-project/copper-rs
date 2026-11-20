@@ -5,54 +5,42 @@ mod tasks;
 #[copper_runtime(config = "copperconfig.ron")]
 struct App {}
 
-// Get the applications for each mission
-use A::App as MissionAApp;
-use B::App as MissionBApp;
+fn main() -> CuResult<()> {
+    let clock = RobotClock::default();
+    let mut missions = AppSupervisor::builder().with_clock(clock.clone()).build()?;
+    missions.start(AppMission::A)?;
 
-const SLAB_SIZE: Option<usize> = Some(10 * 1024 * 1024);
-
-fn run_once<App>(
-    app: CuAppLifecycle<memmap::MmapSectionStorage, UnifiedLoggerWrite, App>,
-) -> CuResult<()>
-where
-    App: CuApplication<memmap::MmapSectionStorage, UnifiedLoggerWrite>,
-{
-    let mut running = app.start()?;
-    running.run_one_iteration()?;
-    running.stop()?;
-    Ok(())
+    let switch_at = clock.raw_now() + CuDuration::from_secs(1);
+    if missions.run_until(|| clock.raw_now() >= switch_at)? == CuRunExit::Requested {
+        missions.transition_to(AppMission::B)?;
+        let stop_at = clock.raw_now() + CuDuration::from_secs(1);
+        missions.run_until(|| clock.raw_now() >= stop_at)?;
+    }
+    missions.stop()
 }
 
-fn main() {
-    let tmp_dir = tempfile::TempDir::new().expect("could not create a tmp dir");
-    let logger_path = tmp_dir.path().join("monitor.copper");
+#[test]
+fn supervisor_reuses_custom_logger_and_resource_setup() {
+    use std::cell::Cell;
+    use std::sync::{Arc, Mutex};
 
-    debug!("Logger created at {}.", path = &logger_path);
-    debug!("Creating application... ");
-    let clock = RobotClock::default();
-    debug!("Running... starting clock: {}.", clock.now());
-    debug!("Starting Mission A.");
-    {
-        let application_a = MissionAApp::builder()
-            .with_clock(clock.clone())
-            .with_log_path(&logger_path, SLAB_SIZE)
-            .expect("Failed to setup logger.")
-            .build()
-            .expect("Failed to create runtime");
-        run_once(application_a).expect("Failed to run mission A.");
-    }
+    let writer = Arc::new(Mutex::new(NoopLogger::new()));
+    let activations = Cell::new(0);
+    let mut supervisor = AppSupervisor::builder()
+        .with_logger::<NoopSectionStorage, _>(writer.clone())
+        .with_resources(|_| {
+            activations.set(activations.get() + 1);
+            Ok(ResourceManager::new(&[]))
+        })
+        .build()
+        .unwrap();
 
-    debug!("Starting Mission B.");
-    // Note if you don't end the tasks, you'll be up for a bad time because tasks can hog some resources.
-    {
-        let application_b = MissionBApp::builder()
-            .with_clock(clock.clone())
-            .with_log_path(&logger_path, SLAB_SIZE)
-            .expect("Failed to setup logger.")
-            .build()
-            .expect("Failed to create runtime");
-        run_once(application_b).expect("Failed to run mission B.");
-    }
-
-    debug!("End of program: {}.", clock.now());
+    assert_eq!(activations.get(), 0);
+    supervisor.start(AppMission::A).unwrap();
+    supervisor.transition_to(AppMission::B).unwrap();
+    supervisor.transition_to(AppMission::B).unwrap();
+    supervisor.stop().unwrap();
+    assert_eq!(activations.get(), 3);
+    drop(supervisor);
+    assert_eq!(Arc::strong_count(&writer), 1);
 }

@@ -1001,12 +1001,21 @@ mod lifecycle_tests {
 
     #[derive(Default)]
     struct MockApp {
+        clock: RobotClock,
+        _probe: Option<OwnerProbe>,
+        fail_iteration: bool,
         started: u32,
         stopped: u32,
         iterations: u32,
         runs: u32,
         fail_start: bool,
         fail_stop: bool,
+    }
+
+    impl cu29_clock::ClockProvider for MockApp {
+        fn get_clock(&self) -> RobotClock {
+            self.clock.clone()
+        }
     }
 
     #[allow(deprecated)] // mocks implement the deprecated raw trait methods
@@ -1049,6 +1058,110 @@ mod lifecycle_tests {
         }
     }
 
+    impl<S: SectionStorage, L: UnifiedLogWrite<S> + 'static> CuManagedApplication<S, L> for MockApp {
+        fn run_managed(&mut self, mut requested: impl FnMut() -> bool) -> CuResult<CuRunExit> {
+            while !requested() {
+                if self.fail_iteration {
+                    return Err("mock iteration failure".into());
+                }
+                self.iterations += 1;
+                std::thread::yield_now();
+            }
+            Ok(CuRunExit::Requested)
+        }
+    }
+
+    struct OwnerProbe {
+        owner: std::thread::ThreadId,
+        released: std::sync::mpsc::Sender<std::thread::ThreadId>,
+        _local: std::rc::Rc<()>,
+    }
+
+    impl Drop for OwnerProbe {
+        fn drop(&mut self) {
+            let here = std::thread::current().id();
+            assert_eq!(here, self.owner);
+            self.released.send(here).unwrap();
+        }
+    }
+
+    #[test]
+    fn runner_builds_and_drops_thread_local_resources_before_join() {
+        let (released, receipt) = std::sync::mpsc::channel();
+        let runner = CuRunner::spawn(move || {
+            Ok(Lifecycle::new(MockApp {
+                _probe: Some(OwnerProbe {
+                    owner: std::thread::current().id(),
+                    released,
+                    _local: std::rc::Rc::new(()),
+                }),
+                ..Default::default()
+            }))
+        })
+        .unwrap();
+        runner.control().request_stop();
+        runner.control().request_stop();
+        assert_eq!(runner.join().unwrap(), CuRunExit::Requested);
+        assert_ne!(receipt.try_recv().unwrap(), std::thread::current().id());
+    }
+
+    #[test]
+    fn runner_retains_start_or_iteration_error_alongside_cleanup_failure() {
+        for fail_start in [false, true] {
+            let runner = CuRunner::spawn(move || {
+                Ok(Lifecycle::new(MockApp {
+                    fail_start,
+                    fail_iteration: true,
+                    fail_stop: true,
+                    ..Default::default()
+                }))
+            })
+            .unwrap();
+            drop(runner.control());
+            let error = runner.join().unwrap_err().to_string();
+            assert!(error.contains(if fail_start {
+                "mock start failure"
+            } else {
+                "mock iteration failure"
+            }));
+            assert!(error.contains("mock stop failure"));
+        }
+    }
+
+    #[test]
+    fn failed_mission_start_releases_resources_before_returning() {
+        let (released, receipt) = std::sync::mpsc::channel();
+        let app = Lifecycle::new(MockApp {
+            fail_start: true,
+            _probe: Some(OwnerProbe {
+                owner: std::thread::current().id(),
+                released,
+                _local: std::rc::Rc::new(()),
+            }),
+            ..Default::default()
+        });
+        assert!(start_managed(app).is_err());
+        receipt.try_recv().unwrap();
+    }
+
+    #[test]
+    fn mission_deadline_uses_the_supplied_robot_clock() {
+        let (clock, control) = RobotClock::mock();
+        let mut app = Lifecycle::new(MockApp {
+            clock,
+            ..Default::default()
+        })
+        .start()
+        .unwrap();
+        let mut observations = 0;
+        let waited = app.wait_until_ready(core::time::Duration::from_secs(3600), || {
+            observations += 1;
+            control.increment(cu29_clock::CuDuration::from_secs(1800));
+            false
+        });
+        assert!(matches!(waited, Err(CuWaitError::Timeout)));
+        assert_eq!(observations, 2);
+    }
     type Lifecycle = CuStdAppLifecycle<MockApp>;
 
     #[test]

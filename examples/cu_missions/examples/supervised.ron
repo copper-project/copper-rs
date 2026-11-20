@@ -1,0 +1,25 @@
+(
+    missions: [(id: "idle"), (id: "recording")],
+    resources: [(id: "camera", provider: "crate::CameraBundle")],
+    tasks: [
+        (
+            id: "preview",
+            type: "crate::FrameSource",
+            missions: ["idle"],
+            logging: (enabled: false),
+            resources: {"camera": "camera.device"},
+        ),
+        (
+            id: "frames",
+            type: "crate::FrameSource",
+            missions: ["recording"],
+            resources: {"camera": "camera.device"},
+        ),
+    ],
+    cnx: [
+        (src: "preview", dst: "__nc__", msg: "u64", missions: ["idle"]),
+        (src: "frames", dst: "__nc__", msg: "u64", missions: ["recording"]),
+    ],
+    runtime: (rate_target_hz: 100),
+    logging: (slab_size_mib: 4, section_size_mib: 1),
+)
