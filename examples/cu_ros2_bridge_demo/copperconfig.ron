@@ -1,5 +1,6 @@
 (
     tasks: [(id: "source", type: "tasks::ExampleSrc"), (id: "verifier", type: "tasks::RxVerifier")],
+    runtime: (rate_target_hz: 50),
     bridges: [
         (
             id: "ros2",

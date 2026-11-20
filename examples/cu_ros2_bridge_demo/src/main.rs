@@ -1,6 +1,5 @@
 use cu29::prelude::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::Duration;
 
 pub mod bridges {
     use cu_ros2_bridge::Ros2Bridge;
@@ -89,8 +88,6 @@ pub mod tasks {
 #[copper_runtime(config = "copperconfig.ron")]
 struct App {}
 
-const ITERATIONS: usize = 50;
-
 fn main() {
     if let Err(error) = drive() {
         eprintln!("cu-ros2-bridge-demo failed: {error}");
@@ -106,18 +103,16 @@ fn drive() -> CuResult<()> {
     let app = App::builder().with_log_path(&logger_path, None)?.build()?;
     let mut app = app.start()?;
 
-    for _ in 0..ITERATIONS {
-        app.run_one_iteration()?;
-        std::thread::sleep(Duration::from_millis(20));
-    }
+    let reply = app.wait_until_ready(CuDuration::from_secs(1), || tasks::received_count() > 0);
+    app.stop()?;
+    reply.map_err(|error| match error {
+        CuWaitError::Timeout => {
+            CuError::from("ROS2 bridge did not receive a loopback reply within 1 s")
+        }
+        other => other.into(),
+    })?;
 
     let received = tasks::received_count();
-    if received == 0 {
-        return Err(CuError::from(
-            "ROS2 bridge test did not receive any looped-back Rx message",
-        ));
-    }
-
     println!("ros2 bridge loopback OK: received {received} messages");
     Ok(())
 }
