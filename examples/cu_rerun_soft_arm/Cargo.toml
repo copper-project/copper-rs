@@ -16,7 +16,7 @@ ci_exclude_workspace = true
 default = ["rerun", "viewer"]
 rerun = ["dep:cu-rerun", "dep:nalgebra", "cu29/reflect"]
 app = ["rerun", "cu29/textlogs"]
-viewer = ["app", "dep:rerun", "dep:clap", "dep:ctrlc", "dep:tokio"]
+viewer = ["app", "dep:rerun", "dep:clap", "cu29/signal-handler", "dep:tokio"]
 debug = ["app", "cu29/rerun"]
 
 [dependencies]
@@ -35,7 +35,6 @@ rerun = { version = "=0.43.2", default-features = false, features = [
   "native_viewer",
 ], optional = true }
 clap = { workspace = true, optional = true }
-ctrlc = { workspace = true, optional = true }
 tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
 
 [build-dependencies]
