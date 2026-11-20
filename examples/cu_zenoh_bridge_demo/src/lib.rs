@@ -25,6 +25,28 @@ pub struct DemoRunOptions {
     pub iterations: Option<usize>,
 }
 
+impl DemoRunOptions {
+    /// Run the serial graph for the requested iteration count or until Ctrl-C.
+    pub fn run<A>(&self, app: CuStdAppLifecycle<A>) -> CuResult<()>
+    where
+        A: CuManagedApplication<memmap::MmapSectionStorage, UnifiedLoggerWrite>,
+    {
+        let mut remaining = self.iterations;
+        let mut running = app.start()?;
+        let result = running.run_until(|| match &mut remaining {
+            Some(0) => true,
+            Some(count) => {
+                *count -= 1;
+                false
+            }
+            None => false,
+        });
+        running.stop()?;
+        result?;
+        Ok(())
+    }
+}
+
 pub fn default_log_path(file_name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("logs")
