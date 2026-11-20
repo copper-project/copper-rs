@@ -91,12 +91,13 @@ itself remains independent of Tokio; a future async adapter can expose completio
 
 ## 3. Switching missions on the caller's thread
 
-For a live app named `App`, the runtime macro generates `AppMission` from
-the mission IDs in the RON configuration. This is the complete switch in the
+For a live app named `App`, the runtime macro generates `AppRunner` and
+an `AppMission` enum with variants for the mission IDs in RON. An app named
+`Robot` gets `RobotRunner` and `RobotMission`. This is the complete switch in the
 camera example, where the declared IDs are `idle` and `recording`.
 
 ```rust
-let mut missions = AppSupervisor::builder()
+let mut missions = AppRunner::builder()
     .with_clock(clock.clone())
     .with_log_path("missions.copper", None)?
     .build()?;
@@ -115,15 +116,15 @@ restarts the entire graph. If stop, construction, or startup fails, the call
 returns an error and the same handle can select a fallback. Explicit stop reports
 cleanup errors. Dropping the handle attempts cleanup.
 
-Set up the generated supervisor once. Its builder accepts the app builder's
+Set up the generated runner once. Its builder accepts the app builder's
 clock, instance ID, logger, resources, and supported configuration overrides.
-`build` produces an idle supervisor. `start` activates the initial mission.
+`build` produces an idle runner. `start` activates the initial mission.
 `transition_to` can also restart the current mission by selecting the same ID.
 
 `with_logger` retains the supplied writer, including on firmware.
 `with_log_path` opens one host archive at the requested path. Its section contexts
 identify each activation by run ID, mission index, and instance ID. Without an
-explicit logger the supervisor uses the app builder's no-op logger.
+explicit logger the runner uses the app builder's no-op logger.
 
 `with_resources` accepts a repeatable resource factory. With the corresponding
 features enabled, `with_clock_reference` and `with_logstream` take openers
