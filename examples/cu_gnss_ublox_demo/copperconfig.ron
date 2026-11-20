@@ -1,4 +1,5 @@
 (
+    runtime: (rate_target_hz: 200),
     resources: [
         (
             id: "linux",
@@ -14,6 +15,7 @@
         (
             id: "ublox",
             type: "cu_gnss_ublox::UbxSource",
+            runtime: (rate_target_hz: 200),
             resources: {"serial": "linux.serial0"},
             config: {
                 "poll_nav_pvt_ms": 200,
