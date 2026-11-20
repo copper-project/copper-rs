@@ -19,6 +19,6 @@ fn main() -> CuResult<()> {
         .with_log_path(&args.log, Some(512 * 1024 * 1024))?
         .build()
         .map_err(|error| CuError::from(format!("failed to build PGS candidate: {error}")))?;
-    app.run_until_shutdown()?;
+    cu_parallel_mandelbrot::run_benchmark(app)?.log_shutdown_completed()?;
     Ok(())
 }
