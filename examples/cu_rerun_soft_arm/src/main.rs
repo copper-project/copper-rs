@@ -27,30 +27,21 @@ struct Args {
 
 fn record(args: &Args, rec: rerun::RecordingStream, stop: &AtomicBool) -> CuResult<()> {
     cu29::replay::remove_log_family(&args.log_base)?;
-    let clock = RobotClock::new();
-    let mut app = SoftArmApp::builder()
-        .with_clock(clock.clone())
+    let app = SoftArmApp::builder()
         .with_log_path(&args.log_base, Some(16 * 1024 * 1024))?
         .with_resources(move |_| cu_rerun_soft_arm::tasks::viewer_resources(rec))
         .build()?;
-    let rate = app
-        .inner_mut()
-        .copper_runtime_mut()
-        .runtime_config
-        .rate_target_hz
-        .unwrap_or(30);
-    let mut limiter = cu29::curuntime::LoopRateLimiter::from_rate_target_hz(rate, &clock)?;
     let mut app = app.start()?;
-    let frames = args.frames.or_else(|| args.save.as_ref().map(|_| 360));
-    let result: CuResult<()> = (|| {
-        let mut frame = 0;
-        while !stop.load(Ordering::Relaxed) && frames.is_none_or(|limit| frame < limit) {
-            app.run_one_iteration()?;
-            frame += 1;
-            limiter.limit(&clock);
+    let mut remaining = args.frames.or_else(|| args.save.as_ref().map(|_| 360));
+    let result = app.run_until(|| {
+        if stop.load(Ordering::Relaxed) || remaining == Some(0) {
+            return true;
         }
-        Ok(())
-    })();
+        if let Some(frames) = &mut remaining {
+            *frames -= 1;
+        }
+        false
+    });
     let stopped = app.stop();
     result?;
     stopped?;
@@ -60,8 +51,6 @@ fn record(args: &Args, rec: rerun::RecordingStream, stop: &AtomicBool) -> CuResu
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     let stop = Arc::new(AtomicBool::new(false));
-    let interrupted = stop.clone();
-    ctrlc::set_handler(move || interrupted.store(true, Ordering::Relaxed))?;
     let builder = viewer::recording_builder();
     if let Some(path) = args.save.as_ref() {
         let rec = builder.save(path)?;
