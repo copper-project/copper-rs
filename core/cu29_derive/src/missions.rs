@@ -41,6 +41,12 @@ pub(crate) fn generate(app: &Ident, vis: &Visibility, modules: &[Ident]) -> Toke
             fn run_until(&mut self, requested: impl FnMut() -> bool) -> #result<#api::CuRunExit> {
                 match self { #(Self::#variants(app) => app.run_until(requested)),* }
             }
+            fn wait_until_ready(&mut self, timeout: #pre::CuDuration, ready: impl FnMut() -> bool) -> ::core::result::Result<(), #api::CuWaitError> {
+                match self { #(Self::#variants(app) => app.wait_until_ready(timeout, ready)),* }
+            }
+            fn drain_until(&mut self, timeout: #pre::CuDuration, drained: impl FnMut() -> bool) -> ::core::result::Result<(), #api::CuWaitError> {
+                match self { #(Self::#variants(app) => app.drain_until(timeout, drained)),* }
+            }
             fn stop(self) -> #result<()> {
                 match self { #(Self::#variants(app) => app.stop().map(drop).map_err(|failed| failed.error)),* }
             }
