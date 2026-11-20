@@ -18,7 +18,6 @@ cu-gnss-payloads = { workspace = true }
 cu-linux-resources = { workspace = true }
 tempfile = { workspace = true }
 serde = { workspace = true }
-ctrlc = { workspace = true }
 
 [package.metadata.cargo-shear]
 ignored = ["serde", "cu-linux-resources"]

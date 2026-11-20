@@ -1,12 +1,6 @@
 pub mod tasks;
 
 use cu29::prelude::*;
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-};
-use std::thread;
-use std::time::Duration;
 
 #[copper_runtime(config = "copperconfig.ron")]
 struct CuGnssUbloxDemo {}
@@ -29,41 +23,21 @@ fn run() -> CuResult<()> {
     let clock = app.clock();
     let mut app = app.start()?;
 
-    let running = Arc::new(AtomicBool::new(true));
-    let running_for_signal = Arc::clone(&running);
-    ctrlc::set_handler(move || {
-        running_for_signal.store(false, Ordering::Relaxed);
-    })
-    .map_err(|e| CuError::new_with_cause("failed to install Ctrl-C handler", e))?;
-
     info!("GNSS demo started. Press Ctrl+C to stop.");
     info!(
         "This demo logs message counters and GNSS values; `sats_in_view` is a per-epoch count that can move up/down as tracking changes."
     );
-    let heartbeat_period_ns = CuDuration::from_secs(5).as_nanos();
-    let mut next_heartbeat_ns = clock.now().as_nanos().saturating_add(heartbeat_period_ns);
-
-    let mut run_error: Option<CuError> = None;
-    while running.load(Ordering::Relaxed) {
-        if let Err(err) = app.run_one_iteration() {
-            run_error = Some(err);
-            break;
+    let stopped = loop {
+        let next_heartbeat = clock.raw_now() + CuDuration::from_secs(5);
+        match app.run_until(|| clock.raw_now() >= next_heartbeat) {
+            Ok(CuRunExit::Requested) => info!("[gnss/heartbeat] {}", tasks::state::summary()),
+            result => {
+                let stopped = app.stop()?;
+                result?;
+                break stopped;
+            }
         }
-
-        let now_ns = clock.now().as_nanos();
-        if now_ns >= next_heartbeat_ns {
-            info!("[gnss/heartbeat] {}", tasks::state::summary());
-            next_heartbeat_ns = now_ns.saturating_add(heartbeat_period_ns);
-        }
-
-        thread::sleep(Duration::from_millis(5));
-    }
-
-    app.stop()?;
-
-    if let Some(err) = run_error {
-        return Err(err);
-    }
+    };
 
     info!("[gnss/final] {}", tasks::state::summary());
 
@@ -73,5 +47,5 @@ fn run() -> CuResult<()> {
         ));
     }
 
-    Ok(())
+    stopped.into_inner().log_shutdown_completed()
 }
