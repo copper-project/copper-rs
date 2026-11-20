@@ -964,7 +964,10 @@ fn benchmark_outlier_bytes(
             }
         }
     });
-    (labeled > 0).then(|| (bytes, 100.0 * bad as f32 / labeled as f32))
+    if labeled == 0 {
+        return None;
+    }
+    Some((bytes, 100.0 * bad as f32 / labeled as f32))
 }
 
 /// A subtle wireframe around the volume reconstructed from the depth image.
