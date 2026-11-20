@@ -231,6 +231,7 @@ intentional contract update. See [contributor workflow](../../CONTRIBUTING.md).
 
 ### Application supervision (experimental)
 
-Live applications opt into paced iteration through `CuManagedApplication`.
-The running lifecycle's `run_until` returns `CuRunExit`. Host mission policies
+On a running app that implements `CuManagedApplication`, `run_until` returns
+when the caller's predicate is true or Copper requests shutdown. `CuRunExit`
+identifies which condition ended the loop. Host mission policies
 implement `CuMissionPolicy` and readiness and drain failures use `CuWaitError`.
