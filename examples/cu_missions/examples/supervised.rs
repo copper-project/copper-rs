@@ -7,7 +7,7 @@ struct App {}
 
 fn main() -> CuResult<()> {
     let clock = RobotClock::default();
-    let mut missions = AppSupervisor::builder()
+    let mut missions = AppRunner::builder()
         .with_clock(clock.clone())
         .with_log_path("missions.copper", None)?
         .build()?;
@@ -83,7 +83,7 @@ fn transitions_release_the_camera_and_keep_each_recording() {
     let root = tempfile::tempdir_in(env!("CARGO_MANIFEST_DIR")).unwrap();
     let clock = RobotClock::default();
     let path = root.path().join("missions.copper");
-    let mut missions = AppSupervisor::builder()
+    let mut missions = AppRunner::builder()
         .with_instance_id(41)
         .with_clock(clock)
         .with_log_path(&path, None)
@@ -137,7 +137,7 @@ fn copper_shutdown_takes_precedence_over_the_caller_request() {
         assert!(status.success());
         return;
     }
-    let mut missions = AppSupervisor::builder().build().unwrap();
+    let mut missions = AppRunner::builder().build().unwrap();
     missions.start(AppMission::Idle).unwrap();
     assert_eq!(missions.run_until(|| true).unwrap(), CuRunExit::Requested);
     assert!(
