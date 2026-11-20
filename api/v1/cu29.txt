@@ -141,6 +141,29 @@ pub fn cu29::rtsan::ensure_initialized()
 pub fn cu29::rtsan::notify_blocking_call(_function_name: &'static core::ffi::c_str::CStr)
 pub fn cu29::rtsan::realtime_enter()
 pub fn cu29::rtsan::realtime_exit()
+pub mod cu29::supervisor
+pub struct cu29::supervisor::Supervisor<'a, M: ConfiguredMission, S: cu29_unifiedlog::SectionStorage + 'static, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static>
+impl<'a, M: ConfiguredMission> cu29::supervisor::Supervisor<'a, M>
+pub fn cu29::supervisor::Supervisor<'a, M>::builder() -> cu29::supervisor::SupervisorBuilder<'a, M>
+impl<M: ConfiguredMission, S: cu29_unifiedlog::SectionStorage + 'static, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static> cu29::supervisor::Supervisor<'_, M, S, L>
+pub fn cu29::supervisor::Supervisor<'_, M, S, L>::run_until(&mut self, requested: impl core::ops::function::FnMut() -> bool) -> cu29_traits::CuResult<cu29_runtime::app::supervision::CuRunExit>
+pub fn cu29::supervisor::Supervisor<'_, M, S, L>::start(&mut self, mission: M) -> cu29_traits::CuResult<()>
+pub fn cu29::supervisor::Supervisor<'_, M, S, L>::stop(&mut self) -> cu29_traits::CuResult<()>
+pub fn cu29::supervisor::Supervisor<'_, M, S, L>::transition_to(&mut self, mission: M) -> cu29_traits::CuResult<()>
+impl<M: ConfiguredMission, S: cu29_unifiedlog::SectionStorage + 'static, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static> core::ops::drop::Drop for cu29::supervisor::Supervisor<'_, M, S, L>
+pub fn cu29::supervisor::Supervisor<'_, M, S, L>::drop(&mut self)
+pub struct cu29::supervisor::SupervisorBuilder<'a, M, S, L>
+impl<'a, M: ConfiguredMission, S: cu29_unifiedlog::SectionStorage + 'static, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static> cu29::supervisor::SupervisorBuilder<'a, M, S, L>
+pub fn cu29::supervisor::SupervisorBuilder<'a, M, S, L>::build(self) -> cu29_traits::CuResult<cu29::supervisor::Supervisor<'a, M, S, L>>
+pub fn cu29::supervisor::SupervisorBuilder<'a, M, S, L>::with_clock(self, clock: cu29_clock::RobotClock) -> Self
+pub fn cu29::supervisor::SupervisorBuilder<'a, M, S, L>::with_config(self, config: cu29_runtime::config::CuConfig) -> Self
+pub fn cu29::supervisor::SupervisorBuilder<'a, M, S, L>::with_instance_id(self, instance_id: u32) -> Self
+pub fn cu29::supervisor::SupervisorBuilder<'a, M, S, L>::with_log_path(self, path: impl core::convert::AsRef<std::path::Path>, slab_size: core::option::Option<usize>) -> cu29_traits::CuResult<cu29::supervisor::SupervisorBuilder<'a, M, cu29_unifiedlog::memmap::MmapSectionStorage, cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite>>
+pub fn cu29::supervisor::SupervisorBuilder<'a, M, S, L>::with_logger<S2: cu29_unifiedlog::SectionStorage + 'static, L2: cu29_unifiedlog::UnifiedLogWrite<S2> + 'static>(self, logger: alloc::sync::Arc<std::sync::poison::mutex::Mutex<L2>>) -> cu29::supervisor::SupervisorBuilder<'a, M, S2, L2>
+pub fn cu29::supervisor::SupervisorBuilder<'a, M, S, L>::with_resources(self, resources: impl core::ops::function::FnMut(&cu29_runtime::config::CuConfig) -> cu29_traits::CuResult<cu29_runtime::resource::ResourceManager> + 'a) -> Self
+pub fn cu29::supervisor::SupervisorBuilder<'a, M, S, L>::with_unified_logger(self, logger: alloc::sync::Arc<std::sync::poison::mutex::Mutex<cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite>>) -> cu29::supervisor::SupervisorBuilder<'a, M, cu29_unifiedlog::memmap::MmapSectionStorage, cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite>
+impl<M> core::default::Default for cu29::supervisor::SupervisorBuilder<'_, M>
+pub fn cu29::supervisor::SupervisorBuilder<'_, M>::default() -> Self
 pub macro cu29::defmt_debug!
 pub macro cu29::defmt_error!
 pub macro cu29::defmt_info!

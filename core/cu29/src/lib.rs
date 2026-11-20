@@ -70,7 +70,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #[cfg(all(feature = "parallel-rt", not(feature = "std")))]
 compile_error!("feature `parallel-rt` requires `std`");
-#[cfg(not(feature = "std"))]
 extern crate alloc;
 extern crate self as cu29;
 
@@ -78,6 +77,7 @@ pub use cu29_derive::{bundle_resources, resources, safety_case};
 #[cfg(feature = "logstream")]
 pub use cu29_logstream as logstream;
 pub use cu29_runtime::app;
+pub mod supervisor;
 #[cfg(feature = "std")]
 #[doc(hidden)]
 pub use cu29_runtime::arena;

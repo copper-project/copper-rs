@@ -1,5 +1,17 @@
 pub mod cu29_runtime
 pub mod cu29_runtime::app
+pub enum cu29_runtime::app::CuRunExit
+pub cu29_runtime::app::CuRunExit::Requested
+pub cu29_runtime::app::CuRunExit::Shutdown
+pub enum cu29_runtime::app::CuWaitError
+pub cu29_runtime::app::CuWaitError::Execution(cu29_traits::CuError)
+pub cu29_runtime::app::CuWaitError::Shutdown
+pub cu29_runtime::app::CuWaitError::Timeout
+impl core::convert::From<cu29_runtime::app::CuWaitError> for cu29_traits::CuError
+pub fn cu29_traits::CuError::from(error: cu29_runtime::app::CuWaitError) -> Self
+impl core::error::Error for cu29_runtime::app::CuWaitError
+impl core::fmt::Display for cu29_runtime::app::CuWaitError
+pub fn cu29_runtime::app::CuWaitError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct cu29_runtime::app::CuAppLifecycle<S, L, A, State>
 impl<S, L, A, State> cu29_runtime::app::CuAppLifecycle<S, L, A, State> where S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static, A: cu29_runtime::app::CuApplication<S, L>, State: cu29_runtime::app::Startable
 pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, State>::run_until_shutdown(self) -> cu29_runtime::app::TransitionResult<S, L, A, cu29_runtime::app::Stopped>
@@ -16,6 +28,11 @@ impl<S, L, A> cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Runn
 pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Running>::wait_for_output(&mut self) -> cu29_traits::CuResult<()>
 impl<S, L, A> cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Running> where S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static, A: cu29_runtime::app::CuApplication<S, L>
 pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Running>::run_one_iteration(&mut self) -> cu29_traits::CuResult<()>
+impl<S, L, A> cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Running> where S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static, A: cu29_runtime::app::CuManagedApplication<S, L> + cu29_clock::ClockProvider
+pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Running>::drain_until(&mut self, timeout: cu29_clock::CuDuration, drained: impl core::ops::function::FnMut() -> bool) -> core::result::Result<(), cu29_runtime::app::CuWaitError>
+pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Running>::wait_until_ready(&mut self, timeout: cu29_clock::CuDuration, ready: impl core::ops::function::FnMut() -> bool) -> core::result::Result<(), cu29_runtime::app::CuWaitError>
+impl<S, L, A> cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Running> where S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static, A: cu29_runtime::app::CuManagedApplication<S, L>
+pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Running>::run_until(&mut self, should_stop: impl core::ops::function::FnMut() -> bool) -> cu29_traits::CuResult<cu29_runtime::app::CuRunExit>
 impl<S, L, A, State> core::fmt::Debug for cu29_runtime::app::CuAppLifecycle<S, L, A, State>
 pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, State>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl<S, L, A, State> core::ops::deref::Deref for cu29_runtime::app::CuAppLifecycle<S, L, A, State>
@@ -114,6 +131,8 @@ pub trait cu29_runtime::app::CuApplicationOutput
 pub fn cu29_runtime::app::CuApplicationOutput::wait_for_output(&mut self) -> cu29_traits::CuResult<()>
 pub trait cu29_runtime::app::CuDistributedReplayApplication<S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static>: cu29_runtime::app::CuRecordedReplayApplication<S, L> + cu29_runtime::app::CuSubsystemMetadata
 pub fn cu29_runtime::app::CuDistributedReplayApplication::build_distributed_replay(clock: cu29_clock::RobotClock, unified_logger: alloc::sync::Arc<std::sync::poison::mutex::Mutex<L>>, instance_id: u32, config_override: core::option::Option<cu29_runtime::config::CuConfig>) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
+pub trait cu29_runtime::app::CuManagedApplication<S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static>: cu29_runtime::app::CuApplication<S, L>
+pub fn cu29_runtime::app::CuManagedApplication::run_managed(&mut self, should_stop: impl core::ops::function::FnMut() -> bool) -> cu29_traits::CuResult<cu29_runtime::app::CuRunExit>
 pub trait cu29_runtime::app::CuRecordedReplayApplication<S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static>: cu29_runtime::app::CuSimApplication<S, L>
 pub type cu29_runtime::app::CuRecordedReplayApplication::RecordedDataSet: cu29_traits::CopperListTuple
 pub fn cu29_runtime::app::CuRecordedReplayApplication::replay_recorded_copperlist(&mut self, clock_mock: &cu29_clock::RobotClockMock, copperlist: &cu29_runtime::copperlist::CopperList<Self::RecordedDataSet>, keyframe: core::option::Option<&cu29_runtime::curuntime::KeyFrame>) -> cu29_traits::CuResult<()>
