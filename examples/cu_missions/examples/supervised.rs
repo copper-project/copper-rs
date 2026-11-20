@@ -15,8 +15,13 @@ fn main() -> CuResult<()> {
     let switch_at = clock.raw_now() + CuDuration::from_secs(1);
     if missions.run_until(|| clock.raw_now() >= switch_at)? == CuRunExit::Requested {
         missions.transition_to(AppMission::Recording)?;
+        missions.wait_until_ready(CuDuration::from_secs(2), Camera::ready)?;
         let stop_at = clock.raw_now() + CuDuration::from_secs(1);
-        missions.run_until(|| clock.raw_now() >= stop_at)?;
+        if missions.run_until(|| clock.raw_now() >= stop_at)? == CuRunExit::Requested {
+            Camera::request_eos();
+            missions.drain_until(CuDuration::from_secs(2), Camera::drained)?;
+            missions.transition_to(AppMission::Idle)?;
+        }
     }
     missions.stop()
 }
@@ -24,7 +29,25 @@ fn main() -> CuResult<()> {
 // This simulated camera can be opened by only one graph at a time.
 static CAMERA_OPEN: AtomicBool = AtomicBool::new(false);
 
+// The frame source acknowledges end-of-stream after processing its final frame.
+static STREAMING: AtomicBool = AtomicBool::new(false);
+static EOS_REQUESTED: AtomicBool = AtomicBool::new(false);
+
 pub struct Camera;
+
+impl Camera {
+    fn ready() -> bool {
+        STREAMING.load(Ordering::Acquire)
+    }
+
+    fn request_eos() {
+        EOS_REQUESTED.store(true, Ordering::Release);
+    }
+
+    fn drained() -> bool {
+        EOS_REQUESTED.load(Ordering::Acquire) && !Self::ready()
+    }
+}
 
 impl Drop for Camera {
     fn drop(&mut self) {
@@ -44,6 +67,8 @@ impl ResourceBundle for CameraBundle {
         if CAMERA_OPEN.swap(true, Ordering::AcqRel) {
             return Err("camera already open".into());
         }
+        STREAMING.store(false, Ordering::Release);
+        EOS_REQUESTED.store(false, Ordering::Release);
         resources.add_owned(bundle.key(CameraBundleId::Device), Camera)
     }
 }
@@ -73,7 +98,10 @@ impl CuSrcTask for FrameSource {
     }
 
     fn process(&mut self, ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
-        output.set_payload(ctx.cl_id());
+        if !Camera::drained() {
+            output.set_payload(ctx.cl_id());
+            STREAMING.store(!EOS_REQUESTED.load(Ordering::Acquire), Ordering::Release);
+        }
         Ok(())
     }
 }
@@ -94,6 +122,14 @@ fn transitions_release_the_camera_and_keep_each_recording() {
     assert!(CAMERA_OPEN.load(Ordering::Acquire));
     for mission in [AppMission::Recording, AppMission::Idle] {
         missions.transition_to(mission).unwrap();
+        assert!(!Camera::ready());
+        assert!(matches!(
+            missions.wait_until_ready(CuDuration::from_nanos(0), Camera::ready),
+            Err(CuWaitError::Timeout)
+        ));
+        missions
+            .wait_until_ready(CuDuration::from_secs(2), Camera::ready)
+            .unwrap();
         let mut remaining = 3;
         let start = clock.raw_now();
         missions
@@ -103,6 +139,12 @@ fn transitions_release_the_camera_and_keep_each_recording() {
             })
             .unwrap();
         assert!(clock.raw_now() - start >= CuDuration::from_millis(10));
+        Camera::request_eos();
+        assert!(!Camera::drained());
+        missions
+            .drain_until(CuDuration::from_secs(2), Camera::drained)
+            .unwrap();
+        assert!(Camera::drained());
     }
     missions.stop().unwrap();
     assert!(!CAMERA_OPEN.load(Ordering::Acquire));
@@ -159,5 +201,9 @@ fn copper_shutdown_takes_precedence_over_the_caller_request() {
         CuRunExit::Shutdown
     );
     assert_eq!(missions.run_until(|| true).unwrap(), CuRunExit::Shutdown);
+    assert!(matches!(
+        missions.drain_until(CuDuration::from_secs(2), || true),
+        Err(CuWaitError::Shutdown)
+    ));
     missions.stop().unwrap();
 }
