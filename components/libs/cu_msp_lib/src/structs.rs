@@ -14,6 +14,8 @@ use bincode::{Decode, Encode};
 use packed_struct::types::bits::ByteArray;
 use packed_struct::{PackedStruct, PackingError, PrimitiveEnum};
 
+use core::str::FromStr;
+
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
 #[cfg_attr(feature = "bincode", bincode(describe))]
 #[cfg_attr(feature = "reflect", derive(bevy_reflect::Reflect))]
@@ -1159,6 +1161,14 @@ impl TryFrom<&str> for Baudrate {
     type Error = &'static str;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
+        value.parse()
+    }
+}
+
+impl FromStr for Baudrate {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
         let baudrate = match value {
             "0" => Baudrate::BaudAuto,
             "1200" => Baudrate::Baud1200,
