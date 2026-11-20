@@ -1,16 +1,17 @@
 # App supervision helpers
 
-Status: proposal. All APIs below are proposed; examples show their intended shape.
-Existing lifecycle methods and manual iteration remain supported.
+Status: API design for the stacked supervision changes. The generated runtime
+and runnable example follow in the next two changes.
 
 Coppernic currently owns a synchronous mission supervisor beside a Tokio runtime.
-It repeats paced iteration loops for idle, camera startup, recording, and draining,
-and uses shared flags to request mission changes. These helpers would let Copper
+It repeats iteration loops for idle, camera startup, recording, and draining,
+and uses shared flags to request mission changes. These helpers let Copper
 own that machinery while applications retain their session and device policies.
 
 ## 1. Managed iteration loop
 
-Add `run_until` to the existing `CuAppLifecycle<S, L, A, Running>` wrapper:
+Call `run_until` on a running app to iterate until the caller's predicate returns
+true or Copper requests shutdown. The caller can then resume iteration or stop the app.
 
 ```rust
 pub fn run_until(
@@ -44,18 +45,16 @@ Expected behavior:
   explicit; return leaves the wrapper in `Running`, including on iteration errors.
 - Checks the predicate and Copper shutdown request before each iteration. If both
   are set, returns `Shutdown`. An already-set request executes no iterations.
-- Uses the App's configured `rate_target_hz` and existing `LoopRateLimiter`;
-  an absent rate means no pacing. Each call starts a fresh pacing schedule.
 - Executes the same generated plan as `run_one_iteration()`, including parallel
   dispatch when configured. Reuses the existing loop's panic/error handling.
-- Returns `Err(CuError)` on execution failure. A stop request never interrupts a
-  task mid-call; response time includes the current iteration and pacing wait.
+- Returns `Err(CuError)` on execution failure. The loop observes stop requests at
+  iteration boundaries. A task already in progress runs to completion.
 - The predicate must be quick and nonblocking. The helper adds no heap allocation
   per iteration. Repeated calls resume iteration; they do not restart tasks.
 
-This is the first implementation target. It needs no Tokio dependency, new RON
-fields, or feature flag. Its basic synchronous contract should support `no_std`;
-host signal handling remains gated by existing features.
+The synchronous loop supports `no_std`. Host signal handling uses the existing
+`signal-handler` feature. A pipeline finishes the current scheduling cycle and
+commits its in-flight CopperLists before returning.
 
 ## 2. Owned runner and control handle
 
@@ -90,54 +89,55 @@ Expected behavior:
 Tokio users can move `runner.join()` into `tokio::task::spawn_blocking`. Copper
 itself remains independent of Tokio; a future async adapter can expose completion.
 
-## 3. Typed mission supervisor
+## 3. Switching missions on the caller's thread
 
-Build on the runner with statically registered mission factories. In this sketch,
-`Mission` is an application enum and `Session` holds application-owned parameters;
-the two `build_*` functions return their respective generated App lifecycle types.
+For a live app named `App`, the runtime macro generates `AppMission` from
+the mission IDs in the RON configuration. This is the complete switch in the
+camera example, where the declared IDs are `idle` and `recording`.
 
 ```rust
-let supervisor = CuMissionSupervisor::<Mission, Session>::builder()
-    .mission(Mission::Idle, |ctx| build_idle_app(ctx.log_path()))
-    .mission(Mission::Recording, |ctx| {
-        build_recording_app(ctx.params(), ctx.log_path())
-    })
-    .command_capacity(4)
-    .spawn()?;
-
-// Proposed async adapter, called from management:
-let ticket = supervisor.control()
-    .request_transition(Mission::Recording, session)?;
-ticket.wait().await?;
+let mut missions = AppSupervisor::builder()
+    .with_clock(clock.clone())
+    .with_log_path("missions.copper", None)?
+    .build()?;
+missions.start(AppMission::Idle)?;
+let switch_at = clock.raw_now() + CuDuration::from_secs(5);
+if missions.run_until(|| clock.raw_now() >= switch_at)? == CuRunExit::Requested {
+    missions.transition_to(AppMission::Recording)?;
+}
+missions.stop()?;
 ```
 
-Expected behavior:
+The caller chooses the next mission. Copper stops and drops the active graph,
+resolves the target's declared resources, constructs its tasks, and calls their
+start hooks. The switch returns after those hooks complete. The first version
+restarts the entire graph. If stop, construction, or startup fails, the call
+returns an error and the same handle can select a fallback. Explicit stop reports
+cleanup errors. Dropping the handle attempts cleanup.
 
-- Factories are registered before spawn and dispatched through generated/static
-  typing, allowing different generated App types. Each build receives its own
-  parameters and log path; application factories wire those into resources.
-- The Copper owner serializes stop/drain → drop → build → start. Exclusive
-  resources are released before the next factory runs. No hot graph mutation.
-- Queue admission is nonblocking and fallible: full queue returns an error.
-  Acceptance means queued; ticket completion means the target is ready, or failed.
-- Accepted requests run in order. Repeated requests, including for the current
-  mission, rebuild it; stop/restart cannot disappear between two ticks.
-- Dropping a ticket does not cancel an accepted transition. Failure completes that
-  ticket with an error and leaves the supervisor without a running mission;
-  retries/fallback missions are explicit application requests.
-- Session directories and log identities are chosen per build; a rebuild must not
-  truncate a previous run. Unknown/unregistered mission variants are rejected.
+Set up the generated supervisor once. Its builder accepts the app builder's
+clock, instance ID, logger, resources, and supported configuration overrides.
+`build` produces an idle supervisor. `start` activates the initial mission.
+`transition_to` can also restart the current mission by selecting the same ID.
 
-Keep this in an optional helper layer. Fleet/session rules stay in the application.
-The adapter for awaiting tickets is optional; synchronous completion is also needed.
+`with_logger` retains the supplied writer, including on firmware.
+`with_log_path` opens one host archive at the requested path. Its section contexts
+identify each activation by run ID, mission index, and instance ID. Without an
+explicit logger the supervisor uses the app builder's no-op logger.
+
+`with_resources` accepts a repeatable resource factory. With the corresponding
+features enabled, `with_clock_reference` and `with_logstream` take openers
+for an owned reference or transport. Copper calls them at each activation after
+releasing the previous graph. `with_telemetry_tx` takes a reusable transmitter
+factory. Simulation callbacks belong to simulation apps.
 
 ## 4. Readiness and draining
 
-Add bounded waiting helpers on a running App. Device-specific actions stay in
+Use bounded waiting helpers on a running app. Device-specific actions stay in
 the application; the supplied observations must be nonblocking.
 
 ```rust
-let mut app = App::builder().build()?.start()?;
+let mut app = App::builder().with_clock(clock.clone()).build()?.start()?;
 app.wait_until_ready(Duration::from_secs(5), || cameras.ready())?;
 
 let run_result = app.run_until(|| stop_requested.load(Ordering::Acquire));
@@ -151,27 +151,9 @@ drain_result?;
 stop_result?;
 ```
 
-Both helpers continue paced iterations until the predicate succeeds, shutdown is
-requested, an iteration fails, or the monotonic timeout expires. Success means the
+Both helpers continue iterating until the predicate succeeds, shutdown is
+requested, an iteration fails, or the configured clock's raw monotonic deadline expires. Success means the
 predicate passed; timeout/shutdown/failure returns a distinguishable error. A zero
 timeout checks the predicate once and runs no iterations. They neither stop nor
 drop the App; callers still attempt cleanup after failure, including readiness
 failure (omitted from the short example). Waiting cannot preempt a blocked task.
-
-The mission supervisor would use these observations to acknowledge readiness and
-finish draining before releasing resources. Camera barriers and EOS logic remain
-component/application concerns.
-
-## Implementation order
-
-1. `core/cu29_runtime/src/app.rs` and
-   `core/cu29_derive/src/runtime_macro.rs`: share the existing run-loop machinery
-   with `run_until`. Verify early exit, configured pacing, errors, and unchanged
-   sequential/parallel dispatch; preserve existing lifecycle APIs.
-2. Add the optional `std` runner beside the lifecycle wrapper. Verify factory and
-   destruction thread identity, repeated stop requests, and failure cleanup.
-3. Add readiness/drain waits on the same loop machinery. Verify timeout and cleanup
-   behavior before introducing the mission supervisor helper.
-4. Implement typed transitions and bounded requests in the helper layer. Verify
-   queued stop/restart, resource release ordering, and completion acknowledgements
-   using an idle/recording example derived from Coppernic.

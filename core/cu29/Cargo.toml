@@ -85,7 +85,7 @@ high-precision-limiter = ["std", "cu29-runtime/high-precision-limiter"]
 logstream = [
   "std",
   "async-cl-io",
-  "dep:cu29-logstream",
+  "cu29-logstream/std",
   "cu29-derive/logstream",
 ]
 cuda = ["std", "cu29-runtime/cuda"]

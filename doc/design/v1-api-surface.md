@@ -233,5 +233,8 @@ intentional contract update. See [contributor workflow](../../CONTRIBUTING.md).
 
 On a running app that implements `CuManagedApplication`, `run_until` returns
 when the caller's predicate is true or Copper requests shutdown. `CuRunExit`
-identifies which condition ended the loop. Host mission policies
-implement `CuMissionPolicy` and readiness and drain failures use `CuWaitError`.
+identifies which condition ended the loop.
+A mission supervisor holds the platform configuration and logger across starts
+and switches. Its builder accepts the clock, logger, instance ID, and reusable
+resource setup. Starting, switching, and stopping run on the calling thread.
+The API is available with and without `std`.

@@ -1,4 +1,7 @@
 use super::*;
+use alloc::{format, string::ToString};
+use core::time::Duration;
+use cu29_clock::ClockProvider;
 
 /// Reason a managed application loop returned.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -29,8 +32,87 @@ where
     }
 }
 
+impl<S, L, A> CuAppLifecycle<S, L, A, Running>
+where
+    S: SectionStorage,
+    L: UnifiedLogWrite<S> + 'static,
+    A: CuManagedApplication<S, L> + ClockProvider,
+{
+    fn wait_for(
+        &mut self,
+        timeout: Duration,
+        mut observed: impl FnMut() -> bool,
+    ) -> Result<(), CuWaitError> {
+        let clock = self.app.get_clock();
+        let start = clock.raw_now();
+        let expired = || u128::from((clock.raw_now() - start).as_nanos()) >= timeout.as_nanos();
+        let mut passed = false;
+        let mut first = true;
+        let exit = self
+            .run_until(|| {
+                if !first && expired() {
+                    return true;
+                }
+                first = false;
+                passed = observed();
+                passed || expired()
+            })
+            .map_err(CuWaitError::Execution)?;
+        match exit {
+            CuRunExit::Shutdown => Err(CuWaitError::Shutdown),
+            CuRunExit::Requested if passed => Ok(()),
+            CuRunExit::Requested => Err(CuWaitError::Timeout),
+        }
+    }
+
+    /// Run iterations until the device reports readiness, the deadline expires, or Copper requests shutdown.
+    pub fn wait_until_ready(
+        &mut self,
+        timeout: Duration,
+        ready: impl FnMut() -> bool,
+    ) -> Result<(), CuWaitError> {
+        self.wait_for(timeout, ready)
+    }
+
+    /// Run iterations until the device finishes draining, the deadline expires, or Copper requests shutdown.
+    pub fn drain_until(
+        &mut self,
+        timeout: Duration,
+        drained: impl FnMut() -> bool,
+    ) -> Result<(), CuWaitError> {
+        self.wait_for(timeout, drained)
+    }
+}
+
+pub(super) fn cleanup<T>(result: CuResult<T>, stopped: CuResult<()>) -> CuResult<T> {
+    match (result, stopped) {
+        (Err(error), Err(stop)) => Err(CuError::from(format!(
+            "{error}; cleanup also failed: {stop}"
+        ))),
+        (Err(error), _) | (_, Err(error)) => Err(error),
+        (Ok(value), Ok(())) => Ok(value),
+    }
+}
+
+#[doc(hidden)]
+pub fn start_managed<S, L, A>(
+    app: CuAppLifecycle<S, L, A>,
+) -> CuResult<CuAppLifecycle<S, L, A, Running>>
+where
+    S: SectionStorage,
+    L: UnifiedLogWrite<S> + 'static,
+    A: CuApplication<S, L>,
+{
+    match app.start() {
+        Ok(running) => Ok(running),
+        Err(failed) => cleanup(
+            Err(failed.error),
+            failed.app.stop().map(drop).map_err(|failed| failed.error),
+        ),
+    }
+}
+
 /// Failure while iterating towards a readiness or drain barrier.
-#[cfg(feature = "std")]
 #[derive(Debug)]
 pub enum CuWaitError {
     Timeout,
@@ -38,7 +120,6 @@ pub enum CuWaitError {
     Execution(CuError),
 }
 
-#[cfg(feature = "std")]
 impl fmt::Display for CuWaitError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -49,10 +130,8 @@ impl fmt::Display for CuWaitError {
     }
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for CuWaitError {}
+impl core::error::Error for CuWaitError {}
 
-#[cfg(feature = "std")]
 impl From<CuWaitError> for CuError {
     fn from(error: CuWaitError) -> Self {
         match error {
@@ -62,13 +141,9 @@ impl From<CuWaitError> for CuError {
     }
 }
 
-/// Device observations and deadlines for one mission build. All hooks run on
-/// the owner thread. Observations must be quick and nonblocking.
-#[cfg(feature = "std")]
-pub trait CuMissionPolicy {
-    fn ready(&mut self) -> bool;
-    fn readiness_timeout(&self) -> core::time::Duration;
-    fn request_drain(&mut self);
-    fn drained(&mut self) -> bool;
-    fn drain_timeout(&self) -> core::time::Duration;
+/// Implemented by the generated enum of running mission apps.
+#[doc(hidden)]
+pub trait ActiveMission {
+    fn run_until(&mut self, requested: impl FnMut() -> bool) -> CuResult<CuRunExit>;
+    fn stop(self) -> CuResult<()>;
 }
