@@ -23,10 +23,10 @@ pub(crate) fn generate(app: &Ident, vis: &Visibility, modules: &[Ident]) -> Toke
     let api = quote!(::cu29::app);
     let pre = quote!(::cu29::prelude);
     let result = quote!(::cu29::CuResult);
-    let supervisor = format_ident!("{app}Supervisor");
+    let runner = format_ident!("{app}Runner");
     quote! {
-        /// Configures a supervisor for the missions declared by this app.
-        #vis type #supervisor<'a, S = #pre::NoopSectionStorage, L = #pre::NoopLogger> =
+        /// Runs the missions declared by this app.
+        #vis type #runner<'a, S = #pre::NoopSectionStorage, L = #pre::NoopLogger> =
             ::cu29::supervisor::Supervisor<'a, #mission, S, L>;
         #[allow(non_camel_case_types)]
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
