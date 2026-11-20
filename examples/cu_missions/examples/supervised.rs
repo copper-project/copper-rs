@@ -85,7 +85,7 @@ fn transitions_release_the_camera_and_keep_each_recording() {
     let path = root.path().join("missions.copper");
     let mut missions = AppRunner::builder()
         .with_instance_id(41)
-        .with_clock(clock)
+        .with_clock(clock.clone())
         .with_log_path(&path, None)
         .unwrap()
         .build()
@@ -95,14 +95,14 @@ fn transitions_release_the_camera_and_keep_each_recording() {
     for mission in [AppMission::Recording, AppMission::Idle] {
         missions.transition_to(mission).unwrap();
         let mut remaining = 3;
-        let start = std::time::Instant::now();
+        let start = clock.raw_now();
         missions
             .run_until(|| {
                 remaining -= 1;
                 remaining == 0
             })
             .unwrap();
-        assert!(start.elapsed() >= std::time::Duration::from_millis(10));
+        assert!(clock.raw_now() - start >= CuDuration::from_millis(10));
     }
     missions.stop().unwrap();
     assert!(!CAMERA_OPEN.load(Ordering::Acquire));
@@ -137,7 +137,11 @@ fn copper_shutdown_takes_precedence_over_the_caller_request() {
         assert!(status.success());
         return;
     }
-    let mut missions = AppRunner::builder().build().unwrap();
+    let clock = RobotClock::default();
+    let mut missions = AppRunner::builder()
+        .with_clock(clock.clone())
+        .build()
+        .unwrap();
     missions.start(AppMission::Idle).unwrap();
     assert_eq!(missions.run_until(|| true).unwrap(), CuRunExit::Requested);
     assert!(
@@ -147,10 +151,10 @@ fn copper_shutdown_takes_precedence_over_the_caller_request() {
             .unwrap()
             .success()
     );
-    let start = std::time::Instant::now();
+    let start = clock.raw_now();
     assert_eq!(
         missions
-            .run_until(|| start.elapsed() > std::time::Duration::from_secs(3))
+            .run_until(|| clock.raw_now() - start > CuDuration::from_secs(3))
             .unwrap(),
         CuRunExit::Shutdown
     );

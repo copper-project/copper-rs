@@ -1154,7 +1154,7 @@ mod lifecycle_tests {
         .start()
         .unwrap();
         let mut observations = 0;
-        let waited = app.wait_until_ready(core::time::Duration::from_secs(3600), || {
+        let waited = app.wait_until_ready(cu29_clock::CuDuration::from_secs(3600), || {
             observations += 1;
             control.increment(cu29_clock::CuDuration::from_secs(1800));
             false
