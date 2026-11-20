@@ -234,7 +234,10 @@ intentional contract update. See [contributor workflow](../../CONTRIBUTING.md).
 On a running app that implements `CuManagedApplication`, `run_until` returns
 when the caller's predicate is true or Copper requests shutdown. `CuRunExit`
 identifies which condition ended the loop.
-A mission supervisor holds the platform configuration and logger across starts
-and switches. Its builder accepts the clock, logger, instance ID, and reusable
-resource setup. Starting, switching, and stopping run on the calling thread.
-The API is available with and without `std`.
+For live apps with named missions, the macro generates an app-specific runner and mission enum.
+`AppRunner::builder()` configures the clock, logging and other platform inputs once.
+`build()` returns an idle app runner. `start(AppMission::Idle)` constructs and starts the selected graph.
+Its blocking `transition_to(AppMission::Recording)` returns when the selected
+graph has started. Lower-level readiness and drain helpers report `CuWaitError`.
+
+On hosts, `CuRunner` optionally owns one app thread and `CuRunnerControl` requests shutdown.
