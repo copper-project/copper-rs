@@ -1,6 +1,5 @@
 use clap::{Parser, ValueEnum};
 use cu29::prelude::*;
-use cu29_unifiedlog::{UnifiedLoggerWrite, memmap::MmapSectionStorage};
 use std::{fs, path::PathBuf};
 
 mod bridges;
@@ -9,10 +8,6 @@ mod tasks;
 
 #[copper_runtime(config = "copperconfig.ron")]
 struct App {}
-// Mission-specific builders emitted by the macro.
-use A::App as MissionAApp;
-use B::App as MissionBApp;
-
 #[derive(Parser)]
 #[command(author, version, about = "Resource coverage demo", long_about = None)]
 struct Cli {
@@ -30,17 +25,6 @@ enum MissionArg {
 }
 
 const SLAB_SIZE: Option<usize> = None;
-
-fn run_once<App>(app: CuAppLifecycle<MmapSectionStorage, UnifiedLoggerWrite, App>) -> CuResult<()>
-where
-    App: CuApplication<MmapSectionStorage, UnifiedLoggerWrite>,
-{
-    // `run` drives the full start/iterate/stop cycle; the typestate rejects
-    // the extra start_all_tasks/stop_all_tasks calls this example used to
-    // make around it (a double start/stop at runtime).
-    app.run_until_shutdown()?;
-    Ok(())
-}
 
 fn main() {
     if let Err(err) = drive() {
@@ -62,20 +46,14 @@ fn drive() -> CuResult<()> {
         ));
     }
 
-    match args.mission {
-        MissionArg::A => {
-            let app = MissionAApp::builder()
-                .with_log_path(&logger_path, SLAB_SIZE)?
-                .build()?;
-            run_once(app)?;
-        }
-        MissionArg::B => {
-            let app = MissionBApp::builder()
-                .with_log_path(&logger_path, SLAB_SIZE)?
-                .build()?;
-            run_once(app)?;
-        }
-    }
-
-    Ok(())
+    let mission = match args.mission {
+        MissionArg::A => AppMission::A,
+        MissionArg::B => AppMission::B,
+    };
+    let mut runner = AppRunner::builder()
+        .with_log_path(&logger_path, SLAB_SIZE)?
+        .build()?;
+    runner.start(mission)?;
+    runner.run_until(|| false)?;
+    runner.stop()
 }

@@ -28,7 +28,7 @@ Implementations live in `src/resources.rs`:
    - `GlobalBundle`:
      - `log` → shared `Arc<GlobalLog>` (mutexed Vec for demo).
    - `ExtraBundle`:
-     - `note` → owned `String`.
+     - `note` → shared `Arc<String>`.
 
    Each bundle uses its `bundle_resources!` ids to insert the right keys into the `ResourceManager`.
 
@@ -46,8 +46,8 @@ Mission A uses `board_a` (offset +10) and bridge `stats_a`. Mission B uses `boar
 ## Running
 
 ```bash
-cargo run -p cu-resources-test -- --mission A   # mission A graph
-cargo run -p cu-resources-test -- --mission B   # mission B graph
+cargo run -p cu-resources-test -- A   # mission A graph
+cargo run -p cu-resources-test -- B   # mission B graph
 ```
 
 Logs end up in `logs/cu_resources_test.copper`; the global log is also appended in memory (see `GlobalLog`).

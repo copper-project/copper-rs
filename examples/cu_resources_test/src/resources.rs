@@ -127,7 +127,7 @@ impl ResourceBundle for ExtraBundle {
             None => format!("{}-note", bundle.bundle_id()),
         };
         let note_key = bundle.key(ExtraBundleId::Note);
-        manager.add_owned(note_key, note)?;
+        manager.add_shared(note_key, Arc::new(note))?;
         Ok(())
     }
 }
