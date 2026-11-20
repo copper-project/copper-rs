@@ -3299,8 +3299,7 @@ fn wrap_type_label(label: &str, max_width: usize) -> String {
         let chunks = split_long_token(&token, max_width);
         for chunk in chunks {
             if current_len + chunk.len() > max_width && !current.is_empty() {
-                lines.push(current);
-                current = String::new();
+                lines.push(core::mem::take(&mut current));
                 current_len = 0;
             }
 
@@ -3308,8 +3307,7 @@ fn wrap_type_label(label: &str, max_width: usize) -> String {
             current_len += chunk.len();
 
             if chunk == "," || chunk == "<" || chunk == ">" {
-                lines.push(current);
-                current = String::new();
+                lines.push(core::mem::take(&mut current));
                 current_len = 0;
             }
         }
