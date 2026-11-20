@@ -14,6 +14,7 @@
         (id: "msp_requester", type: "tasks::LoopbackSource"),
         (id: "msp_verifier", type: "tasks::LoopbackSink"),
     ],
+    runtime: (rate_target_hz: 100),
     bridges: [
         (
             id: "msp_bridge",

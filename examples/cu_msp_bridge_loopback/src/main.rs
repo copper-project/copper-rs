@@ -19,14 +19,14 @@ use std::time::Duration;
 #[copper_runtime(config = "copperconfig.ron")]
 struct CuMspBridgeLoopbackApp {}
 
-fn main() {
-    if let Err(err) = drive() {
+fn main() -> std::process::ExitCode {
+    drive().unwrap_or_else(|err| {
         error!("cu-msp-bridge-loopback failed: {}", err);
-        std::process::exit(1);
-    }
+        std::process::ExitCode::FAILURE
+    })
 }
 
-fn drive() -> CuResult<()> {
+fn drive() -> CuResult<std::process::ExitCode> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let logs_dir = manifest_dir.join("logs");
     fs::create_dir_all(&logs_dir).map_err(|err| {
@@ -45,7 +45,6 @@ fn drive() -> CuResult<()> {
     let mut config = read_configuration(&config_path_str)?;
     let emulator = FlightControllerEmulator::new(&logs_dir)?;
     emulator.configure_bridge(&mut config)?;
-    install_ctrlc_cleanup(emulator.symlink_path.clone())?;
 
     let app = CuMspBridgeLoopbackApp::builder()
         .with_log_path(&logger_path, Some(16 * 1024 * 1024))?
@@ -53,25 +52,16 @@ fn drive() -> CuResult<()> {
         .build()?;
 
     let mut running = app.start()?;
-    for i in 0..3 {
-        debug!("Running iteration {}", i);
-        running.run_one_iteration()?;
-        if tasks::state::was_validated() {
-            break;
-        }
-        thread::sleep(Duration::from_millis(10));
-    }
+    let reply = running.wait_until_ready(CuDuration::from_secs(1), tasks::state::was_validated);
     running.stop()?;
-
-    if !tasks::state::was_validated() {
-        return Err(CuError::from(
-            "MSP flight controller emulator did not validate the response",
-        ));
+    match reply {
+        Ok(()) => Ok(std::process::ExitCode::SUCCESS),
+        Err(CuWaitError::Shutdown) => Ok(std::process::ExitCode::from(130)),
+        Err(CuWaitError::Timeout) => {
+            Err("MSP emulator did not receive a validated response within 1 s".into())
+        }
+        Err(CuWaitError::Execution(err)) => Err(err),
     }
-
-    cleanup_symlink(&emulator.symlink_path);
-    drop(emulator);
-    Ok(())
 }
 
 /// Emulates a simple MSP FC responding to RC packets
@@ -112,7 +102,7 @@ impl FlightControllerEmulator {
                 )
             })?;
         }
-        if symlink_path.exists() {
+        if symlink_path.is_symlink() {
             fs::remove_file(&symlink_path).map_err(|err| {
                 CuError::new_with_cause(
                     "failed to remove stale MSP flight controller emulator symlink",
@@ -231,18 +221,8 @@ fn write_rc_response(file: &mut File) -> std::io::Result<()> {
     file.flush()
 }
 
-fn install_ctrlc_cleanup(symlink_path: PathBuf) -> CuResult<()> {
-    ctrlc::set_handler(move || {
-        cleanup_symlink(&symlink_path);
-        std::process::exit(130);
-    })
-    .map_err(|err| CuError::new_with_cause("failed to install Ctrl-C handler", err))
-}
-
 fn cleanup_symlink(path: &Path) {
-    if path.exists() {
-        let _ = fs::remove_file(path);
-    }
+    let _ = fs::remove_file(path);
 }
 
 mod tasks {
