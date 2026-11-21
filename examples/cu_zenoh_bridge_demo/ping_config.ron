@@ -1,4 +1,5 @@
 (
+    runtime: (rate_target_hz: 5),
     tasks: [
         (id: "ping_src", type: "tasks::PingSource", config: {"label": "ping"}),
         (id: "pong_sink_bin", type: "tasks::PongSink", config: {"label": "pong-bincode"}),

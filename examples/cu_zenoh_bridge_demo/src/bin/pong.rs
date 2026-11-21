@@ -1,6 +1,5 @@
 use cu_zenoh_bridge_demo::parse_run_options;
 use cu29::prelude::*;
-use std::time::Duration;
 
 pub mod bridges {
     pub use cu_zenoh_bridge_demo::bridges::*;
@@ -32,19 +31,5 @@ fn drive() -> CuResult<()> {
         .with_log_path(&options.log_path, SLAB_SIZE)?
         .with_instance_id(options.instance_id)
         .build()?;
-    let mut app = app.start()?;
-
-    if let Some(iterations) = options.iterations {
-        for _ in 0..iterations {
-            app.run_one_iteration()?;
-            std::thread::sleep(Duration::from_millis(200));
-        }
-        app.stop()?;
-        Ok(())
-    } else {
-        loop {
-            app.run_one_iteration()?;
-            std::thread::sleep(Duration::from_millis(200));
-        }
-    }
+    options.run(app)
 }
