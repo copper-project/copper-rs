@@ -38,13 +38,15 @@ fn value(v: &Value) -> TokenStream {
             Number::U16(x) => quote!(#ty::U16(#x)),
             Number::U32(x) => quote!(#ty::U32(#x)),
             Number::U64(x) => quote!(#ty::U64(#x)),
+            // A const block keeps the value promotable, so the borrowed table stays `'static`
+            // when it is emitted inline (monitor, bridge, codec and bundle parameters).
             Number::F32(x) => {
                 let bits = x.0.to_bits();
-                quote!(#ty::F32(f32::from_bits(#bits)))
+                quote!(#ty::F32(const { f32::from_bits(#bits) }))
             }
             Number::F64(x) => {
                 let bits = x.0.to_bits();
-                quote!(#ty::F64(f64::from_bits(#bits)))
+                quote!(#ty::F64(const { f64::from_bits(#bits) }))
             }
             _ => quote!(compile_error!("unsupported static-config number")),
         },
