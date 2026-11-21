@@ -40,6 +40,7 @@ def main():
     generator = output / "install" / "bin" / "cargo-cunew"
     run([str(generator), "--version"])
     env = os.environ.copy()
+    env["CARGO_BUILD_WARNINGS"] = "warn"
     env["CARGO_TARGET_DIR"] = str(root / "target" / "released-template-build")
     for template in ("project", "workspace"):
         project = output / ("hello_copper" if template == "project" else "hello-workspace")
