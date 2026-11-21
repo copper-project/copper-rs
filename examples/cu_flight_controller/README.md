@@ -110,20 +110,20 @@ just end2end
 
 ### Firmware (for flashing to hardware)
 
-`just fw [features] [profile]` defaults to no features and the `screaming` profile.
+`just fw [features] [profile]` defaults to rotating ESC telemetry, no diagnostics, and the `screaming` profile.
 
 | Command | What you get |
 |---|---|
 | `just fw` | Lean flight firmware. No monitor, SD recording, or text logs |
 | `just fw logmon` | Loop rate and latency over the probe |
-| `just fw logmon,rotating-esc-telemetry` | Live timing with experimental round-robin ESC telemetry capture |
+| `just fw logmon,full-esc-telemetry` | Live timing with full-rate ESC telemetry capture |
 | `just fw sdcard-logging` | Binary flight recording to SD |
 | `just fw textlogs` | Info-level text logs and above |
 | `just fw textlogs,log-level-debug` | Text logs including debug messages |
 | `just fw logmon,sdcard-logging` | Live rates plus SD recording |
 | `just fw logmon,sdcard-logging,textlogs,log-level-debug` | All diagnostics |
 
-With `rotating-esc-telemetry`, all four ESCs receive their normal command frames.
+By default, all four ESCs receive their normal command frames every loop.
 The STM32 samples one reply per loop, rotating across the four outputs. At a
 2,778 Hz loop rate each ESC has about 694 capture opportunities per second.
 Successful eRPM updates depend on the ESC's replies. Startup uses full capture.

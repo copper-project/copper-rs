@@ -51,7 +51,10 @@ pub struct Stm32H7Board {
     _motors: Motors,
     gpioe: *const hal::pac::gpioe::RegisterBlock,
     dwt: DWT,
-    #[cfg(feature = "rotating-esc-telemetry")]
+    #[cfg(all(
+        feature = "rotating-esc-telemetry",
+        not(feature = "full-esc-telemetry")
+    ))]
     capture_phase: [u8; 4],
     cycles_per_us: u32,
     bit_cycles: u32,
@@ -104,7 +107,10 @@ impl Stm32H7Board {
             _motors: motors,
             gpioe: hal::pac::GPIOE::ptr(),
             dwt: resources.dwt,
-            #[cfg(feature = "rotating-esc-telemetry")]
+            #[cfg(all(
+                feature = "rotating-esc-telemetry",
+                not(feature = "full-esc-telemetry")
+            ))]
             capture_phase: [0, 3, 2, 1],
             cycles_per_us,
             bit_cycles,
@@ -154,7 +160,10 @@ impl BdshotBoard for Stm32H7Board {
         self.exchange_frame(channel, frame, true)
     }
 
-    #[cfg(feature = "rotating-esc-telemetry")]
+    #[cfg(all(
+        feature = "rotating-esc-telemetry",
+        not(feature = "full-esc-telemetry")
+    ))]
     fn exchange_in_loop(&mut self, channel: usize, frame: u32) -> Option<DShotTelemetry> {
         // Count transmitted frames so a channel with a rate limit still gets its turn.
         let phase = self.capture_phase.get_mut(channel)?;

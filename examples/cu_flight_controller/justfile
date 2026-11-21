@@ -276,7 +276,7 @@ textlogs log="logs/embedded.copper" index="../../target/debug/cu29_log_index":
   cd "{{ROOT}}"
   RUST_BACKTRACE=1 cargo run -p cu-flight-controller --no-default-features --features logreader --bin quad-logreader -- "$log" extract-text-log "$index"
 
-# `just fw [features] [profile]` defaults to no features and the `screaming` profile.
+# `just fw [features] [profile]` defaults to rotating ESC telemetry, no diagnostics, and the `screaming` profile.
 #
 # | Command | What you get |
 # |---|---|
