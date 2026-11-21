@@ -1,3 +1,5 @@
+use cu_bincode::enc::write::Writer;
+use cu_bincode::error::EncodeError;
 use cu_bincode::{Decode, Encode, Uleb128, config, decode_from_slice, encode_into_slice};
 
 fn check<T>(value: T)
@@ -51,6 +53,24 @@ fn all_integer_widths_and_signed_extremes() {
             check(value);
         }
     }
+}
+
+#[test]
+fn writes_a_multibyte_integer_in_one_call() {
+    #[derive(Default)]
+    struct SingleWrite(usize);
+
+    impl Writer for SingleWrite {
+        fn write(&mut self, bytes: &[u8]) -> Result<(), EncodeError> {
+            assert_eq!(self.0, 0);
+            self.0 = bytes.len();
+            Ok(())
+        }
+    }
+
+    let mut writer = SingleWrite::default();
+    cu_bincode::encode_into_writer(Uleb128(u128::MAX), &mut writer, config::standard()).unwrap();
+    assert_eq!(writer.0, 19);
 }
 
 #[test]
