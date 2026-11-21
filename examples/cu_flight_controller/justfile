@@ -276,12 +276,12 @@ textlogs log="logs/embedded.copper" index="../../target/debug/cu29_log_index":
   cd "{{ROOT}}"
   RUST_BACKTRACE=1 cargo run -p cu-flight-controller --no-default-features --features logreader --bin quad-logreader -- "$log" extract-text-log "$index"
 
-# Build and run firmware with textlogs enabled (release profile).
-fw:
+# Flash lean firmware, or pass firmware-recording,textlogs for SD recording.
+fw features="firmware":
   #!/usr/bin/env bash
   set -euo pipefail
   cd "{{ROOT}}"
-  cargo run --release --config examples/cu_flight_controller/.cargo/config-firmware.toml --no-default-features --features firmware,textlogs -p cu-flight-controller --bin quad
+  cargo run --release --config examples/cu_flight_controller/.cargo/config-firmware.toml --no-default-features --features "{{features}}" -p cu-flight-controller --bin quad
 
 # Release release. With no textlogs.
 fwr:

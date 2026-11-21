@@ -9,6 +9,7 @@ use cortex_m::peripheral::DWT;
 use cu_bdshot::{Stm32H7Board, Stm32H7BoardResources, register_stm32h7_board};
 use cu_dps310::Dps310Bus;
 use cu_ist8310::Ist8310Bus;
+#[cfg(feature = "sd-recording")]
 use cu_sdlogger::{EMMCLogger, EMMCSectionStorage, ForceSyncSend, find_copper_partition};
 use cu29::resource::{ResourceBundle, ResourceManager};
 use cu29::{CuError, CuResult, bundle_resources};
@@ -18,6 +19,8 @@ use embedded_hal::blocking::i2c::{Read as I2cRead, Write as I2cWrite, WriteRead 
 use embedded_hal::blocking::spi::Transfer;
 use embedded_hal::digital::v2::OutputPin;
 use spin::Mutex;
+#[cfg(feature = "sd-recording")]
+use stm32h7xx_hal::sdmmc::{self, SdCard, Sdmmc, SdmmcBlockDevice};
 use stm32h7xx_hal::{
     adc,
     delay::Delay,
@@ -25,8 +28,7 @@ use stm32h7xx_hal::{
     i2c::I2cExt,
     nb, pac,
     prelude::*,
-    rcc::{self, rec::AdcClkSel},
-    sdmmc::{self, SdCard, Sdmmc, SdmmcBlockDevice},
+    rcc::rec::AdcClkSel,
     serial::{Error as UartError, Serial, config::Config},
     spi::{Config as SpiConfig, Mode, Phase, Polarity, SpiExt},
 };
@@ -323,14 +325,18 @@ impl BatteryAdc {
     }
 }
 
+#[cfg(feature = "sd-recording")]
 type SdBlockDev = ForceSyncSend<SdmmcBlockDevice<Sdmmc<pac::SDMMC1, SdCard>>>;
+#[cfg(feature = "sd-recording")]
 pub type LogStorage = EMMCSectionStorage<SdBlockDev>;
+#[cfg(feature = "sd-recording")]
 pub type Logger = EMMCLogger<SdBlockDev>;
 
+#[cfg(feature = "sd-recording")]
 fn init_sd_logger(
     sdmmc1: pac::SDMMC1,
-    sdmmc1_rec: rcc::rec::Sdmmc1,
-    clocks: &rcc::CoreClocks,
+    sdmmc1_rec: stm32h7xx_hal::rcc::rec::Sdmmc1,
+    clocks: &stm32h7xx_hal::rcc::CoreClocks,
     pins: (
         impl sdmmc::PinClk<pac::SDMMC1>,
         impl sdmmc::PinCmd<pac::SDMMC1>,
@@ -419,6 +425,7 @@ impl ResourceBundle for MicoAirH743 {
             .freeze(vos, &dp.SYSCFG);
         ccdr.peripheral.kernel_adc_clk_mux(AdcClkSel::Per);
         let sysclk_hz = ccdr.clocks.sys_ck().raw();
+        #[cfg(feature = "sd-recording")]
         let sdmmc1_rec = ccdr.peripheral.SDMMC1;
         let mut delay = Delay::new(syst, ccdr.clocks);
 
@@ -533,6 +540,7 @@ impl ResourceBundle for MicoAirH743 {
         let i2c2_dps310 = Dps310I2c::new(i2c2_shared.clone(), I2C_ADDR_DPS310);
         let i2c2_ist8310 = Ist8310I2c::new(i2c2_shared, I2C_ADDR_IST8310);
 
+        #[cfg(feature = "sd-recording")]
         let logger = init_sd_logger(
             dp.SDMMC1,
             sdmmc1_rec,
@@ -589,6 +597,7 @@ impl ResourceBundle for MicoAirH743 {
         let uart2_key = bundle.key(MicoAirH743Id::Uart2);
         let uart4_key = bundle.key(MicoAirH743Id::Uart4);
         let led_key = bundle.key(MicoAirH743Id::GreenLed);
+        #[cfg(feature = "sd-recording")]
         let logger_key = bundle.key(MicoAirH743Id::Logger);
         let bmi088_spi_key = bundle.key(MicoAirH743Id::Bmi088Spi);
         let bmi088_acc_cs_key = bundle.key(MicoAirH743Id::Bmi088AccCs);
@@ -603,6 +612,7 @@ impl ResourceBundle for MicoAirH743 {
         manager.add_owned(uart2_key, uart2)?;
         manager.add_owned(uart4_key, uart4)?;
         manager.add_owned(led_key, Mutex::new(green_led))?;
+        #[cfg(feature = "sd-recording")]
         manager.add_owned(logger_key, logger)?;
         manager.add_owned(bmi088_spi_key, bmi088_spi)?;
         manager.add_owned(bmi088_acc_cs_key, bmi088_acc_cs)?;

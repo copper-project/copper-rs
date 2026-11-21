@@ -1,6 +1,14 @@
 (
     includes: [
         (
+            path: "mcu_logging_off.ron",
+            when: All([Feature("firmware"), Not(Feature("firmware-recording"))]),
+        ),
+        (
+            path: "mcu_logging_on.ron",
+            when: Any([Not(Feature("firmware")), Feature("firmware-recording")]),
+        ),
+        (
             path: "mcu_graph.ron",
             params: {"control_source": "mapper", "attitude_kp": 1.0},
             when: Not(Any([Feature("sim"), Feature("end2end"), Feature("logreader")])),
@@ -245,6 +253,4 @@
             missions: ["flow"],
         ),
     ],
-    monitor: (type: "tasks::monitor::FlightMonitor"),
-    logging: (slab_size_mib: 200, section_size_mib: 20, enable_task_logging: true),
 )

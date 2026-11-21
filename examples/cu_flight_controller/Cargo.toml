@@ -101,8 +101,6 @@ stm32h7xx-hal = { workspace = true, default-features = false, features = [
   "stm32h743v",
   "rt",
   "defmt",
-  "sdmmc",
-  "sdmmc-fatfs",
 ], optional = true }
 embedded-alloc = { workspace = true, optional = true }
 cortex-m = { workspace = true, features = [
@@ -206,8 +204,14 @@ textlogs = [
 ]
 
 
-firmware = [
+firmware-recording = [
+  "firmware",
   "self-describing-logs",
+  "cu-micoairh743/sd-recording",
+  "cu-logmon/defmt",
+]
+firmware = [
+  "cu29/static-config",
   "dep:cu29",
   "cu29/defmt",
   "dep:defmt",
@@ -236,11 +240,8 @@ firmware = [
   "dep:cu-msp-bridge",
   "cu-crsf/defmt",
   "cu-msp-bridge/defmt",
-  "dep:cu-sdlogger",
-  "dep:cu-logmon",
   "cu-ahrs/defmt",
   "cu-ahrs/firmware",
-  "cu-logmon/defmt",
 ]
 end2end = [
   "self-describing-logs",

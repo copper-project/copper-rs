@@ -111,8 +111,11 @@ just end2end
 ### Firmware (for flashing to hardware)
 
 ```bash
-# Build and flash with text logging (debug)
+# Build and flash static-config firmware without SD logging
 just fw
+
+# Opt in to SD recording and text logs
+just fw firmware-recording,textlogs
 
 # Build and flash release (optimized, no text logs)
 just fwr
@@ -426,7 +429,7 @@ just attach
 
 ### Viewing Logs
 
-The firmware logs to the SD card in Copper's binary format. Use the log reader tools to extract and analyze:
+The firmware-recording build logs to the SD card in Copper's binary format. Use the log reader tools to extract and analyze:
 
 ```bash
 # Extract structured data

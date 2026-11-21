@@ -4,15 +4,18 @@
 extern crate alloc;
 extern crate cu29 as bevy;
 
+#[cfg(feature = "firmware-recording")]
 use alloc::sync::Arc;
 use alloc::vec;
 use buddy_system_allocator::LockedHeap as StdHeap;
 use cortex_m::{asm, peripheral::SCB};
 use cortex_m_rt::{ExceptionFrame, entry, exception};
+#[cfg(feature = "firmware-recording")]
 use cu_micoairh743::{LogStorage, Logger, MicoAirH743Id};
 use cu29::prelude::*;
 use defmt_rtt as _;
 use panic_probe as _;
+#[cfg(feature = "firmware-recording")]
 use spin::Mutex;
 
 mod messages;
@@ -65,39 +68,8 @@ fn main() -> ! {
     report_last_fault();
     init_heap();
 
-    let mut resources = FlightControllerApp::prepare_resources().unwrap_or_else(|e| {
-        defmt::error!("Resource init failed: {}", e); // defmt here because we don't have a copper logger yet.
-        loop {
-            asm::wfi();
-        }
-    });
-
-    let logger_key = app_resources::bundles::FC.key::<Logger, _>(MicoAirH743Id::Logger);
-    let logger = resources.resources.take(logger_key).unwrap_or_else(|_e| {
-        error!("Logger resource missing");
-        loop {
-            asm::wfi();
-        }
-    });
-    let logger = logger.0;
-
-    // Spin up Copper runtime with CRSF -> mapper -> sink graph.
-    let clock = build_clock();
-    let writer = Arc::new(Mutex::new(logger));
-
-    match FlightControllerApp::builder()
-        .with_clock(clock)
-        .with_logger::<LogStorage, Logger>(writer)
-        .with_resources(move |_| Ok(resources.resources))
-        .build()
-    {
-        Ok(app) => {
-            log_heap_stats("before-run");
-            let _ = app.run_until_shutdown();
-        }
-        Err(err) => {
-            error!("App init failed: {}", &err);
-        }
+    if let Err(err) = run_controller() {
+        defmt::error!("Controller failed: {}", &err);
     }
     loop {
         asm::wfi();
@@ -106,9 +78,22 @@ fn main() -> ! {
 
 const SYSCLK_HZ: u64 = 400_000_000;
 
-fn build_clock() -> RobotClock {
-    cu29::clock::initialize();
-    RobotClock::from_counter_frequency(core::num::NonZeroU64::new(SYSCLK_HZ).unwrap())
+fn run_controller() -> CuResult<()> {
+    // The board bundle enables the DWT cycle counter used by RobotClock.
+    #[allow(unused_mut)]
+    let mut resources = FlightControllerApp::prepare_resources()?.resources;
+    let clock = RobotClock::from_counter_frequency(core::num::NonZeroU64::new(SYSCLK_HZ).unwrap());
+    let builder = FlightControllerApp::builder().with_clock(clock);
+    #[cfg(feature = "firmware-recording")]
+    let builder = {
+        let key = app_resources::bundles::FC.key::<Logger, _>(MicoAirH743Id::Logger);
+        let logger = resources.take(key)?.0;
+        builder.with_logger::<LogStorage, Logger>(Arc::new(Mutex::new(logger)))
+    };
+    let app = builder.with_resources(move |_| Ok(resources)).build()?;
+    log_heap_stats("before-run");
+    app.run_until_shutdown()?;
+    Ok(())
 }
 
 fn report_last_fault() {
@@ -157,9 +142,13 @@ pub(crate) fn heap_stats() -> (usize, usize, usize, usize) {
 
 fn log_heap_stats(tag: &str) {
     let (user, allocated, total, free) = heap_stats();
-    info!(
+    defmt::info!(
         "Heap stats({}): user={} alloc={} total={} free={}",
-        tag, user, allocated, total, free
+        tag,
+        user,
+        allocated,
+        total,
+        free
     );
 }
 
