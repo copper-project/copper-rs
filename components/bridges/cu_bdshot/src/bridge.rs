@@ -5,12 +5,7 @@ use cu29::prelude::*;
 use spin::Mutex;
 
 use crate::board::{BdshotBoard, encode_frame};
-#[cfg(all(
-    feature = "messages-only",
-    not(any(feature = "rp2350", feature = "stm32h7"))
-))]
-use crate::messages::DShotTelemetry;
-use crate::messages::{EscCommand, EscTelemetry};
+use crate::messages::{DShotTelemetry, EscCommand, EscTelemetry};
 
 pub trait BdshotBoardProvider {
     type Board: BdshotBoard;
@@ -64,6 +59,7 @@ where
     board: Mutex<P::Board>,
     #[reflect(ignore)]
     telemetry_cache: [Option<EscTelemetry>; MAX_ESC_CHANNELS],
+    configured_channels: [bool; MAX_ESC_CHANNELS],
     active_channels: [bool; MAX_ESC_CHANNELS],
     send_interval: Option<CuDuration>,
     last_send: [Option<CuTime>; MAX_ESC_CHANNELS],
@@ -156,7 +152,8 @@ where
         Ok(Self {
             board: Mutex::new(board),
             telemetry_cache: Default::default(),
-            active_channels: active,
+            configured_channels: active,
+            active_channels: [false; MAX_ESC_CHANNELS],
             send_interval,
             last_send: [None; MAX_ESC_CHANNELS],
         })
@@ -165,11 +162,17 @@ where
     fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
         let idle_frame = encode_frame(EscCommand::disarm());
 
-        let mut ready = true;
-        for i in 0..2048 {
+        // A monitor may continue after a start error. Only enable control frames
+        // once every configured ESC has answered during this startup.
+        self.active_channels = [false; MAX_ESC_CHANNELS];
+        self.telemetry_cache.fill(None);
+        self.last_send.fill(None);
+        const START_ATTEMPTS: usize = 2048;
+        for attempt in 1..=START_ATTEMPTS {
+            let mut ready = true;
             // Arbitrary long, TODO(gbin): move that to the config
             for idx in 0..P::Board::CHANNEL_COUNT {
-                if !self.active_channels[idx] {
+                if !self.configured_channels[idx] {
                     continue;
                 }
                 debug!(ctx, "Sending disarm frames {}", idx);
@@ -178,7 +181,7 @@ where
                     board.delay(200);
                     board.exchange(idx, idle_frame)
                 };
-                if let Some(sample) = sample {
+                if let Some(sample) = sample.filter(|s| *s != DShotTelemetry::EncodingError) {
                     self.telemetry_cache[idx] = Some(EscTelemetry {
                         sample: Some(sample),
                     });
@@ -189,12 +192,11 @@ where
             if ready {
                 break;
             }
-            debug!(ctx, "Waiting for ESCs startup {}...", i);
-        }
-
-        if !ready {
-            error!(ctx, "Timeout waiting for ESC to start up");
-            return Err(CuError::from("Timeout waiting for ESC to start up"));
+            debug!(ctx, "Waiting for ESCs startup {}...", attempt);
+            if attempt == START_ATTEMPTS {
+                error!(ctx, "Timeout waiting for ESC to start up");
+                return Err(CuError::from("Timeout waiting for ESC to start up"));
+            }
         }
 
         let telemetry_cmd = EscCommand {
@@ -204,7 +206,7 @@ where
         let telemetry_frame = encode_frame(telemetry_cmd);
         for _ in 0..6 {
             for idx in 0..P::Board::CHANNEL_COUNT {
-                if !self.active_channels[idx] {
+                if !self.configured_channels[idx] {
                     continue;
                 }
                 let mut board = self.board.lock();
@@ -213,6 +215,7 @@ where
             }
         }
 
+        self.active_channels = self.configured_channels;
         Ok(())
     }
 
@@ -296,5 +299,68 @@ where
             telemetry_msg.clear_payload();
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct TestBoard {
+        polls: usize,
+        control_frames: usize,
+        valid_after: usize,
+    }
+
+    impl BdshotBoardProvider for TestBoard {
+        type Board = Self;
+
+        fn create_board() -> CuResult<Self> {
+            Ok(Self {
+                polls: 0,
+                control_frames: 0,
+                valid_after: 1,
+            })
+        }
+    }
+
+    impl BdshotBoard for TestBoard {
+        const CHANNEL_COUNT: usize = 2;
+
+        fn exchange(&mut self, channel: usize, _: u32) -> Option<DShotTelemetry> {
+            if channel == 0 {
+                self.polls += 1;
+            }
+            Some(if channel == 1 && self.polls <= self.valid_after {
+                DShotTelemetry::EncodingError
+            } else {
+                DShotTelemetry::Erpm(0)
+            })
+        }
+
+        fn exchange_in_loop(&mut self, _: usize, _: u32) -> Option<DShotTelemetry> {
+            self.control_frames += 1;
+            None
+        }
+
+        fn delay(&mut self, _: u32) {}
+    }
+
+    #[test]
+    fn startup_retries_and_a_failed_restart_blocks_control_frames() {
+        let mut bridge = CuBdshotBridge::<TestBoard>::new(None, &[], &[], ()).unwrap();
+        bridge.configured_channels = [true, true, false, false];
+        let (ctx, _) = CuContext::new_mock_clock();
+        let command = CuMsg::new(Some(EscCommand {
+            throttle: 256,
+            request_telemetry: true,
+        }));
+        bridge.start(&ctx).unwrap();
+        assert_eq!(bridge.board.lock().polls, 2 + 6);
+        bridge.send(&ctx, &TxChannels::ESC0_TX, &command).unwrap();
+        bridge.board.lock().valid_after = usize::MAX;
+        assert!(bridge.start(&ctx).is_err());
+        bridge.send(&ctx, &TxChannels::ESC0_TX, &command).unwrap();
+        assert_eq!(bridge.board.lock().control_frames, 1);
     }
 }
