@@ -168,6 +168,8 @@ where
         self.telemetry_cache.fill(None);
         self.last_send.fill(None);
         const START_ATTEMPTS: usize = 2048;
+        // Keep synchronous logging out of the disarm pulse train. A slow log
+        // sink can space frames too far apart for the ESCs to initialize.
         for attempt in 1..=START_ATTEMPTS {
             let mut ready = true;
             // Arbitrary long, TODO(gbin): move that to the config
@@ -175,7 +177,6 @@ where
                 if !self.configured_channels[idx] {
                     continue;
                 }
-                debug!(ctx, "Sending disarm frames {}", idx);
                 let sample = {
                     let mut board = self.board.lock();
                     board.delay(200);
@@ -192,7 +193,6 @@ where
             if ready {
                 break;
             }
-            debug!(ctx, "Waiting for ESCs startup {}...", attempt);
             if attempt == START_ATTEMPTS {
                 error!(ctx, "Timeout waiting for ESC to start up");
                 return Err(CuError::from("Timeout waiting for ESC to start up"));
