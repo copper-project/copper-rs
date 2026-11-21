@@ -61,6 +61,7 @@ where
     telemetry_cache: [Option<EscTelemetry>; MAX_ESC_CHANNELS],
     configured_channels: [bool; MAX_ESC_CHANNELS],
     active_channels: [bool; MAX_ESC_CHANNELS],
+    wait_for_esc_power: bool,
     send_interval: Option<CuDuration>,
     last_send: [Option<CuTime>; MAX_ESC_CHANNELS],
 }
@@ -137,6 +138,10 @@ where
         for ch in tx {
             active[ch.channel.id.as_index()] = true;
         }
+        let wait_for_esc_power = match config {
+            Some(cfg) => cfg.get::<bool>("wait_for_esc_power")?.unwrap_or(false),
+            None => false,
+        };
         let send_interval = if let Some(cfg) = config {
             if let Some(rate_hz) = cfg.get::<f64>("rate_hz")? {
                 if rate_hz <= 0.0 {
@@ -154,6 +159,7 @@ where
             telemetry_cache: Default::default(),
             configured_channels: active,
             active_channels: [false; MAX_ESC_CHANNELS],
+            wait_for_esc_power,
             send_interval,
             last_send: [None; MAX_ESC_CHANNELS],
         })
@@ -170,7 +176,8 @@ where
         const START_ATTEMPTS: usize = 2048;
         // Keep synchronous logging out of the disarm pulse train. A slow log
         // sink can space frames too far apart for the ESCs to initialize.
-        for attempt in 1..=START_ATTEMPTS {
+        let mut attempts_remaining = START_ATTEMPTS;
+        loop {
             let mut ready = true;
             // Arbitrary long, TODO(gbin): move that to the config
             for idx in 0..P::Board::CHANNEL_COUNT {
@@ -193,7 +200,11 @@ where
             if ready {
                 break;
             }
-            if attempt == START_ATTEMPTS {
+            if self.wait_for_esc_power {
+                continue;
+            }
+            attempts_remaining -= 1;
+            if attempts_remaining == 0 {
                 error!(ctx, "Timeout waiting for ESC to start up");
                 return Err(CuError::from("Timeout waiting for ESC to start up"));
             }
@@ -362,5 +373,13 @@ mod tests {
         assert!(bridge.start(&ctx).is_err());
         bridge.send(&ctx, &TxChannels::ESC0_TX, &command).unwrap();
         assert_eq!(bridge.board.lock().control_frames, 1);
+
+        bridge.wait_for_esc_power = true;
+        let previous_polls = bridge.board.lock().polls;
+        bridge.board.lock().valid_after = previous_polls + 2050;
+        bridge.start(&ctx).unwrap();
+        assert_eq!(bridge.board.lock().polls, previous_polls + 2051 + 6);
+        bridge.send(&ctx, &TxChannels::ESC0_TX, &command).unwrap();
+        assert_eq!(bridge.board.lock().control_frames, 2);
     }
 }
