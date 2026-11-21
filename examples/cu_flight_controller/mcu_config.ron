@@ -1,12 +1,13 @@
 (
     includes: [
+        (path: "mcu_monitor.ron", when: Any([Not(Feature("firmware")), Feature("logmon")])),
         (
             path: "mcu_logging_off.ron",
-            when: All([Feature("firmware"), Not(Feature("firmware-recording"))]),
+            when: All([Feature("firmware"), Not(Feature("sdcard-logging"))]),
         ),
         (
             path: "mcu_logging_on.ron",
-            when: Any([Not(Feature("firmware")), Feature("firmware-recording")]),
+            when: Any([Not(Feature("firmware")), Feature("sdcard-logging")]),
         ),
         (
             path: "mcu_graph.ron",

@@ -1,6 +1,6 @@
 [env]
-# The debug log level is kept here for easy switching during development.
-DEFMT_LOG = "debug"
+# The fw recipe selects probe output for the requested diagnostics.
+DEFMT_LOG = "off"
 
 [build]
 target = "thumbv7em-none-eabihf"

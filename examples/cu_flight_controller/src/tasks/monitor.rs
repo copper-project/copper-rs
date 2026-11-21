@@ -17,7 +17,7 @@ pub type FlightMonitor = cu_bevymon::CuBevyMon;
 pub type FlightMonitor = cu_consolemon::CuConsoleMon;
 
 #[cfg(any(
-    feature = "firmware-recording",
+    all(feature = "firmware", feature = "logmon"),
     all(
         not(feature = "sim"),
         not(feature = "firmware"),

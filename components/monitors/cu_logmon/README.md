@@ -29,6 +29,8 @@ For bare-metal targets, disable default features and enable `defmt`:
 cu-logmon = { version = "*", default-features = false, features = ["defmt"] }
 ```
 
+Enable `probe-report` to send the periodic rate and latency report over `defmt` when Copper text logs are disabled. Set `DEFMT_LOG=off,cu_logmon=info` for monitor-only probe output.
+
 ## Example
 
 Run the built-in demo (std targets):

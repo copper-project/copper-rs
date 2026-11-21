@@ -13,6 +13,7 @@ fn main() {
         "mcu_graph.ron",
         "mcu_logging_off.ron",
         "mcu_logging_on.ron",
+        "mcu_monitor.ron",
         "mcu_autonomy.ron",
         "compute_config.ron",
         "compute_preview.ron",

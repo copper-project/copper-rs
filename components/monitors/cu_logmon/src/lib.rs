@@ -361,14 +361,14 @@ impl CuMonitor for CuLogMon {
                 snapshot.e2e_max_us,
                 snapshot.overhead_us,
             );
-            if use_color {
+            let report = if use_color {
                 // Colored labels for readability (values stay uncolored).
                 const CL_COLOR: &str = "\x1b[94m"; // blue
                 const LABEL_COLOR: &str = "\x1b[92m"; // green for main labels
                 const SUBLABEL_COLOR: &str = "\x1b[93m"; // yellow for sublabels
                 const COMPONENT_NAME_COLOR: &str = "\x1b[38;5;208m"; // orange for component name
                 const RESET: &str = "\x1b[0m";
-                let colored = format!(
+                format!(
                     "[{cl_color}CL {cl}{reset}] {label}rate{reset} {rate_whole}.{rate_tenths} Hz | {label}top4{reset} {component_color}{top4}{reset} | {label}e2e{reset} {sublabel}p50{reset} {p50}us {sublabel}p90{reset} {p90}us {sublabel}p99{reset} {p99}us {sublabel}max{reset} {max}us | {label}overhead{reset} {overhead}us",
                     cl_color = CL_COLOR,
                     label = LABEL_COLOR,
@@ -384,11 +384,22 @@ impl CuMonitor for CuLogMon {
                     max = snapshot.e2e_max_us,
                     top4 = snapshot.top4,
                     overhead = snapshot.overhead_us,
-                );
-                info!(ctx, "{}", &colored);
+                )
             } else {
-                info!(ctx, "{}", &base);
-            }
+                base
+            };
+            #[cfg(all(
+                target_os = "none",
+                feature = "probe-report",
+                not(feature = "textlogs")
+            ))]
+            defmt::info!("{}", report.as_str());
+            #[cfg(not(all(
+                target_os = "none",
+                feature = "probe-report",
+                not(feature = "textlogs")
+            )))]
+            info!(ctx, "{}", &report);
             let log_end = ctx.recent();
             lock_window(&self.window).last_log_duration = log_end - log_start;
         }

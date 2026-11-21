@@ -110,19 +110,19 @@ just end2end
 
 ### Firmware (for flashing to hardware)
 
-```bash
-# Build and flash static-config firmware without SD logging
-just fw
+`just fw [features] [profile]` defaults to no features and the `screaming` profile.
 
-# Opt in to SD recording and text logs
-just fw firmware-recording,textlogs
+| Command | What you get |
+|---|---|
+| `just fw` | Lean flight firmware. No monitor, SD recording, or text logs |
+| `just fw logmon` | Loop rate and latency over the probe |
+| `just fw sdcard-logging` | Binary flight recording to SD |
+| `just fw textlogs` | Info-level text logs and above |
+| `just fw textlogs,log-level-debug` | Text logs including debug messages |
+| `just fw logmon,sdcard-logging` | Live rates plus SD recording |
+| `just fw logmon,sdcard-logging,textlogs,log-level-debug` | All diagnostics |
 
-# Build and flash release (optimized, no text logs)
-just fwr
-
-# Build and flash debug profile
-just fwd
-```
+The optional second argument selects `screaming`, `release`, or `dev`. For example, `just fw logmon release` measures rates on the release build, and `just fw "" dev` flashes a lean debug build. This single recipe replaces `fwr` and `fwd`.
 
 ### Log Reader (host tool)
 
@@ -429,7 +429,7 @@ just attach
 
 ### Viewing Logs
 
-The firmware-recording build logs to the SD card in Copper's binary format. Use the log reader tools to extract and analyze:
+The `sdcard-logging` build logs to the SD card in Copper's binary format. Use the log reader tools to extract and analyze:
 
 ```bash
 # Extract structured data
