@@ -10,8 +10,8 @@ use stm32h7xx_hal as hal;
 
 use hal::gpio::{Analog, Output, Pin, PushPull};
 
-// Slightly faster than nominal DSHOT600 (matching BF timing).
-const DSHOT_FREQUENCY: u32 = 650_000;
+// Use nominal DShot600 timing even when the H743 instruction cache is enabled.
+const DSHOT_FREQUENCY: u32 = 600_000;
 const INVERT_SIGNAL: bool = true;
 const INVERT_CSUM_ON_TELEM: bool = true;
 
