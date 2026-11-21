@@ -24,7 +24,6 @@ cu-msp-lib = { path = "../../components/libs/cu_msp_lib", version = "~1.4.0-dev"
 # cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "~1.4.0-dev" }
 nix = { workspace = true, default-features = false, features = ["term", "fs"] }
 serde = { workspace = true }
-ctrlc = { workspace = true }
 
 [package.metadata.cargo-shear]
 ignored = ["serde", "cu-linux-resources"]
