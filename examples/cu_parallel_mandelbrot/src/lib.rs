@@ -94,13 +94,25 @@ fn log_summary(
     );
 }
 
+/// Drive the benchmark until the source submits its last stripe or the viewer closes.
+pub fn run_benchmark<A>(app: CuStdAppLifecycle<A>) -> CuResult<A>
+where
+    A: CuManagedApplication<memmap::MmapSectionStorage, UnifiedLoggerWrite>,
+{
+    tasks::reset_benchmark_summary();
+    let mut running = app.start()?;
+    let result = running.run_until(tasks::stop_requested);
+    let stopped = running.stop()?;
+    result?;
+    Ok(stopped.into_inner())
+}
+
 pub fn run_log_only() -> CuResult<()> {
     let logger_path = benchmark_logger_path("parallel_mandelbrot_log_only.copper")?;
     run_log_only_with_path(&logger_path)
 }
 
 pub fn run_log_only_with_path(logger_path: &Path) -> CuResult<()> {
-    tasks::reset_benchmark_summary();
     let settings = load_benchmark_settings()?;
     let logger_path_display = logger_path.display().to_string();
     let app = log_only::App::builder()
@@ -113,13 +125,12 @@ pub fn run_log_only_with_path(logger_path: &Path) -> CuResult<()> {
         logger_path_display
     );
     let started = Instant::now();
-    app.run_until_shutdown()?;
+    let mut stopped = run_benchmark(app)?;
     log_summary("log_only", logger_path, settings, started.elapsed());
-    Ok(())
+    stopped.log_shutdown_completed()
 }
 
 pub fn run_viewer_live() -> CuResult<()> {
-    tasks::reset_benchmark_summary();
     let settings = load_benchmark_settings()?;
     let logger_path = benchmark_logger_path("parallel_mandelbrot_viewer.copper")?;
     let logger_path_display = logger_path.display().to_string();
@@ -133,7 +144,7 @@ pub fn run_viewer_live() -> CuResult<()> {
         logger_path_display
     );
     let started = Instant::now();
-    app.run_until_shutdown()?;
+    let mut stopped = run_benchmark(app)?;
     log_summary("viewer_live", &logger_path, settings, started.elapsed());
-    Ok(())
+    stopped.log_shutdown_completed()
 }

@@ -13,7 +13,7 @@ use std::arch::x86_64::{
     _mm512_add_ps, _mm512_cmp_ps_mask, _mm512_fmadd_ps, _mm512_loadu_ps, _mm512_mask_blend_ps,
     _mm512_mul_ps, _mm512_set_ps, _mm512_set1_ps, _mm512_storeu_ps, _mm512_sub_ps,
 };
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{SyncSender, sync_channel};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -22,6 +22,7 @@ const RGB_PIXEL_FORMAT: [u8; 4] = *b"RGB3";
 const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
 const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 
+static STOP_REQUESTED: AtomicBool = AtomicBool::new(false);
 static FRAMES_EMITTED: AtomicU64 = AtomicU64::new(0);
 static LAST_FRAME_DIGEST: AtomicU64 = AtomicU64::new(0);
 const VIEWER_BUFFER_COUNT: usize = 2;
@@ -542,18 +543,12 @@ fn iterate_band(
     iterate_band_scalar(plane, z_re, z_im, escape_iter, start_iter, target_iters);
 }
 
-fn request_runtime_stop() -> CuResult<()> {
-    let rc = unsafe { libc::raise(libc::SIGINT) };
-    if rc == 0 {
-        Ok(())
-    } else {
-        Err(CuError::from(
-            "failed to request runtime shutdown via SIGINT",
-        ))
-    }
+pub(crate) fn stop_requested() -> bool {
+    STOP_REQUESTED.load(Ordering::Acquire)
 }
 
 pub fn reset_benchmark_summary() {
+    STOP_REQUESTED.store(false, Ordering::Release);
     FRAMES_EMITTED.store(0, Ordering::Release);
     LAST_FRAME_DIGEST.store(0, Ordering::Release);
 }
@@ -752,7 +747,7 @@ impl CuSrcTask for MandelbrotStripeSource {
 
         self.next_linear_index += 1;
         if self.next_linear_index == self.settings.total_stripes() {
-            request_runtime_stop()?;
+            STOP_REQUESTED.store(true, Ordering::Release);
         }
 
         Ok(())
@@ -1181,7 +1176,7 @@ impl CuSinkTask for ViewerFrameSink {
         }
 
         if !self.viewer_open.load(Ordering::Acquire) {
-            request_runtime_stop()?;
+            STOP_REQUESTED.store(true, Ordering::Release);
             self.expected_linear_index += 1;
             return Ok(());
         }
@@ -1242,7 +1237,7 @@ impl CuSinkTask for ViewerFrameSink {
             );
 
             if !self.viewer_open.load(Ordering::Acquire) {
-                request_runtime_stop()?;
+                STOP_REQUESTED.store(true, Ordering::Release);
             }
         }
 

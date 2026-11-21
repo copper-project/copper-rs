@@ -21,7 +21,6 @@ cu29 = { workspace = true }
 cu29-export = { workspace = true, features = ["mcap"] }
 cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "~1.4.0-dev" }
 cu-sensor-payloads = { workspace = true }
-libc = { workspace = true }
 minifb = "0.29.0"
 serde = { workspace = true }
 
