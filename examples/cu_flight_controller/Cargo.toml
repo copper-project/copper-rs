@@ -41,6 +41,7 @@ cu-msp-bridge = { path = "../../components/bridges/cu_msp_bridge", version = "~1
 cu-msp-lib = { path = "../../components/libs/cu_msp_lib", version = "~1.4.0-dev", default-features = false, features = [
   "bincode",
 ] }
+rtrb = { version = "0.4", default-features = false, optional = true }
 cu-sdlogger = { workspace = true, optional = true }
 cu-micoairh743 = { workspace = true, optional = true }
 cu-logmon = { path = "../../components/monitors/cu_logmon", version = "~1.4.0-dev", default-features = false, features = [
@@ -212,7 +213,12 @@ log-level-debug = ["textlogs", "cu29/log-level-debug"]
 logmon = ["cu-logmon/probe-report"]
 rotating-esc-telemetry = ["cu-bdshot?/rotating-esc-telemetry"]
 full-esc-telemetry = ["cu-bdshot?/full-esc-telemetry"]
-sdcard-logging = ["self-describing-logs", "cu-micoairh743/sd-rollover"]
+sdcard-logging = [
+  "dep:rtrb",
+  "self-describing-logs",
+  "cu-micoairh743/sd-rollover",
+  "cu-micoairh743/sd-dma",
+]
 firmware = [
   "rotating-esc-telemetry",
   "cu29/static-config",
@@ -382,6 +388,7 @@ path = "tests/config_matrix.rs"
 required-features = ["logreader"]
 
 [dev-dependencies]
+rtrb = { version = "0.4", default-features = false }
 cu29-export = { workspace = true, features = ["self-describing-logs"] }
 tempfile = { workspace = true }
 
