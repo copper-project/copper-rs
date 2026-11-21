@@ -307,7 +307,7 @@ cu-feetech = { path = "components/bridges/cu_feetech", version = "~1.4.0-dev" }
 cu-gnss-ublox = { path = "components/sources/cu_gnss_ublox", version = "~1.4.0-dev" }
 cu-gstreamer = { path = "components/sources/cu_gstreamer", version = "~1.4.0-dev" }
 cu-logmon = { path = "components/monitors/cu_logmon", version = "~1.4.0-dev" }
-cu-micoairh743 = { path = "components/res/cu_micoairh743", version = "~1.4.0-dev" }
+cu-micoairh743 = { default-features = false, path = "components/res/cu_micoairh743", version = "~1.4.0-dev" }
 cu-msp-lib = { path = "components/libs/cu_msp_lib", version = "~1.4.0-dev" }
 cu-rp-encoder = { path = "components/sources/cu_rp_encoder", version = "~1.4.0-dev" }
 cu-rp-sn754410-new = { path = "components/sinks/cu_rp_sn754410", version = "~1.4.0-dev" }

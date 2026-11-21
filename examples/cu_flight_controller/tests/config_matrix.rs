@@ -30,6 +30,31 @@ fn has_compute_task(features: &[&str], task_id: &str) -> bool {
 }
 
 #[test]
+fn firmware_monitor_and_recording_are_independent() {
+    for (features, monitor, recording) in [
+        (vec!["firmware"], false, false),
+        (
+            vec!["firmware", "textlogs", "log-level-debug"],
+            false,
+            false,
+        ),
+        (vec!["firmware", "logmon"], true, false),
+        (vec!["firmware", "sdcard-logging"], false, true),
+        (vec!["firmware", "logmon", "sdcard-logging"], true, true),
+    ] {
+        let cfg = read_configuration_with_features(
+            config_path("mcu_config.ron").to_str().unwrap(),
+            &features,
+        )
+        .unwrap();
+        assert_eq!(cfg.monitors.len(), usize::from(monitor), "{features:?}");
+        let logging = cfg.logging.unwrap();
+        assert_eq!(logging.enable_task_logging, recording, "{features:?}");
+        assert_eq!(logging.enable_keyframe_logging, recording, "{features:?}");
+    }
+}
+
+#[test]
 fn mcu_feature_matrix_selects_one_control_graph() {
     for features in [
         &[][..],

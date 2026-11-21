@@ -276,30 +276,36 @@ textlogs log="logs/embedded.copper" index="../../target/debug/cu29_log_index":
   cd "{{ROOT}}"
   RUST_BACKTRACE=1 cargo run -p cu-flight-controller --no-default-features --features logreader --bin quad-logreader -- "$log" extract-text-log "$index"
 
-# Build and run firmware with textlogs enabled (release profile).
-fw:
+# `just fw [features] [profile]` defaults to no features and the `screaming` profile.
+#
+# | Command | What you get |
+# |---|---|
+# | `just fw` | Lean flight firmware. No monitor, SD recording, or text logs |
+# | `just fw logmon` | Loop rate and latency over the probe |
+# | `just fw sdcard-logging` | Binary flight recording to SD |
+# | `just fw textlogs` | Info-level text logs and above |
+# | `just fw textlogs,log-level-debug` | Text logs including debug messages |
+# | `just fw logmon,sdcard-logging` | Live rates plus SD recording |
+# | `just fw logmon,sdcard-logging,textlogs,log-level-debug` | All diagnostics |
+#
+# The optional second argument selects `screaming`, `release`, or `dev`. For example, `just fw logmon release` measures rates on the release build, and `just fw "" dev` flashes a lean debug build. This single recipe replaces `fwr` and `fwd`.
+[doc('Flash firmware with optional diagnostics and profile.')]
+[positional-arguments]
+fw features="" profile="screaming":
   #!/usr/bin/env bash
   set -euo pipefail
   cd "{{ROOT}}"
-  cargo run --release --config examples/cu_flight_controller/.cargo/config-firmware.toml --no-default-features --features firmware,textlogs -p cu-flight-controller --bin quad
-
-# Release release. With no textlogs.
-fwr:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  cd "{{ROOT}}"
-  cargo run --profile screaming --config examples/cu_flight_controller/.cargo/config-firmware.toml --no-default-features --features firmware -p cu-flight-controller --bin quad
-
-# Debug (it won't be fast enough to run be at least you van debug the bringup).
-fwd:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  cd "{{ROOT}}"
-  cargo run --config examples/cu_flight_controller/.cargo/config-firmware.toml --no-default-features --features firmware,log-level-debug -p cu-flight-controller --bin quad
+  case ",$1," in
+    *,log-level-debug,*) export DEFMT_LOG=debug ;;
+    *,textlogs,*) export DEFMT_LOG=info ;;
+    *,logmon,*) export DEFMT_LOG=off,cu_logmon=info ;;
+    *) export DEFMT_LOG=off ;;
+  esac
+  cargo run --profile "$2" --config examples/cu_flight_controller/.cargo/config-firmware.toml --no-default-features --features "firmware,$1" -p cu-flight-controller --bin quad
 
 # Attach to the already-flashed target without rebuilding or flashing.
-attach:
+attach profile="screaming":
   #!/usr/bin/env bash
   set -euo pipefail
   cd "{{ROOT}}"
-  probe-rs attach --chip STM32H743VITx --protocol swd target/thumbv7em-none-eabihf/release/quad
+  probe-rs attach --chip STM32H743VITx --protocol swd target/thumbv7em-none-eabihf/{{ if profile == "dev" { "debug" } else { profile } }}/quad

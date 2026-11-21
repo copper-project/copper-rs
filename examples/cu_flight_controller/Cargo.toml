@@ -87,7 +87,6 @@ avian3d = { workspace = true, default-features = false, features = [
 ], optional = true }
 
 cu29 = { path = "../../core/cu29", version = "~1.4.0-dev", default-features = false, features = [
-  "log-level-debug",
   "units",
 ], optional = true }
 cortex-m-rt = { workspace = true, optional = true }
@@ -101,8 +100,6 @@ stm32h7xx-hal = { workspace = true, default-features = false, features = [
   "stm32h743v",
   "rt",
   "defmt",
-  "sdmmc",
-  "sdmmc-fatfs",
 ], optional = true }
 embedded-alloc = { workspace = true, optional = true }
 cortex-m = { workspace = true, features = [
@@ -183,6 +180,7 @@ forest-world = []
 urban-world = []
 autonomous-demo = []
 sim_core = [
+  "cu29/log-level-debug",
   "self-describing-logs",
   "dep:cu29",
   "cu29/std",
@@ -206,8 +204,12 @@ textlogs = [
 ]
 
 
+log-level-debug = ["textlogs", "cu29/log-level-debug"]
+logmon = ["cu-logmon/probe-report"]
+sdcard-logging = ["self-describing-logs", "cu-micoairh743/sd-recording"]
 firmware = [
-  "self-describing-logs",
+  "cu29/static-config",
+  "cu29/log-level-critical",
   "dep:cu29",
   "cu29/defmt",
   "dep:defmt",
@@ -236,13 +238,11 @@ firmware = [
   "dep:cu-msp-bridge",
   "cu-crsf/defmt",
   "cu-msp-bridge/defmt",
-  "dep:cu-sdlogger",
-  "dep:cu-logmon",
   "cu-ahrs/defmt",
   "cu-ahrs/firmware",
-  "cu-logmon/defmt",
 ]
 end2end = [
+  "cu29/log-level-debug",
   "self-describing-logs",
   "dep:cu29",
   "cu29/std",
@@ -256,6 +256,7 @@ end2end = [
   "dep:cu-ratelimit",
 ]
 logreader = [
+  "cu29/log-level-debug",
   "dep:cu29",
   "cu29/std",
   "bincode/std",
@@ -271,6 +272,7 @@ logreader = [
 ]
 compute-logreader = ["logreader", "dep:cu-zed", "dep:cu-vitfly"]
 python-bindings = [
+  "cu29/log-level-debug",
   "dep:cu29",
   "cu29/std",
   "bincode/std",

@@ -13,7 +13,7 @@ use cu_sensor_payloads::ImuPayload;
 use cu29::bincode::{Decode, Encode};
 use cu29::prelude::*;
 use cu29::units::si::angle::{degree, radian};
-use cu29::units::si::angular_velocity::{degree_per_second, radian_per_second};
+use cu29::units::si::angular_velocity::radian_per_second;
 use cu29::units::si::f32::{Angle, AngularVelocity, Ratio};
 use cu29::units::si::ratio::ratio;
 use cu29::units::si::thermodynamic_temperature::degree_celsius;
@@ -82,9 +82,12 @@ impl LogRateLimiter {
 #[macro_export]
 macro_rules! debug_rl {
     ($state:expr, $now:expr, { $($body:tt)* }) => {{
-        let mut state = $state.lock();
-        if state.should_log($now) {
-            $($body)*
+        #[cfg(any(not(feature = "firmware"), feature = "textlogs"))]
+        {
+            let mut state = $state.lock();
+            if state.should_log($now) {
+                $($body)*
+            }
         }
     }};
     ($state:expr, $now:expr, $($arg:tt)+) => {{
@@ -179,9 +182,11 @@ impl CuSinkTask for ImuLogger {
     }
 
     fn process<'i>(&mut self, _ctx: &CuContext, input: &Self::Input<'i>) -> CuResult<()> {
-        if let Some(payload) = input.payload() {
-            let tov_time = expect_tov_time(input.tov)?;
-            debug_rl!(&LOG_IMU, tov_time, {
+        if let Some(_payload) = input.payload() {
+            let _tov_time = expect_tov_time(input.tov)?;
+            debug_rl!(&LOG_IMU, _tov_time, {
+                let payload = _payload;
+                let tov_time = _tov_time;
                 let tov_kind = 1_u8;
                 let tov_start_ns = tov_time.as_nanos();
                 let tov_end_ns = tov_time.as_nanos();
@@ -190,9 +195,15 @@ impl CuSinkTask for ImuLogger {
                     None => 0,
                 };
                 self.last_tov = Some(tov_time);
-                let gx_dps = payload.gyro_x.get::<degree_per_second>();
-                let gy_dps = payload.gyro_y.get::<degree_per_second>();
-                let gz_dps = payload.gyro_z.get::<degree_per_second>();
+                let gx_dps = payload
+                    .gyro_x
+                    .get::<cu29::units::si::angular_velocity::degree_per_second>();
+                let gy_dps = payload
+                    .gyro_y
+                    .get::<cu29::units::si::angular_velocity::degree_per_second>();
+                let gz_dps = payload
+                    .gyro_z
+                    .get::<cu29::units::si::angular_velocity::degree_per_second>();
                 let temp_c = payload.temperature.get::<degree_celsius>();
                 debug!(
                     "imu ax={} m.s⁻² ay={} m.s⁻² az={} m.s⁻² gx={} deg.s⁻¹ gy={} deg.s⁻¹ gz={} deg.s⁻¹ t={} °C tov_kind={} tov_start_ns={} tov_end_ns={} tov_dt_us={}",
@@ -1009,7 +1020,7 @@ impl CuTask for RateController {
         let (setpoint_msg, imu_msg, ctrl_msg) = *input;
         let _ = expect_tov_time(setpoint_msg.tov)?;
         let imu_tov = expect_tov_time(imu_msg.tov)?;
-        let ctrl_tov = expect_tov_time(ctrl_msg.tov)?;
+        let _ctrl_tov = expect_tov_time(ctrl_msg.tov)?;
         let output_tov = Tov::Time(imu_tov);
         let Some(setpoint) = setpoint_msg.payload() else {
             output.tov = output_tov;
@@ -1073,7 +1084,7 @@ impl CuTask for RateController {
         let pitch_cmd = pitch_out.output;
         let yaw_cmd = yaw_out.output;
 
-        debug_rl!(&LOG_RATE, ctrl_tov, {
+        debug_rl!(&LOG_RATE, _ctrl_tov, {
             let sp_roll = setpoint.roll.get::<radian_per_second>().to_degrees();
             let sp_pitch = setpoint.pitch.get::<radian_per_second>().to_degrees();
             let sp_yaw = setpoint.yaw.get::<radian_per_second>().to_degrees();
@@ -1188,7 +1199,7 @@ impl CuTask for QuadXMixer {
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
         let (ctrl_msg, cmd_msg) = *input;
-        let ctrl_tov = expect_tov_time(ctrl_msg.tov)?;
+        let _ctrl_tov = expect_tov_time(ctrl_msg.tov)?;
         let cmd_tov = expect_tov_time(cmd_msg.tov)?;
         let output_tov = Tov::Time(cmd_tov);
         let Some(ctrl) = ctrl_msg.payload() else {
@@ -1230,6 +1241,7 @@ impl CuTask for QuadXMixer {
             _ => EscCommand::disarm(),
         };
 
+        #[cfg(any(not(feature = "firmware"), feature = "textlogs"))]
         {
             let mut state = MOTOR_LOG.lock();
             if self.motor_index < state.values.len() {
@@ -1238,7 +1250,7 @@ impl CuTask for QuadXMixer {
         }
 
         if self.motor_index == 0 {
-            debug_rl!(&LOG_MOTORS, ctrl_tov, {
+            debug_rl!(&LOG_MOTORS, _ctrl_tov, {
                 let state = MOTOR_LOG.lock();
                 debug!(
                     "motors cmd0={} cmd1={} cmd2={} cmd3={}",

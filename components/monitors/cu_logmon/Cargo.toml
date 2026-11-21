@@ -41,6 +41,9 @@ serde = { workspace = true }
 default = ["std", "color_log"]
 std = ["cu29/std", "cu29-log-runtime/std"]
 defmt = ["dep:defmt", "cu29/defmt"]
+
+# Send the periodic report to the probe even when Copper text logs are disabled.
+probe-report = ["defmt"]
 color_log = []
 textlogs = ["cu29/textlogs"]
 log-level-info = ["cu29/log-level-info"]
