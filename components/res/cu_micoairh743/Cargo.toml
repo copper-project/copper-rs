@@ -19,6 +19,7 @@ environments = ["embedded"]
 embedded_targets = ["thumbv7em-none-eabihf"]
 
 [features]
+sd-rollover = ["sd-recording"]
 multi-build-log-append = ["sd-recording", "cu-sdlogger/multi-build-log-append"]
 default = ["defmt", "sd-recording"]
 sd-recording = ["dep:cu-sdlogger", "stm32h7xx-hal/sdmmc-fatfs"]

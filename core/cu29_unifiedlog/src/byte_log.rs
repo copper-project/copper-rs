@@ -28,6 +28,7 @@ const SEALED: usize = 3;
 const GENERATION_STRIDE: usize = 8;
 
 struct Lease {
+    batched: AtomicBool,
     state: AtomicUsize,
     next: UnsafeCell<u64>,
     allocated: UnsafeCell<u64>,
@@ -454,7 +455,7 @@ impl<R: ByteRegion> ByteSection<R> {
 }
 impl<R: ByteRegion> Drop for ByteSection<R> {
     fn drop(&mut self) {
-        if self.append_only && self.header.is_open {
+        if (self.append_only || self.records_per_commit > 1) && self.header.is_open {
             let _ = self.flush();
         } else if self.write_reserved {
             self.region.abort();
@@ -652,6 +653,14 @@ impl<R: ByteRegion> SectionStorage for ByteSection<R> {
     }
 }
 
+// A boot catalog is part of the data chain but must outlive the data it describes.
+#[derive(Clone, Copy)]
+struct BootExtent {
+    start: u64,
+    tail: u64,
+    end: u64,
+}
+
 /// One allocator implements both backing adapters. Section bookkeeping is fixed-capacity.
 pub struct ByteLogger<B: ByteStorage> {
     storage: B,
@@ -668,6 +677,9 @@ pub struct ByteLogger<B: ByteStorage> {
     extent_visits: AtomicUsize,
     append_pending: bool,
     record_boot_metadata: bool,
+    boot_extent: Option<BootExtent>,
+    next_metadata_position: Option<u64>,
+    reopened_generation: u64,
     faulted: bool,
 }
 impl<B: ByteStorage> ByteLogger<B> {
@@ -717,6 +729,7 @@ impl<B: ByteStorage> ByteLogger<B> {
             capacity,
             leases: Arc::new(LeaseTable {
                 slots: core::array::from_fn(|_| Lease {
+                    batched: AtomicBool::new(false),
                     state: AtomicUsize::new(0),
                     next: UnsafeCell::new(0),
                     allocated: UnsafeCell::new(0),
@@ -732,6 +745,9 @@ impl<B: ByteStorage> ByteLogger<B> {
             extent_visits: AtomicUsize::new(0),
             append_pending,
             record_boot_metadata: false,
+            boot_extent: None,
+            next_metadata_position: None,
+            reopened_generation: 0,
             faulted: false,
         }
     }
@@ -744,6 +760,11 @@ impl<B: ByteStorage> ByteLogger<B> {
     /// Interrupted sections keep their original commit blocks and open markers.
     pub fn append_after_reset(storage: B, capacity: u64) -> CuResult<Self> {
         Self::open_existing(storage, CapacityPolicy::StopWhenFull, capacity, true)
+    }
+
+    /// Resume a fixed-capacity ring after reset. Reclaim only sections without live writers.
+    pub fn rollover_after_reset(storage: B, capacity: u64) -> CuResult<Self> {
+        Self::open_existing(storage, CapacityPolicy::OverwriteOldest, capacity, true)
     }
 
     fn open_existing(
@@ -781,6 +802,7 @@ impl<B: ByteStorage> ByteLogger<B> {
                 ));
             }
             if after_reset
+                && policy == CapacityPolicy::StopWhenFull
                 && section.next_section != 0
                 && section.next_section < cursor + section.allocated
             {
@@ -814,6 +836,7 @@ impl<B: ByteStorage> ByteLogger<B> {
             }
             cursor = section.next_section;
         }
+        logger.reopened_generation = logger.generation as u64;
         logger.validate_metadata()?;
         logger.record_boot_metadata = after_reset && cfg!(feature = "multi-build-log-append");
         Ok(logger)
@@ -970,6 +993,47 @@ impl<B: ByteStorage> ByteLogger<B> {
         }
         Ok(())
     }
+    fn next_extent(&self, size: u64) -> CuResult<u64> {
+        let tail = self.header.tail_section;
+        let after_tail = if tail == 0 {
+            self.header.sections_begin
+        } else {
+            tail + self.section_extent(tail)?.0
+        };
+        if self.policy != CapacityPolicy::OverwriteOldest {
+            return Ok(after_tail);
+        }
+        for mut start in [after_tail, self.header.sections_begin] {
+            if let Some(pin) = self.boot_extent
+                && start < pin.end
+                && start.saturating_add(size) > pin.start
+            {
+                start = pin.end;
+            }
+            if start.saturating_add(size) <= self.header.sections_end {
+                return Ok(start);
+            }
+        }
+        Err(CuError::from(
+            "Section exceeds available space around boot metadata",
+        ))
+    }
+
+    fn link_sections(&mut self, previous: u64, next: u64, generation: u64) -> CuResult<()> {
+        let mut descriptor = read_descriptor(&self.storage, previous)?;
+        descriptor.next_section = next;
+        descriptor.next_generation = generation;
+        write_header(&mut self.storage.region(previous, BLOCK)?, &descriptor)?;
+        if let Some(slot) = self
+            .leases
+            .iter()
+            .position(|lease| lease.offset() == previous)
+        {
+            self.leases[slot].set_next(next);
+        }
+        Ok(())
+    }
+
     fn write_boot_metadata<E: Encode>(
         &mut self,
         kind: UnifiedLogType,
@@ -1027,14 +1091,12 @@ impl<B: ByteStorage> ByteLogger<B> {
         if self.faulted || self.leases.poisoned.load(Ordering::Acquire) {
             return Err(CuError::from("Cannot cleanly close a faulted logger"));
         }
-        // Live append-only handles own their commit block for their lifetime.
-        // Close cannot seal them behind an encoder's back; callers flush/drop first.
-        if self.policy != CapacityPolicy::OverwriteOldest
-            && self
-                .leases
-                .iter()
-                .any(|lease| lease.load(Ordering::Acquire) % 4 == BUSY)
-        {
+        // Only the live encoder can commit the remaining buffered records.
+        if self.leases.iter().any(|lease| {
+            let state = lease.load(Ordering::Acquire) % 4;
+            (self.policy != CapacityPolicy::OverwriteOldest && state == BUSY)
+                || (lease.batched.load(Ordering::Relaxed) && matches!(state, IDLE | BUSY))
+        }) {
             return Err(CuError::from(
                 "Flush or drop live append-only sections before closing the logger",
             ));
@@ -1093,26 +1155,27 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
             catalog_offset: 0,
         };
         let new_epoch = self.record_boot_metadata && self.header.metadata_offset != 0;
-        let base = if new_epoch {
-            self.allocation_end
-        } else {
-            self.header.page_size as u64
-        };
-        // The offset changes bincode's varint width; sizing converges monotonically.
+        let catalog_size = catalog
+            .map(|c| encoded_size(c).and_then(|s| aligned(HEADER + s)))
+            .transpose()?
+            .unwrap_or(0);
+        let mut base = self.header.page_size as u64;
         let mut app_size = 0;
         for _ in 0..8 {
-            let size = aligned(HEADER + encoded_size(&metadata)?)?;
-            let offset = if catalog.is_some() { base + size } else { 0 };
-            app_size = size;
+            app_size = aligned(HEADER + encoded_size(&metadata)?)?;
+            if new_epoch {
+                base = self.next_extent(app_size + catalog_size)?;
+            }
+            let offset = if catalog.is_some() {
+                base + app_size
+            } else {
+                0
+            };
             if metadata.catalog_offset == offset {
                 break;
             }
             metadata.catalog_offset = offset;
         }
-        let catalog_size = catalog
-            .map(|c| encoded_size(c).and_then(|s| aligned(HEADER + s)))
-            .transpose()?
-            .unwrap_or(0);
         let end = base
             .checked_add(app_size)
             .and_then(|s| s.checked_add(catalog_size))
@@ -1126,6 +1189,7 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
                 run_id: self.next_run_id,
                 ..Default::default()
             };
+            self.next_metadata_position = Some(base);
             self.write_boot_metadata(
                 UnifiedLogType::ApplicationMetadata,
                 app_size,
@@ -1139,6 +1203,13 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
                     catalog,
                     context,
                 )?;
+            }
+            if self.policy == CapacityPolicy::OverwriteOldest {
+                self.boot_extent = Some(BootExtent {
+                    start: base,
+                    tail: self.header.tail_section,
+                    end,
+                });
             }
             self.record_boot_metadata = false;
             return Ok(());
@@ -1234,21 +1305,13 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
         if self.policy != CapacityPolicy::Grow && size > capacity {
             return Err(CuError::from("Section exceeds log capacity"));
         }
-        let tail = self.header.tail_section;
-        let mut position = if self.policy == CapacityPolicy::Grow {
+        let position = if self.policy == CapacityPolicy::Grow {
             self.allocation_end
-        } else if tail == 0 {
-            self.header.sections_begin
+        } else if let Some(position) = self.next_metadata_position.take() {
+            position
         } else {
-            tail + self.section_extent(tail)?.0
+            self.next_extent(size)?
         };
-        if self.policy == CapacityPolicy::OverwriteOldest
-            && position
-                .checked_add(size)
-                .is_none_or(|end| end > self.header.sections_end)
-        {
-            position = self.header.sections_begin;
-        }
         let end = position
             .checked_add(size)
             .ok_or_else(|| CuError::from("Section extent overflow"))?;
@@ -1256,14 +1319,37 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
         let mut last_overlap = 0;
         // Append-only growth starts beyond every occupied extent, including
         // after reopening a wrapped ring. Only reclamation needs a chain walk.
-        if self.policy != CapacityPolicy::Grow {
+        if self.policy != CapacityPolicy::Grow && position < self.allocation_end {
             let mut cursor = self.header.head_section;
+            // Once only this boot remains, its data sections are in circular address
+            // order. Stop at the first section beyond the space consumed by this write.
+            let ordered = if let Some(pin) = self.boot_extent
+                && cursor == pin.start
+            {
+                cursor = self.section_extent(pin.tail)?.1;
+                let tail = self.header.tail_section;
+                Some(tail + self.section_extent(tail)?.0)
+            } else {
+                None
+            };
             let mut remaining = capacity / HEADER;
             while cursor != 0 {
                 if remaining == 0 {
                     return Err(CuError::from("Cyclic section links"));
                 }
                 remaining -= 1;
+                if let Some(origin) = ordered {
+                    let distance = |p| {
+                        if p >= origin {
+                            p - origin
+                        } else {
+                            capacity - (origin - p)
+                        }
+                    };
+                    if distance(cursor) >= distance(position) + size {
+                        break;
+                    }
+                }
                 let (allocated, next) = self.section_extent(cursor)?;
                 if overlaps(cursor, allocated) {
                     last_overlap = cursor;
@@ -1280,20 +1366,41 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
         let mut claims = Claims::new(self.leases.clone());
         let mut cursor = self.header.head_section;
         if last_overlap != 0 {
+            let mut discard_build = false;
             loop {
-                if let Some(slot) = self
+                let pinned = self
+                    .boot_extent
+                    .is_some_and(|p| cursor == p.start || cursor == p.tail);
+                let slot = self
                     .leases
                     .iter()
-                    .position(|lease| lease.offset() == cursor)
-                {
+                    .position(|lease| lease.offset() == cursor);
+                if !pinned && let Some(slot) = slot {
                     claims.claim(slot)?;
-                } else if self.data_header_unlocked(cursor)?.is_open {
+                }
+                let h = self.data_header_unlocked(cursor)?;
+                if slot.is_none()
+                    && h.is_open
+                    && read_descriptor(&self.storage, cursor)?.generation > self.reopened_generation
+                {
                     return Err(CuError::from("Space is blocked by an open section"));
                 }
-                if cursor == last_overlap {
-                    break;
+                if h.entry_type == UnifiedLogType::ApplicationMetadata {
+                    discard_build = !pinned;
                 }
-                cursor = self.data_header_unlocked(cursor)?.next_section;
+                if cursor == last_overlap {
+                    // Once a build's metadata is gone, drop the rest of that build together.
+                    if discard_build
+                        && h.next_section != 0
+                        && self.data_header_unlocked(h.next_section)?.entry_type
+                            != UnifiedLogType::ApplicationMetadata
+                    {
+                        last_overlap = h.next_section;
+                    } else {
+                        break;
+                    }
+                }
+                cursor = h.next_section;
             }
         }
         let free_slot = self
@@ -1317,7 +1424,15 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
         }
         if last_overlap != 0 {
             let mut cursor = self.header.head_section;
+            let mut retained_boot = None;
             loop {
+                if let Some(pin) = self.boot_extent
+                    && cursor == pin.start
+                {
+                    retained_boot = Some(pin);
+                    cursor = self.data_header_unlocked(pin.tail)?.next_section;
+                    continue;
+                }
                 let mut h = self.data_header_unlocked(cursor)?;
                 h.is_open = false;
                 let generation = read_descriptor(&self.storage, cursor)?.generation;
@@ -1338,9 +1453,22 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
                 self.retained_space -= h.allocated;
                 let next = h.next_section;
                 if cursor == last_overlap {
-                    self.header.head_section = next;
-                    if next == 0 {
-                        self.header.tail_section = 0;
+                    if let Some(pin) = retained_boot {
+                        let generation = if next == 0 {
+                            0
+                        } else {
+                            read_descriptor(&self.storage, next)?.generation
+                        };
+                        self.link_sections(pin.tail, next, generation)?;
+                        self.header.head_section = pin.start;
+                        if next == 0 {
+                            self.header.tail_section = pin.tail;
+                        }
+                    } else {
+                        self.header.head_section = next;
+                        if next == 0 {
+                            self.header.tail_section = 0;
+                        }
                     }
                     break;
                 }
@@ -1370,13 +1498,7 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
         initialize_section(&mut region, &header, position, self.generation as u64)?;
         if self.header.tail_section != 0 {
             let tail = self.header.tail_section;
-            let mut previous = read_descriptor(&self.storage, tail)?;
-            previous.next_section = position;
-            previous.next_generation = self.generation as u64;
-            write_header(&mut self.storage.region(tail, BLOCK)?, &previous)?;
-            if let Some(slot) = self.leases.iter().position(|lease| lease.offset() == tail) {
-                self.leases[slot].set_next(position);
-            }
+            self.link_sections(tail, position, self.generation as u64)?;
         }
         if self.header.head_section == 0 {
             self.header.head_section = position;
@@ -1404,11 +1526,14 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
             Ordering::Release,
         );
         let append_only = self.policy != CapacityPolicy::OverwriteOldest;
-        let records_per_commit = if append_only && kind == UnifiedLogType::CopperList {
+        let records_per_commit = if kind == UnifiedLogType::CopperList {
             region.begin_record_batching().get()
         } else {
             1
         };
+        self.leases[slot]
+            .batched
+            .store(records_per_commit > 1, Ordering::Relaxed);
         let storage = ByteSection {
             region,
             position: HEADER,
