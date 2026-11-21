@@ -65,7 +65,7 @@ const BMI088_SOFT_RESET_CMD: u8 = 0xB6;
 const BMI088_ACC_PWR_CONF_ACTIVE: u8 = 0x00;
 const BMI088_ACC_PWR_CTRL_ON: u8 = 0x04;
 const BMI088_GYR_RANGE_2000: u8 = 0x00;
-const BMI088_GYR_BANDWIDTH: u8 = 0x07; // ODR 2000Hz, Filter BW 230Hz
+const BMI088_GYR_ODR_2000HZ_BW_230HZ: u8 = 0x01;
 const BMI088_GYR_PWR_NORMAL: u8 = 0x00;
 
 // Conversion factor for gyroscope at 2000 dps range
@@ -288,7 +288,7 @@ where
             &mut spi,
             &mut gyr_cs,
             BMI088_GYR_REG_BANDWIDTH,
-            BMI088_GYR_BANDWIDTH,
+            BMI088_GYR_ODR_2000HZ_BW_230HZ,
         )
         .map_err(|err| map_error("bmi088 gyro bandwidth", err))?;
         spi_write_reg(
