@@ -29,17 +29,15 @@ macro_rules! word_codec {
     ($word:ty, $encode:ident, $decode:ident) => {
         #[inline]
         fn $encode<E: Encoder>(mut value: $word, encoder: &mut E) -> Result<(), EncodeError> {
-            loop {
-                let mut byte = (value & 0x7f) as u8;
+            let mut bytes = [0u8; (<$word>::BITS as usize).div_ceil(7)];
+            let mut len = 0;
+            while value >= 0x80 {
+                bytes[len] = (value & 0x7f) as u8 | 0x80;
                 value >>= 7;
-                if value != 0 {
-                    byte |= 0x80;
-                }
-                encoder.writer().write(&[byte])?;
-                if value == 0 {
-                    return Ok(());
-                }
+                len += 1;
             }
+            bytes[len] = value as u8;
+            encoder.writer().write(&bytes[..=len])
         }
 
         #[inline]
