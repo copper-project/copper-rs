@@ -344,7 +344,25 @@ pub mod bridges {
 #[copper_runtime(config = "copperconfig.ron")]
 struct BridgeSchedulerApp {}
 
-// Expose the generated mission applications to the bin target.
+/// Run the selected bridge graph until Copper requests shutdown.
+pub fn run_mission(selection: MissionArg, logger_path: &std::path::Path) -> CuResult<()> {
+    let mission = match selection {
+        MissionArg::BridgeOnlyAb => BridgeSchedulerAppMission::BridgeOnlyAb,
+        MissionArg::BridgeLoopback => BridgeSchedulerAppMission::BridgeLoopback,
+        MissionArg::SourceToBridge => BridgeSchedulerAppMission::SourceToBridge,
+        MissionArg::BridgeToSink => BridgeSchedulerAppMission::BridgeToSink,
+        MissionArg::BridgeTaskSame => BridgeSchedulerAppMission::BridgeTaskSame,
+        MissionArg::BridgeFanout => BridgeSchedulerAppMission::BridgeFanout,
+    };
+    let mut runner = BridgeSchedulerAppRunner::builder()
+        .with_log_path(logger_path, Some(32 * 1024 * 1024))?
+        .build()?;
+    runner.start(mission)?;
+    runner.run_until(|| false)?;
+    runner.stop()
+}
+
+// Mission-specific application types for callers that drive individual iterations.
 pub type BridgeLoopbackApp = BridgeLoopback::BridgeSchedulerApp;
 pub type BridgeOnlyABApp = BridgeOnlyAB::BridgeSchedulerApp;
 pub type BridgeTaskSameApp = BridgeTaskSame::BridgeSchedulerApp;
