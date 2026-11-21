@@ -37,6 +37,7 @@ default = ["messages-only"]
 rp2350 = ["dep:rp235x-hal", "dep:pio"]
 defmt = ["stm32h7xx-hal/defmt"]
 stm32h7 = ["dep:stm32h7xx-hal", "defmt"]
+rotating-esc-telemetry = []
 messages-only = []
 textlogs = ["cu29/textlogs"]
 

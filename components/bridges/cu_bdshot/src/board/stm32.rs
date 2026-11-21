@@ -51,6 +51,8 @@ pub struct Stm32H7Board {
     _motors: Motors,
     gpioe: *const hal::pac::gpioe::RegisterBlock,
     dwt: DWT,
+    #[cfg(feature = "rotating-esc-telemetry")]
+    capture_phase: [u8; 4],
     cycles_per_us: u32,
     bit_cycles: u32,
     t0_high: u32,
@@ -102,18 +104,21 @@ impl Stm32H7Board {
             _motors: motors,
             gpioe: hal::pac::GPIOE::ptr(),
             dwt: resources.dwt,
+            #[cfg(feature = "rotating-esc-telemetry")]
+            capture_phase: [0, 3, 2, 1],
             cycles_per_us,
             bit_cycles,
             t0_high,
             t1_high,
         })
     }
-}
 
-impl BdshotBoard for Stm32H7Board {
-    const CHANNEL_COUNT: usize = 4;
-
-    fn exchange(&mut self, channel: usize, frame: u32) -> Option<DShotTelemetry> {
+    fn exchange_frame(
+        &mut self,
+        channel: usize,
+        frame: u32,
+        capture: bool,
+    ) -> Option<DShotTelemetry> {
         // SAFETY: gpioe points to the GPIOE register block for the lifetime of the board.
         let gpioe = unsafe { &*self.gpioe };
         let mask = *MOTOR_TELE_MASKS.get(channel)?;
@@ -134,11 +139,28 @@ impl BdshotBoard for Stm32H7Board {
         );
         set_mode_input(gpioe, moder_mask, pupdr_mask);
         let wants_telemetry = (frame as u16) & 0x10 != 0;
-        if wants_telemetry {
+        if capture && wants_telemetry {
             decode_telemetry(gpioe, &self.dwt, frame_start, self.bit_cycles, mask)
         } else {
             None
         }
+    }
+}
+
+impl BdshotBoard for Stm32H7Board {
+    const CHANNEL_COUNT: usize = 4;
+
+    fn exchange(&mut self, channel: usize, frame: u32) -> Option<DShotTelemetry> {
+        self.exchange_frame(channel, frame, true)
+    }
+
+    #[cfg(feature = "rotating-esc-telemetry")]
+    fn exchange_in_loop(&mut self, channel: usize, frame: u32) -> Option<DShotTelemetry> {
+        // Count transmitted frames so a channel with a rate limit still gets its turn.
+        let phase = self.capture_phase.get_mut(channel)?;
+        let capture = *phase == 0;
+        *phase = (*phase + 1) % 4;
+        self.exchange_frame(channel, frame, capture)
     }
 
     fn delay(&mut self, micros: u32) {

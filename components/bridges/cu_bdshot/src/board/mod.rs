@@ -11,6 +11,11 @@ pub trait BdshotBoard {
 
     fn exchange(&mut self, channel: usize, frame: u32) -> Option<DShotTelemetry>;
 
+    /// Exchange a control-loop frame. Startup always uses the full exchange above.
+    fn exchange_in_loop(&mut self, channel: usize, frame: u32) -> Option<DShotTelemetry> {
+        self.exchange(channel, frame)
+    }
+
     fn delay(&mut self, micros: u32);
 }
 
