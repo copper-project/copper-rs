@@ -351,11 +351,11 @@ fn init_sd_logger(
 
     defmt::info!("Init()... ");
     sdmmc
-        .init(25.MHz())
+        .init(50.MHz())
         .map_err(|_| CuError::from("SDMMC init failed"))?;
     defmt::info!("Init passed ... ");
     sdmmc.card().map_err(|_| CuError::from("no sd card"))?;
-    defmt::info!("Card detected!!");
+    defmt::info!("SD card detected at {} Hz", sdmmc.clock().raw());
 
     let bd = ForceSyncSend::new(sdmmc.sdmmc_block_device());
 
