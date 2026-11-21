@@ -143,6 +143,16 @@ impl From<CuWaitError> for CuError {
 /// Implemented by the generated enum of running mission apps.
 #[doc(hidden)]
 pub trait ActiveMission {
+    fn wait_until_ready(
+        &mut self,
+        timeout: CuDuration,
+        ready: impl FnMut() -> bool,
+    ) -> Result<(), CuWaitError>;
+    fn drain_until(
+        &mut self,
+        timeout: CuDuration,
+        drained: impl FnMut() -> bool,
+    ) -> Result<(), CuWaitError>;
     fn run_until(&mut self, requested: impl FnMut() -> bool) -> CuResult<CuRunExit>;
     fn stop(self) -> CuResult<()>;
 }

@@ -146,10 +146,12 @@ pub struct cu29::supervisor::Supervisor<'a, M: ConfiguredMission, S: cu29_unifie
 impl<'a, M: ConfiguredMission> cu29::supervisor::Supervisor<'a, M>
 pub fn cu29::supervisor::Supervisor<'a, M>::builder() -> cu29::supervisor::SupervisorBuilder<'a, M>
 impl<M: ConfiguredMission, S: cu29_unifiedlog::SectionStorage + 'static, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static> cu29::supervisor::Supervisor<'_, M, S, L>
+pub fn cu29::supervisor::Supervisor<'_, M, S, L>::drain_until(&mut self, timeout: cu29_clock::CuDuration, drained: impl core::ops::function::FnMut() -> bool) -> core::result::Result<(), cu29_runtime::app::supervision::CuWaitError>
 pub fn cu29::supervisor::Supervisor<'_, M, S, L>::run_until(&mut self, requested: impl core::ops::function::FnMut() -> bool) -> cu29_traits::CuResult<cu29_runtime::app::supervision::CuRunExit>
 pub fn cu29::supervisor::Supervisor<'_, M, S, L>::start(&mut self, mission: M) -> cu29_traits::CuResult<()>
 pub fn cu29::supervisor::Supervisor<'_, M, S, L>::stop(&mut self) -> cu29_traits::CuResult<()>
 pub fn cu29::supervisor::Supervisor<'_, M, S, L>::transition_to(&mut self, mission: M) -> cu29_traits::CuResult<()>
+pub fn cu29::supervisor::Supervisor<'_, M, S, L>::wait_until_ready(&mut self, timeout: cu29_clock::CuDuration, ready: impl core::ops::function::FnMut() -> bool) -> core::result::Result<(), cu29_runtime::app::supervision::CuWaitError>
 impl<M: ConfiguredMission, S: cu29_unifiedlog::SectionStorage + 'static, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static> core::ops::drop::Drop for cu29::supervisor::Supervisor<'_, M, S, L>
 pub fn cu29::supervisor::Supervisor<'_, M, S, L>::drop(&mut self)
 pub struct cu29::supervisor::SupervisorBuilder<'a, M, S, L>

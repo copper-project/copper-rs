@@ -2960,29 +2960,17 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             None
         };
 
-        let kill_handler = if std && signal_handler {
-            Some(quote! {
-                ctrlc::set_handler(move || {
-                    STOP_FLAG.store(true, Ordering::SeqCst);
-                }).expect("Error setting Ctrl-C handler");
-            })
+        let shutdown_setup = (std && signal_handler).then(|| quote! {
+            cu29::install_shutdown_handler()?;
+        });
+        let shutdown_requested = if std && signal_handler {
+            quote!(cu29::shutdown_requested())
         } else {
-            None
+            quote!(false)
         };
 
-        let run_loop = if std {
-            quote! {{
-                let mut rate_limiter = self
-                    .copper_runtime
-                    .runtime_config
-                    .rate_target_hz
-                    .map(|rate| cu29::curuntime::LoopRateLimiter::from_rate_target_hz(
-                        rate,
-                        self.copper_runtime.clock_ref(),
-                    ))
-                    .transpose()?;
-                loop  {
-                    let result = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+        let iteration = if std {
+            quote! { match std::panic::catch_unwind(std::panic::AssertUnwindSafe(
                         || <Self as #app_trait<S, L>>::run_one_iteration(self, #sim_callback_arg)
                     )) {
                         Ok(result) => result,
@@ -3001,42 +2989,29 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 panic_message
                             )))
                         }
-                    };
-
-                    if let Some(rate_limiter) = rate_limiter.as_mut() {
-                        rate_limiter.limit(self.copper_runtime.clock_ref());
-                    }
-
-                    if STOP_FLAG.load(Ordering::SeqCst) || result.is_err() {
-                        if result.is_err() && self.stop_reason != cu29::curuntime::RuntimeStopReason::Panic { self.stop_reason = cu29::curuntime::RuntimeStopReason::Error; }
-                        break result;
-                    }
-                }
-            }}
+                    } }
         } else {
-            quote! {{
-                let mut rate_limiter = self
-                    .copper_runtime
-                    .runtime_config
-                    .rate_target_hz
-                    .map(|rate| cu29::curuntime::LoopRateLimiter::from_rate_target_hz(
-                        rate,
-                        self.copper_runtime.clock_ref(),
-                    ))
-                    .transpose()?;
-                loop  {
-                    let result = <Self as #app_trait<S, L>>::run_one_iteration(self, #sim_callback_arg);
-                    if let Some(rate_limiter) = rate_limiter.as_mut() {
-                        rate_limiter.limit(self.copper_runtime.clock_ref());
-                    }
-
-                    if STOP_FLAG.load(Ordering::SeqCst) || result.is_err() {
-                        if result.is_err() && self.stop_reason != cu29::curuntime::RuntimeStopReason::Panic { self.stop_reason = cu29::curuntime::RuntimeStopReason::Error; }
-                        break result;
-                    }
-                }
-            }}
+            quote! { <Self as #app_trait<S, L>>::run_one_iteration(self, #sim_callback_arg) }
         };
+        let run_loop = quote! {{
+            let mut rate_limiter = self.copper_runtime.runtime_config.rate_target_hz
+                .map(|rate| cu29::curuntime::LoopRateLimiter::from_rate_target_hz(
+                    rate, self.copper_runtime.clock_ref(),
+                )).transpose()?;
+            loop {
+                if #shutdown_requested { break Ok(cu29::app::CuRunExit::Shutdown); }
+                if should_stop() { break Ok(cu29::app::CuRunExit::Requested); }
+                if let Err(error) = #iteration {
+                    if self.stop_reason != cu29::curuntime::RuntimeStopReason::Panic {
+                        self.stop_reason = cu29::curuntime::RuntimeStopReason::Error;
+                    }
+                    break Err(error);
+                }
+                if let Some(limiter) = rate_limiter.as_mut() {
+                    limiter.limit(self.copper_runtime.clock_ref());
+                }
+            }
+        }};
 
         let parallel_keyframe_runtime = keyframe_logging_enabled.then(|| {
             quote! {
@@ -3082,7 +3057,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         } else {
             None
         };
-        let run_body: proc_macro2::TokenStream = if let Some(lane) = lane_executor_tokens {
+        let make_run_body = |managed: bool| if let Some(lane) = &lane_executor_tokens {
             let LaneExecutorTokens {
                 worker_spawns: lane_worker_spawns,
                 dispatcher_scheduling: lane_dispatcher_scheduling,
@@ -3091,12 +3066,30 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 max_in_flight: lane_max_in_flight,
                 workers: lane_workers,
             } = lane;
-            quote! {
-                static STOP_FLAG: AtomicBool = AtomicBool::new(false);
-
-                #kill_handler
-
+            let start = (!managed).then(|| quote! {
+                <Self as #app_trait<S, L>>::start_all_tasks(self)?;
+                tasks_started = true;
+            });
+            let owner_state = (!managed).then(|| quote! {
                 let mut tasks_started = false;
+                let should_stop = || false;
+            });
+            let finish = if managed {
+                quote! { result.map(|()| exit) }
+            } else {
+                quote! {
+                    let _ = exit;
+                    let stop_result = if tasks_started {
+                        <Self as #app_trait<S, L>>::stop_all_tasks(self, #sim_callback_arg)
+                    } else { Ok(()) };
+                    let shutdown_result = if stop_result.is_ok() { self.log_shutdown_completed() } else { Ok(()) };
+                    cu29::curuntime::combine_output_results(result, cu29::curuntime::combine_output_results(stop_result, shutdown_result))
+                }
+            };
+            quote! {
+                #shutdown_setup
+                #owner_state
+                let mut exit = cu29::app::CuRunExit::Requested;
                 let result = std::thread::scope(|scope| -> CuResult<()> {
                     #mission_mod::assert_parallel_rt_send_bounds();
                     #lane_dispatcher_scheduling
@@ -3145,8 +3138,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     #(#lane_worker_spawns)*
 
                     let execution_result = (|| -> CuResult<()> {
-                        <Self as #app_trait<S, L>>::start_all_tasks(self)?;
-                        tasks_started = true;
+                        #start
 
                         let runtime = &mut self.copper_runtime;
                         let monitor = &runtime.monitor;
@@ -3246,10 +3238,15 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             break;
                         }
 
-                        if STOP_FLAG.load(Ordering::SeqCst)
-                            && !stop_launching
+                        if !stop_launching
                             && (next_launch_clid - start_clid).is_multiple_of(copperlists_per_cycle)
+                            && (#shutdown_requested || std::panic::catch_unwind(
+                                std::panic::AssertUnwindSafe(|| should_stop())
+                            ).map_err(|panic| CuError::from(
+                                cu29::monitoring::panic_payload_to_string(panic.as_ref())
+                            ))?)
                         {
+                            if #shutdown_requested { exit = cu29::app::CuRunExit::Shutdown; }
                             stop_launching = true;
                             lanes.stop_admitting();
                         }
@@ -3351,20 +3348,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 if result.is_err() {
                     error!("A task errored out: {}", &result);
                 }
-                let stop_result = if tasks_started {
-                    <Self as #app_trait<S, L>>::stop_all_tasks(self, #sim_callback_arg)
-                } else { Ok(()) };
-                let shutdown_result = if stop_result.is_ok() { self.log_shutdown_completed() } else { Ok(()) };
-                cu29::curuntime::combine_output_results(result, cu29::curuntime::combine_output_results(stop_result, shutdown_result))
+                #finish
             }
+        } else if managed {
+            quote! { #shutdown_setup #run_loop }
         } else {
             quote! {
-                static STOP_FLAG: AtomicBool = AtomicBool::new(false);
-
-                #kill_handler
-
+                #shutdown_setup
+                let should_stop = || false;
                 <Self as #app_trait<S, L>>::start_all_tasks(self, #sim_callback_arg)?;
-                let result = #run_loop;
+                let result = (|| #run_loop)().map(|_| ());
 
                 if result.is_err() {
                     error!("A task errored out: {}", &result);
@@ -3374,6 +3367,25 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 cu29::curuntime::combine_output_results(result, cu29::curuntime::combine_output_results(stop_result, shutdown_result))
             }
         };
+        let run_body = make_run_body(false);
+        let managed_impl = (!sim_mode).then(|| {
+            let body = make_run_body(true);
+            quote! {
+                impl cu29::clock::ClockProvider for #application_name {
+                    fn get_clock(&self) -> cu29::clock::RobotClock {
+                        self.clock()
+                    }
+                }
+
+                #[allow(deprecated)]
+                impl<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static>
+                    cu29::app::CuManagedApplication<S, L> for #application_name {
+                    fn run_managed(&mut self, mut should_stop: impl FnMut() -> bool) -> CuResult<cu29::app::CuRunExit> {
+                        #body
+                    }
+                }
+            }
+        });
         let keyframe_manager_binding = keyframe_logging_enabled
             .then(|| quote! { let kf_manager = &mut runtime.keyframes_manager; });
         let keyframe_reset =
@@ -4504,6 +4516,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         #[cfg(feature = "macro_debug")]
         eprintln!("[build result]");
         let application_impl = quote! {
+            #managed_impl
             #app_impl_decl {
                 #simstep_type_decl
 
@@ -4905,25 +4918,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     path: impl AsRef<std::path::Path>,
                     slab_size: Option<usize>,
                 ) -> CuResult<#builder_name<#builder_log_path_generics>> {
-                    let preallocated_size = slab_size.unwrap_or(1024 * 1024 * 10);
-                    let logger = cu29::prelude::UnifiedLoggerBuilder::new()
-                        .write(true)
-                        .create(true)
-                        .file_base_name(path.as_ref())
-                        .preallocated_size(preallocated_size)
-                        .build()
-                        .map_err(|e| CuError::new_with_cause("Failed to create unified logger", e))?;
-                    let logger = match logger {
-                        cu29::prelude::UnifiedLogger::Write(logger) => logger,
-                        cu29::prelude::UnifiedLogger::Read(_) => {
-                            return Err(CuError::from(
-                                "UnifiedLoggerBuilder did not create a write-capable logger",
-                            ));
-                        }
-                    };
-                    Ok(self.with_logger::<MmapSectionStorage, UnifiedLoggerWrite>(Arc::new(Mutex::new(
-                        logger,
-                    ))))
+                    Ok(self.with_unified_logger(::cu29::supervisor::open_log(path.as_ref(), slab_size)?))
                 }
             })
         } else {
@@ -5289,7 +5284,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use std::fmt::Result as FmtResult;
                 use std::mem::size_of;
                 use std::boxed::Box;
-                use std::sync::atomic::{AtomicBool, Ordering};
             }
         } else {
             quote! {
@@ -5297,7 +5291,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use alloc::string::String;
                 use alloc::string::ToString;
                 use cu29::__private::sync::{Arc, Mutex};
-                use core::sync::atomic::{AtomicBool, Ordering};
                 use core::fmt::{Debug, Formatter};
                 use core::fmt::Result as FmtResult;
                 use core::mem::size_of;
@@ -5309,6 +5302,31 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let task_mapping_defs = task_resource_mappings.defs.clone();
         let bridge_mapping_defs = bridge_resource_mappings.defs.clone();
 
+        let supervised_start = (!sim_mode && all_missions.iter().any(|(id, _)| id != "default")).then(|| {
+            let config = (std && !static_config).then(|| quote!(builder.config_override = settings.config.clone();));
+            let reference = clock_sync_enabled.then(|| quote!(builder.clock_reference = settings.reference.as_mut().map(|open| open()).transpose()?;));
+            let telemetry = logstream_enabled.then(|| quote!(builder.logstream = settings.telemetry.as_mut().map(|open| open()).transpose()?;));
+            quote! {
+                pub(super) fn start_supervised<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static>(
+                    settings: &mut ::cu29::supervisor::MissionSettings<'_>, logger: Arc<Mutex<L>>
+                ) -> CuResult<::cu29::app::CuAppLifecycle<S,L,#application_name,::cu29::app::Running>> {
+                    let mut builder = #application_name::builder().with_logger::<S,L>(logger).with_instance_id(settings.instance_id);
+                    builder.clock = settings.clock.clone();
+                    #config
+                    #reference
+                    #telemetry
+                    let app = if let Some(resources) = settings.resources.as_mut() {
+                        builder.with_resources(resources).build()?
+                    } else {
+                        builder.build()?
+                    };
+                    if settings.clock.is_none() {
+                        settings.clock = Some(app.clock());
+                    }
+                    ::cu29::app::start_managed(app)
+                }
+            }
+        });
         // Convert the modified struct back into a TokenStream
         let mission_mod_tokens = quote! {
             mod #mission_mod {
@@ -5441,6 +5459,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #std_application_impl
 
                 #application_builder
+                #supervised_start
             }
 
         };
@@ -5482,8 +5501,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         .collect::<BTreeSet<_>>();
     let root_constant_modules = constant_modules.root_modules_except(&mission_module_names);
 
+    let mission_api = if !sim_mode && all_missions.iter().any(|(name, _)| name != "default") {
+        let modules = all_missions.iter().map(|(name, _)| parse_str::<Ident>(name).unwrap()).collect::<Vec<_>>();
+        missions::generate(application_name, &application_struct.vis, &modules)
+    } else {
+        quote!()
+    };
+
     let result: proc_macro2::TokenStream = quote! {
         #root_constant_modules
+        #mission_api
         #(#all_missions_tokens)*
         #default_application_tokens
     };

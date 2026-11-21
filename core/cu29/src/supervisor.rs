@@ -2,8 +2,8 @@
 use crate::__private::sync::{Arc, Mutex};
 use alloc::boxed::Box;
 use core::marker::PhantomData;
-use cu29_clock::RobotClock;
-use cu29_runtime::app::{ActiveMission, CuRunExit};
+use cu29_clock::{CuDuration, RobotClock};
+use cu29_runtime::app::{ActiveMission, CuRunExit, CuWaitError};
 use cu29_runtime::resource::ResourceManager;
 use cu29_traits::{CuError, CuResult};
 use cu29_unifiedlog::{NoopLogger, NoopSectionStorage, SectionStorage, UnifiedLogWrite};
@@ -240,10 +240,35 @@ impl<M: ConfiguredMission, S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 
 
     /// Drive the running graph until the predicate succeeds or Copper requests shutdown.
     pub fn run_until(&mut self, requested: impl FnMut() -> bool) -> CuResult<CuRunExit> {
+        self.active_mission()?.run_until(requested)
+    }
+
+    /// Drive the active mission until its readiness predicate succeeds or the wait ends.
+    pub fn wait_until_ready(
+        &mut self,
+        timeout: CuDuration,
+        ready: impl FnMut() -> bool,
+    ) -> Result<(), CuWaitError> {
+        self.active_mission()
+            .map_err(CuWaitError::Execution)?
+            .wait_until_ready(timeout, ready)
+    }
+
+    /// Drive the active mission until its drain predicate succeeds or the wait ends.
+    pub fn drain_until(
+        &mut self,
+        timeout: CuDuration,
+        drained: impl FnMut() -> bool,
+    ) -> Result<(), CuWaitError> {
+        self.active_mission()
+            .map_err(CuWaitError::Execution)?
+            .drain_until(timeout, drained)
+    }
+
+    fn active_mission(&mut self) -> CuResult<&mut M::Active<S, L>> {
         self.active
             .as_mut()
-            .ok_or_else(|| CuError::from("no active mission"))?
-            .run_until(requested)
+            .ok_or_else(|| CuError::from("no active mission"))
     }
 
     /// Release the old app before constructing the target. A failed switch leaves the supervisor idle.
@@ -318,6 +343,20 @@ mod tests {
         fn run_until(&mut self, _: impl FnMut() -> bool) -> CuResult<CuRunExit> {
             Ok(CuRunExit::Requested)
         }
+        fn wait_until_ready(
+            &mut self,
+            _: CuDuration,
+            _: impl FnMut() -> bool,
+        ) -> Result<(), CuWaitError> {
+            unreachable!("idle wait must fail before dispatch")
+        }
+        fn drain_until(
+            &mut self,
+            _: CuDuration,
+            _: impl FnMut() -> bool,
+        ) -> Result<(), CuWaitError> {
+            unreachable!("idle wait must fail before dispatch")
+        }
         fn stop(self) -> CuResult<()> {
             if matches!(self, Self::StopFails) {
                 Err("stop failed".into())
@@ -334,6 +373,14 @@ mod tests {
         assert!(supervisor.start(Mission::Unreachable).is_err());
         assert!(supervisor.transition_to(Mission::Unreachable).is_err());
         assert!(supervisor.run_until(|| true).is_err());
+        assert!(matches!(
+            supervisor.wait_until_ready(CuDuration::from_nanos(0), || true),
+            Err(CuWaitError::Execution(_))
+        ));
+        assert!(matches!(
+            supervisor.drain_until(CuDuration::from_nanos(0), || true),
+            Err(CuWaitError::Execution(_))
+        ));
         assert!(supervisor.transition_to(Mission::StartFails).is_err());
         supervisor.start(Mission::Normal).unwrap();
         supervisor.stop().unwrap();

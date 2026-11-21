@@ -134,7 +134,7 @@ factory. Simulation callbacks belong to simulation apps.
 
 ## 4. Readiness and draining
 
-Use bounded waiting helpers on a running app. Device-specific actions stay in
+Both a running app and its mission runner expose the same bounded waits. On the runner, each wait drives the currently active mission. Calling either wait while the runner has no active mission returns `CuWaitError::Execution`. Device-specific actions stay in
 the application; the supplied observations must be nonblocking.
 
 ```rust
