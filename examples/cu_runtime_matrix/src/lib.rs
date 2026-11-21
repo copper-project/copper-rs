@@ -2120,6 +2120,47 @@ mod tests {
     }
 
     #[test]
+    fn managed_runs_resume_and_preserve_copperlist_order() {
+        let _guard = TEST_MUTEX.lock().unwrap_or_else(|p| p.into_inner());
+        let dir = tempfile::tempdir_in(env!("CARGO_MANIFEST_DIR")).unwrap();
+        let log = dir.path().join("managed.copper");
+        let (clock, _) = RobotClock::mock();
+        let mut config = load_runtime_matrix_config().unwrap();
+        configure_runtime_matrix(
+            &mut config,
+            32,
+            0,
+            TEST_COMPUTE_WORDS,
+            TEST_COMPUTE_ROUNDS,
+            true,
+        )
+        .unwrap();
+        let mut running = OneToMany::RuntimeMatrixApp::builder()
+            .with_clock(clock)
+            .with_log_path(&log, DEFAULT_LOG_SLAB_SIZE)
+            .unwrap()
+            .with_config(config)
+            .build()
+            .unwrap()
+            .start()
+            .unwrap();
+        assert_eq!(running.run_until(|| true).unwrap(), CuRunExit::Requested);
+        for _ in 0..2 {
+            let mut checks = 0;
+            running
+                .run_until(|| {
+                    checks += 1;
+                    checks > 2
+                })
+                .unwrap();
+        }
+        drop(running.stop().unwrap());
+        let records = read_mission_copperlists(MissionArg::OneToMany, &log).unwrap();
+        let ids: Vec<_> = records.iter().map(|record| record.id).collect();
+        assert_eq!(ids, [0, 1, 2, 3]);
+    }
+
+    #[test]
     fn run_stops_on_task_error_without_publishing_partial_copperlists() {
         // Fit within the nine output handoff slots even if the async worker
         // does not run before the source fails on the next iteration.

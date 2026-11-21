@@ -1,7 +1,7 @@
 # App supervision helpers
 
-Status: API design for the stacked supervision changes. The generated runtime
-and runnable example follow in the next two changes.
+Status: implemented as experimental APIs. Existing lifecycle methods and manual
+iteration remain supported. See the [supervised missions example](../../examples/cu_missions/examples/supervised.rs).
 
 Coppernic currently owns a synchronous mission supervisor beside a Tokio runtime.
 It repeats iteration loops for idle, camera startup, recording, and draining,
@@ -158,3 +158,9 @@ predicate passed; timeout/shutdown/failure returns a distinguishable error. A ze
 timeout checks the predicate once and runs no iterations. They neither stop nor
 drop the App; callers still attempt cleanup after failure, including readiness
 failure (omitted from the short example). Waiting cannot preempt a blocked task.
+
+## Running the example
+
+Run `cargo run -p cu-missions --example supervised` to start idle, switch to
+recording, and stop. Both graphs acquire the same exclusive mock camera through
+the configured resource bundle. Each activation writes its own run context into the same archive.
