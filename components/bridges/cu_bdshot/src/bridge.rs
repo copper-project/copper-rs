@@ -246,7 +246,7 @@ where
         let frame = encode_frame(command);
         let telemetry = {
             let mut board = self.board.lock();
-            board.exchange(idx, frame)
+            board.exchange_in_loop(idx, frame)
         };
         if let Some(telemetry) = telemetry {
             self.telemetry_cache[idx] = Some(EscTelemetry {

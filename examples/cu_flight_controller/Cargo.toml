@@ -206,8 +206,11 @@ textlogs = [
 
 log-level-debug = ["textlogs", "cu29/log-level-debug"]
 logmon = ["cu-logmon/probe-report"]
+rotating-esc-telemetry = ["cu-bdshot?/rotating-esc-telemetry"]
+full-esc-telemetry = ["cu-bdshot?/full-esc-telemetry"]
 sdcard-logging = ["self-describing-logs", "cu-micoairh743/sd-recording"]
 firmware = [
+  "rotating-esc-telemetry",
   "cu29/static-config",
   "cu29/log-level-critical",
   "dep:cu29",
