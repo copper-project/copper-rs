@@ -10,6 +10,7 @@ fn main() {
     for config in [
         "flight_controller.ron",
         "mcu_config.ron",
+        "mcu_config.ron.in",
         "mcu_graph.ron",
         "mcu_logging_off.ron",
         "mcu_logging_on.ron",

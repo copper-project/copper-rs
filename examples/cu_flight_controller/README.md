@@ -368,8 +368,9 @@ Notes:
 
 ## Configuration
 
-`mcu_config.ron` and `compute_config.ron` contain each subsystem's shared graph exactly once. Their
-feature-gated manual/preview and autonomy fragments add only the nodes and connections that differ.
+`mcu_config.ron` selects recording settings for the shared MCU graph in `mcu_config.ron.in`.
+`compute_config.ron` defines the shared compute graph. Feature-gated manual, preview, and
+autonomy fragments add the nodes and connections that differ.
 The 500 m / 8 m waypoint geometry and infinite repetition are fixed demo constants, not RON
 parameters. Key configurable parameters:
 
@@ -435,7 +436,9 @@ just attach
 
 ### Viewing Logs
 
-The `sdcard-logging` build logs to the SD card in Copper's binary format. Use the log reader tools to extract and analyze:
+The `sdcard-logging` build records BMI088 IMU samples, body-rate setpoints, PID commands, and
+individual motor commands to the SD card. It omits GNSS, barometer, magnetometer, magnetic heading,
+and battery payloads. Use the log reader tools to extract and analyze the recording.
 
 ```bash
 # Extract structured data
