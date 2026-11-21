@@ -3,6 +3,8 @@
 
 extern crate alloc;
 
+mod uart2_tx;
+
 use alloc::sync::Arc;
 use core::fmt::Debug;
 use cortex_m::peripheral::DWT;
@@ -83,7 +85,7 @@ impl<U> SerialWrapper<U> {
     }
 }
 
-macro_rules! impl_serial_wrapper_io {
+macro_rules! impl_serial_wrapper_read {
     ($usart:ty) => {
         impl embedded_io::ErrorType for SerialWrapper<$usart> {
             type Error = SerialPortError;
@@ -117,6 +119,12 @@ macro_rules! impl_serial_wrapper_io {
                 Ok(read)
             }
         }
+    };
+}
+
+macro_rules! impl_serial_wrapper_io {
+    ($usart:ty) => {
+        impl_serial_wrapper_read!($usart);
 
         impl embedded_io::Write for SerialWrapper<$usart> {
             fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
@@ -142,7 +150,7 @@ macro_rules! impl_serial_wrapper_io {
 
 impl_serial_wrapper_io!(pac::USART6);
 impl_serial_wrapper_io!(pac::USART3);
-impl_serial_wrapper_io!(pac::USART2);
+impl_serial_wrapper_read!(pac::USART2);
 impl_serial_wrapper_io!(pac::UART4);
 
 // Resource type aliases exposed by the bundle.
@@ -469,7 +477,7 @@ impl ResourceBundle for MicoAirH743 {
             None => UART2_BAUD,
         };
         let uart2_config = Config::default().baudrate(uart2_baud.bps());
-        let uart2 = SerialWrapper::new(
+        let mut uart2 = SerialWrapper::new(
             dp.USART2
                 .serial(
                     (gpioa.pa2.into_alternate(), gpioa.pa3.into_alternate()),
@@ -481,6 +489,8 @@ impl ResourceBundle for MicoAirH743 {
             "UART2",
             overrun_period_cycles,
         );
+
+        uart2_tx::init(&mut uart2.inner, dp.DMA1, ccdr.peripheral.DMA1);
 
         let uart3_baud = match _config {
             Some(cfg) => cfg.get::<u32>("uart3_baud")?.unwrap_or(UART3_BAUD),
