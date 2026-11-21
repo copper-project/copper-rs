@@ -170,8 +170,18 @@ pub trait ByteRegion: Send + Sync {
     fn commit(&mut self) -> CuResult<()> {
         self.flush()
     }
+    /// Enable buffering for a newly allocated append-only CopperList section.
+    #[doc(hidden)]
+    fn begin_record_batching(&mut self) -> core::num::NonZeroUsize {
+        core::num::NonZeroUsize::MIN
+    }
     /// Discard a failed write's pending block state. Committed bytes remain readable.
     fn abort(&mut self) {}
+    /// Discard the failed record while retaining any earlier buffered records.
+    #[doc(hidden)]
+    fn abort_record(&mut self, _position: u64) {
+        self.abort();
+    }
 }
 
 /// Maps byte ranges to backing allocations or partition blocks.
@@ -412,6 +422,8 @@ pub struct ByteSection<R: ByteRegion> {
     offset: u64,
     write_reserved: bool,
     append_only: bool,
+    records_per_commit: usize,
+    pending_records: usize,
 }
 impl<R: ByteRegion> ByteSection<R> {
     fn token(&self, state: usize) -> usize {
@@ -467,7 +479,7 @@ impl<R: ByteRegion> Drop for SectionWrite<'_, R> {
             if self.observing {
                 abort_observed_encode();
             }
-            self.section.region.abort();
+            self.section.region.abort_record(self.section.position);
             let _ = self.section.release_write(IDLE);
         }
     }
@@ -557,17 +569,22 @@ impl<R: ByteRegion> SectionStorage for ByteSection<R> {
             let mut encoder = EncoderImpl::new(ObservedWriter::new(writer), standard());
             entry.encode(&mut encoder)?;
             let end = encoder.into_writer().into_inner().position;
-            section.region.commit().map_err(encode_error)?;
             let mut committed = section.header.clone();
             committed.used = u32::try_from(end - HEADER).map_err(|_| EncodeError::UnexpectedEnd)?;
-            if let Err(error) = write_commit(
-                &mut section.region,
-                &committed,
-                section.offset,
-                section.generation as u64,
-            ) {
-                section.leases.poisoned.store(true, Ordering::Release);
-                return Err(encode_error(error));
+            if section.pending_records + 1 == section.records_per_commit {
+                section.region.commit().map_err(encode_error)?;
+                if let Err(error) = write_commit(
+                    &mut section.region,
+                    &committed,
+                    section.offset,
+                    section.generation as u64,
+                ) {
+                    section.leases.poisoned.store(true, Ordering::Release);
+                    return Err(encode_error(error));
+                }
+                section.pending_records = 0;
+            } else {
+                section.pending_records += 1;
             }
             section.header = committed;
             section.position = end;
@@ -580,7 +597,7 @@ impl<R: ByteRegion> SectionStorage for ByteSection<R> {
             }
             Err(_) => {
                 abort_observed_encode();
-                section.region.abort();
+                section.region.abort_record(old_position);
             }
         }
         let release = guard.finish(IDLE).map_err(encode_error);
@@ -608,15 +625,21 @@ impl<R: ByteRegion> SectionStorage for ByteSection<R> {
             let section = &mut *guard.section;
             let mut header = section.header.clone();
             header.is_open = false;
-            let result = write_commit(
-                &mut section.region,
-                &header,
-                section.offset,
-                section.generation as u64,
-            )
-            .and_then(|()| section.region.flush());
+            let result = (|| {
+                if section.pending_records != 0 {
+                    section.region.commit()?;
+                }
+                write_commit(
+                    &mut section.region,
+                    &header,
+                    section.offset,
+                    section.generation as u64,
+                )?;
+                section.region.flush()
+            })();
             let state = if result.is_ok() {
                 section.header = header;
+                section.pending_records = 0;
                 SEALED
             } else {
                 section.leases.poisoned.store(true, Ordering::Release);
@@ -1303,6 +1326,12 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
                 },
             Ordering::Release,
         );
+        let append_only = self.policy != CapacityPolicy::OverwriteOldest;
+        let records_per_commit = if append_only && kind == UnifiedLogType::CopperList {
+            region.begin_record_batching().get()
+        } else {
+            1
+        };
         let storage = ByteSection {
             region,
             position: HEADER,
@@ -1312,7 +1341,9 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
             generation: self.generation,
             offset: position,
             write_reserved: false,
-            append_only: self.policy != CapacityPolicy::OverwriteOldest,
+            append_only,
+            records_per_commit,
+            pending_records: 0,
         };
         let handle = SectionHandle::create(header, storage)?;
         self.faulted = false;

@@ -1,11 +1,15 @@
 use crate::sdmmc::{Block, BlockCount, BlockDevice, BlockIdx};
 use alloc::sync::Arc;
 use bincode::Encode;
+use core::num::NonZeroUsize;
 use cu29::prelude::*;
 use cu29_unifiedlog::byte_log::{ByteLogger, ByteRegion, ByteSection, ByteStorage};
 use spin::Mutex;
 
 const BLK: usize = 512;
+const BATCH_BLOCKS: usize = 16;
+const RECORDS_PER_COMMIT: NonZeroUsize = NonZeroUsize::new(32).unwrap();
+const SECTION_HEADER_BYTES: u64 = cu29_unifiedlog::SECTION_HEADER_COMPACT_SIZE as u64;
 
 /// Synchronizes access to a shared block device, including concurrent section streams.
 pub struct ForceSyncSend<T>(Mutex<T>);
@@ -32,39 +36,39 @@ impl<B: BlockDevice> BlockDevice for ForceSyncSend<B> {
     }
 }
 
-/// A bounded partition byte range with one fixed read/modify/write block buffer.
+/// A bounded partition byte range with a fixed buffer for contiguous sectors.
 pub struct SdRegion<BD: BlockDevice> {
     bd: Arc<ForceSyncSend<BD>>,
     start: u64,
     length: u64,
-    pending: Option<u32>,
-    buffer: Block,
-    dirty: bool,
+    first_block: u32,
+    buffered_blocks: usize,
+    blocks: [Block; BATCH_BLOCKS],
+    first_dirty: usize,
+    batch_copperlists: bool,
+    batching: bool,
 }
 impl<BD: BlockDevice> SdRegion<BD> {
-    fn read_block(&self, index: u32, block: &mut Block) -> CuResult<()> {
+    fn read_block(bd: &ForceSyncSend<BD>, index: u32, block: &mut Block) -> CuResult<()> {
         #[cfg(all(feature = "eh02", not(feature = "eh1")))]
-        let result = self.bd.read(
+        let result = bd.read(
             core::slice::from_mut(block),
             BlockIdx(index),
             "Copper byte log",
         );
         #[cfg(feature = "eh1")]
-        let result = self.bd.read(core::slice::from_mut(block), BlockIdx(index));
+        let result = bd.read(core::slice::from_mut(block), BlockIdx(index));
         result.map_err(|_| CuError::from("SD block read failed"))
     }
     fn flush_pending(&mut self) -> CuResult<()> {
-        if self.dirty {
+        if self.first_dirty < self.buffered_blocks {
             self.bd
                 .write(
-                    core::slice::from_ref(&self.buffer),
-                    BlockIdx(
-                        self.pending
-                            .ok_or_else(|| CuError::from("Missing SD block buffer"))?,
-                    ),
+                    &self.blocks[self.first_dirty..self.buffered_blocks],
+                    BlockIdx(self.first_block + self.first_dirty as u32),
                 )
                 .map_err(|_| CuError::from("SD block write failed"))?;
-            self.dirty = false;
+            self.first_dirty = self.buffered_blocks;
         }
         Ok(())
     }
@@ -90,7 +94,7 @@ impl<BD: BlockDevice + Send> ByteRegion for SdRegion<BD> {
         while !bytes.is_empty() {
             let index = u32::try_from(cursor / BLK as u64)
                 .map_err(|_| CuError::from("SD block index overflow"))?;
-            self.read_block(index, &mut block)?;
+            Self::read_block(&self.bd, index, &mut block)?;
             let local = (cursor % BLK as u64) as usize;
             let count = bytes.len().min(BLK - local);
             bytes[..count].copy_from_slice(&block.as_ref()[local..local + count]);
@@ -101,20 +105,45 @@ impl<BD: BlockDevice + Send> ByteRegion for SdRegion<BD> {
     }
     fn write(&mut self, offset: u64, mut bytes: &[u8]) -> CuResult<()> {
         let mut cursor = self.bounds(offset, bytes.len())?;
+        if self.batching && offset == BLK as u64 && bytes.len() <= BLK {
+            // The commit owns this sector. Publishing it leaves the payload tail in RAM.
+            self.flush_pending()?;
+            let index = u32::try_from(cursor / BLK as u64)
+                .map_err(|_| CuError::from("SD block index overflow"))?;
+            let mut commit = Block::new();
+            commit.as_mut()[..bytes.len()].copy_from_slice(bytes);
+            return self
+                .bd
+                .write(core::slice::from_ref(&commit), BlockIdx(index))
+                .map_err(|_| CuError::from("SD commit write failed"));
+        }
         while !bytes.is_empty() {
             let index = u32::try_from(cursor / BLK as u64)
                 .map_err(|_| CuError::from("SD block index overflow"))?;
-            if self.pending != Some(index) {
-                self.flush_pending()?;
-                let mut block = Block::new();
-                self.read_block(index, &mut block)?;
-                self.buffer = block;
-                self.pending = Some(index);
-            }
             let local = (cursor % BLK as u64) as usize;
             let count = bytes.len().min(BLK - local);
-            self.buffer.as_mut()[local..local + count].copy_from_slice(&bytes[..count]);
-            self.dirty = true;
+            let payload_start = self.start + SECTION_HEADER_BYTES;
+            let in_payload = self.batching && cursor >= payload_start;
+            let mut slot = index.wrapping_sub(self.first_block) as usize;
+            if slot >= self.buffered_blocks {
+                let extend = in_payload && slot == self.buffered_blocks && slot < BATCH_BLOCKS;
+                if !extend {
+                    self.flush_pending()?;
+                    self.buffered_blocks = 0;
+                    self.first_dirty = 0;
+                    self.first_block = index;
+                    slot = 0;
+                }
+                let block = &mut self.blocks[slot];
+                if count == BLK || (in_payload && local == 0) {
+                    *block = Block::new();
+                } else {
+                    Self::read_block(&self.bd, index, block)?;
+                }
+                self.buffered_blocks += 1;
+            }
+            self.blocks[slot].as_mut()[local..local + count].copy_from_slice(&bytes[..count]);
+            self.first_dirty = self.first_dirty.min(slot);
             bytes = &bytes[count..];
             cursor += count as u64;
         }
@@ -123,9 +152,28 @@ impl<BD: BlockDevice + Send> ByteRegion for SdRegion<BD> {
     fn flush(&mut self) -> CuResult<()> {
         self.flush_pending()
     }
+    fn begin_record_batching(&mut self) -> NonZeroUsize {
+        self.batching = self.batch_copperlists;
+        if self.batching {
+            self.abort();
+            RECORDS_PER_COMMIT
+        } else {
+            NonZeroUsize::MIN
+        }
+    }
     fn abort(&mut self) {
-        self.pending = None;
-        self.dirty = false;
+        self.buffered_blocks = 0;
+        self.first_dirty = 0;
+    }
+    fn abort_record(&mut self, position: u64) {
+        if !self.batching {
+            self.abort();
+            return;
+        }
+        let end_block = (self.start + position).div_ceil(BLK as u64);
+        let retained_blocks = end_block.saturating_sub(u64::from(self.first_block)) as usize;
+        self.buffered_blocks = self.buffered_blocks.min(retained_blocks);
+        self.first_dirty = self.first_dirty.min(self.buffered_blocks);
     }
 }
 
@@ -133,6 +181,7 @@ pub struct SdStorage<BD: BlockDevice> {
     bd: Arc<ForceSyncSend<BD>>,
     start: u64,
     size: u64,
+    batch_copperlists: bool,
 }
 impl<BD: BlockDevice + Send> ByteStorage for SdStorage<BD> {
     type Region = SdRegion<BD>;
@@ -153,9 +202,12 @@ impl<BD: BlockDevice + Send> ByteStorage for SdStorage<BD> {
             bd: self.bd.clone(),
             start: self.start + offset,
             length,
-            pending: None,
-            buffer: Block::new(),
-            dirty: false,
+            first_block: 0,
+            buffered_blocks: 0,
+            blocks: core::array::from_fn(|_| Block::new()),
+            first_dirty: 0,
+            batch_copperlists: self.batch_copperlists,
+            batching: false,
         })
     }
 }
@@ -167,11 +219,26 @@ impl<BD: BlockDevice + Send> EMMCLogger<BD> {
     pub fn new(bd: BD, start: BlockIdx, size: BlockCount) -> CuResult<Self> {
         Self::with_policy(bd, start, size, CapacityPolicy::StopWhenFull)
     }
+    /// Create a stop-when-full log that commits CopperLists in groups of 32.
+    ///
+    /// A reset can lose the current batch. Closing a section commits any remainder.
+    pub fn new_batched(bd: BD, start: BlockIdx, size: BlockCount) -> CuResult<Self> {
+        Self::create(bd, start, size, CapacityPolicy::StopWhenFull, true)
+    }
     pub fn with_policy(
         bd: BD,
         start: BlockIdx,
         size: BlockCount,
         policy: CapacityPolicy,
+    ) -> CuResult<Self> {
+        Self::create(bd, start, size, policy, false)
+    }
+    fn create(
+        bd: BD,
+        start: BlockIdx,
+        size: BlockCount,
+        policy: CapacityPolicy,
+        batch_copperlists: bool,
     ) -> CuResult<Self> {
         Self::validate_partition(&bd, start, size)?;
         let size = size.0 as u64 * BLK as u64;
@@ -179,6 +246,7 @@ impl<BD: BlockDevice + Send> EMMCLogger<BD> {
             bd: Arc::new(ForceSyncSend::new(bd)),
             start: start.0 as u64 * BLK as u64,
             size,
+            batch_copperlists,
         };
         ByteLogger::new(storage, BLK as u16, policy, size).map(Self)
     }
@@ -194,6 +262,7 @@ impl<BD: BlockDevice + Send> EMMCLogger<BD> {
             bd: Arc::new(ForceSyncSend::new(bd)),
             start: start.0 as u64 * BLK as u64,
             size,
+            batch_copperlists: false,
         };
         ByteLogger::append(storage, policy, size).map(Self)
     }
@@ -268,12 +337,16 @@ mod tests {
     struct Device {
         bytes: Arc<HostMutex<Vec<u8>>>,
         fail_after: Arc<AtomicUsize>,
+        writes: Arc<HostMutex<Vec<usize>>>,
+        reads: Arc<AtomicUsize>,
     }
     impl Device {
         fn new() -> Self {
             Self {
                 bytes: Arc::new(HostMutex::new(alloc::vec![0; 48 * BLK])),
                 fail_after: Arc::new(AtomicUsize::new(usize::MAX)),
+                writes: Arc::new(HostMutex::new(Vec::new())),
+                reads: Arc::new(AtomicUsize::new(0)),
             }
         }
     }
@@ -300,6 +373,7 @@ mod tests {
                 let offset = (start.0 as usize + index) * BLK;
                 bytes[offset..offset + BLK].copy_from_slice(block.as_ref());
             }
+            self.writes.lock().unwrap().push(blocks.len());
             Ok(())
         }
         fn num_blocks(&self) -> Result<BlockCount, ()> {
@@ -308,6 +382,7 @@ mod tests {
     }
     impl Device {
         fn read_blocks(&self, blocks: &mut [Block], start: BlockIdx) -> Result<(), ()> {
+            self.reads.fetch_add(blocks.len(), Ordering::Relaxed);
             let bytes = self.bytes.lock().unwrap();
             for (index, block) in blocks.iter_mut().enumerate() {
                 let offset = (start.0 as usize + index) * BLK;
@@ -316,6 +391,84 @@ mod tests {
             Ok(())
         }
     }
+    #[test]
+    fn sd_batches_write_whole_sectors_without_reads_and_publish_after_payload() {
+        let device = Device::new();
+        let mut logger =
+            EMMCLogger::new_batched(device.clone(), BlockIdx(7), BlockCount(32)).unwrap();
+        let mut section = logger
+            .add_section(UnifiedLogType::CopperList, 12_288)
+            .unwrap();
+        device.writes.lock().unwrap().clear();
+        device.reads.store(0, Ordering::Relaxed);
+        const RECORD_BYTES: usize = 250;
+        let payload = [42u8; RECORD_BYTES];
+        for _ in 1..RECORDS_PER_COMMIT.get() {
+            section.append(payload).unwrap();
+        }
+        assert!(device.writes.lock().unwrap().is_empty());
+        section.append(payload).unwrap();
+        assert_eq!(*device.writes.lock().unwrap(), [BATCH_BLOCKS, 1]);
+        assert_eq!(device.reads.load(Ordering::Relaxed), 0);
+
+        section.append([43u8; RECORD_BYTES]).unwrap();
+        assert_eq!(device.reads.load(Ordering::Relaxed), 0);
+        assert_eq!(*device.writes.lock().unwrap(), [BATCH_BLOCKS, 1, 1]);
+        let directory = test_dir();
+        let path = directory.path().join("batched.copper");
+        let snapshot = || {
+            std::fs::write(
+                directory.path().join("batched_0.copper"),
+                &device.bytes.lock().unwrap()[7 * BLK..39 * BLK],
+            )
+            .unwrap();
+            sections(&path).remove(0).2
+        };
+        let committed = snapshot();
+        assert_eq!(committed, payload.repeat(RECORDS_PER_COMMIT.get()));
+        logger.try_flush_section(&mut section).unwrap();
+        logger.close().unwrap();
+        let saved = snapshot();
+        assert_eq!(saved.len(), committed.len() + RECORD_BYTES);
+        assert_eq!(&saved[..committed.len()], committed);
+        assert_eq!(&saved[committed.len()..], [43u8; RECORD_BYTES]);
+    }
+
+    #[test]
+    fn failed_record_preserves_the_buffered_prefix() {
+        struct FailingRecord;
+        impl Encode for FailingRecord {
+            fn encode<E: bincode::enc::Encoder>(
+                &self,
+                encoder: &mut E,
+            ) -> Result<(), bincode::error::EncodeError> {
+                [2u8; BATCH_BLOCKS * BLK].encode(encoder)?;
+                Err(bincode::error::EncodeError::Other("test encoding failure"))
+            }
+        }
+        let device = Device::new();
+        let mut logger =
+            EMMCLogger::new_batched(device.clone(), BlockIdx(7), BlockCount(32)).unwrap();
+        let mut section = logger
+            .add_section(UnifiedLogType::CopperList, 12_288)
+            .unwrap();
+        section.append(11u8).unwrap();
+        assert!(section.append(FailingRecord).is_err());
+        section.append(12u8).unwrap();
+        logger.try_flush_section(&mut section).unwrap();
+        logger.close().unwrap();
+        let directory = test_dir();
+        std::fs::write(
+            directory.path().join("batched-rollback_0.copper"),
+            &device.bytes.lock().unwrap()[7 * BLK..39 * BLK],
+        )
+        .unwrap();
+        assert_eq!(
+            sections(&directory.path().join("batched-rollback.copper"))[0].2,
+            [11, 12]
+        );
+    }
+
     fn metadata() -> ApplicationMetadata {
         ApplicationMetadata {
             app_type: "Robot".into(),

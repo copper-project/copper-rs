@@ -440,6 +440,9 @@ The `sdcard-logging` build records BMI088 IMU samples, body-rate setpoints, PID 
 individual motor commands to the SD card. It omits GNSS, barometer, magnetometer, magnetic heading,
 and battery payloads. Use the log reader tools to extract and analyze the recording.
 
+The MicoAir logger commits CopperLists in batches of 32. An abrupt reset can lose the current
+batch. Closing a section commits its remaining records.
+
 ```bash
 # Extract structured data
 just logextract-native
