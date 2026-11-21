@@ -228,3 +228,13 @@ The checked-in V1 audit baseline lives under [`api/v1/`](../../api/v1/).
 
 Use `just api-check` to verify the baseline and `just api-update` only for an
 intentional contract update. See [contributor workflow](../../CONTRIBUTING.md).
+
+### Application supervision (experimental)
+
+On a running app that implements `CuManagedApplication`, `run_until` returns
+when the caller's predicate is true or Copper requests shutdown. `CuRunExit`
+identifies which condition ended the loop.
+A mission supervisor holds the platform configuration and logger across starts
+and switches. Its builder accepts the clock, logger, instance ID, and reusable
+resource setup. Starting, switching, and stopping run on the calling thread.
+The API is available with and without `std`.
