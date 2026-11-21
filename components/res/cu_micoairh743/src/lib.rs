@@ -414,6 +414,7 @@ impl ResourceBundle for MicoAirH743 {
             .ok_or_else(|| CuError::from("cortex-m peripherals already taken"))?;
         #[cfg(all(target_arch = "arm", target_abi = "eabihf"))]
         cp.SCB.enable_fpu();
+        cp.SCB.enable_icache();
         cp.DCB.enable_trace();
         DWT::unlock();
         let mut dwt = cp.DWT;
