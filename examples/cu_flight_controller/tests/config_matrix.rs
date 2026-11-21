@@ -55,6 +55,37 @@ fn firmware_monitor_and_recording_are_independent() {
 }
 
 #[test]
+fn firmware_sd_logging_selects_rate_tuning_payloads() {
+    let path = config_path("mcu_config.ron");
+    for (features, firmware) in [
+        (&["firmware", "sdcard-logging"][..], true),
+        (&["sim"][..], false),
+    ] {
+        let config = read_configuration_with_features(path.to_str().unwrap(), features).unwrap();
+        let graph = config.get_graph(Some("default")).unwrap();
+        for (task_id, enabled) in [
+            ("bmi088", true),
+            ("attitude", firmware),
+            ("rate", firmware),
+            ("mixer0", true),
+            ("mixer1", true),
+            ("mixer2", true),
+            ("mixer3", true),
+            ("gnss_ublox", !firmware),
+            ("dps310", !firmware),
+            ("ist8310", !firmware),
+            ("mag_heading", !firmware),
+            ("battery_adc", !firmware),
+        ] {
+            let node = graph
+                .get_node(graph.get_node_id_by_name(task_id).unwrap())
+                .unwrap();
+            assert_eq!(node.is_logging_enabled(), enabled, "{features:?} {task_id}");
+        }
+    }
+}
+
+#[test]
 fn mcu_feature_matrix_selects_one_control_graph() {
     for features in [
         &[][..],
