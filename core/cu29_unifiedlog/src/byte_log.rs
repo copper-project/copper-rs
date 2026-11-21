@@ -735,8 +735,23 @@ impl<B: ByteStorage> ByteLogger<B> {
     }
     /// Read-only validation. No storage extension or header write precedes metadata comparison.
     pub fn append(storage: B, policy: CapacityPolicy, capacity: u64) -> CuResult<Self> {
+        Self::open_existing(storage, policy, capacity, false)
+    }
+
+    /// Start another run beyond the validated extents of a stop-when-full log.
+    /// Interrupted sections keep their original commit blocks and open markers.
+    pub fn append_after_reset(storage: B, capacity: u64) -> CuResult<Self> {
+        Self::open_existing(storage, CapacityPolicy::StopWhenFull, capacity, true)
+    }
+
+    fn open_existing(
+        storage: B,
+        policy: CapacityPolicy,
+        capacity: u64,
+        after_reset: bool,
+    ) -> CuResult<Self> {
         let header = read_main(&storage)?;
-        if !header.clean_close {
+        if !header.clean_close && !after_reset {
             return Err(CuError::from("Cannot append: log was not cleanly closed"));
         }
         if !capacity.is_multiple_of(BLOCK) || capacity <= header.sections_begin {
@@ -756,7 +771,13 @@ impl<B: ByteStorage> ByteLogger<B> {
                     "Cannot shrink storage beneath retained sections",
                 ));
             }
-            if section.is_open {
+            if after_reset
+                && section.next_section != 0
+                && section.next_section < cursor + section.allocated
+            {
+                return Err(CuError::from("Invalid extent order for stop-when-full log"));
+            }
+            if section.is_open && (!after_reset || logger.header.clean_close) {
                 return Err(CuError::from("Cannot append: retained section is open"));
             }
             logger.generation = logger.generation.max(

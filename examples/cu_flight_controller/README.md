@@ -440,6 +440,11 @@ The `sdcard-logging` build records BMI088 IMU samples, body-rate setpoints, PID 
 individual motor commands to the SD card. It omits GNSS, barometer, magnetometer, magnetic heading,
 and battery payloads. Use the log reader tools to extract and analyze the recording.
 
+On each boot the MicoAir logger starts a new run after existing sections on the Copper
+partition. Use the same firmware and configuration across flights. A metadata mismatch,
+invalid log, or full partition prevents recording. Start a different build on an empty
+Copper partition. A run interrupted by power loss keeps its open-section markers.
+
 The MicoAir logger commits CopperLists in batches of 32. An abrupt reset can lose the current
 batch. Closing a section commits its remaining records.
 
