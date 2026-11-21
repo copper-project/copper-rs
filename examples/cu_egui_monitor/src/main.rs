@@ -11,7 +11,6 @@ use monitor::MonitorState;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use std::thread;
 use std::time::Duration;
 
 #[copper_runtime(config = "copperconfig.ron")]
@@ -31,94 +30,34 @@ struct Args {
     features: Vec<String>,
 }
 
-struct RuntimeThread {
-    state: Arc<MonitorState>,
-    worker: Option<thread::JoinHandle<CuResult<()>>>,
-}
-
-impl RuntimeThread {
-    fn start() -> CuResult<Self> {
-        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-        let worker = thread::Builder::new()
-            .name("copper-demo".into())
-            .spawn(move || {
-                let mut app = match App::builder().build() {
-                    Ok(app) => app,
-                    Err(error) => {
-                        let _ = sender.send(Err(error.clone()));
-                        return Err(error);
-                    }
-                };
-                // Clone the monitor's UI handle only during initialization.
-                let state = app.inner_mut().copper_runtime_mut().monitor.state();
-                let mut app = match app.start() {
-                    Ok(app) => app,
-                    Err(error) => {
-                        let error = CuError::from(error);
-                        let _ = sender.send(Err(error.clone()));
-                        return Err(error);
-                    }
-                };
-                if sender.send(Ok(Arc::clone(&state))).is_err() {
-                    let _ = app.stop();
-                    return Ok(());
-                }
-                let result = (|| {
-                    while !state.stop_requested.load(Ordering::Relaxed) {
-                        app.run_one_iteration()?;
-                    }
-                    Ok(())
-                })();
-                let stopped = app.stop().map_err(CuError::from);
-                state.running.store(false, Ordering::Relaxed);
-                result.and(stopped.map(|_| ()))
-            })
-            .map_err(|error| CuError::new_with_cause("Cannot start Copper demo", error))?;
-        match receiver.recv() {
-            Ok(Ok(state)) => Ok(Self {
-                state,
-                worker: Some(worker),
-            }),
-            Ok(Err(error)) => {
-                let _ = worker.join();
-                Err(error)
-            }
-            Err(error) => {
-                let _ = worker.join();
-                Err(CuError::new_with_cause(
-                    "Copper demo initialization failed",
-                    error,
-                ))
-            }
-        }
-    }
-}
-
-impl Drop for RuntimeThread {
-    fn drop(&mut self) {
-        self.state.stop_requested.store(true, Ordering::Relaxed);
-        if let Some(worker) = self.worker.take() {
-            match worker.join() {
-                Ok(Ok(())) => {}
-                Ok(Err(error)) => error!("Copper demo stopped with error: {}", error),
-                Err(_) => error!("Copper demo thread panicked"),
-            }
+fn start_runtime() -> CuResult<(CuRunner, Arc<MonitorState>)> {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let runner = CuRunner::spawn(move || {
+        let mut app = App::builder().build()?;
+        app.inner_mut().copper_runtime_mut().monitor.on_start = Some(sender);
+        Ok(app)
+    })?;
+    match receiver.recv() {
+        Ok(state) => Ok((runner, state)),
+        Err(_) => {
+            runner.join()?;
+            Err("Copper stopped before the monitor started".into())
         }
     }
 }
 
 struct MonitorApp {
     graph: GraphView,
-    runtime: Option<RuntimeThread>,
+    runtime: Option<(CuRunnerControl, Arc<MonitorState>)>,
     title: String,
 }
 
 impl eframe::App for MonitorApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        if let Some(runtime) = &self.runtime {
+        if let Some((control, state)) = &self.runtime {
             egui::Panel::left("monitor")
                 .default_size(235.0)
-                .show(ui, |ui| monitor_panel(ui, &runtime.state));
+                .show(ui, |ui| monitor_panel(ui, state, control));
             ui.ctx().request_repaint_after(Duration::from_millis(100));
         }
         egui::CentralPanel::default().show(ui, |ui| {
@@ -130,7 +69,7 @@ impl eframe::App for MonitorApp {
     }
 }
 
-fn monitor_panel(ui: &mut egui::Ui, state: &MonitorState) {
+fn monitor_panel(ui: &mut egui::Ui, state: &MonitorState, control: &CuRunnerControl) {
     ui.heading("Live Copper monitor");
     ui.label(format!("Mission: {}", state.metadata.mission_id()));
     ui.label(if state.running.load(Ordering::Relaxed) {
@@ -144,7 +83,7 @@ fn monitor_panel(ui: &mut egui::Ui, state: &MonitorState) {
     ));
     ui.label(format!("Errors: {}", state.errors.load(Ordering::Relaxed)));
     if ui.button("Stop runtime").clicked() {
-        state.stop_requested.store(true, Ordering::Relaxed);
+        control.request_stop();
     }
     ui.small("Callbacks update preallocated atomics. Graph rendering runs on a worker.");
     ui.separator();
@@ -207,10 +146,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         (
             cu29_graph_view::render_config_svg(&config, None)?,
             "Copper task graph".into(),
-            Some(RuntimeThread::start()?),
+            Some(start_runtime()?),
         )
     };
-    eframe::run_native(
+    let panel = runtime
+        .as_ref()
+        .map(|(runner, state)| (runner.control(), Arc::clone(state)));
+    let gui = eframe::run_native(
         "Copper egui monitor",
         eframe::NativeOptions {
             viewport: egui::ViewportBuilder::default().with_inner_size([1500.0, 950.0]),
@@ -222,12 +164,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .global_style_mut(|style| style.spacing.scroll = egui::style::ScrollStyle::solid());
             Ok(Box::new(MonitorApp {
                 graph: GraphView::new(&svg, cc.egui_ctx.clone())?,
-                runtime,
+                runtime: panel,
                 title,
             }))
         }),
-    )
-    .map_err(|error| error.to_string().into())
+    );
+    if let Some((runner, _)) = runtime {
+        runner.control().request_stop();
+        runner.join()?;
+    }
+    gui.map_err(|error| error.to_string().into())
 }
 
 #[cfg(test)]
@@ -235,20 +181,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn runtime_thread_observes_iterations_and_stops_on_drop() {
+    fn monitor_observes_iterations_until_runner_stops() {
         // Copper's process-wide logger is initialized once: exercise one application
         // through its full thread lifecycle instead of building two apps in this test binary.
-        let runtime = RuntimeThread::start().unwrap();
-        let state = Arc::clone(&runtime.state);
+        let (runner, state) = start_runtime().unwrap();
         assert_eq!(state.metadata.component_count(), 3);
         assert!(state.running.load(Ordering::Relaxed));
         let deadline = std::time::Instant::now() + Duration::from_secs(2);
         while state.cycles.load(Ordering::Relaxed) < 3 && std::time::Instant::now() < deadline {
-            thread::sleep(Duration::from_millis(5));
+            std::thread::sleep(Duration::from_millis(5));
         }
         assert!(state.cycles.load(Ordering::Relaxed) >= 3);
         assert_eq!(state.errors.load(Ordering::Relaxed), 0);
-        drop(runtime);
+        runner.control().request_stop();
+        assert_eq!(runner.join().unwrap(), CuRunExit::Requested);
         assert!(!state.running.load(Ordering::Relaxed));
         assert!(
             state
