@@ -29,6 +29,8 @@ pub(crate) struct RecordedRun {
     pub missions: Vec<String>,
     pub shutdown_completed: bool,
     start: LogPosition,
+    metadata_position: LogPosition,
+    catalog_position: LogPosition,
     pub copperlist_bytes: u64,
 }
 
@@ -44,6 +46,8 @@ impl RecordedRun {
             missions: Vec::new(),
             shutdown_completed: false,
             start,
+            metadata_position: LogPosition(0),
+            catalog_position: LogPosition(0),
             copperlist_bytes: 0,
         }
     }
@@ -54,6 +58,8 @@ impl RecordedRun {
         let remaining = inner.raw_main_header().sections_end / 512 + 1;
         Ok(RunReader {
             inner,
+            metadata_position: self.metadata_position,
+            catalog_position: self.catalog_position,
             run_id: self.run_id,
             remaining,
         })
@@ -63,7 +69,8 @@ impl RecordedRun {
 /// Discover constructions from section identities, including runs whose startup rolled out.
 pub(crate) fn discover(path: &Path) -> CuResult<Vec<RecordedRun>> {
     let mut reader = build_read_logger(path)?;
-    let metadata = reader.application_metadata()?;
+    let mut metadata = reader.application_metadata()?;
+    let mut metadata_position = LogPosition(reader.raw_main_header().metadata_offset);
     let beginning = reader.position();
     let mut runs = Vec::<RecordedRun>::new();
     let mut remaining = reader.raw_main_header().sections_end / 512 + 1;
@@ -82,6 +89,27 @@ pub(crate) fn discover(path: &Path) -> CuResult<Vec<RecordedRun>> {
         if header.entry_type == UnifiedLogType::LastEntry {
             break;
         }
+        if header.entry_type == UnifiedLogType::ApplicationMetadata
+            && position.0 >= reader.raw_main_header().sections_begin
+            && !header.is_open
+        {
+            reader.seek(position)?;
+            let (_, bytes) = reader.raw_read_section()?;
+            let (next, used) = decode_from_slice(&bytes, standard())
+                .map_err(|e| CuError::new_with_cause("Invalid boot metadata", e))?;
+            if used != bytes.len() {
+                return Err("Invalid boot metadata length".into());
+            }
+            metadata = Some(next);
+            metadata_position = position;
+        }
+        if header.entry_type == UnifiedLogType::ValueDecodeCatalog
+            && metadata
+                .as_ref()
+                .is_none_or(|m| m.catalog_offset != position.0)
+        {
+            return Err("Unexpected ValueDecodeCatalog outside the recorded metadata".into());
+        }
         if matches!(
             header.entry_type,
             UnifiedLogType::ApplicationMetadata | UnifiedLogType::ValueDecodeCatalog
@@ -93,6 +121,8 @@ pub(crate) fn discover(path: &Path) -> CuResult<Vec<RecordedRun>> {
             index
         } else {
             let mut run = RecordedRun::new(runs.len(), beginning);
+            run.metadata_position = metadata_position;
+            run.catalog_position = LogPosition(metadata.as_ref().map_or(0, |m| m.catalog_offset));
             run.run_id = run_id;
             run.mission_index = header.context.mission_index;
             if let Some(metadata) = &metadata {
@@ -165,7 +195,9 @@ pub(crate) fn discover(path: &Path) -> CuResult<Vec<RecordedRun>> {
     }
     if runs.is_empty() {
         let mut run = RecordedRun::new(0, beginning);
+        run.metadata_position = metadata_position;
         if let Some(metadata) = metadata {
+            run.catalog_position = LogPosition(metadata.catalog_offset);
             run.config = (!metadata.effective_config_ron.is_empty())
                 .then_some(metadata.effective_config_ron);
             run.missions.extend(metadata.missions.into_iter().take(1));
@@ -196,6 +228,8 @@ pub(crate) fn select(runs: &[RecordedRun], requested: Option<usize>) -> CuResult
 
 pub(crate) struct RunReader {
     inner: UnifiedLoggerRead,
+    metadata_position: LogPosition,
+    catalog_position: LogPosition,
     run_id: u64,
     remaining: u64,
 }
@@ -206,6 +240,14 @@ impl RunReader {
     }
     pub fn raw_main_header(&self) -> &MainHeader {
         self.inner.raw_main_header()
+    }
+
+    fn includes(&self, position: LogPosition, header: &SectionHeader) -> bool {
+        match header.entry_type {
+            UnifiedLogType::ApplicationMetadata => position == self.metadata_position,
+            UnifiedLogType::ValueDecodeCatalog => position == self.catalog_position,
+            _ => header.context.run_id == self.run_id,
+        }
     }
 
     fn visit(&mut self) -> CuResult<()> {
@@ -227,13 +269,7 @@ impl RunReader {
             if header.entry_type == UnifiedLogType::LastEntry {
                 return Ok(None);
             }
-            if header.entry_type == kind
-                && (header.context.run_id == self.run_id
-                    || matches!(
-                        kind,
-                        UnifiedLogType::ApplicationMetadata | UnifiedLogType::ValueDecodeCatalog
-                    ))
-            {
+            if header.entry_type == kind && self.includes(position, &header) {
                 if kind == UnifiedLogType::ValueDecodeCatalog
                     && header.used as usize > 16 * 1024 * 1024 * 9 / 8 + 8
                 {
@@ -251,14 +287,9 @@ impl RunReader {
     pub fn raw_read_section(&mut self) -> CuResult<(SectionHeader, Vec<u8>)> {
         loop {
             self.visit()?;
+            let position = self.position();
             let (header, content) = self.inner.raw_read_section()?;
-            if header.entry_type == UnifiedLogType::LastEntry
-                || header.context.run_id == self.run_id
-                || matches!(
-                    header.entry_type,
-                    UnifiedLogType::ApplicationMetadata | UnifiedLogType::ValueDecodeCatalog
-                )
-            {
+            if header.entry_type == UnifiedLogType::LastEntry || self.includes(position, &header) {
                 return Ok((header, content));
             }
         }

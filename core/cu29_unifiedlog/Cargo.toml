@@ -27,6 +27,7 @@ portable-atomic = { version = "1.11", default-features = false, features = [
 tempfile = { workspace = true }
 
 [features]
+multi-build-log-append = []
 default = ["std", "compact"]
 std = ["dep:memmap2", "dep:page_size", "cu29-traits/std", "bincode/std"]
 compact = []                                                             # favor compactness over pure memory page alignment in the log

@@ -28,6 +28,7 @@ cu29-unifiedlog = { workspace = true }
 spin = { workspace = true }
 
 [features]
+multi-build-log-append = ["cu29-unifiedlog/multi-build-log-append"]
 default = ["eh02"]
 std = []
 eh02 = ["dep:embedded-sdmmc"]

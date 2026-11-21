@@ -707,12 +707,16 @@ mod tests {
         drop(stream);
         drop(first);
         *device.bytes.lock().unwrap() = image.clone();
-        let mut mismatch = open();
-        assert!(mismatch.seal_metadata(&metadata(), Some(&43u32)).is_err());
-        drop(mismatch);
-        assert_eq!(*device.bytes.lock().unwrap(), image);
         let mut second = open();
-        second.seal_metadata(&metadata(), Some(&42u32)).unwrap();
+        let mut updated = metadata();
+        updated.git_commit = Some("next revision".into());
+        if cfg!(feature = "multi-build-log-append") {
+            second.seal_metadata(&updated, Some(&43u32)).unwrap();
+        } else {
+            assert!(second.seal_metadata(&updated, Some(&43u32)).is_err());
+            assert_eq!(*device.bytes.lock().unwrap(), image);
+            second.seal_metadata(&metadata(), Some(&42u32)).unwrap();
+        }
         let context = second.construction_context(0, 0).unwrap();
         assert_eq!(context.run_id, 2);
         let mut stream = second

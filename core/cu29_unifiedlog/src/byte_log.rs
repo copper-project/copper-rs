@@ -667,6 +667,7 @@ pub struct ByteLogger<B: ByteStorage> {
     #[cfg(test)]
     extent_visits: AtomicUsize,
     append_pending: bool,
+    record_boot_metadata: bool,
     faulted: bool,
 }
 impl<B: ByteStorage> ByteLogger<B> {
@@ -730,6 +731,7 @@ impl<B: ByteStorage> ByteLogger<B> {
             #[cfg(test)]
             extent_visits: AtomicUsize::new(0),
             append_pending,
+            record_boot_metadata: false,
             faulted: false,
         }
     }
@@ -766,6 +768,13 @@ impl<B: ByteStorage> ByteLogger<B> {
             }
             remaining -= 1;
             let section = logger.data_header(cursor)?;
+            if section.entry_type == UnifiedLogType::ApplicationMetadata
+                && !(after_reset && cfg!(feature = "multi-build-log-append"))
+            {
+                return Err(CuError::from(
+                    "Appending to a multi-build log requires multi-build-log-append",
+                ));
+            }
             if cursor + section.allocated > capacity {
                 return Err(CuError::from(
                     "Cannot shrink storage beneath retained sections",
@@ -806,6 +815,7 @@ impl<B: ByteStorage> ByteLogger<B> {
             cursor = section.next_section;
         }
         logger.validate_metadata()?;
+        logger.record_boot_metadata = after_reset && cfg!(feature = "multi-build-log-append");
         Ok(logger)
     }
     fn validate_metadata(&self) -> CuResult<()> {
@@ -960,6 +970,21 @@ impl<B: ByteStorage> ByteLogger<B> {
         }
         Ok(())
     }
+    fn write_boot_metadata<E: Encode>(
+        &mut self,
+        kind: UnifiedLogType,
+        size: u64,
+        value: &E,
+        context: SectionContext,
+    ) -> CuResult<()> {
+        let size = usize::try_from(size)
+            .map_err(|_| CuError::from("Metadata section exceeds platform limits"))?;
+        let mut section = self.add_section_with_context(kind, size, context)?;
+        section
+            .append(value)
+            .map_err(|e| CuError::from("Cannot write boot metadata").add_cause(&e.to_string()))?;
+        self.try_flush_section(&mut section)
+    }
     fn write_static<E: Encode>(
         &mut self,
         offset: u64,
@@ -1067,7 +1092,12 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
             missions: &metadata.missions,
             catalog_offset: 0,
         };
-        let base = self.header.page_size as u64;
+        let new_epoch = self.record_boot_metadata && self.header.metadata_offset != 0;
+        let base = if new_epoch {
+            self.allocation_end
+        } else {
+            self.header.page_size as u64
+        };
         // The offset changes bincode's varint width; sizing converges monotonically.
         let mut app_size = 0;
         for _ in 0..8 {
@@ -1087,6 +1117,32 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
             .checked_add(app_size)
             .and_then(|s| s.checked_add(catalog_size))
             .ok_or_else(|| CuError::from("Metadata size overflow"))?;
+        if new_epoch {
+            if end > self.capacity {
+                return Err(CuError::from("Log is full"));
+            }
+            self.activate()?;
+            let context = SectionContext {
+                run_id: self.next_run_id,
+                ..Default::default()
+            };
+            self.write_boot_metadata(
+                UnifiedLogType::ApplicationMetadata,
+                app_size,
+                &metadata,
+                context,
+            )?;
+            if let Some(catalog) = catalog {
+                self.write_boot_metadata(
+                    UnifiedLogType::ValueDecodeCatalog,
+                    catalog_size,
+                    catalog,
+                    context,
+                )?;
+            }
+            self.record_boot_metadata = false;
+            return Ok(());
+        }
         if self.header.metadata_offset != 0 {
             self.compare(base, UnifiedLogType::ApplicationMetadata, &metadata)?;
             if let Some(catalog) = catalog {

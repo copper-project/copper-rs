@@ -103,16 +103,16 @@ fn write_run(
     let _text = LogStream::with_context(
         UnifiedLogType::StructuredLogLine,
         logger.clone(),
-        1024,
+        1536,
         context,
     )
     .unwrap();
     let mut cls =
-        LogStream::with_context(UnifiedLogType::CopperList, logger.clone(), 1024, context).unwrap();
+        LogStream::with_context(UnifiedLogType::CopperList, logger.clone(), 1536, context).unwrap();
     let mut lifecycle = LogStream::with_context(
         UnifiedLogType::RuntimeLifecycle,
         logger.clone(),
-        1024,
+        1536,
         context,
     )
     .unwrap();
@@ -301,7 +301,7 @@ fn cropped_startup_uses_retained_mission_identity_and_shared_catalog() {
     }
     for id in 0..50u8 {
         let mut stream =
-            LogStream::with_context(UnifiedLogType::CopperList, logger.clone(), 1024, context)
+            LogStream::with_context(UnifiedLogType::CopperList, logger.clone(), 1536, context)
                 .unwrap();
         stream
             .log(&WireBytes(vec![id, 0, 0, 0, 0, 0, 0, 1, 1, 0, 42]))

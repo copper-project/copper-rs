@@ -78,7 +78,7 @@ impl CatalogSection {
 }
 
 /// Load and validate the shared catalog for every compiled mission. Experimental API.
-/// The catalog is shared by all recorded runs in the log.
+/// Returns the original static catalog. Selected runs use their own recorded catalog.
 pub fn read_value_decode_catalog(path: &Path) -> CuResult<ValueDecodeCatalog> {
     let mut reader = crate::build_read_logger(path)?;
     let mut catalog_position = None;
@@ -88,7 +88,9 @@ pub fn read_value_decode_catalog(path: &Path) -> CuResult<ValueDecodeCatalog> {
         if header.entry_type == UnifiedLogType::LastEntry {
             break;
         }
-        if header.entry_type == UnifiedLogType::ValueDecodeCatalog {
+        if header.entry_type == UnifiedLogType::ValueDecodeCatalog
+            && position.0 < reader.raw_main_header().sections_begin
+        {
             if catalog_position.is_some() {
                 return Err("Log contains multiple static ValueDecodeCatalog sections".into());
             }
@@ -124,7 +126,19 @@ pub fn read_value_decode_catalog(path: &Path) -> CuResult<ValueDecodeCatalog> {
 }
 
 pub(crate) fn load_catalog(run: &runs::RecordedRun, path: &Path) -> CuResult<SelectedCatalog> {
-    let mut catalog = read_value_decode_catalog(path)?;
+    let mut reader = run.reader(path)?;
+    let (_, bytes) = reader
+        .read_next_section_type_at(UnifiedLogType::ValueDecodeCatalog)?
+        .ok_or_else(|| CuError::from("Log has no ValueDecodeCatalog for the selected run"))?;
+    let mut catalog = ValueDecodeCatalog::from_blob(&bytes)
+        .map_err(|e| CuError::new_with_cause("Invalid recorded ValueDecodeCatalog", e))?;
+    if catalog
+        .missions
+        .iter()
+        .any(|mission| mission.slots.len() > MAX_SLOTS)
+    {
+        return Err("Catalog exceeds offline slot limit".into());
+    }
     let index = run.mission_index as usize;
     if index >= catalog.missions.len() {
         return Err("Section mission index is outside the catalog".into());
