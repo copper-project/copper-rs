@@ -445,7 +445,9 @@ partition. By default, append requires matching application metadata. Flash with
 `just fw multi-build-log-append` to enable SD recording across firmware revisions
 using the same log format. Each boot then records its own revision, configuration,
 and decoding catalog. Use a reader from this branch to select a run.
-An invalid log or full partition prevents recording. A run interrupted by power loss keeps its open-section markers.
+At capacity the logger wraps and reuses the oldest sections. The active build's
+metadata and catalog stay on the card. When space is reclaimed from an older build's
+metadata, its remaining data sections are retired together. A run interrupted by power loss keeps its open-section markers.
 
 The MicoAir logger commits CopperLists in batches of 32. An abrupt reset can lose the current
 batch. Closing a section commits its remaining records.

@@ -379,7 +379,11 @@ fn init_sd_logger(
         }
     };
 
-    Logger::append_batched(bd, start, count)
+    #[cfg(feature = "sd-rollover")]
+    let open = Logger::rollover_batched;
+    #[cfg(not(feature = "sd-rollover"))]
+    let open = Logger::append_batched;
+    open(bd, start, count)
 }
 
 /// Resource bundle for the MicoAir H743 board.

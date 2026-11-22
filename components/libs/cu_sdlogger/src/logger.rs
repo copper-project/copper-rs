@@ -227,6 +227,18 @@ impl<BD: BlockDevice + Send> EMMCLogger<BD> {
     }
     /// Start a batched run on blank media or append after the last allocated section.
     pub fn append_batched(bd: BD, start: BlockIdx, size: BlockCount) -> CuResult<Self> {
+        Self::open_batched(bd, start, size, CapacityPolicy::StopWhenFull)
+    }
+    /// Record continuously, replacing the oldest retained data when capacity is reached.
+    pub fn rollover_batched(bd: BD, start: BlockIdx, size: BlockCount) -> CuResult<Self> {
+        Self::open_batched(bd, start, size, CapacityPolicy::OverwriteOldest)
+    }
+    fn open_batched(
+        bd: BD,
+        start: BlockIdx,
+        size: BlockCount,
+        policy: CapacityPolicy,
+    ) -> CuResult<Self> {
         Self::validate_partition(&bd, start, size)?;
         let capacity = size.0 as u64 * BLK as u64;
         let storage = SdStorage {
@@ -238,7 +250,9 @@ impl<BD: BlockDevice + Send> EMMCLogger<BD> {
         let mut header = [0u8; BLK];
         storage.region(0, BLK as u64)?.read(0, &mut header)?;
         if header == [0; BLK] || header == [0xff; BLK] {
-            ByteLogger::new(storage, BLK as u16, CapacityPolicy::StopWhenFull, capacity).map(Self)
+            ByteLogger::new(storage, BLK as u16, policy, capacity).map(Self)
+        } else if policy == CapacityPolicy::OverwriteOldest {
+            ByteLogger::rollover_after_reset(storage, capacity).map(Self)
         } else {
             ByteLogger::append_after_reset(storage, capacity).map(Self)
         }
@@ -737,6 +751,61 @@ mod tests {
             .map(|(ctx, _, bytes)| (ctx.run_id, bytes))
             .collect();
         assert_eq!(runs, [(1, alloc::vec![1; 32]), (2, alloc::vec![2; 32])]);
+    }
+
+    #[cfg(feature = "multi-build-log-append")]
+    #[test]
+    fn sd_rollover_preserves_the_catalog_for_every_retained_record() {
+        let device = Device::new();
+        let dir = test_dir();
+        for build in 1..=8u8 {
+            let mut logger =
+                EMMCLogger::rollover_batched(device.clone(), BlockIdx(7), BlockCount(40)).unwrap();
+            let mut meta = metadata();
+            meta.git_commit = Some(alloc::format!("{build}"));
+            logger.seal_metadata(&meta, Some(&build)).unwrap();
+            let context = logger.construction_context(0, 0).unwrap();
+            let turns = if build % 2 == 0 { 35 } else { 2 };
+            for turn in 0..turns {
+                let mut section = logger
+                    .add_section_with_context(UnifiedLogType::CopperList, 2048, context)
+                    .unwrap();
+                for _ in 0..32 {
+                    section.append([build, turn]).unwrap();
+                }
+                // Inspect the committed batch while the writer is still live.
+                let image = device.bytes.lock().unwrap().clone();
+                std::fs::write(dir.path().join("ring_0.copper"), &image[7 * BLK..47 * BLK])
+                    .unwrap();
+                let mut catalog = 0;
+                let mut latest = None;
+                for (_, kind, data) in sections(&dir.path().join("ring.copper")) {
+                    match kind {
+                        UnifiedLogType::ValueDecodeCatalog => catalog = data[0],
+                        UnifiedLogType::CopperList => {
+                            assert_eq!(data.len(), 64);
+                            assert!(
+                                data.as_chunks::<2>()
+                                    .0
+                                    .iter()
+                                    .all(|record| record[0] == catalog)
+                            );
+                            latest = Some((catalog, data[1]));
+                        }
+                        _ => {}
+                    }
+                }
+                assert_eq!(latest, Some((build, turn)));
+                logger.try_flush_section(&mut section).unwrap();
+                if turn + 1 == turns {
+                    // Restore the unclean snapshot for the following boot.
+                    drop(section);
+                    drop(logger);
+                    *device.bytes.lock().unwrap() = image;
+                    break;
+                }
+            }
+        }
     }
 
     #[test]
