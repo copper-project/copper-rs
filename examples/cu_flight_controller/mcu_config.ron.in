@@ -218,6 +218,7 @@
         (
             id: "bdshot",
             type: "cu_bdshot::Stm32BdshotBridge",
+            config: {"wait_for_esc_power": true},
             run_in_sim: false,
             logging: (enabled: true),
             channels: [
