@@ -14,7 +14,7 @@ use cu29::units::si::ratio::ratio;
 use cu29::units::si::time::second;
 use nalgebra::{Quaternion, UnitQuaternion, Vector3};
 use serde::{Deserialize, Serialize};
-use uf_ahrs::{Ahrs, Mahony, MahonyParams};
+use uf_ahrs::{Ahrs, AhrsWithDt, Mahony, MahonyParams};
 
 #[cfg(feature = "rerun")]
 mod rerun_components;
@@ -150,52 +150,33 @@ impl CuAhrs {
         Ok(filter)
     }
 
-    fn dt_seconds(&mut self, tov: &Tov) -> Option<f32> {
-        let current = match tov {
-            Tov::Time(t) => Some(*t),
-            Tov::Range(r) => Some(r.end),
-            Tov::None => None,
-        }?;
-
-        let dt = self.last_tov.map(|previous| current - previous);
-        self.last_tov = Some(current);
-
-        dt.map(|duration| duration.as_nanos() as f32 * 1e-9)
-    }
-
-    fn maybe_lock_sample_period(&mut self, dt_s: Option<f32>) {
-        if !self.auto_sample_period {
-            return;
+    fn integration_period(&mut self, tov: &Tov) -> Duration {
+        if self.auto_sample_period {
+            let current = match tov {
+                Tov::Time(t) => Some(*t),
+                Tov::Range(r) => Some(r.end),
+                Tov::None => None,
+            };
+            if let (Some(previous), Some(current)) = (self.last_tov, current) {
+                if current <= previous {
+                    return Duration::ZERO;
+                }
+                let dt = (current - previous).as_nanos().min(1_000_000_000);
+                self.last_tov = Some(current);
+                self.sample_period_s = dt as f32 * 1e-9;
+                return Duration::from_nanos(dt);
+            }
+            self.last_tov = current;
         }
-
-        let Some(dt) = dt_s else {
-            return;
-        };
-        if !dt.is_finite() || dt <= 1.0e-5 {
-            return;
-        }
-
-        let orientation = self.filter.orientation();
-        let bias = self.filter.bias;
-        self.sample_period_s = dt.clamp(1.0e-5, 1.0);
-        self.filter = Self::build_filter(
-            self.sample_period_s,
-            self.mahony_kp,
-            self.mahony_ki,
-            orientation,
-        );
-        self.filter.bias = bias;
-        self.auto_sample_period = false;
+        Duration::from_secs_f32(self.sample_period_s)
     }
 
     fn update_pose(
         &mut self,
         imu: &ImuPayload,
         mag: Option<&MagnetometerPayload>,
-        dt_s: Option<f32>,
+        dt: Duration,
     ) -> AhrsPose {
-        self.maybe_lock_sample_period(dt_s);
-
         let gyro = Vector3::new(
             imu.gyro_x.get::<radian_per_second>(),
             imu.gyro_y.get::<radian_per_second>(),
@@ -207,7 +188,9 @@ impl CuAhrs {
             imu.accel_z.get::<meter_per_second_squared>(),
         );
 
-        let q = if let Some(mag) = mag {
+        let q = if dt.is_zero() {
+            self.filter.orientation()
+        } else if let Some(mag) = mag {
             // Copper magnetometer payload follows the historical FC convention where +Y is mirrored
             // compared to the NED convention used by uf-ahrs. Convert at the AHRS boundary.
             let mag_vec = Vector3::new(mag.mag_x.value, -mag.mag_y.value, mag.mag_z.value);
@@ -216,12 +199,12 @@ impl CuAhrs {
                 && mag_vec.z.is_finite()
                 && mag_vec.norm_squared() > 1.0e-12
             {
-                self.filter.update(gyro, accel, mag_vec)
+                self.filter.update_with_dt(dt, gyro, accel, mag_vec)
             } else {
-                self.filter.update_imu(gyro, accel)
+                self.filter.update_imu_with_dt(dt, gyro, accel)
             }
         } else {
-            self.filter.update_imu(gyro, accel)
+            self.filter.update_imu_with_dt(dt, gyro, accel)
         };
 
         let (roll, pitch, yaw) = q.euler_angles();
@@ -385,14 +368,15 @@ impl CuTask for CuAhrs {
         let (imu_msg, mag_msg) = *input;
         output.tov = imu_msg.tov;
         let Some(imu) = imu_msg.payload() else {
+            self.last_tov = None;
             #[cfg(not(feature = "firmware"))]
             output.metadata.set_status("imu none");
             output.clear_payload();
             return Ok(());
         };
 
-        let dt_s = self.dt_seconds(&imu_msg.tov);
-        let pose = self.update_pose(imu, mag_msg.payload(), dt_s);
+        let dt = self.integration_period(&imu_msg.tov);
+        let pose = self.update_pose(imu, mag_msg.payload(), dt);
 
         #[cfg(not(feature = "firmware"))]
         output.metadata.set_status(alloc::format!(
@@ -533,6 +517,24 @@ mod tests {
             pose.yaw.value,
             FRAC_PI_2
         );
+    }
+
+    #[test]
+    fn integrates_elapsed_imu_time_after_slow_startup_sample() {
+        let ctx = CuContext::new_with_clock();
+        let mut task = CuAhrs::new_filter();
+        let still = ImuPayload::from_raw([0.0, 0.0, 9.81], [0.0; 3], 25.0);
+        let spinning = ImuPayload::from_raw([0.0, 0.0, 9.81], [0.0, 0.0, 1.0], 25.0);
+        process_sample(&mut task, &ctx, still, None, 0);
+        process_sample(&mut task, &ctx, still, None, 3_996_035);
+        let mut time_ns = 3_996_035;
+        for step in [605_725, 1_188_087].into_iter().cycle().take(1000) {
+            time_ns += step;
+            process_sample(&mut task, &ctx, spinning, None, time_ns);
+        }
+        let pose = process_sample(&mut task, &ctx, spinning, None, time_ns).unwrap();
+        let elapsed = (time_ns - 3_996_035) as f32 * 1e-9;
+        assert!((pose.yaw.value - elapsed).abs() < 1e-4);
     }
 
     #[test]
