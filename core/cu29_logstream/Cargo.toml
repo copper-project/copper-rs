@@ -19,7 +19,9 @@ environments = ["host", "embedded"]
 
 [dependencies]
 atomic-waker = { version = "1.1", optional = true }
-crossbeam-queue = { version = "0.3", optional = true }
+crossbeam-queue = { version = "0.3", default-features = false, features = [
+  "alloc",
+], optional = true }
 bincode = { workspace = true }
 blake3 = { workspace = true }
 cu-fec = { workspace = true }
@@ -42,6 +44,11 @@ tempfile = { workspace = true }
 serde = { workspace = true }
 
 [features]
+manual-telemetry = [
+  "cu29-runtime/manual-telemetry",
+  "dep:cu29-log",
+  "dep:crossbeam-queue",
+]
 # Developer-only per-output divergence checks; all hashing stays off the RT path.
 verify-reconstruction = []
 default = ["std"]

@@ -32,6 +32,9 @@ pub struct MissionSettings<'a> {
     pub config: Option<cu29_runtime::config::CuConfig>,
     #[cfg(feature = "clock-sync")]
     pub reference: Option<Box<dyn FnMut() -> CuResult<Reference> + 'a>>,
+    #[cfg(all(feature = "manual-telemetry", not(feature = "async-cl-io")))]
+    pub manual_telemetry:
+        Option<Box<dyn FnMut() -> CuResult<crate::logstream::manual::ManualDestination> + 'a>>,
     #[cfg(feature = "logstream")]
     pub telemetry:
         Option<Box<dyn FnMut() -> CuResult<crate::logstream::TelemetryDestination> + 'a>>,
@@ -72,6 +75,8 @@ impl<M> Default for SupervisorBuilder<'_, M> {
                 reference: None,
                 #[cfg(feature = "logstream")]
                 telemetry: None,
+                #[cfg(all(feature = "manual-telemetry", not(feature = "async-cl-io")))]
+                manual_telemetry: None,
             },
             logger: Arc::new(Mutex::new(NoopLogger::new())),
             types: PhantomData,
@@ -166,6 +171,24 @@ impl<'a, M: ConfiguredMission, S: SectionStorage + 'static, L: UnifiedLogWrite<S
         settings: crate::clock_sync::MaintenanceConfig,
     ) -> Self {
         self.settings.reference = Some(Box::new(move || Ok((Box::new(open()?), settings))));
+        self
+    }
+
+    /// Open a fresh session and native transmitter for each mission activation.
+    #[cfg(all(feature = "manual-telemetry", not(feature = "async-cl-io")))]
+    pub fn with_manual_telemetry_tx<T: crate::logstream::protocol::CuTelemetryTx + 'static>(
+        mut self,
+        mut open: impl FnMut() -> CuResult<([u8; 16], T)> + 'a,
+        buffers: crate::logstream::TelemetryBufferConfig,
+    ) -> Self {
+        self.settings.manual_telemetry = Some(Box::new(move || {
+            let (session_id, tx) = open()?;
+            Ok(crate::logstream::manual::ManualDestination {
+                session_id,
+                buffers,
+                make_tx: Box::new(move |_| Ok(Box::new(tx))),
+            })
+        }));
         self
     }
 

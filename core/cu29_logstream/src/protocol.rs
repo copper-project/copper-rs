@@ -34,10 +34,10 @@ pub enum TxMode {
     Draining,
 }
 
-/// Robot-side protocol, called on the output worker. The first record opens
+/// Robot-side protocol, driven by a host worker or explicitly between firmware iterations. The first record opens
 /// the session. A retained payload must be moved into protocol-owned storage.
 pub trait CuTelemetryTx: Send {
-    /// Accept one borrowed record.
+    /// Accept one borrowed record with bounded, nonblocking work.
     fn send(&mut self, record: CuTelemetryRecord<'_>) -> CuResult<()>;
 
     /// Perform bounded, nonblocking work and return the next absolute wakeup
@@ -47,6 +47,21 @@ pub trait CuTelemetryTx: Send {
     fn poll(&mut self, _mode: TxMode) -> CuResult<Option<CuTime>> {
         Ok(None)
     }
+}
+
+/// Run one bounded service pass. Always poll after processing the available records.
+#[cfg(any(feature = "std", feature = "manual-telemetry"))]
+pub(crate) fn service_tx<T: CuTelemetryTx + ?Sized>(
+    tx: &mut T,
+    mode: TxMode,
+    budget: usize,
+    mut send_next: impl FnMut(&mut T) -> CuResult<bool>,
+) -> CuResult<(usize, Option<CuTime>)> {
+    let mut sent = 0;
+    while sent < budget && send_next(tx)? {
+        sent += 1;
+    }
+    Ok((sent, tx.poll(mode)?))
 }
 
 /// Deliver each borrowed record to both protocols on the same output worker.

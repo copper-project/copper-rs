@@ -51,6 +51,10 @@ rayon = { workspace = true, optional = true }
 ctrlc = { workspace = true, optional = true }
 
 [features]
+manual-telemetry = [
+  "cu29-logstream/manual-telemetry",
+  "cu29-derive/manual-telemetry",
+]
 # Compile component parameters and monitor topology into the app. Runtime overrides and
 # embedded RON are disabled. Replay requires the config matching the recorded Git revision.
 static-config = ["cu29-derive/static-config", "cu29-runtime/static-config"]
@@ -117,6 +121,7 @@ memory_monitoring = [
   "cu29-derive/memory_monitoring",
 ]
 std = [
+  "cu29-logstream?/std",
   "rayon",
   "cu29-clock/std",
   "cu29-derive/std",

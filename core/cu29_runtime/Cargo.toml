@@ -94,6 +94,7 @@ serde = { workspace = true }
 tempfile = { workspace = true }
 
 [features]
+manual-telemetry = []
 static-config = []
 # Compatibility alias: remote debugging always includes Rerun representations.
 rerun = ["remote-debug"]

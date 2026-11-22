@@ -572,6 +572,8 @@ fn flush_completed_output<P: CopperListTuple>(
 /// Manages the lifecycle and completed-list sink on the synchronous path.
 #[doc(hidden)]
 pub struct SyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usize> {
+    #[cfg(feature = "manual-telemetry")]
+    manual: Option<crate::manual_output::ManualOutput<P>>,
     inner: Option<CuListsManager<P, NBCL>>,
     #[cfg(feature = "std")]
     free_pool: Vec<CuSlotLease<P>>,
@@ -617,6 +619,8 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         P: CuListZeroedInit,
     {
         Ok(Self {
+            #[cfg(feature = "manual-telemetry")]
+            manual: None,
             inner: (!P::DISTRIBUTED).then(CuListsManager::new),
             #[cfg(feature = "std")]
             free_pool: if P::DISTRIBUTED {
@@ -636,7 +640,43 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         })
     }
 
+    #[cfg(feature = "manual-telemetry")]
+    #[doc(hidden)]
+    pub fn enable_manual_output(&mut self, captures: u16, frames: u16) -> CuResult<()>
+    where
+        P: CuListZeroedInit,
+    {
+        if P::DISTRIBUTED || self.next_cl_id() != 0 {
+            return Err("manual telemetry requires an idle serial runtime".into());
+        }
+        self.manual = Some(crate::manual_output::ManualOutput::new(captures, frames)?);
+        self.inner = None;
+        Ok(())
+    }
+    #[cfg(feature = "manual-telemetry")]
+    #[doc(hidden)]
+    pub fn prepare_manual_keyframes(&mut self, keyframes: &KeyFramesManager) -> CuResult<()> {
+        if let (Some(manual), Some(frame)) = (&mut self.manual, &keyframes.inner) {
+            manual.prepare_frames(frame.serialized_tasks.capacity())?;
+        }
+        Ok(())
+    }
+    #[cfg(feature = "manual-telemetry")]
+    #[doc(hidden)]
+    pub fn service_manual_output(
+        &mut self,
+        send: impl FnOnce(crate::manual_output::ManualRecord<'_, P>) -> CuResult<()>,
+    ) -> CuResult<()> {
+        if let Some(manual) = &mut self.manual {
+            manual.service(send)?;
+        }
+        Ok(())
+    }
     pub fn next_cl_id(&self) -> u64 {
+        #[cfg(feature = "manual-telemetry")]
+        if let Some(manual) = &self.manual {
+            return manual.active.next_cl_id();
+        }
         #[cfg(feature = "std")]
         {
             self.inner
@@ -677,6 +717,10 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
     }
 
     pub fn peek(&self) -> Option<&CopperList<P>> {
+        #[cfg(feature = "manual-telemetry")]
+        if let Some(manual) = &self.manual {
+            return manual.active.peek();
+        }
         self.inner.as_ref().and_then(CuListsManager::peek)
     }
 
@@ -702,6 +746,13 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
     where
         P: CuListZeroedInit,
     {
+        #[cfg(feature = "manual-telemetry")]
+        if let Some(manual) = &mut self.manual {
+            return manual
+                .active
+                .create()
+                .ok_or_else(|| CuError::from("manual capture already active"));
+        }
         self.inner
             .as_mut()
             .expect("serial storage")
@@ -719,7 +770,12 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         culistid: u64,
         keyframes: &mut KeyFramesManager,
     ) -> CuResult<()> {
-        let result = self.finish_serial_output(culistid, keyframes.completed_keyframe(culistid));
+        let capture = keyframes.is_capturing(culistid);
+        let frame = keyframes
+            .inner
+            .as_mut()
+            .filter(|frame| capture && frame.culistid == culistid);
+        let result = self.finish_serial_output(culistid, frame);
         keyframes.locked = false;
         result
     }
@@ -735,10 +791,53 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
     }
 
     pub const fn dropped_keyframes_total(&self) -> u64 {
+        #[cfg(feature = "manual-telemetry")]
+        if let Some(manual) = &self.manual {
+            return manual.frame_drops;
+        }
         0
     }
 
-    fn finish_serial_output(&mut self, culistid: u64, keyframe: Option<&KeyFrame>) -> CuResult<()> {
+    fn finish_serial_output(
+        &mut self,
+        culistid: u64,
+        keyframe: Option<&mut KeyFrame>,
+    ) -> CuResult<()> {
+        #[cfg(feature = "manual-telemetry")]
+        if let Some(manual) = &mut self.manual {
+            let list = manual
+                .active
+                .iter_mut()
+                .next()
+                .filter(|list| list.id == culistid)
+                .ok_or_else(|| CuError::from("missing completed capture"))?;
+            list.change_state(CopperListState::BeingSerialized);
+            #[cfg(feature = "remote-debug")]
+            {
+                self.last_completed_encoded = Some(encode_completed_copperlist_snapshot(list)?);
+            }
+            let output = write_completed_output(
+                &mut self.sink,
+                &mut self.keyframe_sink,
+                list,
+                keyframe.as_deref(),
+            );
+            match output {
+                Ok((encoded, handles, frames)) => {
+                    self.last_encoded_bytes = encoded;
+                    self.last_handle_bytes = handles;
+                    self.last_keyframe_bytes = frames;
+                    manual.complete(keyframe);
+                    return Ok(());
+                }
+                Err(error) => {
+                    manual.active.pop();
+                    return Err(error);
+                }
+            }
+        }
+        let keyframe = keyframe.as_deref();
+
         #[cfg(debug_assertions)]
         self.debug_assert_end_of_processing_target(culistid);
 
@@ -782,6 +881,11 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
     /// Recycles the current serial iteration without publishing its partial output.
     #[doc(hidden)]
     pub fn discard_current(&mut self) {
+        #[cfg(feature = "manual-telemetry")]
+        if let Some(manual) = &mut self.manual {
+            manual.active.pop();
+            return;
+        }
         if let Some(inner) = &mut self.inner
             && inner.peek().is_some_and(|culist| {
                 matches!(
@@ -800,6 +904,10 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
     }
 
     pub fn available_copper_lists(&mut self) -> CuResult<usize> {
+        #[cfg(feature = "manual-telemetry")]
+        if let Some(manual) = &self.manual {
+            return Ok(usize::from(manual.active.is_empty()));
+        }
         if let Some(inner) = &self.inner {
             return Ok(NBCL - inner.len());
         }
@@ -815,6 +923,10 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
 
     #[inline]
     pub const fn dropped_copperlists_total(&self) -> u64 {
+        #[cfg(feature = "manual-telemetry")]
+        if let Some(manual) = &self.manual {
+            return manual.drops;
+        }
         0
     }
 
@@ -1932,7 +2044,7 @@ impl KeyFramesManager {
     }
 }
 
-fn reserve_keyframe_capacity(keyframe: &mut KeyFrame, requested: usize) -> CuResult<()> {
+pub(crate) fn reserve_keyframe_capacity(keyframe: &mut KeyFrame, requested: usize) -> CuResult<()> {
     if keyframe.serialized_tasks.capacity() < requested {
         let additional = requested.saturating_sub(keyframe.serialized_tasks.len());
         keyframe

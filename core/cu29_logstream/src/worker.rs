@@ -31,65 +31,11 @@ use std::{
     thread::{JoinHandle, Thread},
 };
 
-use crate::pacing::STRUCTURED_RECORD_BYTES;
+use crate::TelemetryBufferConfig;
 
 // Limit work between protocol polls independently of the configured queue capacities.
 const MAX_RECORDS_PER_POLL: usize = 6;
 const MAX_LOGS_PER_POLL: usize = 4;
-
-/// Preallocated native records shared by all destinations on one telemetry worker.
-/// A full pool drops the incoming record of that kind. Counts and byte limits must be positive.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct TelemetryBufferConfig {
-    /// Maximum encoded payload per CopperList capture.
-    pub max_capture_bytes: usize,
-    /// Maximum encoded payload per keyframe. Structured logs use the smaller of this and 4096 bytes.
-    pub max_keyframe_bytes: usize,
-    /// Number of capture buffers.
-    pub capture_count: u16,
-    /// Number of keyframe buffers.
-    pub keyframe_count: u16,
-    /// Number of structured-log buffers.
-    pub structured_log_count: u16,
-}
-
-impl TelemetryBufferConfig {
-    /// Reserve four captures, two keyframes and four structured logs.
-    pub const fn new(max_capture_bytes: usize, max_keyframe_bytes: usize) -> Self {
-        Self {
-            max_capture_bytes,
-            max_keyframe_bytes,
-            capture_count: 4,
-            keyframe_count: 2,
-            structured_log_count: 4,
-        }
-    }
-
-    fn structured_bytes(self) -> usize {
-        self.max_keyframe_bytes.min(STRUCTURED_RECORD_BYTES)
-    }
-
-    fn payload_bytes(self) -> CuResult<usize> {
-        if self.max_capture_bytes == 0 || self.max_keyframe_bytes == 0 {
-            return Err("telemetry record limits must be positive".into());
-        }
-        if self.capture_count == 0 || self.keyframe_count == 0 || self.structured_log_count == 0 {
-            return Err("telemetry buffer counts must be positive".into());
-        }
-        let pools = [
-            (self.max_capture_bytes, self.capture_count),
-            (self.max_keyframe_bytes, self.keyframe_count),
-            (self.structured_bytes(), self.structured_log_count),
-        ];
-        pools
-            .into_iter()
-            .try_fold(0usize, |total, (bytes, count)| {
-                total.checked_add(bytes.checked_mul(usize::from(count))?)
-            })
-            .filter(|&bytes| bytes <= isize::MAX as usize)
-            .ok_or_else(|| CuError::from("telemetry buffer size overflow"))
-    }
-}
 
 struct StructuredRecord {
     bytes: Box<[u8]>,
@@ -820,59 +766,62 @@ impl SenderInbox {
         driver: &mut impl Driver,
         mode: TxMode,
     ) -> crate::Result<(usize, Option<CuTime>)> {
-        let mut received = 0;
-        for _ in 0..MAX_RECORDS_PER_POLL {
-            let Ok(record) = self.records.try_recv() else {
-                break;
-            };
-            let bytes = &record.bytes[..record.len];
-            let value = if record.keyframe {
-                CuTelemetryRecord::KeyFrame {
-                    copperlist_id: record.id,
-                    state: bytes,
+        let mut captures = 0;
+        let mut logs = 0;
+        crate::protocol::service_tx(
+            driver,
+            mode,
+            MAX_RECORDS_PER_POLL + MAX_LOGS_PER_POLL,
+            |driver| {
+                if captures < MAX_RECORDS_PER_POLL {
+                    if let Ok(record) = self.records.try_recv() {
+                        let bytes = &record.bytes[..record.len];
+                        let (value, returned) = if record.keyframe {
+                            (
+                                CuTelemetryRecord::KeyFrame {
+                                    copperlist_id: record.id,
+                                    state: bytes,
+                                },
+                                &self.kf_return,
+                            )
+                        } else {
+                            (
+                                CuTelemetryRecord::CopperList {
+                                    id: record.id,
+                                    capture: bytes,
+                                },
+                                &self.cl_return,
+                            )
+                        };
+                        let result = driver.send(value);
+                        let _ = returned.try_send(record.bytes);
+                        result?;
+                        captures += 1;
+                        return Ok(true);
+                    }
+                    captures = MAX_RECORDS_PER_POLL;
                 }
-            } else {
-                CuTelemetryRecord::CopperList {
-                    id: record.id,
-                    capture: bytes,
+                if logs == MAX_LOGS_PER_POLL {
+                    return Ok(false);
                 }
-            };
-            let result = driver
-                .send(value)
-                .map_err(|e| crate::Error::Codec(e.to_string()));
-            let returned = if record.keyframe {
-                &self.kf_return
-            } else {
-                &self.cl_return
-            };
-            let _ = returned.try_send(record.bytes);
-            result?;
-            received += 1;
-        }
-        for _ in 0..MAX_LOGS_PER_POLL {
-            let Some(record) = self.structured.pending.pop() else {
-                break;
-            };
-            let result = driver
-                .send(CuTelemetryRecord::StructuredLog {
+                let Some(record) = self.structured.pending.pop() else {
+                    return Ok(false);
+                };
+                let result = driver.send(CuTelemetryRecord::StructuredLog {
                     sequence: self.structured_id,
                     entry: &record.bytes[..record.len],
-                })
-                .map_err(|e| crate::Error::Codec(e.to_string()));
-            let _ = self.structured.free.push(record);
-            result?;
-            self.structured_id =
-                self.structured_id
+                });
+                let _ = self.structured.free.push(record);
+                result?;
+                self.structured_id = self
+                    .structured_id
                     .checked_add(1)
-                    .ok_or(crate::Error::InvalidConfig(
-                        "structured log sequence exhausted",
-                    ))?;
-            received += 1;
-        }
-        let next = driver
-            .poll(mode)
-            .map_err(|e| crate::Error::Codec(e.to_string()))?;
-        Ok((received, next))
+                    .ok_or_else(|| CuError::from("structured log sequence exhausted"))?;
+                logs += 1;
+                Ok(true)
+            },
+        )
+        .map_err(|error| crate::Error::Codec(error.to_string()))
     }
 }
 

@@ -37,6 +37,8 @@ pub mod distributed_replay;
 pub mod fanout;
 pub(crate) mod log;
 pub mod logcodec;
+#[cfg(feature = "manual-telemetry")]
+pub mod manual_output;
 pub mod monitoring;
 #[cfg(feature = "std")]
 #[cfg_attr(not(feature = "parallel-rt"), doc(hidden))]

@@ -1,0 +1,6 @@
+(
+    missions: [(id: "first"),(id: "second")],
+    logging: (enable_task_logging: false, enable_keyframe_logging: false, copperlist_count: 8, keyframe_interval: 5),
+    tasks: [(id: "source", type: "StreamSource")],
+    cnx: [(src: "source", dst: "__nc__", msg: "StreamMsg")],
+)

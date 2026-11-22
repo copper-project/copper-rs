@@ -61,6 +61,7 @@ pr-check:
 	cargo +stable check -p cu29-logstream --no-default-features
 	cargo +stable clippy -p cu29 --features logstream --test logstream_runtime -- --deny warnings
 	cargo +stable test -p cu29 --features logstream --test logstream_runtime
+	cargo +stable test -p cu29 --features manual-telemetry,memory_monitoring --test manual_telemetry
 	cargo +stable clippy -p cu-logstream-demo --all-targets --features replay -- --deny warnings
 	cargo +stable test -p cu29-runtime --test replay_primitives --features cu29/async-cl-io
 	just --justfile examples/cu_logstream_demo/justfile check

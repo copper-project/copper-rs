@@ -29,6 +29,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let signal_handler = cfg!(feature = "signal-handler");
     let parallel_rt_enabled = cfg!(feature = "parallel-rt");
     let logstream_enabled = cfg!(feature = "logstream");
+    let manual = cfg!(feature = "manual-telemetry") && !cfg!(feature="async-cl-io") && !sim_mode && !logstream_enabled;
+    let live_replay = std && sim_mode && (logstream_enabled || cfg!(feature="manual-telemetry"));
     let clock_sync_enabled = cfg!(feature = "clock-sync");
     let rt_guard = rtsan_guard_tokens();
 
@@ -105,7 +107,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     // A feature-gated streaming destination may request keyframes even when the local archive
     // does not. Compile the capture path in that case; runtime output requirements keep it idle
     // when no logstream destination is configured.
-    let keyframe_logging_enabled = local_keyframe_logging_enabled || logstream_enabled;
+    let keyframe_logging_enabled = local_keyframe_logging_enabled || logstream_enabled || manual || live_replay;
     let copperlist_count_tokens = proc_macro2::Literal::usize_unsuffixed(copperlist_count);
     let caller_root = utils::caller_crate_root();
     let (git_commit, git_dirty) = detect_git_info(&caller_root);
@@ -245,6 +247,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             fields_named.named.push(parse_quote! { shutdown_completed: bool });
             fields_named.named.push(parse_quote! { stop_reason: ::cu29::curuntime::RuntimeStopReason });
             fields_named.named.push(logger_runtime_field);
+            if manual { fields_named.named.push(parse_quote!{manual_telemetry: Option<::cu29::logstream::manual::ManualTelemetry>}); }
             if clock_sync_enabled {
                 fields_named.named.push(parse_quote! { clock_maintenance: Option<::cu29::clock_sync::ClockMaintenance> });
                 if sim_mode { fields_named.named.push(parse_quote! { replay_clock_sync: Option<::cu29::clock::sync::ClockSync> }); }
@@ -257,6 +260,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             fields_unnamed.unnamed.push(parse_quote! { shutdown_completed: bool });
             fields_unnamed.unnamed.push(parse_quote! { stop_reason: ::cu29::curuntime::RuntimeStopReason });
             fields_unnamed.unnamed.push(logger_runtime_field);
+            if manual { fields_unnamed.unnamed.push(parse_quote!{manual_telemetry: Option<::cu29::logstream::manual::ManualTelemetry>}); }
             if clock_sync_enabled {
                 fields_unnamed.unnamed.push(parse_quote! { clock_maintenance: Option<::cu29::clock_sync::ClockMaintenance> });
                 if sim_mode { fields_unnamed.unnamed.push(parse_quote! { replay_clock_sync: Option<::cu29::clock::sync::ClockSync> }); }
@@ -2796,7 +2800,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             // A ground-side simulation may disable local output entirely while
             // retaining the generated freeze/thaw plan for received recovery points.
             if configured_keyframe_logging != #local_keyframe_logging_enabled
-                && !(#sim_mode && #logstream_enabled && !configured_keyframe_logging) {
+                && !(#live_replay && !configured_keyframe_logging) {
                 return Err(CuError::from(format!(
                     "Configured keyframe logging ({configured_keyframe_logging}) does not match the runtime compiled into this binary ({})",
                     #local_keyframe_logging_enabled
@@ -2923,7 +2927,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             })
         };
 
-        let build_with_resources_logstream_param = if logstream_enabled {
+        let build_with_resources_logstream_param = if manual {
+            quote!{manual_destination: Option<::cu29::logstream::manual::ManualDestination>,}
+        } else if logstream_enabled {
             quote! {
                 logstream: Option<::cu29::logstream::TelemetryDestination>,
             }
@@ -2993,6 +2999,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         } else {
             quote! { <Self as #app_trait<S, L>>::run_one_iteration(self, #sim_callback_arg) }
         };
+        let service_between_iterations = manual.then(|| quote! {
+            ::cu29::app::CuManualTelemetry::service_telemetry(self)?;
+        });
         let run_loop = quote! {{
             let mut rate_limiter = self.copper_runtime.runtime_config.rate_target_hz
                 .map(|rate| cu29::curuntime::LoopRateLimiter::from_rate_target_hz(
@@ -3007,6 +3016,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     }
                     break Err(error);
                 }
+                #service_between_iterations
                 if let Some(limiter) = rate_limiter.as_mut() {
                     limiter.limit(self.copper_runtime.clock_ref());
                 }
@@ -3411,6 +3421,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     .prepare_keyframes(&kf_manager.capture_capacities);
             }
         });
+        let prepare_manual_frames = manual.then(||quote!{runtime.copperlists_manager.prepare_manual_keyframes(kf_manager)?;});
         let keyframe_preallocation = keyframe_logging_enabled.then(|| {
             quote! {
                 {
@@ -3422,18 +3433,19 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     kf_manager.begin_capture_preallocation();
                     #(#keyframe_preallocation_code)*
                     kf_manager.finish_capture_preallocation()?;
+                    #prepare_manual_frames
                     #prepare_arena_keyframes
                 }
             }
         });
 
 
-        let live_completed = (sim_mode && logstream_enabled).then(|| {
+        let live_completed = live_replay.then(|| {
             quote! {
                 let _ = sim_callback(SimStep::CopperListCompleted(culist));
             }
         });
-        let live_replay_impl = if sim_mode && logstream_enabled {
+        let live_replay_impl = if live_replay {
             live_twin::runtime_support(
                 application_name,
                 &mission_mod,
@@ -3902,8 +3914,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         };
 
-        let no_logstream_arg = logstream_enabled.then(|| quote! { None, });
-        let builder_logstream_arg = logstream_enabled.then(|| quote! { self.logstream, });
+        let no_logstream_arg = (logstream_enabled || manual).then(|| quote! { None, });
+        let builder_logstream_arg = (logstream_enabled || manual).then(|| quote! { self.logstream, });
         let new_with_resources_compat_fn = if sim_mode {
             quote! {
                 pub fn new_with_resources<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static>(
@@ -3942,6 +3954,24 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         };
 
+        let close_manual = manual.then(||quote!{
+            if let Some(mut tx) = self.manual_telemetry.take() { tx.close(&mut self.copper_runtime.copperlists_manager)?; }
+        });
+        let configure_manual = manual.then(||quote!{
+            let mut copper_runtime = copper_runtime;
+            if let Some(buffers) = manual_buffers {
+                copper_runtime.copperlists_manager.enable_manual_output(buffers.capture_count,buffers.keyframe_count)?;
+            }
+        });
+        let manual_init = manual.then(||quote!{manual_telemetry,});
+        let manual_service = manual.then(||quote!{
+            impl ::cu29::app::CuManualTelemetry for #application_name {
+                fn service_telemetry(&mut self) -> CuResult<()> {
+                    if let Some(tx) = &mut self.manual_telemetry { tx.service(&mut self.copper_runtime.copperlists_manager)?; }
+                    Ok(())
+                }
+            }
+        });
         let build_with_resources_thread_pools_destructure = if std {
             quote! { thread_pools, }
         } else {
@@ -4062,7 +4092,19 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         });
         let configured_logstream_count = logstream_resource_specs.len();
-        let copperlist_output_graph = if logstream_enabled {
+        let copperlist_output_graph = if manual {
+            quote! {
+                let local_lists = config.logging.as_ref().is_none_or(|l| l.enable_task_logging);
+                let local_frames = config.logging.as_ref().is_none_or(|l| l.enable_task_logging && l.enable_keyframe_logging);
+                let manual_buffers = manual_destination.as_ref().map(|d| d.buffers);
+                let (manual_telemetry, manual_logs) = manual_destination
+                    .map(|d| d.start::<#mission_mod::CuStampedDataSet>(clock.clone(), log_context))
+                    .transpose()?.unzip();
+                let output_requirements = cu29::curuntime::OutputRequirements::new(local_lists || manual_telemetry.is_some(), local_frames || manual_telemetry.is_some());
+                let copperlist_sink = ::cu29::fanout::OptionalWriteStream::new(local_lists.then_some(local_copperlist_sink));
+                let keyframe_sink = ::cu29::fanout::OptionalWriteStream::new(local_frames.then_some(local_keyframe_sink));
+            }
+        } else if logstream_enabled {
             quote! {
                 let local_copperlist_output_required = config
                     .logging
@@ -4154,7 +4196,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 unified_logger.clone(), 4096 * 10, log_context,
             )?;
         };
-        let (early_structured_logger_init, late_structured_logger_init) = if logstream_enabled {
+        let (early_structured_logger_init, late_structured_logger_init) = if manual {
+            (quote!{}, quote!{
+                #local_structured_logger_init
+                let logger_runtime = if let Some(output) = manual_logs {
+                    ::cu29::prelude::LoggerRuntime::init(clock.clone(), ::cu29::logstream::StructuredLogStream::new(local_structured_log_sink,output), None::<::cu29::prelude::NullLog>)
+                } else {
+                    ::cu29::prelude::LoggerRuntime::init(clock.clone(),local_structured_log_sink,None::<::cu29::prelude::NullLog>)
+                };
+            })
+        } else if logstream_enabled {
             (
                 quote! {},
                 quote! {
@@ -4291,7 +4342,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     timestamp: copper_runtime.clock_ref().now(),
                     event: RuntimeLifecycleEvent::Instantiated { config_source },
                 })?;
+                #configure_manual
                 let application = Ok(#application_name {
+                    #manual_init
                     copper_runtime,
                     #clock_maintenance_init
                     #replay_clock_init
@@ -4412,6 +4465,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 pub fn log_shutdown_completed(&mut self) -> CuResult<()> {
                     if self.lifecycle_running { return Err(CuError::from("Stop the application before completing shutdown")); }
                     if self.shutdown_completed { return Ok(()); }
+                    #close_manual
                     let cl_close = self.copper_runtime.copperlists_manager.close_output();
                     let kf_close = self.copper_runtime.keyframes_manager.close_output();
                     let logs_flush = self.logger_runtime.try_flush();
@@ -4438,6 +4492,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         };
 
         let app_metadata_impl = quote! {
+            #manual_service
             impl cu29::prelude::app::CuSubsystemMetadata for #application_name {
                 fn subsystem() -> cu29::prelude::app::Subsystem {
                     #application_name::subsystem()
@@ -4730,15 +4785,24 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! { let clock = self.clock.ok_or(CuError::from("Clock missing from builder"))?; }
         };
 
-        let builder_logstream_field = logstream_enabled.then(|| {
+        let builder_logstream_field = if manual { Some(quote!{logstream: Option<::cu29::logstream::manual::ManualDestination>,}) } else { logstream_enabled.then(|| {
             quote! {
                 logstream: Option<::cu29::logstream::TelemetryDestination>,
             }
-        });
-        let builder_logstream_init = logstream_enabled.then(|| quote! { logstream: None, });
+        })
+        };
+        let builder_logstream_init = (logstream_enabled || manual).then(|| quote! { logstream: None, });
         let builder_logstream_copy =
-            logstream_enabled.then(|| quote! { logstream: self.logstream, });
-        let builder_with_logstream_method = logstream_enabled.then(|| {
+            (logstream_enabled || manual).then(|| quote! { logstream: self.logstream, });
+        let builder_with_logstream_method = if manual {Some(quote!{
+            /// Install a manually serviced native sender. Supply a unique session ID for each boot.
+            pub fn with_manual_telemetry_tx<T: ::cu29::logstream::protocol::CuTelemetryTx+'static>(mut self,
+                session_id:[u8;16], make_tx: impl FnOnce(::cu29::clock::RobotClock)->CuResult<T>+Send+'static,
+                buffers: ::cu29::logstream::TelemetryBufferConfig) -> Self {
+                self.logstream=Some(::cu29::logstream::manual::ManualDestination{session_id,buffers,make_tx:Box::new(move |clock|Ok(Box::new(make_tx(clock)?)))});
+                self
+            }
+        })} else {logstream_enabled.then(|| {
             quote! {
                 /// Stream native records through a custom protocol on a bounded sender worker.
                 /// Buffer counts and record sizes bound the shared telemetry inbox.
@@ -4774,7 +4838,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     self
                 }
             }
-        });
+        })};
 
         let (
             builder_struct,
@@ -5324,6 +5388,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let supervised_start = (!sim_mode && all_missions.iter().any(|(id, _)| id != "default")).then(|| {
             let config = (std && !static_config).then(|| quote!(builder.config_override = settings.config.clone();));
             let reference = clock_sync_enabled.then(|| quote!(builder.clock_reference = settings.reference.as_mut().map(|open| open()).transpose()?;));
+            let manual_telemetry = manual.then(||quote!{builder.logstream = settings.manual_telemetry.as_mut().map(|open|open()).transpose()?;});
             let telemetry = logstream_enabled.then(|| quote!(builder.logstream = settings.telemetry.as_mut().map(|open| open()).transpose()?;));
             quote! {
                 pub(super) fn start_supervised<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static>(
@@ -5337,6 +5402,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     #config
                     #reference
                     #telemetry
+                    #manual_telemetry
                     let app = if let Some(resources) = settings.resources.as_mut() {
                         builder.with_resources(resources).build()?
                     } else {
