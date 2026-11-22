@@ -806,6 +806,76 @@ impl<T: CuStreamTx + CuFeedbackRx> Driver for FecTelemetryTx<T> {
     }
 }
 
+struct SenderInbox {
+    records: Receiver<Record>,
+    cl_return: SyncSender<Box<[u8]>>,
+    kf_return: SyncSender<Box<[u8]>>,
+    structured: Arc<StructuredInbox>,
+    structured_id: u64,
+}
+
+impl SenderInbox {
+    fn service(
+        &mut self,
+        driver: &mut impl Driver,
+        mode: TxMode,
+    ) -> crate::Result<(usize, Option<CuTime>)> {
+        let mut received = 0;
+        for _ in 0..MAX_RECORDS_PER_POLL {
+            let Ok(record) = self.records.try_recv() else {
+                break;
+            };
+            let bytes = &record.bytes[..record.len];
+            let value = if record.keyframe {
+                CuTelemetryRecord::KeyFrame {
+                    copperlist_id: record.id,
+                    state: bytes,
+                }
+            } else {
+                CuTelemetryRecord::CopperList {
+                    id: record.id,
+                    capture: bytes,
+                }
+            };
+            let result = driver
+                .send(value)
+                .map_err(|e| crate::Error::Codec(e.to_string()));
+            let returned = if record.keyframe {
+                &self.kf_return
+            } else {
+                &self.cl_return
+            };
+            let _ = returned.try_send(record.bytes);
+            result?;
+            received += 1;
+        }
+        for _ in 0..MAX_LOGS_PER_POLL {
+            let Some(record) = self.structured.pending.pop() else {
+                break;
+            };
+            let result = driver
+                .send(CuTelemetryRecord::StructuredLog {
+                    sequence: self.structured_id,
+                    entry: &record.bytes[..record.len],
+                })
+                .map_err(|e| crate::Error::Codec(e.to_string()));
+            let _ = self.structured.free.push(record);
+            result?;
+            self.structured_id =
+                self.structured_id
+                    .checked_add(1)
+                    .ok_or(crate::Error::InvalidConfig(
+                        "structured log sequence exhausted",
+                    ))?;
+            received += 1;
+        }
+        let next = driver
+            .poll(mode)
+            .map_err(|e| crate::Error::Codec(e.to_string()))?;
+        Ok((received, next))
+    }
+}
+
 fn spawn_worker<P: CopperListTuple + Send + Sync>(
     mut driver: impl Driver + 'static,
     clock: RobotClock,
@@ -866,7 +936,7 @@ fn spawn_worker<P: CopperListTuple + Send + Sync>(
         .spawn(move || {
             let mut next_snapshot = clock.now();
             let mut stop_at = None;
-            let mut structured_id = 0u64;
+            let mut inbox = SenderInbox { records, cl_return, kf_return, structured: structured_worker.clone(), structured_id: 0 };
             // Teardown remains finite even for deliberately frozen scheduler test clocks.
             let result = (|| -> crate::Result<()> {
                 if let Some(session) = &session { driver.send(CuTelemetryRecord::Session(session)).map_err(|e| crate::Error::Codec(e.to_string()))?; }
@@ -874,34 +944,8 @@ fn spawn_worker<P: CopperListTuple + Send + Sync>(
                     if status.stop.load(Ordering::Acquire) && stop_at.is_none() {
                         stop_at = Some(shutdown_clock.now() + drain_time);
                     }
-                    let mut received = 0;
-                    for _ in 0..MAX_RECORDS_PER_POLL {
-                        let Ok(record) = records.try_recv() else {
-                            break;
-                        };
-                        let bytes = &record.bytes[..record.len];
-                        let value = if record.keyframe { CuTelemetryRecord::KeyFrame { copperlist_id: record.id, state: bytes } } else { CuTelemetryRecord::CopperList { id: record.id, capture: bytes } };
-                        let result = driver.send(value).map_err(|e| crate::Error::Codec(e.to_string()));
-                        let returned = if record.keyframe {
-                            &kf_return
-                        } else {
-                            &cl_return
-                        };
-                        let _ = returned.try_send(record.bytes);
-                        result?;
-                        received += 1;
-                    }
-                    for _ in 0..MAX_LOGS_PER_POLL {
-                        let Some(record) = structured_worker.pending.pop() else { break; };
-                        let result = driver.send(CuTelemetryRecord::StructuredLog {sequence: structured_id,entry: &record.bytes[..record.len]}).map_err(|e| crate::Error::Codec(e.to_string()));
-                        let _ = structured_worker.free.push(record);
-                        result?;
-                        structured_id = structured_id.checked_add(1)
-                            .ok_or(crate::Error::InvalidConfig("structured log sequence exhausted"))?;
-                        received += 1;
-                    }
                     let mode = if stop_at.is_some() { TxMode::Draining } else { TxMode::Running };
-                    let next = driver.poll(mode).map_err(|e| crate::Error::Codec(e.to_string()))?;
+                    let (received, next) = inbox.service(&mut driver, mode)?;
                     let now = clock.now();
                     if now >= next_snapshot {
                         if let Ok(mut snapshot) = status.snapshot.try_lock() {
@@ -1074,7 +1118,61 @@ impl cu29_runtime::monitoring::LogStreamStatsSource for SenderMonitor {
 
 #[cfg(test)]
 mod tests {
-    use super::TelemetryBufferConfig;
+    use super::*;
+
+    #[test]
+    fn service_yields_with_records_still_queued() {
+        #[derive(Default)]
+        struct Probe(usize);
+        impl CuTelemetryTx for Probe {
+            fn send(&mut self, record: CuTelemetryRecord<'_>) -> CuResult<()> {
+                assert!(
+                    matches!(record, CuTelemetryRecord::CopperList { id, .. } if id == self.0 as u64)
+                );
+                self.0 += 1;
+                Ok(())
+            }
+        }
+        impl Driver for Probe {}
+
+        let capacity = MAX_RECORDS_PER_POLL + 1;
+        let (pending, records) = mpsc::sync_channel(capacity);
+        let (cl_return, recycled) = mpsc::sync_channel(capacity);
+        let (kf_return, _) = mpsc::sync_channel(1);
+        let mut inbox = SenderInbox {
+            records,
+            cl_return,
+            kf_return,
+            structured: Arc::new(StructuredInbox {
+                free: crossbeam_queue::ArrayQueue::new(1),
+                pending: crossbeam_queue::ArrayQueue::new(1),
+            }),
+            structured_id: 0,
+        };
+        for id in 0..capacity {
+            assert!(
+                pending
+                    .try_send(Record {
+                        bytes: Box::new([0]),
+                        len: 1,
+                        keyframe: false,
+                        id: id as u64
+                    })
+                    .is_ok()
+            );
+        }
+        let mut driver = Probe::default();
+        assert_eq!(
+            inbox.service(&mut driver, TxMode::Running).unwrap(),
+            (MAX_RECORDS_PER_POLL, None)
+        );
+        assert_eq!(recycled.try_iter().count(), MAX_RECORDS_PER_POLL);
+        assert_eq!(
+            inbox.service(&mut driver, TxMode::Draining).unwrap(),
+            (1, None)
+        );
+        assert_eq!(driver.0, capacity);
+    }
 
     #[test]
     fn native_pool_payload_budget_uses_configured_sizes_and_counts() {
