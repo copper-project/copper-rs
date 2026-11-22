@@ -12,16 +12,16 @@
         (
             path: "mcu_graph.ron",
             params: {"control_source": "mapper", "attitude_kp": 1.0, "record_rate_tuning": {{record_rate_tuning}}},
-            when: Not(Any([Feature("sim"), Feature("end2end"), Feature("logreader")])),
+            when: Not(All([Not(Feature("firmware-replay")), Any([Feature("sim"), Feature("end2end"), Feature("logreader")])])),
         ),
         (
             path: "mcu_graph.ron",
             params: {"control_source": "mode_supervisor", "attitude_kp": 10.0, "record_rate_tuning": {{record_rate_tuning}}},
-            when: Any([Feature("sim"), Feature("end2end"), Feature("logreader")]),
+            when: All([Not(Feature("firmware-replay")), Any([Feature("sim"), Feature("end2end"), Feature("logreader")])]),
         ),
         (
             path: "mcu_autonomy.ron",
-            when: Any([Feature("sim"), Feature("end2end"), Feature("logreader")]),
+            when: All([Not(Feature("firmware-replay")), Any([Feature("sim"), Feature("end2end"), Feature("logreader")])]),
         ),
     ],
     missions: [(id: "default"), (id: "flow"), (id: "gnss")],
@@ -30,7 +30,7 @@
         (
             id: "bmi088",
             type: "tasks::Bmi088Source",
-            run_in_sim: true,
+            run_in_sim: {{simulate_sensors}},
             logging: (enabled: true),
             resources: {
                 "spi": "fc.bmi088_spi",
@@ -42,14 +42,14 @@
         (
             id: "dps310",
             type: "tasks::Dps310Source",
-            run_in_sim: true,
+            run_in_sim: {{simulate_sensors}},
             logging: (enabled: {{record_auxiliary}}),
             resources: {"i2c": "fc.i2c2_dps310"},
         ),
         (
             id: "ist8310",
             type: "tasks::Ist8310Source",
-            run_in_sim: true,
+            run_in_sim: {{simulate_sensors}},
             logging: (enabled: {{record_auxiliary}}),
             resources: {"i2c": "fc.i2c2_ist8310"},
         ),
@@ -63,7 +63,7 @@
         (
             id: "battery_adc",
             type: "tasks::battery::BatteryAdcSource",
-            run_in_sim: true,
+            run_in_sim: {{simulate_sensors}},
             logging: (enabled: {{record_auxiliary}}),
             resources: {"battery_adc": "fc.battery_adc"},
             config: {
@@ -171,7 +171,7 @@
         (
             id: "gnss_ublox",
             type: "tasks::gnss::GnssSource",
-            run_in_sim: true,
+            run_in_sim: {{simulate_sensors}},
             logging: (enabled: {{record_auxiliary}}),
             resources: {"serial": "fc.uart3"},
             config: {

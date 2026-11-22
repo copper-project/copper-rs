@@ -2,13 +2,21 @@
     includes: [
         (
             path: "mcu_config.ron.in",
-            params: {"record_auxiliary": false, "record_rate_tuning": true},
-            when: Feature("firmware"),
+            params: {
+                "simulate_sensors": false,
+                "record_auxiliary": false,
+                "record_rate_tuning": true,
+            },
+            when: Any([Feature("firmware"), Feature("firmware-replay")]),
         ),
         (
             path: "mcu_config.ron.in",
-            params: {"record_auxiliary": true, "record_rate_tuning": false},
-            when: Not(Feature("firmware")),
+            params: {
+                "simulate_sensors": true,
+                "record_auxiliary": true,
+                "record_rate_tuning": false,
+            },
+            when: Not(Any([Feature("firmware"), Feature("firmware-replay")])),
         ),
     ],
 )
