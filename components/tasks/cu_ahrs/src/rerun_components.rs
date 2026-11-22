@@ -1,4 +1,4 @@
-//! AHRS orientation rendered as the aerospace body axes in the navigation frame.
+//! AHRS orientation rendered as the aerospace body axes in an east-north-up scene.
 
 use crate::{AhrsPose, CuAhrsDebugState};
 use alloc::vec::Vec;
@@ -9,7 +9,8 @@ use nalgebra::{Quaternion, UnitQuaternion, Vector3};
 fn axes(orientation: UnitQuaternion<f32>) -> Vec<SerializedComponentBatch> {
     let directions = [Vector3::x(), Vector3::y(), Vector3::z()].map(|axis| {
         let direction = orientation.transform_vector(&axis);
-        [direction.x, direction.y, direction.z]
+        // The filter rotates into north-east-down. Rerun displays east-north-up.
+        [direction.y, direction.x, -direction.z]
     });
     Arrows3D::from_vectors(directions)
         .with_origins([[0.0, 0.0, 0.0]; 3])
@@ -61,17 +62,26 @@ mod tests {
     }
 
     #[test]
-    fn euler_and_quaternion_representations_rotate_the_body_axes() {
+    fn level_body_points_north_east_and_down() {
+        assert_eq!(
+            vectors(&AhrsPose::default()),
+            [[0.0, 1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, -1.0]]
+        );
+    }
+
+    #[test]
+    fn left_turn_points_west_for_euler_and_quaternion_poses() {
         let pose = AhrsPose {
-            yaw: Angle::new::<radian>(core::f32::consts::FRAC_PI_2),
+            yaw: Angle::new::<radian>(-core::f32::consts::FRAC_PI_2),
             ..Default::default()
         };
         let mut state = CuAhrs::new_filter().debug_state();
         state.orientation_w =
             cu29::units::si::f32::Ratio::new::<ratio>(core::f32::consts::FRAC_1_SQRT_2);
-        state.orientation_k = state.orientation_w;
-        let expected = [[0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]];
+        state.orientation_k = -state.orientation_w;
+        let expected = [[-1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, -1.0]];
         for actual in [vectors(&pose), vectors(&state)] {
+            assert_eq!(actual.len(), expected.len());
             for (actual, expected) in actual.iter().zip(expected) {
                 for (a, e) in actual.iter().zip(expected) {
                     assert!((a - e).abs() < 1e-5);
