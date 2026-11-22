@@ -1,11 +1,14 @@
-#![cfg(feature = "demo")]
+#![cfg(feature = "arm")]
 
 extern crate self as cu_logstream_demo;
 pub mod tasks;
+#[cfg(feature = "demo")]
 pub mod telemetry;
 
+#[cfg(feature = "demo")]
 use cu29::prelude::*;
 
+#[cfg(feature = "demo")]
 #[cfg_attr(
     all(feature = "sender-monitor", not(feature = "feedback")),
     copper_runtime(config = "senderconfig.ron")
@@ -24,6 +27,7 @@ use cu29::prelude::*;
 )]
 struct Demo {}
 
+#[cfg(feature = "demo")]
 pub mod twin {
     use cu29::prelude::*;
     #[copper_runtime(config = "copperconfig.ron", sim_mode = true)]
@@ -31,7 +35,9 @@ pub mod twin {
     pub type DataSet = default::CuStampedDataSet;
     pub type Twin = default::Replay;
 }
+#[cfg(feature = "demo")]
 pub type DataSet = twin::DataSet;
+#[cfg(feature = "demo")]
 pub type List = CopperList<DataSet>;
 
 pub const ITERATIONS: u64 = 256;
@@ -39,6 +45,7 @@ pub const TICK_NS: u64 = 10_000_000;
 // Generated native keyframe sections currently reserve 10 MiB.
 pub const SLAB_BYTES: usize = 16 * 1024 * 1024;
 
+#[cfg(feature = "demo")]
 pub fn read_lists(path: &std::path::Path) -> CuResult<Vec<List>> {
     Ok(
         cu29_export::copperlists_reader::<DataSet>(UnifiedLoggerIOReader::new(
@@ -50,6 +57,7 @@ pub fn read_lists(path: &std::path::Path) -> CuResult<Vec<List>> {
     )
 }
 
+#[cfg(feature = "demo")]
 pub fn run_sender(
     remote: std::net::SocketAddr,
     path: &std::path::Path,
@@ -66,6 +74,7 @@ pub fn run_sender(
 }
 
 /// Bind the robot's UDP endpoint explicitly for a configured feedback return path.
+#[cfg(feature = "demo")]
 pub fn run_sender_bound(
     remote: std::net::SocketAddr,
     bind: std::net::SocketAddr,
@@ -104,6 +113,7 @@ pub fn run_sender_bound(
 }
 
 /// Read native captures for offline reconstruction, with no debug side data.
+#[cfg(feature = "demo")]
 pub fn read_captures(
     path: &std::path::Path,
 ) -> CuResult<Vec<cu29_logstream::capture::CapturedList<DataSet>>> {
@@ -113,6 +123,7 @@ pub fn read_captures(
         .collect())
 }
 
+#[cfg(feature = "demo")]
 pub fn read_keyframes(path: &std::path::Path) -> CuResult<Vec<cu29::curuntime::KeyFrame>> {
     Ok(cu29_export::keyframes_reader(UnifiedLoggerIOReader::new(
         UnifiedLoggerRead::new(path).map_err(|e| CuError::new_with_cause("Open keyframes", e))?,
@@ -122,6 +133,7 @@ pub fn read_keyframes(path: &std::path::Path) -> CuResult<Vec<cu29::curuntime::K
 }
 
 /// Read original robot entries from a local or received native archive.
+#[cfg(feature = "demo")]
 pub fn read_logs(path: &std::path::Path) -> CuResult<Vec<CuLogEntry>> {
     cu29_export::structlog_reader(UnifiedLoggerIOReader::new(
         UnifiedLoggerRead::new(path)
