@@ -1,0 +1,13 @@
+[package]
+name = "cu-flight-probe-logs"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+bincode = { workspace = true, features = ["std"] }
+anyhow = "1"
+crc32fast = "1"
+cu29-traits = { workspace = true, features = ["std"] }
+cu29-unifiedlog = { workspace = true, features = ["std"] }
+tempfile.workspace = true

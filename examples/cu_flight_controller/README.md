@@ -449,6 +449,19 @@ At capacity the logger wraps and reuses the oldest sections. The active build's
 metadata and catalog stay on the card. When space is reclaimed from an older build's
 metadata, its remaining data sections are retired together. A run interrupted by power loss keeps its open-section markers.
 
+To offload a run, disarm, unplug the flight battery, and power the board through USB
+with the CMSIS-DAP probe attached. Recovery temporarily runs a read-only SD reader
+in SRAM and restarts the installed firmware afterward. Each restart can create a new run.
+
+```bash
+just probe-logs list
+just probe-logs download 28
+```
+
+The download prints its path under `logs/flight-<revision>-run<ID>_0.copper`.
+Existing downloads are protected. For the catalog reader, pass the base name
+without the slab suffix, for example `just logtool-catalog logs/flight-ea561ce48b32-run28.copper list-runs`.
+
 The flight controller queues complete records in a 256 KiB RAM buffer. The SD writer
 uses SDMMC1 DMA and services the controller while the card is busy. If the queue
 fills, the recorder skips new records until space becomes available. Missing

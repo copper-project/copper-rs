@@ -388,6 +388,30 @@ pub fn read_header<B: ByteStorage>(storage: &B, offset: u64) -> CuResult<Section
     })
 }
 
+/// Encode the two metadata blocks for a section copied into a standalone slab.
+/// All links in the copy use generation one. Source allocation leases are local
+/// to the source storage and have no meaning in the immutable copy.
+#[cfg(feature = "std")]
+pub fn encode_copied_section(header: &SectionHeader, position: u64) -> CuResult<[u8; 1024]> {
+    let mut blocks = [0; 1024];
+    let mut descriptor = SectionDescriptor::new(header, position, 1);
+    descriptor.next_generation = u64::from(header.next_section != 0);
+    encode_into_slice(descriptor, &mut blocks[..512], standard())
+        .map_err(|e| CuError::from(e.to_string()))?;
+    encode_into_slice(
+        SectionCommit {
+            position,
+            generation: 1,
+            used: header.used,
+            is_open: header.is_open,
+        },
+        &mut blocks[512..],
+        standard(),
+    )
+    .map_err(|e| CuError::from(e.to_string()))?;
+    Ok(blocks)
+}
+
 pub fn read_main<B: ByteStorage>(storage: &B) -> CuResult<MainHeader> {
     let mut bytes = [0u8; 512];
     storage.region(0, BLOCK)?.read(0, &mut bytes)?;

@@ -309,3 +309,14 @@ attach profile="screaming":
   set -euo pipefail
   cd "{{ROOT}}"
   probe-rs attach --chip STM32H743VITx --protocol swd target/thumbv7em-none-eabihf/{{ if profile == "dev" { "debug" } else { profile } }}/quad
+
+# List SD runs through the debugger or download one by ID to logs/.
+[positional-arguments]
+probe-logs action="list" run="":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{justfile_directory()}}/tools/probe-logs/reader"
+  cargo build --release --target-dir target
+  reader="$PWD/target/thumbv7em-none-eabihf/release/cu-stm32h743-swd-recovery"
+  cd "{{justfile_directory()}}"
+  cargo run --quiet -p cu-flight-probe-logs -- "$reader" "$1" "$2"

@@ -1,0 +1,20 @@
+[package]
+name = "cu-stm32h743-swd-recovery"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Read MicoAir H743 SD recordings through a CMSIS-DAP probe"
+
+[dependencies]
+cortex-m = "0.7"
+cortex-m-rt = "0.7"
+crc32fast = { version = "1", default-features = false }
+stm32h7xx-hal = { version = "0.16", features = ["stm32h743v", "rt", "sdmmc"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+debug = true
+
+[workspace]
