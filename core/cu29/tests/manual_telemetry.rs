@@ -1,8 +1,4 @@
-#![cfg(all(
-    feature = "std",
-    feature = "manual-telemetry",
-    not(feature = "async-cl-io")
-))]
+#![cfg(all(feature = "std", feature = "telemetry", not(feature = "async-cl-io")))]
 use bincode::{Decode, Encode};
 use cu29::logstream::TelemetryBufferConfig;
 use cu29::logstream::protocol::{CuTelemetryRecord, CuTelemetryTx, TxMode};
@@ -59,14 +55,19 @@ mod missions {
                 if let CuTelemetryRecord::Session(session) = record {
                     assert_eq!(session.identity.session_id, [self.1; 16]);
                 }
-                self.0.fetch_add(1, Ordering::Relaxed);
                 Ok(())
+            }
+            fn poll(&mut self, mode: super::TxMode) -> CuResult<Option<CuTime>> {
+                if mode == super::TxMode::Running {
+                    self.0.fetch_add(1, Ordering::Relaxed);
+                }
+                Ok(None)
             }
         }
         let received = Arc::new(AtomicUsize::new(0));
         let mut activation = 0;
         let mut runner = RobotRunner::builder()
-            .with_manual_telemetry_tx(
+            .with_telemetry_tx(
                 || {
                     activation += 1;
                     Ok(([activation; 16], ManagedProbe(received.clone(), activation)))
@@ -150,11 +151,11 @@ impl CuTelemetryTx for Probe {
     }
 }
 #[test]
-fn manual_sender_yields_and_recovers_after_skipped_service() -> CuResult<()> {
+fn generated_iteration_services_telemetry_and_twin_recovers_from_loss() -> CuResult<()> {
     let seen = Arc::new(StdMutex::new(Observations::default()));
     let tx = Probe(seen.clone());
     let app = ManualApp::builder()
-        .with_manual_telemetry_tx(
+        .with_telemetry_tx(
             [9; 16],
             move |_| Ok(tx),
             TelemetryBufferConfig {
@@ -166,31 +167,26 @@ fn manual_sender_yields_and_recovers_after_skipped_service() -> CuResult<()> {
         )
         .build()?;
     let mut app = app.start()?;
-    for _ in 0..5 {
+    for id in 0..6 {
         app.run_one_iteration()?;
+        let s = seen.lock().unwrap();
+        assert_eq!(s.sessions, 1);
+        assert_eq!(s.lists.last(), Some(&id));
     }
-    assert_eq!(seen.lock().unwrap().sessions, 0);
-    for _ in 0..8 {
-        let count = || {
-            let s = seen.lock().unwrap();
-            s.sessions + s.lists.len() + s.frames.len() + s.logs.len()
-        };
-        let before = count();
-        app.service_telemetry()?;
-        assert!(count() - before <= 1);
-    }
-    app.run_one_iteration()?;
     drop(app.stop()?);
     let s = seen.lock().unwrap();
     assert_eq!(s.sessions, 1);
-    assert_eq!(s.lists, [0, 5]);
+    assert_eq!(s.lists, [0, 1, 2, 3, 4, 5]);
     assert_eq!(s.frames.first(), Some(&0));
     assert!(!s.logs.is_empty());
     assert!(s.draining);
     use cu29::logstream::twin::LiveReplay;
     let (mut replay, clock) = ground::Twin::build_twin()?;
     assert_eq!(s.frames, [0, 5]);
-    for (bytes, frame) in s.captures.iter().zip(&s.keyframes) {
+    for (bytes, frame) in [&s.captures[0], &s.captures[5]]
+        .into_iter()
+        .zip(&s.keyframes)
+    {
         let (mut list, _) = bincode::decode_from_slice(bytes, bincode::config::standard()).unwrap();
         let (frame, _) = bincode::decode_from_slice(frame, bincode::config::standard()).unwrap();
         replay.replay_capture(&clock, &mut list, Some(&frame))?;

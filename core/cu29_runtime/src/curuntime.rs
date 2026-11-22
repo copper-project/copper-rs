@@ -572,7 +572,7 @@ fn flush_completed_output<P: CopperListTuple>(
 /// Manages the lifecycle and completed-list sink on the synchronous path.
 #[doc(hidden)]
 pub struct SyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usize> {
-    #[cfg(feature = "manual-telemetry")]
+    #[cfg(feature = "telemetry")]
     manual: Option<crate::manual_output::ManualOutput<P>>,
     inner: Option<CuListsManager<P, NBCL>>,
     #[cfg(feature = "std")]
@@ -619,7 +619,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         P: CuListZeroedInit,
     {
         Ok(Self {
-            #[cfg(feature = "manual-telemetry")]
+            #[cfg(feature = "telemetry")]
             manual: None,
             inner: (!P::DISTRIBUTED).then(CuListsManager::new),
             #[cfg(feature = "std")]
@@ -640,7 +640,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         })
     }
 
-    #[cfg(feature = "manual-telemetry")]
+    #[cfg(feature = "telemetry")]
     #[doc(hidden)]
     pub fn enable_manual_output(&mut self, captures: u16, frames: u16) -> CuResult<()>
     where
@@ -653,7 +653,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         self.inner = None;
         Ok(())
     }
-    #[cfg(feature = "manual-telemetry")]
+    #[cfg(feature = "telemetry")]
     #[doc(hidden)]
     pub fn prepare_manual_keyframes(&mut self, keyframes: &KeyFramesManager) -> CuResult<()> {
         if let (Some(manual), Some(frame)) = (&mut self.manual, &keyframes.inner) {
@@ -661,7 +661,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         }
         Ok(())
     }
-    #[cfg(feature = "manual-telemetry")]
+    #[cfg(feature = "telemetry")]
     #[doc(hidden)]
     pub fn service_manual_output(
         &mut self,
@@ -673,7 +673,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         Ok(())
     }
     pub fn next_cl_id(&self) -> u64 {
-        #[cfg(feature = "manual-telemetry")]
+        #[cfg(feature = "telemetry")]
         if let Some(manual) = &self.manual {
             return manual.active.next_cl_id();
         }
@@ -717,7 +717,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
     }
 
     pub fn peek(&self) -> Option<&CopperList<P>> {
-        #[cfg(feature = "manual-telemetry")]
+        #[cfg(feature = "telemetry")]
         if let Some(manual) = &self.manual {
             return manual.active.peek();
         }
@@ -746,7 +746,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
     where
         P: CuListZeroedInit,
     {
-        #[cfg(feature = "manual-telemetry")]
+        #[cfg(feature = "telemetry")]
         if let Some(manual) = &mut self.manual {
             return manual
                 .active
@@ -791,7 +791,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
     }
 
     pub const fn dropped_keyframes_total(&self) -> u64 {
-        #[cfg(feature = "manual-telemetry")]
+        #[cfg(feature = "telemetry")]
         if let Some(manual) = &self.manual {
             return manual.frame_drops;
         }
@@ -803,7 +803,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         culistid: u64,
         keyframe: Option<&mut KeyFrame>,
     ) -> CuResult<()> {
-        #[cfg(feature = "manual-telemetry")]
+        #[cfg(feature = "telemetry")]
         if let Some(manual) = &mut self.manual {
             let list = manual
                 .active
@@ -881,7 +881,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
     /// Recycles the current serial iteration without publishing its partial output.
     #[doc(hidden)]
     pub fn discard_current(&mut self) {
-        #[cfg(feature = "manual-telemetry")]
+        #[cfg(feature = "telemetry")]
         if let Some(manual) = &mut self.manual {
             manual.active.pop();
             return;
@@ -904,7 +904,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
     }
 
     pub fn available_copper_lists(&mut self) -> CuResult<usize> {
-        #[cfg(feature = "manual-telemetry")]
+        #[cfg(feature = "telemetry")]
         if let Some(manual) = &self.manual {
             return Ok(usize::from(manual.active.is_empty()));
         }
@@ -923,7 +923,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
 
     #[inline]
     pub const fn dropped_copperlists_total(&self) -> u64 {
-        #[cfg(feature = "manual-telemetry")]
+        #[cfg(feature = "telemetry")]
         if let Some(manual) = &self.manual {
             return manual.drops;
         }

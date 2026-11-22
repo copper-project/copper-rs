@@ -821,7 +821,7 @@ fn gen_culist_support(
         let mut slots = Vec::new();
         let mut error = None;
         for (index, (task_id, msg_type, payload_type)) in task_output_specs.iter().enumerate() {
-            let captured = (cfg!(any(feature = "logstream", feature = "manual-telemetry"))
+            let captured = (cfg!(any(feature = "logstream", feature = "telemetry"))
                 || cuconfig
                     .logging
                     .as_ref()
@@ -878,7 +878,7 @@ fn gen_culist_support(
         }
     }
 
-    let capture_support = if cfg!(any(feature = "logstream", feature = "manual-telemetry")) {
+    let capture_support = if cfg!(any(feature = "logstream", feature = "telemetry")) {
         live_twin::dataset_support(
             runtime_plan,
             &output_packs,
@@ -1098,7 +1098,7 @@ fn gen_sim_support(
 
     if cfg!(any(
         feature = "logstream",
-        all(feature = "manual-telemetry", feature = "std")
+        all(feature = "telemetry", feature = "std")
     )) {
         variants.push(quote! { CopperListCompleted(&'a mut CopperList<CuStampedDataSet>) });
     }
@@ -5571,7 +5571,7 @@ fn generate_task_execution_tokens(
             let regular_trait = task_trait_for_specs(task_specs, tid);
             let (slot_cast_defs, regular_slot_match_fn_ident) =
                 output_slot_cast_tokens(&task_hint, "Task", "task", &regular_trait);
-            let live_process_completed = (sim_mode && cfg!(any(feature = "logstream",all(feature="manual-telemetry",feature="std")))).then(|| quote! {
+            let live_process_completed = (sim_mode && cfg!(any(feature = "logstream",all(feature="telemetry",feature="std")))).then(|| quote! {
                 let _ = sim_callback(SimStep::#enum_name(CuTaskCallbackState::ProcessCompleted(cumsg_output)));
             });
             let regular_process_tokens = quote! {

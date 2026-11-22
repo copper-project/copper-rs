@@ -74,7 +74,7 @@ extern crate alloc;
 extern crate self as cu29;
 
 pub use cu29_derive::{bundle_resources, resources, safety_case};
-#[cfg(any(feature = "logstream", feature = "manual-telemetry"))]
+#[cfg(any(feature = "logstream", feature = "telemetry"))]
 pub use cu29_logstream as logstream;
 pub use cu29_runtime::app;
 pub mod supervisor;

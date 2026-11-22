@@ -50,7 +50,7 @@ pub trait CuTelemetryTx: Send {
 }
 
 /// Run one bounded service pass. Always poll after processing the available records.
-#[cfg(any(feature = "std", feature = "manual-telemetry"))]
+#[cfg(any(feature = "std", feature = "telemetry"))]
 pub(crate) fn service_tx<T: CuTelemetryTx + ?Sized>(
     tx: &mut T,
     mode: TxMode,

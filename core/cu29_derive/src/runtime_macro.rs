@@ -29,8 +29,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let signal_handler = cfg!(feature = "signal-handler");
     let parallel_rt_enabled = cfg!(feature = "parallel-rt");
     let logstream_enabled = cfg!(feature = "logstream");
-    let manual = cfg!(feature = "manual-telemetry") && !cfg!(feature="async-cl-io") && !sim_mode && !logstream_enabled;
-    let live_replay = std && sim_mode && (logstream_enabled || cfg!(feature="manual-telemetry"));
+    let manual = cfg!(feature = "telemetry") && !cfg!(feature="async-cl-io") && !sim_mode && !logstream_enabled;
+    let live_replay = std && sim_mode && (logstream_enabled || cfg!(feature="telemetry"));
     let clock_sync_enabled = cfg!(feature = "clock-sync");
     let rt_guard = rtsan_guard_tokens();
 
@@ -3000,7 +3000,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! { <Self as #app_trait<S, L>>::run_one_iteration(self, #sim_callback_arg) }
         };
         let service_between_iterations = manual.then(|| quote! {
-            ::cu29::app::CuManualTelemetry::service_telemetry(self)?;
+            let result = result.and_then(|()| {
+                if let Some(sender) = &mut self.manual_telemetry {
+                    sender.service(&mut self.copper_runtime.copperlists_manager)?;
+                }
+                Ok(())
+            });
         });
         let run_loop = quote! {{
             let mut rate_limiter = self.copper_runtime.runtime_config.rate_target_hz
@@ -3016,7 +3021,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     }
                     break Err(error);
                 }
-                #service_between_iterations
                 if let Some(limiter) = rate_limiter.as_mut() {
                     limiter.limit(self.copper_runtime.clock_ref());
                 }
@@ -3720,6 +3724,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
             #run_one_iteration {
                 let result: CuResult<()> = (|| { #clock_maintain #iteration_body })();
+                #service_between_iterations
                 if let Err(error) = &result {
                     self.copper_runtime.copperlists_manager.discard_current();
                     let _ = self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::LifecycleFailed {
@@ -3964,14 +3969,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         });
         let manual_init = manual.then(||quote!{manual_telemetry,});
-        let manual_service = manual.then(||quote!{
-            impl ::cu29::app::CuManualTelemetry for #application_name {
-                fn service_telemetry(&mut self) -> CuResult<()> {
-                    if let Some(tx) = &mut self.manual_telemetry { tx.service(&mut self.copper_runtime.copperlists_manager)?; }
-                    Ok(())
-                }
-            }
-        });
         let build_with_resources_thread_pools_destructure = if std {
             quote! { thread_pools, }
         } else {
@@ -4492,7 +4489,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         };
 
         let app_metadata_impl = quote! {
-            #manual_service
             impl cu29::prelude::app::CuSubsystemMetadata for #application_name {
                 fn subsystem() -> cu29::prelude::app::Subsystem {
                     #application_name::subsystem()
@@ -4795,8 +4791,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let builder_logstream_copy =
             (logstream_enabled || manual).then(|| quote! { logstream: self.logstream, });
         let builder_with_logstream_method = if manual {Some(quote!{
-            /// Install a manually serviced native sender. Supply a unique session ID for each boot.
-            pub fn with_manual_telemetry_tx<T: ::cu29::logstream::protocol::CuTelemetryTx+'static>(mut self,
+            /// Send native telemetry after each completed iteration. Supply a unique session ID for each boot.
+            pub fn with_telemetry_tx<T: ::cu29::logstream::protocol::CuTelemetryTx+'static>(mut self,
                 session_id:[u8;16], make_tx: impl FnOnce(::cu29::clock::RobotClock)->CuResult<T>+Send+'static,
                 buffers: ::cu29::logstream::TelemetryBufferConfig) -> Self {
                 self.logstream=Some(::cu29::logstream::manual::ManualDestination{session_id,buffers,make_tx:Box::new(move |clock|Ok(Box::new(make_tx(clock)?)))});

@@ -154,7 +154,8 @@ impl ManualTelemetry {
         &mut self,
         lists: &mut SyncCopperListsManager<P, N>,
     ) -> CuResult<()> {
-        self.service_one(lists, TxMode::Running).map(|_| ())
+        // A single iteration can produce a session, a keyframe, a capture and a log.
+        self.service_records(lists, TxMode::Running, 4).map(|_| ())
     }
     pub fn close<P: CaptureDataSet, const N: usize>(
         &mut self,
@@ -166,18 +167,19 @@ impl ManualTelemetry {
             + usize::from(self.inbox.buffers.keyframe_count)
             + usize::from(self.inbox.buffers.structured_log_count);
         for _ in 0..budget {
-            if !self.service_one(lists, TxMode::Draining)? {
+            if !self.service_records(lists, TxMode::Draining, 1)? {
                 return Ok(());
             }
         }
         Err("manual telemetry did not finish draining within its record budget".into())
     }
-    fn service_one<P: CaptureDataSet, const N: usize>(
+    fn service_records<P: CaptureDataSet, const N: usize>(
         &mut self,
         lists: &mut SyncCopperListsManager<P, N>,
         mode: TxMode,
+        budget: usize,
     ) -> CuResult<bool> {
-        let (sent, next) = crate::protocol::service_tx(&mut *self.tx, mode, 1, |tx| {
+        let (sent, next) = crate::protocol::service_tx(&mut *self.tx, mode, budget, |tx| {
             self.inbox.send_next(tx, lists)
         })?;
         Ok(sent != 0 || next.is_some())

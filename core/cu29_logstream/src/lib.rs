@@ -32,16 +32,16 @@ pub use twin_session::{
 #[cfg(feature = "std")]
 pub mod telemetry;
 
-#[cfg(any(feature = "std", feature = "manual-telemetry"))]
+#[cfg(any(feature = "std", feature = "telemetry"))]
 mod buffers;
-#[cfg(any(feature = "std", feature = "manual-telemetry"))]
+#[cfg(any(feature = "std", feature = "telemetry"))]
 pub use buffers::TelemetryBufferConfig;
 pub mod capture;
 mod copper;
 mod error;
 pub mod feedback;
 mod manifest;
-#[cfg(feature = "manual-telemetry")]
+#[cfg(feature = "telemetry")]
 pub mod manual;
 mod object;
 mod pacing;
@@ -52,12 +52,12 @@ mod rlc;
 mod router;
 mod sender;
 mod stream;
-#[cfg(any(feature = "std", feature = "manual-telemetry"))]
+#[cfg(any(feature = "std", feature = "telemetry"))]
 pub mod structured;
 mod wire;
 #[cfg(feature = "std")]
 mod worker;
-#[cfg(any(feature = "std", feature = "manual-telemetry"))]
+#[cfg(any(feature = "std", feature = "telemetry"))]
 pub use structured::StructuredLogStream;
 #[cfg(feature = "std")]
 pub use worker::{

@@ -609,24 +609,6 @@ where
     }
 }
 
-/// Application with caller-serviced native telemetry.
-#[cfg(feature = "manual-telemetry")]
-pub trait CuManualTelemetry {
-    fn service_telemetry(&mut self) -> CuResult<()>;
-}
-#[cfg(feature = "manual-telemetry")]
-impl<S, L, A> CuAppLifecycle<S, L, A, Running>
-where
-    S: SectionStorage,
-    L: UnifiedLogWrite<S> + 'static,
-    A: CuApplication<S, L> + CuManualTelemetry,
-{
-    /// Send at most one queued record. Call between iterations.
-    pub fn service_telemetry(&mut self) -> CuResult<()> {
-        self.app.service_telemetry()
-    }
-}
-
 #[cfg(feature = "std")]
 impl<S, L, A> CuAppLifecycle<S, L, A, Running>
 where
