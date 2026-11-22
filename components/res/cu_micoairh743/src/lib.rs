@@ -379,7 +379,7 @@ fn init_sd_logger(
         }
     };
 
-    Logger::new_batched(bd, start, count)
+    Logger::append_batched(bd, start, count)
 }
 
 /// Resource bundle for the MicoAir H743 board.

@@ -225,6 +225,25 @@ impl<BD: BlockDevice + Send> EMMCLogger<BD> {
     pub fn new_batched(bd: BD, start: BlockIdx, size: BlockCount) -> CuResult<Self> {
         Self::create(bd, start, size, CapacityPolicy::StopWhenFull, true)
     }
+    /// Start a batched run on blank media or append after the last allocated section.
+    pub fn append_batched(bd: BD, start: BlockIdx, size: BlockCount) -> CuResult<Self> {
+        Self::validate_partition(&bd, start, size)?;
+        let capacity = size.0 as u64 * BLK as u64;
+        let storage = SdStorage {
+            bd: Arc::new(ForceSyncSend::new(bd)),
+            start: start.0 as u64 * BLK as u64,
+            size: capacity,
+            batch_copperlists: true,
+        };
+        let mut header = [0u8; BLK];
+        storage.region(0, BLK as u64)?.read(0, &mut header)?;
+        if header == [0; BLK] || header == [0xff; BLK] {
+            ByteLogger::new(storage, BLK as u16, CapacityPolicy::StopWhenFull, capacity).map(Self)
+        } else {
+            ByteLogger::append_after_reset(storage, capacity).map(Self)
+        }
+    }
+
     pub fn with_policy(
         bd: BD,
         start: BlockIdx,
@@ -669,6 +688,57 @@ mod tests {
             ((11, 12), data.len())
         );
     }
+    #[test]
+    fn sd_batched_replug_preserves_committed_records_across_runs() {
+        let device = Device::new();
+        let open =
+            || EMMCLogger::append_batched(device.clone(), BlockIdx(7), BlockCount(32)).unwrap();
+        let mut first = open();
+        first.seal_metadata(&metadata(), Some(&42u32)).unwrap();
+        let context = first.construction_context(0, 0).unwrap();
+        let mut stream = first
+            .add_section_with_context(UnifiedLogType::CopperList, 2048, context)
+            .unwrap();
+        for _ in 0..33 {
+            stream.append(1u8).unwrap();
+        }
+        // Snapshot while the last record is still pending, as on loss of power.
+        let image = device.bytes.lock().unwrap().clone();
+        drop(stream);
+        drop(first);
+        *device.bytes.lock().unwrap() = image.clone();
+        let mut second = open();
+        let mut updated = metadata();
+        updated.git_commit = Some("next revision".into());
+        if cfg!(feature = "multi-build-log-append") {
+            second.seal_metadata(&updated, Some(&43u32)).unwrap();
+        } else {
+            assert!(second.seal_metadata(&updated, Some(&43u32)).is_err());
+            assert_eq!(*device.bytes.lock().unwrap(), image);
+            second.seal_metadata(&metadata(), Some(&42u32)).unwrap();
+        }
+        let context = second.construction_context(0, 0).unwrap();
+        assert_eq!(context.run_id, 2);
+        let mut stream = second
+            .add_section_with_context(UnifiedLogType::CopperList, 2048, context)
+            .unwrap();
+        for _ in 0..32 {
+            stream.append(2u8).unwrap();
+        }
+        let dir = test_dir();
+        std::fs::write(
+            dir.path().join("replug_0.copper"),
+            &device.bytes.lock().unwrap()[7 * BLK..39 * BLK],
+        )
+        .unwrap();
+        let runs: Vec<_> = sections(&dir.path().join("replug.copper"))
+            .into_iter()
+            .filter(|(_, kind, _)| *kind == UnifiedLogType::CopperList)
+            .map(|(ctx, _, bytes)| (ctx.run_id, bytes))
+            .collect();
+        assert_eq!(runs, [(1, alloc::vec![1; 32]), (2, alloc::vec![2; 32])]);
+    }
+
     #[test]
     fn sd_append_compares_before_writing_and_reuses_metadata() {
         let device = Device::new();
