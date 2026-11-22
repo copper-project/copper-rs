@@ -3,6 +3,8 @@
 
 extern crate alloc;
 
+#[cfg(feature = "sd-dma")]
+pub mod sd_dma;
 mod uart2_tx;
 
 use alloc::sync::Arc;
@@ -22,7 +24,7 @@ use embedded_hal::blocking::spi::Transfer;
 use embedded_hal::digital::v2::OutputPin;
 use spin::Mutex;
 #[cfg(feature = "sd-recording")]
-use stm32h7xx_hal::sdmmc::{self, SdCard, Sdmmc, SdmmcBlockDevice};
+use stm32h7xx_hal::sdmmc::{self, SdCard, Sdmmc};
 use stm32h7xx_hal::{
     adc,
     delay::Delay,
@@ -333,8 +335,10 @@ impl BatteryAdc {
     }
 }
 
-#[cfg(feature = "sd-recording")]
-type SdBlockDev = ForceSyncSend<SdmmcBlockDevice<Sdmmc<pac::SDMMC1, SdCard>>>;
+#[cfg(feature = "sd-dma")]
+type SdBlockDev = ForceSyncSend<sd_dma::Device>;
+#[cfg(all(feature = "sd-recording", not(feature = "sd-dma")))]
+type SdBlockDev = ForceSyncSend<sdmmc::SdmmcBlockDevice<Sdmmc<pac::SDMMC1, SdCard>>>;
 #[cfg(feature = "sd-recording")]
 pub type LogStorage = EMMCSectionStorage<SdBlockDev>;
 #[cfg(feature = "sd-recording")]
@@ -342,6 +346,7 @@ pub type Logger = EMMCLogger<SdBlockDev>;
 
 #[cfg(feature = "sd-recording")]
 fn init_sd_logger(
+    #[cfg(feature = "sd-dma")] cache: cortex_m::peripheral::SCB,
     sdmmc1: pac::SDMMC1,
     sdmmc1_rec: stm32h7xx_hal::rcc::rec::Sdmmc1,
     clocks: &stm32h7xx_hal::rcc::CoreClocks,
@@ -365,6 +370,9 @@ fn init_sd_logger(
     sdmmc.card().map_err(|_| CuError::from("no sd card"))?;
     defmt::info!("SD card detected at {} Hz", sdmmc.clock().raw());
 
+    #[cfg(feature = "sd-dma")]
+    let bd = ForceSyncSend::new(sd_dma::Device::new(sdmmc, cache));
+    #[cfg(not(feature = "sd-dma"))]
     let bd = ForceSyncSend::new(sdmmc.sdmmc_block_device());
 
     let (start, count) = match find_copper_partition(&bd) {
@@ -557,6 +565,8 @@ impl ResourceBundle for MicoAirH743 {
 
         #[cfg(feature = "sd-recording")]
         let logger = init_sd_logger(
+            #[cfg(feature = "sd-dma")]
+            cp.SCB,
             dp.SDMMC1,
             sdmmc1_rec,
             &ccdr.clocks,

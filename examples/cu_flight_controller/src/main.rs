@@ -11,7 +11,9 @@ use buddy_system_allocator::LockedHeap as StdHeap;
 use cortex_m::{asm, peripheral::SCB};
 use cortex_m_rt::{ExceptionFrame, entry, exception};
 #[cfg(feature = "sdcard-logging")]
-use cu_micoairh743::{LogStorage, Logger, MicoAirH743Id};
+use cu_micoairh743::{Logger, MicoAirH743Id};
+#[cfg(feature = "sdcard-logging")]
+mod deferred_sd;
 use cu29::prelude::*;
 use defmt_rtt as _;
 use panic_probe as _;
@@ -23,7 +25,12 @@ mod tasks;
 
 #[global_allocator]
 static ALLOC: StdHeap<32> = StdHeap::empty();
-static mut HEAP_MEM: [u8; 256 * 1024] = [0; 256 * 1024];
+const HEAP_BYTES: usize = 256 * 1024;
+static mut HEAP_MEM: [u8; HEAP_BYTES] = [0; HEAP_BYTES];
+#[cfg(feature = "sdcard-logging")]
+#[unsafe(link_section = ".sd_heap")]
+static mut SD_HEAP: core::mem::MaybeUninit<[u8; deferred_sd::POOL_BYTES]> =
+    core::mem::MaybeUninit::uninit();
 const HARDFAULT_MAGIC: u32 = 0xDEAD_BEEF;
 
 #[repr(C)]
@@ -79,22 +86,84 @@ fn main() -> ! {
 const SYSCLK_HZ: u64 = 400_000_000;
 
 fn run_controller() -> CuResult<()> {
+    #[cfg(feature = "sdcard-logging")]
+    let (queue, output) = deferred_sd::queue();
     // The board bundle enables the DWT cycle counter used by RobotClock.
     #[allow(unused_mut)]
     let mut resources = FlightControllerApp::prepare_resources()?.resources;
     let clock = RobotClock::from_counter_frequency(core::num::NonZeroU64::new(SYSCLK_HZ).unwrap());
     let builder = FlightControllerApp::builder().with_clock(clock);
     #[cfg(feature = "sdcard-logging")]
-    let builder = {
+    {
         let key = app_resources::bundles::FC.key::<Logger, _>(MicoAirH743Id::Logger);
-        let logger = resources.take(key)?.0;
-        builder.with_logger::<LogStorage, Logger>(Arc::new(Mutex::new(logger)))
-    };
-    let app = builder.with_resources(move |_| Ok(resources)).build()?;
-    #[cfg(feature = "textlogs")]
-    log_heap_stats("before-run");
-    app.run_until_shutdown()?;
-    Ok(())
+        let recorder = Arc::new(Mutex::new(deferred_sd::Recorder::new(
+            resources.take(key)?.0,
+            queue,
+        )));
+        let app = builder
+            .with_logger::<deferred_sd::PendingSection, _>(recorder.clone())
+            .with_resources(move |_| Ok(resources))
+            .build()?
+            .start()?;
+        let mut worker = recorder.lock().worker(output);
+        type RunningController = CuAppLifecycle<
+            deferred_sd::PendingSection,
+            deferred_sd::Recorder,
+            FlightControllerApp,
+            Running,
+        >;
+        static CONTROL: Mutex<Option<RunningController>> = Mutex::new(None);
+        static CONTROL_ERROR: Mutex<Option<CuError>> = Mutex::new(None);
+        fn control() {
+            let mut controller = CONTROL.lock();
+            let Some(app) = controller.as_mut() else {
+                return;
+            };
+            if let Err(error) = app.run_one_iteration() {
+                // Stop the tasks immediately, including when the worker yielded
+                // from inside a card transfer. Shutdown records go into the queue.
+                if let Some(app) = controller.take() {
+                    drop(app.stop());
+                }
+                *CONTROL_ERROR.lock() = Some(error);
+            }
+        }
+        *CONTROL.lock() = Some(app);
+
+        #[cfg(feature = "textlogs")]
+        log_heap_stats("before-run");
+        let mut iterations = 0u32;
+        loop {
+            control();
+            if let Some(error) = CONTROL_ERROR.lock().take() {
+                if let Err(flush) = worker.finish() {
+                    defmt::error!("SD shutdown: {}", flush);
+                }
+                return Err(error);
+            }
+            cu_micoairh743::sd_dma::service_with(
+                || {
+                    for _ in 0..4 {
+                        worker.service();
+                    }
+                },
+                control,
+            );
+            iterations = iterations.wrapping_add(1);
+            if iterations.is_multiple_of(16384) {
+                let (consumed, dropped) = worker.counts();
+                defmt::info!("SD drained={} dropped={}", consumed, dropped);
+            }
+        }
+    }
+    #[cfg(not(feature = "sdcard-logging"))]
+    {
+        let app = builder.with_resources(move |_| Ok(resources)).build()?;
+        #[cfg(feature = "textlogs")]
+        log_heap_stats("before-run");
+        app.run_until_shutdown()?;
+        Ok(())
+    }
 }
 
 fn report_last_fault() {
@@ -126,8 +195,23 @@ fn init_heap() {
     // SAFETY: HEAP_MEM is a dedicated static buffer for the allocator.
     unsafe {
         let start = core::ptr::addr_of_mut!(HEAP_MEM) as usize;
-        let size = core::mem::size_of::<[u8; 256 * 1024]>();
+        let size = HEAP_BYTES;
         ALLOC.lock().init(start, size);
+        #[cfg(feature = "sdcard-logging")]
+        {
+            // Startup owns RCC. Enable both D2 SRAM banks before the allocator
+            // writes their free list. Leave AXI RAM available for the main stack.
+            let rcc = &*stm32h7xx_hal::pac::RCC::ptr();
+            rcc.ahb2enr
+                .modify(|_, w| w.sram1en().set_bit().sram2en().set_bit());
+            let _ = rcc.ahb2enr.read();
+            cortex_m::asm::dsb();
+            let sd_start = core::ptr::addr_of_mut!(SD_HEAP) as usize;
+            ALLOC
+                .lock()
+                .add_to_heap(sd_start, sd_start + deferred_sd::POOL_BYTES);
+        }
+
         defmt::info!("Heap region start={} size={}", start, size);
     }
 }

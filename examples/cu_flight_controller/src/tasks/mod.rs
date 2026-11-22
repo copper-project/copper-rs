@@ -18,6 +18,9 @@ use cu29::units::si::f32::{Angle, AngularVelocity, Ratio};
 use cu29::units::si::ratio::ratio;
 use cu29::units::si::thermodynamic_temperature::degree_celsius;
 
+mod gyro_derivative;
+use gyro_derivative::GyroDerivative;
+
 const LOG_PERIOD_MS: u64 = 500;
 const HEAP_LOG_PERIOD_MS: u64 = 500;
 const VTX_HEARTBEAT_PERIOD_MS: u64 = 1000;
@@ -926,6 +929,8 @@ pub struct RateController {
     pitch_pid: AxisPid,
     #[reflect(ignore)]
     yaw_pid: AxisPid,
+    #[reflect(ignore)]
+    gyro_d: Option<GyroDerivative>,
     output_limit: f32,
     dt_fallback: CuDuration,
     i_throttle_min: f32,
@@ -945,6 +950,10 @@ impl Freezable for RateController {
         self.yaw_pid.freeze(encoder)?;
         Encode::encode(&self.airmode_active, encoder)?;
         Encode::encode(&self.last_time, encoder)?;
+        if let Some(filter) = &self.gyro_d {
+            Encode::encode(&filter.previous, encoder)?;
+            Encode::encode(&filter.output, encoder)?;
+        }
         Ok(())
     }
 
@@ -957,6 +966,10 @@ impl Freezable for RateController {
         self.yaw_pid.thaw(decoder)?;
         self.airmode_active = Decode::decode(decoder)?;
         self.last_time = Decode::decode(decoder)?;
+        if let Some(filter) = &mut self.gyro_d {
+            filter.previous = Decode::decode(decoder)?;
+            filter.output = Decode::decode(decoder)?;
+        }
         Ok(())
     }
 }
@@ -983,6 +996,14 @@ impl CuTask for RateController {
         let airmode_start_throttle =
             normalize_percent(cfg_f32(config, "airmode_start_throttle_percent", 25.0)?);
 
+        let cutoff = cfg_f32(config, "dterm_lowpass_hz", 0.0)?;
+        if !cutoff.is_finite() || cutoff < 0.0 {
+            return Err(CuError::from(
+                "dterm_lowpass_hz must be finite and nonnegative",
+            ));
+        }
+        let gyro_d = (cutoff > 0.0).then(|| GyroDerivative::new(cutoff, kd));
+        let error_kd = if gyro_d.is_some() { 0.0 } else { kd };
         let pid = |p: f32, i: f32, d: f32| {
             PIDController::new(
                 p,
@@ -998,9 +1019,10 @@ impl CuTask for RateController {
         };
 
         Ok(Self {
-            roll_pid: AxisPid::new(pid(kp, ki, kd)),
-            pitch_pid: AxisPid::new(pid(kp, ki, kd)),
+            roll_pid: AxisPid::new(pid(kp, ki, error_kd)),
+            pitch_pid: AxisPid::new(pid(kp, ki, error_kd)),
             yaw_pid: AxisPid::new(pid(kp_yaw, ki_yaw, kd_yaw)),
+            gyro_d,
             output_limit,
             dt_fallback,
             i_throttle_min,
@@ -1022,6 +1044,14 @@ impl CuTask for RateController {
         let imu_tov = expect_tov_time(imu_msg.tov)?;
         let _ctrl_tov = expect_tov_time(ctrl_msg.tov)?;
         let output_tov = Tov::Time(imu_tov);
+        if (!ctrl_msg.payload().is_some_and(|ctrl| ctrl.armed)
+            || imu_msg.payload().is_none()
+            || setpoint_msg.payload().is_none())
+            && let Some(filter) = &mut self.gyro_d
+        {
+            filter.previous = None;
+            filter.output = [0.0; 2];
+        }
         let Some(setpoint) = setpoint_msg.payload() else {
             output.tov = output_tov;
             status_if_not_firmware!(output.metadata, "rate no-sp");
@@ -1077,9 +1107,17 @@ impl CuTask for RateController {
         let pitch_measure = imu.gyro_y.value - setpoint.pitch.get::<radian_per_second>();
         let yaw_measure = imu.gyro_z.value - setpoint.yaw.get::<radian_per_second>();
 
-        let roll_out = self.roll_pid.update(roll_measure, dt).unwrap_or_default();
-        let pitch_out = self.pitch_pid.update(pitch_measure, dt).unwrap_or_default();
+        let mut roll_out = self.roll_pid.update(roll_measure, dt).unwrap_or_default();
+        let mut pitch_out = self.pitch_pid.update(pitch_measure, dt).unwrap_or_default();
         let yaw_out = self.yaw_pid.update(yaw_measure, dt).unwrap_or_default();
+        if let Some(filter) = &mut self.gyro_d {
+            let damping = filter.update(imu_tov.as_nanos(), [imu.gyro_x.value, imu.gyro_y.value]);
+            for (axis, d) in [&mut roll_out, &mut pitch_out].into_iter().zip(damping) {
+                axis.d = d.clamp(-self.output_limit, self.output_limit);
+                axis.output =
+                    (axis.p + axis.i + axis.d).clamp(-self.output_limit, self.output_limit);
+            }
+        }
         let roll_cmd = roll_out.output;
         let pitch_cmd = pitch_out.output;
         let yaw_cmd = yaw_out.output;
