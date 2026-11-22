@@ -70,7 +70,7 @@ sim-mkl:
   cargo --config examples/cu_flight_controller/.cargo/config.toml run --release -p cu-flight-controller --no-default-features --features vitfly-mkl,forest-world --bin quad-sim
 
 # Run the replay-backed remote debug server for the flight controller log.
-resim-mcu-debug debug_base="copper/examples/cu_flight_controller/debug/v1" log="logs/flight_controller_sim.copper" replay_log="logs/flight_controller_resim.copper":
+resim-mcu-debug debug_base="copper/examples/cu_flight_controller/debug/v1" log="logs/flight_controller_sim.copper" replay_log="logs/flight_controller_resim.copper" recording="sim":
   #!/usr/bin/env bash
   set -euo pipefail
   example_dir="{{justfile_directory()}}"
@@ -82,8 +82,13 @@ resim-mcu-debug debug_base="copper/examples/cu_flight_controller/debug/v1" log="
   if [[ "$replay_log" != /* ]]; then
     replay_log="${example_dir}/${replay_log}"
   fi
+  case "{{recording}}" in
+    firmware) features=firmware-replay ;;
+    sim) features=rerun ;;
+    *) echo "recording must be sim or firmware" >&2; exit 2 ;;
+  esac
   cd "{{ROOT}}"
-  cargo --config examples/cu_flight_controller/.cargo/config.toml run --profile debug-optimized -p cu-flight-controller --no-default-features --features rerun --bin quad-resim -- \
+  cargo --config examples/cu_flight_controller/.cargo/config.toml run --profile debug-optimized -p cu-flight-controller --no-default-features --features "$features" --bin quad-resim -- \
     --debug-base "{{debug_base}}" \
     --log-base "$log" \
     --replay-log-base "$replay_log"

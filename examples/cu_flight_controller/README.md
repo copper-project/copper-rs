@@ -152,6 +152,18 @@ cd examples/cu_flight_controller
 just resim-mcu-debug
 ```
 
+For a firmware recording downloaded with `just probe-logs`, select the firmware
+graph with the last argument. Pass the slab base name without `_0`. For example,
+
+```bash
+just resim-mcu-debug copper/examples/cu_flight_controller/run34/debug/v1 \
+  logs/flight-07e19bf234b6-run34.copper logs/run34-flight-resim.copper firmware
+```
+
+Connect TimeTraveler to the namespace in the first argument. Use Messages for
+recorded values. Recomputed state between keyframes can differ when the firmware
+omitted a sensor payload, such as the magnetometer.
+
 The MCU debug recipe enables the optional `rerun` feature. In TimeTraveler, open
 Messages → `ahrs` → `AhrsPose`, or State → `ahrs` → `CuAhrsDebugState`, and use
 `+` to open a 3D view. Forward, Right, and Down arrows rotate with the recorded
