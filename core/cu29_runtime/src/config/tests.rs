@@ -2418,6 +2418,20 @@ fn test_resolve_subsystem_config_for_instance_rejects_unknown_path() {
     );
 }
 
+#[cfg(not(feature = "std"))]
+#[test]
+fn no_std_ignores_thread_pools_in_shared_configs() {
+    let config = CuConfig::deserialize_ron(
+        r#"(runtime: (rate_target_hz: 1000, thread_pools: [(id: "rt", threads: 2)]), tasks: [])"#,
+    )
+    .unwrap();
+    let runtime = config.runtime.as_ref().unwrap();
+    assert_eq!(runtime.rate_target_hz, Some(1000));
+    assert!(runtime.thread_pools().is_empty());
+    assert!(!config.serialize_ron().unwrap().contains("thread_pools"));
+}
+
+#[cfg(feature = "std")]
 #[test]
 fn test_thread_pools_parse_and_round_trip() {
     let txt = r#"(
@@ -2486,6 +2500,7 @@ fn test_background_flag_and_pool_forms() {
     assert_eq!(c.background_pool(), DEFAULT_BACKGROUND_POOL);
 }
 
+#[cfg(feature = "std")]
 #[test]
 fn test_thread_pool_validation_rejects_bad_configs() {
     let cases = [

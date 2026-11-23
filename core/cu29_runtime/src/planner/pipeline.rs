@@ -49,10 +49,12 @@ impl CuPlanner for Pipeline {
         let max_in_flight = self.max_in_flight.unwrap_or(
             u32::try_from(capacity).map_err(|_| CuError::from("Pipeline capacity exceeds u32"))?,
         );
-        let pool = config
-            .runtime
-            .as_ref()
-            .and_then(|runtime| runtime.thread_pools.iter().find(|pool| pool.id == RT_POOL));
+        let pool = config.runtime.as_ref().and_then(|runtime| {
+            runtime
+                .thread_pools()
+                .iter()
+                .find(|pool| pool.id == RT_POOL)
+        });
         let mut missions = BTreeMap::new();
         for (mission, graph) in mission_graphs(config) {
             let mut assembled = assemble_runtime_plan_with_planner(config, graph, &Serial)?;
