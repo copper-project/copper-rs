@@ -161,7 +161,8 @@ impl<const N: usize> CuSrcTask for CuGStreamer<N> {
         let config = config.ok_or_else(|| CuError::from("No config provided."))?;
 
         let pipeline = if let Some(pipeline_str) = config.get::<String>("pipeline")? {
-            debug!("Creating with pipeline: {}", &pipeline_str);
+            // Pipeline properties can contain credentials.
+            debug!("Creating GStreamer pipeline.");
             let pipeline = parse::launch(pipeline_str.as_str())
                 .map_err(|e| CuError::new_with_cause("Failed to parse pipeline.", e))?;
             Ok(pipeline)
