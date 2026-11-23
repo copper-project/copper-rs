@@ -65,6 +65,15 @@ pr-check:
 	cargo +stable test -p cu29-runtime --test replay_primitives --features cu29/async-cl-io
 	just --justfile examples/cu_logstream_demo/justfile check
 
+# Show unvalidated Rust library calls made directly by Copper core in RP2350 blinky.
+ferrocene-audit:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	mkdir -p "{{ROOT}}/target/ferrocene"
+	cd "{{ROOT}}/examples/cu_rp2350_skeleton"
+	export CARGO_BUILD_WARNINGS=warn
+	criticalup run --strict cargo rustc --bin cu-blinky --no-default-features --features firmware --target thumbv8m.main-none-eabihf --message-format=json -- --cfg ferrocene_audit --force-warn=ferrocene::unvalidated | tee "{{ROOT}}/target/ferrocene/blinky.jsonl" | python3 "{{ROOT}}/support/ci/ferrocene_report.py"
+
 # Run the weekly beta checks on this host.
 weekly:
 	cargo +beta fmt --all -- --check

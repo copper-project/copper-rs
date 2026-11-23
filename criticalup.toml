@@ -1,0 +1,10 @@
+manifest-version = 1
+
+[products.ferrocene]
+release = "stable-26.08.0"
+packages = [
+    "cargo-${rustc-host}",
+    "rustc-${rustc-host}",
+    "rust-std-${rustc-host}",
+    "rust-std-thumbv8m.main-none-eabihf",
+]
