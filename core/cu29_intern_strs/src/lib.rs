@@ -39,19 +39,30 @@ impl InternDb {
     }
 }
 
-fn parent_n_times(path: &Path, n: usize) -> Option<PathBuf> {
-    let mut result = Some(path.to_path_buf());
-    for _ in 0..n {
-        result = result?.parent().map(PathBuf::from);
-    }
-    result
+fn log_index_dir(out_dir: &Path) -> PathBuf {
+    let legacy_root = out_dir.ancestors().nth(3).expect("invalid LOG_INDEX_DIR");
+    // Cargo 1.100 split <package>-<hash> into <package>/<hash>.
+    let split_layout = legacy_root.ends_with("build")
+        && out_dir.ends_with("out")
+        && out_dir
+            .parent()
+            .and_then(Path::file_name)
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.bytes().all(|b| b.is_ascii_hexdigit()));
+    let profile = if split_layout {
+        legacy_root
+            .parent()
+            .expect("missing Cargo profile directory")
+    } else {
+        legacy_root
+    };
+    profile.join(INDEX_DIR_NAME)
 }
 
-/// Convenience function to returns the default path for the log index directory.
+/// Returns the default path for the log index directory.
 pub fn default_log_index_dir() -> PathBuf {
-    let outdir = std::env::var("LOG_INDEX_DIR").expect("no LOG_INDEX_DIR system variable set, be sure build.rs sets it, see cu29_log/build.rs for example.");
-    let outdir_path = Path::new(&outdir);
-    parent_n_times(outdir_path, 3).unwrap().join(INDEX_DIR_NAME)
+    let outdir = std::env::var_os("LOG_INDEX_DIR").expect("no LOG_INDEX_DIR system variable set, be sure build.rs sets it, see cu29_log/build.rs for example.");
+    log_index_dir(Path::new(&outdir))
 }
 
 fn database_path(base: &Path) -> PathBuf {
@@ -172,4 +183,26 @@ fn load_db_shared(path: &Path) -> std::result::Result<InternDb, anyhow::Error> {
 #[allow(dead_code)]
 pub fn record_callsite(filename: &str, line_number: u32) -> Option<IndexType> {
     intern_string(format!("{filename}:{line_number}").as_str())
+}
+
+#[cfg(test)]
+mod layout_tests {
+    use super::*;
+
+    #[test]
+    fn log_index_is_shared_at_profile_level() {
+        for profile in ["target/debug", "custom/thumbv8m/release", "target/build"] {
+            let profile = Path::new(profile);
+            for suffix in [
+                "build/my-app-a1b2/out",
+                "build/my-app/a1b2/out",
+                "build/build/a1b2/out",
+            ] {
+                assert_eq!(
+                    log_index_dir(&profile.join(suffix)),
+                    profile.join(INDEX_DIR_NAME)
+                );
+            }
+        }
+    }
 }
