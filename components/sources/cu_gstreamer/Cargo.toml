@@ -29,6 +29,7 @@ serde = { workspace = true, optional = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 rerun = { workspace = true }
+url = "2"
 
 [build-dependencies]
 cu29-build = { workspace = true }
@@ -43,3 +44,7 @@ gst = [
   "dep:gstreamer",
   "dep:gstreamer-app",
 ]
+
+[[example]]
+name = "rtsp"
+required-features = ["gst"]

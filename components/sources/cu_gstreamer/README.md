@@ -30,3 +30,16 @@ When you connect this driver to the rest of the system you need to use the `cu_g
 ```
 
 You can see a small test application in the `tests/` folder on github.
+
+### RTSP credentials from the environment
+
+The [RTSP example](examples/rtsp.rs) builds the camera URL from `CAMERA_URL`
+(e.g. `rtsp://camera.local/live`), `CAMERA_USER`, and `CAMERA_PASSWORD`.
+It sets `.save_effective_config(false)` to omit the configuration snapshot from
+log metadata. Replay that depends on runtime overrides needs a separately supplied config.
+
+With those variables exported, run from this component's directory:
+
+```sh
+cargo run --features gst --example rtsp
+```

@@ -1,0 +1,6 @@
+(
+    tasks: [
+        (id: "camera", type: "cu_gstreamer::CuDefaultGStreamer", config: {"caps": "video/x-raw"}),
+    ],
+    cnx: [(src: "camera", dst: "__nc__", msg: "cu_gstreamer::CuGstBuffer")],
+)

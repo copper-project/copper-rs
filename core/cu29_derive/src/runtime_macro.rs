@@ -4202,11 +4202,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 ::cu29::logcodec::set_effective_config_ron::<super::#mission_mod::CuStampedDataSet>(&effective_config_ron);
             }
         };
-        let metadata_ron = if static_config {
-            quote!(String::new())
-        } else {
-            quote!(config.serialize_ron()?)
-        };
         let build_with_resources_fn = quote! {
             #build_with_resources_sig {
                 let AppResources {
@@ -4223,7 +4218,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #clock_maintenance_compat
                 let log_context = match log_context {
                     Some(context) => context,
-                    None => Self::prepare_log_metadata::<S, L>(&unified_logger, &config, instance_id)?,
+                    None => Self::prepare_log_metadata::<S, L>(&unified_logger, &config, instance_id, true)?,
                 };
                 #early_structured_logger_init
 
@@ -4367,9 +4362,17 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 #[doc(hidden)]
                 fn prepare_log_metadata<S: SectionStorage, L: UnifiedLogWrite<S>>(
-                    logger: &Arc<Mutex<L>>, config: &CuConfig, instance_id: u32,
+                    logger: &Arc<Mutex<L>>,
+                    config: &CuConfig,
+                    instance_id: u32,
+                    save_effective_config: bool,
                 ) -> CuResult<cu29::prelude::SectionContext> {
-                    let metadata = Self::application_log_metadata(#metadata_ron);
+                    let effective_config_ron = if !#static_config && save_effective_config {
+                        config.serialize_ron()?
+                    } else {
+                        String::new()
+                    };
+                    let metadata = Self::application_log_metadata(effective_config_ron);
                     #metadata_log_lock
                     Self::seal_log_metadata::<S, L>(&mut *logger, &metadata)?;
                     logger.construction_context(instance_id, #mission_index)
@@ -4795,6 +4798,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         unified_logger: Arc<Mutex<L>>,
                         instance_id: u32,
                         config_override: Option<CuConfig>,
+                        save_effective_config: bool,
                         resources_factory: R,
                         sim_callback: Option<&'a mut F>,
                         #builder_logstream_field
@@ -4821,6 +4825,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             unified_logger: Arc::new(Mutex::new(cu29::prelude::NoopLogger::new())),
                             instance_id: 0,
                             config_override: None,
+                            save_effective_config: true,
                             resources_factory: #mission_mod::resources_instanciator as fn(&#resource_config_ty) -> CuResult<ResourceManager>,
                             sim_callback: None,
                             #builder_logstream_init
@@ -4856,6 +4861,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         unified_logger: Arc<Mutex<L>>,
                         instance_id: u32,
                         config_override: Option<CuConfig>,
+                        save_effective_config: bool,
                         resources_factory: R,
                         #builder_logstream_field
                         #builder_clock_reference_field
@@ -4877,6 +4883,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             unified_logger: Arc::new(Mutex::new(cu29::prelude::NoopLogger::new())),
                             instance_id: 0,
                             config_override: None,
+                            save_effective_config: true,
                             resources_factory: #mission_mod::resources_instanciator as fn(&#resource_config_ty) -> CuResult<ResourceManager>,
                             #builder_logstream_init
                             #builder_clock_reference_none
@@ -5070,6 +5077,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         unified_logger,
                         instance_id: self.instance_id,
                         config_override: self.config_override,
+                        save_effective_config: self.save_effective_config,
                         resources_factory: self.resources_factory,
                         #builder_sim_callback_field_copy
                         #builder_logstream_copy
@@ -5095,12 +5103,21 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         unified_logger: self.unified_logger,
                         instance_id: self.instance_id,
                         config_override: self.config_override,
+                        save_effective_config: self.save_effective_config,
                         resources_factory,
                         #builder_sim_callback_field_copy
                         #builder_logstream_copy
                         #builder_clock_reference_copy
                         _storage: core::marker::PhantomData,
                     }
+                }
+
+                /// Save the effective configuration in log metadata (default: true).
+                /// Static-config builds always omit it. When omitted, offline tools
+                /// may need the runtime configuration supplied separately.
+                pub fn save_effective_config(mut self, save: bool) -> Self {
+                    self.save_effective_config = save;
+                    self
                 }
 
                 #builder_with_config_method
@@ -5122,7 +5139,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 fn build_impl(self) -> CuResult<#application_name> {
 
                     let (config, config_source) = #builder_prepare_config_call;
-                    let log_context = #application_name::prepare_log_metadata::<S, L>(&self.unified_logger, &config, self.instance_id)?;
+                    let log_context = #application_name::prepare_log_metadata::<S, L>(
+                        &self.unified_logger, &config, self.instance_id, self.save_effective_config,
+                    )?;
                     #[allow(unused_mut)]
                     let mut resources = (self.resources_factory)(#resource_config_ref)?;
                     #builder_clock_setup
@@ -5310,7 +5329,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 pub(super) fn start_supervised<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static>(
                     settings: &mut ::cu29::supervisor::MissionSettings<'_>, logger: Arc<Mutex<L>>
                 ) -> CuResult<::cu29::app::CuAppLifecycle<S,L,#application_name,::cu29::app::Running>> {
-                    let mut builder = #application_name::builder().with_logger::<S,L>(logger).with_instance_id(settings.instance_id);
+                    let mut builder = #application_name::builder()
+                        .with_logger::<S,L>(logger)
+                        .with_instance_id(settings.instance_id)
+                        .save_effective_config(settings.save_effective_config);
                     builder.clock = settings.clock.clone();
                     #config
                     #reference

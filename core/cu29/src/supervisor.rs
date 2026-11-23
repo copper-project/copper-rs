@@ -26,6 +26,7 @@ type Reference = (
 pub struct MissionSettings<'a> {
     pub clock: Option<RobotClock>,
     pub instance_id: u32,
+    pub save_effective_config: bool,
     pub resources: Option<ResourceFactory<'a>>,
     #[cfg(all(feature = "std", not(feature = "static-config")))]
     pub config: Option<cu29_runtime::config::CuConfig>,
@@ -63,6 +64,7 @@ impl<M> Default for SupervisorBuilder<'_, M> {
                 #[cfg(not(all(feature = "std", not(feature = "clock-sync"))))]
                 clock: None,
                 instance_id: 0,
+                save_effective_config: true,
                 resources: None,
                 #[cfg(all(feature = "std", not(feature = "static-config")))]
                 config: None,
@@ -137,6 +139,13 @@ impl<'a, M: ConfiguredMission, S: SectionStorage + 'static, L: UnifiedLogWrite<S
     #[cfg(all(feature = "std", not(feature = "static-config")))]
     pub fn with_config(mut self, config: cu29_runtime::config::CuConfig) -> Self {
         self.settings.config = Some(config);
+        self
+    }
+
+    /// Save each mission's effective configuration in log metadata (default: true).
+    /// Static-config builds always omit it.
+    pub fn save_effective_config(mut self, save: bool) -> Self {
+        self.settings.save_effective_config = save;
         self
     }
 
