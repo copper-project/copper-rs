@@ -1964,7 +1964,7 @@ pub struct LoggingConfig {
     pub keyframe_interval: Option<u32>,
 
     /// Named log codec specs reusable across task output bindings.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default = "Vec::new", skip_serializing_if = "Vec::is_empty")]
     pub codecs: Vec<LoggingCodecSpec>,
 }
 
