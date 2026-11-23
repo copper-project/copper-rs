@@ -58,7 +58,9 @@ impl ComponentConfig {
     {
         let ComponentConfig(config) = self;
         match config.get(key) {
-            Some(value) => T::try_from(value).map(Some),
+            Some(value) => T::try_from(value)
+                .map(Some)
+                .map_err(|err| err.with_key(key)),
             None => Ok(None),
         }
     }
@@ -634,22 +636,20 @@ macro_rules! impl_try_from_value_for_int {
 
                 fn try_from(value: &Value) -> Result<Self, Self::Error> {
                     if let Value(RonValue::Number(num)) = value {
-                        match num {
-                            Number::I8(n) => Ok(*n as $target),
-                            Number::I16(n) => Ok(*n as $target),
-                            Number::I32(n) => Ok(*n as $target),
-                            Number::I64(n) => Ok(*n as $target),
-                            Number::U8(n) => Ok(*n as $target),
-                            Number::U16(n) => Ok(*n as $target),
-                            Number::U32(n) => Ok(*n as $target),
-                            Number::U64(n) => Ok(*n as $target),
-                            Number::F32(_) | Number::F64(_) => {
-                                Err(ConfigError::type_mismatch("integer", value))
-                            }
-                            _ => {
-                                Err(ConfigError::type_mismatch("integer", value))
-                            }
-                        }
+                        let integer = match num {
+                            Number::I8(n) => i128::from(*n),
+                            Number::I16(n) => i128::from(*n),
+                            Number::I32(n) => i128::from(*n),
+                            Number::I64(n) => i128::from(*n),
+                            Number::U8(n) => i128::from(*n),
+                            Number::U16(n) => i128::from(*n),
+                            Number::U32(n) => i128::from(*n),
+                            Number::U64(n) => i128::from(*n),
+                            _ => return Err(ConfigError::type_mismatch("integer", value)),
+                        };
+                        <$target>::try_from(integer).map_err(|_| ConfigError {
+                            message: format!("Integer {integer} is out of range for {}", stringify!($target)),
+                        })
                     } else {
                         Err(ConfigError::type_mismatch("integer", value))
                     }
