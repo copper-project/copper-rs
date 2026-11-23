@@ -157,6 +157,7 @@ pub fn cu29::supervisor::Supervisor<'_, M, S, L>::drop(&mut self)
 pub struct cu29::supervisor::SupervisorBuilder<'a, M, S, L>
 impl<'a, M: ConfiguredMission, S: cu29_unifiedlog::SectionStorage + 'static, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static> cu29::supervisor::SupervisorBuilder<'a, M, S, L>
 pub fn cu29::supervisor::SupervisorBuilder<'a, M, S, L>::build(self) -> cu29_traits::CuResult<cu29::supervisor::Supervisor<'a, M, S, L>>
+pub fn cu29::supervisor::SupervisorBuilder<'a, M, S, L>::save_effective_config(self, save: bool) -> Self
 pub fn cu29::supervisor::SupervisorBuilder<'a, M, S, L>::with_clock(self, clock: cu29_clock::RobotClock) -> Self
 pub fn cu29::supervisor::SupervisorBuilder<'a, M, S, L>::with_config(self, config: cu29_runtime::config::CuConfig) -> Self
 pub fn cu29::supervisor::SupervisorBuilder<'a, M, S, L>::with_instance_id(self, instance_id: u32) -> Self

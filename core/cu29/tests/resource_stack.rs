@@ -75,3 +75,47 @@ fn runtime_configuration_cannot_rewire_compiled_inputs() {
         .insert("value".into(), "base.other".into());
     assert!(default::resources_instanciator(&config).is_err());
 }
+
+#[cfg(feature = "std")]
+#[test]
+fn resources_build_with_the_effective_config_omitted_from_metadata()
+-> Result<(), Box<dyn std::error::Error>> {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("private.copper");
+    let builder = App::builder()
+        .save_effective_config(false)
+        .with_log_path(&path, None)?;
+    #[cfg(not(feature = "static-config"))]
+    let builder = {
+        let mut config = CuConfig::deserialize_ron(include_str!("resource_stack.ron"))?;
+        let graph = config.get_graph_mut(None)?;
+        let source = graph.get_node_id_by_name("source").unwrap();
+        graph
+            .get_node_mut(source)
+            .unwrap()
+            .set_param("credential", "test-only".to_owned());
+        builder.with_config(config)
+    };
+    let app = builder
+        .with_resources(|config| {
+            #[cfg(not(feature = "static-config"))]
+            assert_eq!(
+                config
+                    .find_task_node(None, "source")
+                    .unwrap()
+                    .get_instance_config()
+                    .unwrap()
+                    .get::<String>("credential")?
+                    .as_deref(),
+                Some("test-only")
+            );
+            default::resources_instanciator(config)
+        })
+        .build()?;
+    drop(app);
+    let metadata = UnifiedLoggerRead::new(&path)?
+        .application_metadata()?
+        .unwrap();
+    assert!(metadata.effective_config_ron.is_empty());
+    Ok(())
+}
