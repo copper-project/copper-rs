@@ -103,12 +103,12 @@ impl core::ops::Deref for LeaseTable {
     }
 }
 
-struct Claims {
-    leases: Arc<LeaseTable>,
+struct Claims<'a> {
+    leases: &'a LeaseTable,
     held: [Option<(usize, usize)>; LEASES],
 }
-impl Claims {
-    fn new(leases: Arc<LeaseTable>) -> Self {
+impl<'a> Claims<'a> {
+    fn new(leases: &'a LeaseTable) -> Self {
         Self {
             leases,
             held: [None; LEASES],
@@ -151,7 +151,7 @@ impl Claims {
         }
     }
 }
-impl Drop for Claims {
+impl Drop for Claims<'_> {
     fn drop(&mut self) {
         for &(slot, old) in self.held.iter().flatten() {
             self.leases[slot].store(old, Ordering::Release);
@@ -907,7 +907,7 @@ impl<B: ByteStorage> ByteLogger<B> {
         Ok((header.allocated, header.next_section))
     }
     fn data_header(&self, offset: u64) -> CuResult<SectionHeader> {
-        let mut claims = Claims::new(self.leases.clone());
+        let mut claims = Claims::new(&self.leases);
         if let Some(slot) = self
             .leases
             .iter()
@@ -1387,7 +1387,8 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
             return Err(CuError::from("Log is full"));
         }
         // Claim every affected encoder before any write. A failed preflight restores all leases.
-        let mut claims = Claims::new(self.leases.clone());
+        let leases = self.leases.clone();
+        let mut claims = Claims::new(&leases);
         let mut cursor = self.header.head_section;
         if last_overlap != 0 {
             let mut discard_build = false;
