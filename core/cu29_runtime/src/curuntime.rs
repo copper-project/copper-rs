@@ -1636,6 +1636,10 @@ pub type CopperListsManager<P, const NBCL: usize> = AsyncCopperListsManager<P, N
 #[doc(hidden)]
 pub type CopperListsManager<P, const NBCL: usize> = SyncCopperListsManager<P, NBCL>;
 
+#[doc(hidden)]
+#[cfg(any(feature = "static-config", test))]
+pub mod fixed_keyframe;
+
 /// Manages bounded task-state keyframe capture and output.
 pub struct KeyFramesManager {
     distributed: bool,
@@ -1685,6 +1689,12 @@ impl Writer for PreallocatedVecWriter<'_> {
         self.0.extend_from_slice(bytes);
         Ok(())
     }
+}
+
+fn frozen_payload_size(item: &impl Freezable) -> Result<usize, EncodeError> {
+    let mut encoder = EncoderImpl::new(SizeWriter::default(), bincode::config::standard());
+    BincodeAdapter(item).encode(&mut encoder)?;
+    Ok(encoder.into_writer().bytes_written)
 }
 
 impl KeyFramesManager {
@@ -1780,11 +1790,8 @@ impl KeyFramesManager {
         if self.inner.is_none() && !self.distributed {
             return Ok(());
         }
-        let mut sizer = EncoderImpl::new(SizeWriter::default(), bincode::config::standard());
-        BincodeAdapter(item)
-            .encode(&mut sizer)
+        let payload_bytes = frozen_payload_size(item)
             .map_err(|_| CuError::from("Failed to size component keyframe state"))?;
-        let payload_bytes = sizer.into_writer().bytes_written as usize;
         if self.distributed {
             self.capture_capacities.push(
                 (KEYFRAME_FRAME_HEADER_LEN + payload_bytes)
