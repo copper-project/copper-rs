@@ -145,6 +145,7 @@ impl<S: ConfigRead> Config<S> {
             .scalar(key)
             .map(|value| T::try_from(value.borrow()))
             .transpose()
+            .map_err(|err| err.with_key(key))
     }
     /// Deserialize a structured parameter directly from the backing storage.
     pub fn get_value<T: DeserializeOwned>(&self, key: &str) -> Result<Option<T>, ConfigError> {
@@ -722,22 +723,20 @@ macro_rules! impl_try_from_value_for_int {
 
                 fn try_from(value: &Value) -> Result<Self, Self::Error> {
                     if let Value(RonValue::Number(num)) = value {
-                        match num {
-                            Number::I8(n) => Ok(*n as $target),
-                            Number::I16(n) => Ok(*n as $target),
-                            Number::I32(n) => Ok(*n as $target),
-                            Number::I64(n) => Ok(*n as $target),
-                            Number::U8(n) => Ok(*n as $target),
-                            Number::U16(n) => Ok(*n as $target),
-                            Number::U32(n) => Ok(*n as $target),
-                            Number::U64(n) => Ok(*n as $target),
-                            Number::F32(_) | Number::F64(_) => {
-                                Err(ConfigError::type_mismatch("integer", value))
-                            }
-                            _ => {
-                                Err(ConfigError::type_mismatch("integer", value))
-                            }
-                        }
+                        let integer = match num {
+                            Number::I8(n) => i128::from(*n),
+                            Number::I16(n) => i128::from(*n),
+                            Number::I32(n) => i128::from(*n),
+                            Number::I64(n) => i128::from(*n),
+                            Number::U8(n) => i128::from(*n),
+                            Number::U16(n) => i128::from(*n),
+                            Number::U32(n) => i128::from(*n),
+                            Number::U64(n) => i128::from(*n),
+                            _ => return Err(ConfigError::type_mismatch("integer", value)),
+                        };
+                        <$target>::try_from(integer).map_err(|_| ConfigError {
+                            message: format!("Integer {integer} is out of range for {}", stringify!($target)),
+                        })
                     } else {
                         Err(ConfigError::type_mismatch("integer", value))
                     }
