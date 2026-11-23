@@ -715,6 +715,16 @@ macro_rules! impl_from_value_for_int {
 
 impl_from_value_for_int!(u8, i8, u16, i16, u32, i32, u64, i64);
 
+fn checked_integer<T, S>(value: S) -> Result<T, ConfigError>
+where
+    T: TryFrom<S>,
+    S: Copy + Display,
+{
+    T::try_from(value).map_err(|_| ConfigError {
+        message: format!("Integer {value} is out of range for {}", type_name::<T>()),
+    })
+}
+
 macro_rules! impl_try_from_value_for_int {
     ($($target:ty),* $(,)?) => {
         $(
@@ -723,20 +733,17 @@ macro_rules! impl_try_from_value_for_int {
 
                 fn try_from(value: &Value) -> Result<Self, Self::Error> {
                     if let Value(RonValue::Number(num)) = value {
-                        let integer = match num {
-                            Number::I8(n) => i128::from(*n),
-                            Number::I16(n) => i128::from(*n),
-                            Number::I32(n) => i128::from(*n),
-                            Number::I64(n) => i128::from(*n),
-                            Number::U8(n) => i128::from(*n),
-                            Number::U16(n) => i128::from(*n),
-                            Number::U32(n) => i128::from(*n),
-                            Number::U64(n) => i128::from(*n),
-                            _ => return Err(ConfigError::type_mismatch("integer", value)),
-                        };
-                        <$target>::try_from(integer).map_err(|_| ConfigError {
-                            message: format!("Integer {integer} is out of range for {}", stringify!($target)),
-                        })
+                        match num {
+                            Number::I8(n) => checked_integer(*n),
+                            Number::I16(n) => checked_integer(*n),
+                            Number::I32(n) => checked_integer(*n),
+                            Number::I64(n) => checked_integer(*n),
+                            Number::U8(n) => checked_integer(*n),
+                            Number::U16(n) => checked_integer(*n),
+                            Number::U32(n) => checked_integer(*n),
+                            Number::U64(n) => checked_integer(*n),
+                            _ => Err(ConfigError::type_mismatch("integer", value)),
+                        }
                     } else {
                         Err(ConfigError::type_mismatch("integer", value))
                     }
