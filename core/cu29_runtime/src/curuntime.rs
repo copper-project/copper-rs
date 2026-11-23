@@ -2709,22 +2709,11 @@ impl KeyFrame {
     fn add_frozen_task(&mut self, task: &impl Freezable) -> Result<usize, EncodeError> {
         let cfg = bincode::config::standard();
         let start = self.serialized_tasks.len();
-        let payload_offset =
-            start
-                .checked_add(KEYFRAME_FRAME_HEADER_LEN)
-                .ok_or(EncodeError::Other(
-                    "keyframe component frame offset overflow",
-                ))?;
-        if payload_offset > self.serialized_tasks.capacity() {
-            return Err(EncodeError::UnexpectedEnd);
-        }
+        let mut writer = PreallocatedVecWriter(&mut self.serialized_tasks);
+        writer.write(&[0; KEYFRAME_FRAME_HEADER_LEN])?;
+        let payload_offset = writer.0.len();
 
-        self.serialized_tasks.resize(payload_offset, 0);
-        let length_offset = start;
-        self.serialized_tasks[length_offset..payload_offset].fill(0);
-
-        let mut encoder =
-            EncoderImpl::<_, _>::new(PreallocatedVecWriter(&mut self.serialized_tasks), cfg);
+        let mut encoder = EncoderImpl::<_, _>::new(writer, cfg);
         if let Err(error) = BincodeAdapter(task).encode(&mut encoder) {
             self.serialized_tasks.truncate(start);
             return Err(error);
@@ -2736,10 +2725,7 @@ impl KeyFrame {
                 "keyframe component snapshot exceeds the u32 frame limit".to_string(),
             )
         })?;
-        self.serialized_tasks
-            .truncate(payload_offset + payload_len as usize);
-        self.serialized_tasks[length_offset..payload_offset]
-            .copy_from_slice(&payload_len.to_le_bytes());
+        self.serialized_tasks[start..payload_offset].copy_from_slice(&payload_len.to_le_bytes());
         Ok(self.serialized_tasks.len() - start)
     }
 }
