@@ -8,7 +8,6 @@ pub(crate) use cu29_log_runtime::log;
 
 #[allow(unused_imports)]
 #[cfg(debug_assertions)]
-#[cfg(feature = "std")]
 pub(crate) use cu29_log_runtime::log_debug_mode;
 
 #[allow(unused_imports)]
