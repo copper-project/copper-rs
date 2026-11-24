@@ -1,46 +1,20 @@
 //! Inline capture storage for generated static-config no_std applications.
 use super::{
-    BincodeAdapter, CuError, CuResult, CuTime, Encode, EncodeError, EncoderImpl, Freezable,
-    KEYFRAME_FRAME_HEADER_LEN, KEYFRAME_PAYLOAD_HEADER, RegionWriter, RobotClock, WriteStream,
-    frozen_payload_size,
+    CapturePayload, CuError, CuResult, CuTime, EncodeError, Freezable, KEYFRAME_FRAME_HEADER_LEN,
+    KEYFRAME_PAYLOAD_HEADER, KeyFrame, RobotClock, WriteStream, frozen_payload_size,
 };
 use crate::log::*;
 use alloc::boxed::Box;
-use bincode::enc::Encoder;
+pub use heapless::Vec as InlineVec;
 
-/// The array stays in the application. Only the occupied prefix goes on the wire.
-pub struct FixedKeyFrame<const N: usize> {
-    id: u64,
-    timestamp: CuTime,
-    bytes: [u8; N],
-    used: usize,
-}
-
-impl<const N: usize> Encode for FixedKeyFrame<N> {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        self.id.encode(encoder)?;
-        self.timestamp.encode(encoder)?;
-        self.bytes[..self.used].encode(encoder)
+impl<const N: usize> CapturePayload for InlineVec<u8, N> {
+    fn append_bytes(&mut self, bytes: &[u8]) -> Result<(), EncodeError> {
+        self.extend_from_slice(bytes)
+            .map_err(|_| EncodeError::UnexpectedEnd)
     }
-}
 
-impl<const N: usize> FixedKeyFrame<N> {
-    fn append(&mut self, item: &impl Freezable) -> Result<(), EncodeError> {
-        let (header, payload) = self.bytes[self.used..]
-            .split_first_chunk_mut::<KEYFRAME_FRAME_HEADER_LEN>()
-            .ok_or(EncodeError::UnexpectedEnd)?;
-        let writer = RegionWriter {
-            bytes: payload,
-            written: 0,
-        };
-        let mut encoder = EncoderImpl::new(writer, bincode::config::standard());
-        BincodeAdapter(item).encode(&mut encoder)?;
-        let written = encoder.into_writer().written;
-        *header = u32::try_from(written)
-            .map_err(|_| EncodeError::Other("keyframe component exceeds u32 size"))?
-            .to_le_bytes();
-        self.used += KEYFRAME_FRAME_HEADER_LEN + written;
-        Ok(())
+    fn truncate_to(&mut self, len: usize) {
+        self.truncate(len);
     }
 }
 
@@ -60,8 +34,8 @@ impl KeyFrameSizer {
 }
 
 pub struct FixedKeyFrameCapture<const N: usize> {
-    frame: FixedKeyFrame<N>,
-    sink: Option<Box<dyn WriteStream<FixedKeyFrame<N>>>>,
+    frame: KeyFrame<InlineVec<u8, N>>,
+    sink: Option<Box<dyn WriteStream<KeyFrame<InlineVec<u8, N>>>>>,
     interval: u32,
     capturing: bool,
     pub dropped: u64,
@@ -69,18 +43,17 @@ pub struct FixedKeyFrameCapture<const N: usize> {
 
 impl<const N: usize> FixedKeyFrameCapture<N> {
     pub fn new(
-        sink: impl WriteStream<FixedKeyFrame<N>> + 'static,
+        sink: impl WriteStream<KeyFrame<InlineVec<u8, N>>> + 'static,
         interval: u32,
     ) -> CuResult<Self> {
         if interval == 0 {
             return Err(CuError::from("Keyframe interval cannot be zero"));
         }
         Ok(Self {
-            frame: FixedKeyFrame {
-                id: 0,
+            frame: KeyFrame {
+                culistid: 0,
                 timestamp: CuTime::default(),
-                bytes: [0; N],
-                used: 0,
+                serialized_tasks: InlineVec::new(),
             },
             sink: Some(Box::new(sink)),
             interval,
@@ -110,12 +83,15 @@ impl<const N: usize> FixedKeyFrameCapture<N> {
     pub fn reset(&mut self, id: u64, clock: &RobotClock) {
         self.capturing = id.is_multiple_of(u64::from(self.interval));
         if self.capturing {
-            self.frame.id = id;
+            self.frame.culistid = id;
             self.frame.timestamp = clock.now();
-            if let Some(header) = self.frame.bytes.get_mut(..KEYFRAME_PAYLOAD_HEADER.len()) {
-                header.copy_from_slice(KEYFRAME_PAYLOAD_HEADER);
-                self.frame.used = header.len();
-            } else {
+            self.frame.serialized_tasks.clear();
+            if self
+                .frame
+                .serialized_tasks
+                .extend_from_slice(KEYFRAME_PAYLOAD_HEADER)
+                .is_err()
+            {
                 self.reject(EncodeError::UnexpectedEnd);
             }
         }
@@ -127,18 +103,18 @@ impl<const N: usize> FixedKeyFrameCapture<N> {
         match error {
             EncodeError::UnexpectedEnd => error!(
                 "Skipping keyframe {}: snapshot exceeds logging.keyframe_capacity ({} bytes)",
-                self.frame.id, N
+                self.frame.culistid, N
             ),
             _ => error!(
                 "Skipping keyframe {}: component serialization failed",
-                self.frame.id
+                self.frame.culistid
             ),
         }
     }
 
     pub fn freeze_task(&mut self, _: u64, item: &impl Freezable) -> CuResult<()> {
         if self.capturing
-            && let Err(error) = self.frame.append(item)
+            && let Err(error) = self.frame.add_frozen_task(item)
         {
             self.reject(error);
         }
@@ -159,7 +135,7 @@ impl<const N: usize> FixedKeyFrameCapture<N> {
             self.dropped = self.dropped.saturating_add(1);
             error!(
                 "Failed to write keyframe {}; continuing without it",
-                self.frame.id
+                self.frame.culistid
             );
         }
         0
@@ -175,6 +151,7 @@ mod tests {
     use super::*;
     use crate::curuntime::{KeyFrame, KeyFramePayloadReader};
     use alloc::sync::Arc;
+    use bincode::enc::Encoder;
     use std::sync::Mutex;
 
     struct Bytes<'a>(&'a [u8]);
@@ -188,8 +165,8 @@ mod tests {
     #[derive(Debug, Default, Clone)]
     struct Recorder(Arc<Mutex<Vec<Vec<u8>>>>);
 
-    impl<const N: usize> WriteStream<FixedKeyFrame<N>> for Recorder {
-        fn log(&mut self, frame: &FixedKeyFrame<N>) -> CuResult<()> {
+    impl<const N: usize> WriteStream<KeyFrame<InlineVec<u8, N>>> for Recorder {
+        fn log(&mut self, frame: &KeyFrame<InlineVec<u8, N>>) -> CuResult<()> {
             self.0
                 .lock()
                 .unwrap()

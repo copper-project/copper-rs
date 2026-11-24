@@ -40,6 +40,7 @@ petgraph = { workspace = true, default-features = false, features = [
   "stable_graph",
 ] }
 ron = { version = "0.12", default-features = false }
+heapless = { workspace = true }
 hashbrown = { workspace = true }
 paste = { workspace = true }
 portable-atomic = { version = "1.11", default-features = false, features = [

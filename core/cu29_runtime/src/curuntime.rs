@@ -1789,17 +1789,30 @@ const MIN_KEYFRAME_CAPTURE_CAPACITY: usize = 4 * 1024;
 #[cfg(all(feature = "std", feature = "async-cl-io"))]
 const ASYNC_KEYFRAME_HANDOFF_CAPACITY: usize = 2;
 
-/// A `Vec` writer that is forbidden from growing its backing allocation.
-struct PreallocatedVecWriter<'a>(&'a mut Vec<u8>);
+trait CapturePayload: core::ops::DerefMut<Target = [u8]> {
+    fn append_bytes(&mut self, bytes: &[u8]) -> Result<(), EncodeError>;
+    fn truncate_to(&mut self, len: usize);
+}
 
-impl Writer for PreallocatedVecWriter<'_> {
-    fn write(&mut self, bytes: &[u8]) -> Result<(), EncodeError> {
-        if bytes.len() > self.0.capacity().saturating_sub(self.0.len()) {
+impl CapturePayload for Vec<u8> {
+    fn append_bytes(&mut self, bytes: &[u8]) -> Result<(), EncodeError> {
+        if bytes.len() > self.capacity() - self.len() {
             return Err(EncodeError::UnexpectedEnd);
         }
-        // The capacity check above makes this append allocation-free.
-        self.0.extend_from_slice(bytes);
+        self.extend_from_slice(bytes);
         Ok(())
+    }
+
+    fn truncate_to(&mut self, len: usize) {
+        self.truncate(len);
+    }
+}
+
+struct PayloadWriter<'a, P>(&'a mut P);
+
+impl<P: CapturePayload> Writer for PayloadWriter<'_, P> {
+    fn write(&mut self, bytes: &[u8]) -> Result<(), EncodeError> {
+        self.0.append_bytes(bytes)
     }
 }
 
@@ -2442,13 +2455,13 @@ where
 /// `serialized_tasks` contains a versioned sequence of length-framed component
 /// snapshots in their generated execution-wave freeze order.
 #[derive(Clone, Decode)]
-pub struct KeyFrame {
+pub struct KeyFrame<P = Vec<u8>> {
     // This is the id of the copper list that this keyframe is associated with (recorded before the copperlist).
     pub culistid: u64,
     // This is the timestamp when the keyframe was created, using the robot clock.
     pub timestamp: CuTime,
     // Versioned, length-framed bincode snapshots of all generated components.
-    pub serialized_tasks: Vec<u8>,
+    pub serialized_tasks: P,
 }
 
 const DISTRIBUTED_KEYFRAME_HEADER: &[u8; 5] = b"CUKD\x01";
@@ -2608,13 +2621,13 @@ fn align_up(value: usize, alignment: usize) -> Option<usize> {
         .map(|value| value & !(alignment - 1))
 }
 
-impl Encode for KeyFrame {
+impl<P: AsRef<[u8]>> Encode for KeyFrame<P> {
     fn encode<__E: bincode::enc::Encoder>(&self, encoder: &mut __E) -> Result<(), EncodeError> {
         self.culistid.encode(encoder)?;
         self.timestamp.encode(encoder)?;
-        let bytes = self.serialized_tasks.as_slice();
+        let bytes = self.serialized_tasks.as_ref();
         let Some(count) = distributed_count(bytes).map_err(EncodeError::Other)? else {
-            return self.serialized_tasks.encode(encoder);
+            return bytes.encode(encoder);
         };
         let mut length = KEYFRAME_PAYLOAD_HEADER.len();
         for component in 0..count {
@@ -2823,29 +2836,29 @@ impl KeyFrame {
         self.serialized_tasks
             .extend_from_slice(KEYFRAME_PAYLOAD_HEADER);
     }
+}
 
-    /// Append one length-framed component snapshot in a single `freeze` pass.
-    fn add_frozen_task(&mut self, task: &impl Freezable) -> Result<usize, EncodeError> {
-        let cfg = bincode::config::standard();
-        let start = self.serialized_tasks.len();
-        let mut writer = PreallocatedVecWriter(&mut self.serialized_tasks);
-        writer.write(&[0; KEYFRAME_FRAME_HEADER_LEN])?;
-        let payload_offset = writer.0.len();
-
-        let mut encoder = EncoderImpl::<_, _>::new(writer, cfg);
+impl<P> KeyFrame<P> {
+    /// Append one length-framed component snapshot in a single freeze pass.
+    fn add_frozen_task(&mut self, task: &impl Freezable) -> Result<usize, EncodeError>
+    where
+        P: CapturePayload,
+    {
+        let bytes = &mut self.serialized_tasks;
+        let start = bytes.len();
+        bytes.append_bytes(&[0; KEYFRAME_FRAME_HEADER_LEN])?;
+        let payload_offset = bytes.len();
+        let mut encoder = EncoderImpl::new(PayloadWriter(bytes), bincode::config::standard());
         if let Err(error) = BincodeAdapter(task).encode(&mut encoder) {
-            self.serialized_tasks.truncate(start);
+            bytes.truncate_to(start);
             return Err(error);
         }
-        let payload_len = encoder.into_writer().0.len() - payload_offset;
-        let payload_len = u32::try_from(payload_len).map_err(|_| {
-            self.serialized_tasks.truncate(start);
-            EncodeError::OtherString(
-                "keyframe component snapshot exceeds the u32 frame limit".to_string(),
-            )
+        let payload_len = u32::try_from(bytes.len() - payload_offset).map_err(|_| {
+            bytes.truncate_to(start);
+            EncodeError::Other("keyframe component snapshot exceeds the u32 frame limit")
         })?;
-        self.serialized_tasks[start..payload_offset].copy_from_slice(&payload_len.to_le_bytes());
-        Ok(self.serialized_tasks.len() - start)
+        bytes[start..payload_offset].copy_from_slice(&payload_len.to_le_bytes());
+        Ok(bytes.len() - start)
     }
 }
 

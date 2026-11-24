@@ -4013,7 +4013,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote!()
         };
         let keyframe_record = if fixed_keyframes {
-            quote!(#fixed_module::FixedKeyFrame<#keyframe_capacity>)
+            quote!(KeyFrame<#fixed_module::InlineVec<u8, #keyframe_capacity>>)
         } else { quote!(KeyFrame) };
         let fixed_capture_init = fixed_keyframes.then(|| quote! {
             let interval = config.logging.as_ref().and_then(|l| l.keyframe_interval)
