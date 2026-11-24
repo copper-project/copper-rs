@@ -33,6 +33,7 @@
                     ),
                     objects: (max_object_bytes: 65536, repair_symbols_per_block: 2),
                 ),
+                metadata_repeat_secs: 1,
                 recovery_interval: 16,
                 max_record_bytes: 4096,
             ),

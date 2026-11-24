@@ -274,6 +274,7 @@ fn reporter_uses_local_cadence_and_advertised_capability() {
             max_object_bytes: 4096,
             repair_symbols_per_block: 2,
         },
+        metadata_repeat_secs: 5,
         recovery_interval: 1,
         max_record_bytes: 4096,
     };

@@ -16,6 +16,8 @@ pub struct CuTelemetrySession {
     pub identity: StreamIdentity,
     pub context: SectionContext,
     pub schema: ApplicationSchema,
+    /// Producer identity and saved configuration. Required to open a twin archive.
+    pub metadata: Option<cu29_unifiedlog::ApplicationMetadata>,
 }
 
 /// Borrowed for one synchronous handoff. No packet or FEC header is included.

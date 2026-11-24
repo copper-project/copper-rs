@@ -301,6 +301,21 @@ impl cu29_logstream::CuStreamRx for PacketRx {
     }
 }
 
+fn sender_metadata() -> cu29_unifiedlog::ApplicationMetadata {
+    cu29_unifiedlog::ApplicationMetadata {
+        app_type: "Robot".into(),
+        app_name: "onboard".into(),
+        app_version: "1".into(),
+        git_commit: None,
+        git_dirty: None,
+        subsystem_id: None,
+        subsystem_code: 0,
+        effective_config_ron: String::new(),
+        missions: vec!["default".into()],
+        catalog_offset: 0,
+    }
+}
+
 #[test]
 fn twin_rollover_bounds_disk_usage_and_retains_metadata_and_recent_entries() {
     use cu29::prelude::*;
@@ -314,7 +329,7 @@ fn twin_rollover_bounds_disk_usage_and_retains_metadata_and_recent_entries() {
     let ground = directory.path().join("ground.copper");
     let config = CuConfig::deserialize_ron(&Twin::original_config()).unwrap();
     let plan = LogStreamPlan::resolve(&config.log_streaming.unwrap().destinations[0]).unwrap();
-    let sender = plan
+    let mut sender = plan
         .sender_config(
             StreamIdentity {
                 session_id: [4; 16],
@@ -332,6 +347,7 @@ fn twin_rollover_bounds_disk_usage_and_retains_metadata_and_recent_entries() {
             },
         )
         .unwrap();
+    sender.set_application_metadata(sender_metadata()).unwrap();
     let mut packets = Vec::new();
     FiniteObjectEncoder::new(sender.recovery.finite)
         .unwrap()
@@ -444,7 +460,7 @@ fn twin_rejects_another_mission_even_when_output_types_match() {
     let plan =
         cu29_logstream::LogStreamPlan::resolve(&config.log_streaming.unwrap().destinations[0])
             .unwrap();
-    let sender = plan
+    let mut sender = plan
         .sender_config(
             cu29_logstream::StreamIdentity {
                 session_id: [5; 16],
@@ -458,6 +474,7 @@ fn twin_rejects_another_mission_even_when_output_types_match() {
             },
         )
         .unwrap();
+    sender.set_application_metadata(sender_metadata()).unwrap();
     let mut packets = Vec::new();
     cu29_logstream::FiniteObjectEncoder::new(sender.recovery.finite)
         .unwrap()
@@ -483,7 +500,7 @@ fn twin_rejects_another_mission_even_when_output_types_match() {
 }
 
 #[test]
-fn twin_archive_seals_local_metadata_and_optional_catalog() {
+fn twin_archive_seals_sender_metadata_and_optional_catalog() {
     use cu29::prelude::{UnifiedLogRead, UnifiedLogType, UnifiedLoggerRead};
 
     let _serial = SERIAL.lock().unwrap();
@@ -515,7 +532,14 @@ fn twin_archive_seals_local_metadata_and_optional_catalog() {
     let metadata = reader.application_metadata().unwrap().unwrap();
     assert_eq!(metadata.app_name, "cu-logstream-demo");
     assert_eq!(metadata.missions, ["default"]);
-    assert!(metadata.effective_config_ron.is_empty());
+    assert_eq!(
+        metadata,
+        UnifiedLoggerRead::new(&onboard)
+            .unwrap()
+            .application_metadata()
+            .unwrap()
+            .unwrap()
+    );
     let catalog = reader
         .read_next_section_type(UnifiedLogType::ValueDecodeCatalog)
         .unwrap();
@@ -685,8 +709,9 @@ impl cu29_logstream::twin::LiveReplay for BlockedTwin {
     const MISSION_INDEX: u32 = <Twin as cu29_logstream::twin::LiveReplay>::MISSION_INDEX;
     fn seal_archive_metadata(
         logger: &mut cu29_unifiedlog::UnifiedLoggerWrite,
+        metadata: &cu29_unifiedlog::ApplicationMetadata,
     ) -> cu29::CuResult<()> {
-        <Twin as cu29_logstream::twin::LiveReplay>::seal_archive_metadata(logger)
+        <Twin as cu29_logstream::twin::LiveReplay>::seal_archive_metadata(logger, metadata)
     }
     type DataSet = DataSet;
     fn build_twin() -> cu29::CuResult<(Self, cu29::clock::RobotClockMock)> {

@@ -63,7 +63,7 @@ def run(binary, scenario, two_way=False):
         if scenario == "idle":
             ground, address = receiver("received", impairment="bootstrap")
             sender = spawn("sender", "--remote", address, "--log-base", directory / "sender.copper",
-                           "--iterations", "1", "--idle-ms", "1000")
+                           "--iterations", "1", "--idle-ms", "1800")
         elif scenario == "late":
             # Observe a real prefix with a separate receiver. A launch-time sleep
             # can join while CL0 is still retained and recover it, so it does not

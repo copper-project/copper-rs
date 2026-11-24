@@ -80,6 +80,7 @@ impl<R: CuStreamRx> CuTelemetryRx for FecTelemetryRx<R> {
                                     identity: m.identity,
                                     context: m.context,
                                     schema: m.application_schema.clone(),
+                                    metadata: m.metadata.clone(),
                                 },
                             )));
                         }

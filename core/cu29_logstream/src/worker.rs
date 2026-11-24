@@ -318,6 +318,7 @@ impl TelemetryDestination {
         self,
         context: cu29_unifiedlog::SectionContext,
         clock: RobotClock,
+        metadata: cu29_unifiedlog::ApplicationMetadata,
     ) -> CuResult<(
         ScheduledCopperListSink<P>,
         ScheduledKeyFrameSink,
@@ -340,6 +341,7 @@ impl TelemetryDestination {
                         sender_id: context.instance_id,
                     },
                     context,
+                    metadata: Some(metadata),
                     schema,
                 };
                 let (lists, frames, _) = spawn_worker(
@@ -365,6 +367,7 @@ impl TelemetryDestination {
                 config.recovery.finite.identity.sender_id = context.instance_id;
                 manifest.identity = config.continuous.identity;
                 manifest.context = context;
+                manifest.metadata = Some(metadata);
                 config.recovery.manifest_record = manifest
                     .encode_record()
                     .map_err(|e| CuError::from(e.to_string()))?;
@@ -470,6 +473,7 @@ where
     };
     let session = manifest.ok().map(|m| CuTelemetrySession {
         identity: m.identity,
+        metadata: m.metadata,
         schema: m.application_schema,
         context: m.context,
     });
@@ -566,9 +570,14 @@ impl<T: CuStreamTx + CuFeedbackRx> CuTelemetryTx for FecTelemetryTx<T> {
                 let CuTelemetryRecord::Session(session) = record else {
                     return Err("FEC sender requires an opening session".into());
                 };
-                let config = plan
+                let mut config = plan
                     .sender_config(session.identity, session.schema.clone(), session.context)
                     .map_err(|e| CuError::from(e.to_string()))?;
+                if let Some(metadata) = &session.metadata {
+                    config
+                        .set_application_metadata(metadata.clone())
+                        .map_err(|e| CuError::from(e.to_string()))?;
+                }
                 let manifest =
                     crate::SessionManifest::decode_record(&config.recovery.manifest_record)
                         .map_err(|e| CuError::from(e.to_string()))?;

@@ -425,6 +425,7 @@ pub cu29_runtime::config::LogStreamDestinationConfig::feedback: core::option::Op
 pub cu29_runtime::config::LogStreamDestinationConfig::id: alloc::string::String
 pub cu29_runtime::config::LogStreamDestinationConfig::link: cu29_runtime::config::LogStreamLinkConfig
 pub cu29_runtime::config::LogStreamDestinationConfig::max_record_bytes: u64
+pub cu29_runtime::config::LogStreamDestinationConfig::metadata_repeat_secs: u32
 pub cu29_runtime::config::LogStreamDestinationConfig::recovery_interval: u32
 pub cu29_runtime::config::LogStreamDestinationConfig::transport: cu29_runtime::config::LogStreamTransportConfig
 pub struct cu29_runtime::config::LogStreamFecConfig

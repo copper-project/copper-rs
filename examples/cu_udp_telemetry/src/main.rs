@@ -25,7 +25,9 @@ fn run_robot<T: CuTelemetryTx + 'static>(
     log: &Path,
 ) -> Result<(), Box<dyn Error>> {
     let (clock, mock) = RobotClock::mock();
+    // The plain protocol fits its opening session in one 1200-byte datagram.
     let builder = Robot::builder()
+        .save_effective_config(false)
         .with_clock(clock)
         .with_log_path(log, Some(cu_logstream_demo::SLAB_BYTES))?;
     let buffers = TelemetryBufferConfig {
