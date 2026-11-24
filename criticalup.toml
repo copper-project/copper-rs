@@ -1,7 +1,7 @@
 manifest-version = 1
 
 [products.ferrocene]
-release = "rolling-2026-11-24"
+release = "beta-26.11-2026-11-24"
 packages = [
   "cargo-${rustc-host}",
   "rustc-${rustc-host}",
