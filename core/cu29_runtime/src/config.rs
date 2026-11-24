@@ -1963,6 +1963,13 @@ pub struct LoggingConfig {
     )]
     pub keyframe_interval: Option<u32>,
 
+    /// Serialized keyframe budget in bytes for static-config no_std applications.
+    /// Includes framing. Defaults to 4096 bytes. Startup reports the space needed
+    /// by the initial state. A capture that exceeds the budget skips that keyframe
+    /// and retries at the next interval.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub keyframe_capacity: Option<usize>,
+
     /// Named log codec specs reusable across task output bindings.
     #[serde(default = "Vec::new", skip_serializing_if = "Vec::is_empty")]
     pub codecs: Vec<LoggingCodecSpec>,
@@ -1977,6 +1984,7 @@ impl Default for LoggingConfig {
             slab_size_mib: None,
             section_size_mib: None,
             keyframe_interval: default_keyframe_interval(),
+            keyframe_capacity: None,
             codecs: Vec::new(),
         }
     }

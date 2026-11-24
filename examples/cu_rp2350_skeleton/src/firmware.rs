@@ -207,6 +207,13 @@ fn main() -> ! {
         EMMCLogger::new(sd, blk_id, blk_len).expect("Could not create EMMCLogger"),
     ));
 
+    run_copper(clock, writer)
+}
+
+// Ferrocene starts its post-monomorphization call walk at externally reachable
+// functions. Export this root only for the audit, after board initialization.
+#[cfg_attr(ferrocene_audit, ferrocene::prevalidated, unsafe(export_name = "cu_blinky_audit_root"))]
+fn run_copper(clock: RobotClock, writer: Arc<Mutex<EMMCLogger<TSPimodoriSdCard>>>) -> ! {
     let app = BlinkyApp::builder()
         .with_clock(clock)
         .with_logger::<EMMCSectionStorage<TSPimodoriSdCard>, EMMCLogger<TSPimodoriSdCard>>(writer)

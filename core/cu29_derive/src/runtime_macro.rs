@@ -109,6 +109,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     // when no logstream destination is configured.
     let keyframe_logging_enabled = local_keyframe_logging_enabled || logstream_enabled || manual || live_replay;
     let copperlist_count_tokens = proc_macro2::Literal::usize_unsuffixed(copperlist_count);
+    let fixed_keyframes = static_config && !std && keyframe_logging_enabled;
+    let keyframe_capacity = copper_config.logging.as_ref()
+        .and_then(|logging| logging.keyframe_capacity).unwrap_or(4096);
+    let fixed_module = quote!(::cu29::curuntime::fixed_keyframe);
+    let fixed_field: Option<Field> = fixed_keyframes.then(|| parse_quote! {
+        keyframe_capture: #fixed_module::FixedKeyFrameCapture<#keyframe_capacity>
+    });
     let caller_root = utils::caller_crate_root();
     let (git_commit, git_dirty) = detect_git_info(&caller_root);
     let git_commit_tokens = if let Some(commit) = git_commit {
@@ -242,6 +249,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     match &mut application_struct.fields {
         Named(fields_named) => {
             fields_named.named.push(runtime_field);
+            fields_named.named.extend(fixed_field);
             fields_named.named.push(lifecycle_sink_field);
             fields_named.named.push(parse_quote! { lifecycle_running: bool });
             fields_named.named.push(parse_quote! { shutdown_completed: bool });
@@ -255,6 +263,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         }
         Unnamed(fields_unnamed) => {
             fields_unnamed.unnamed.push(runtime_field);
+            fields_unnamed.unnamed.extend(fixed_field);
             fields_unnamed.unnamed.push(lifecycle_sink_field);
             fields_unnamed.unnamed.push(parse_quote! { lifecycle_running: bool });
             fields_unnamed.unnamed.push(parse_quote! { shutdown_completed: bool });
@@ -3400,23 +3409,38 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 }
             }
         });
-        let keyframe_manager_binding = keyframe_logging_enabled
-            .then(|| quote! { let kf_manager = &mut runtime.keyframes_manager; });
-        let keyframe_reset =
-            keyframe_logging_enabled.then(|| quote! { kf_manager.try_reset(clid, clock)?; });
-        let keyframe_poll = keyframe_logging_enabled.then(|| quote! { cl_manager.poll_keyframes(kf_manager)?; });
-        let completed_output = if keyframe_logging_enabled {
-            quote! { cl_manager.end_of_processing_with_keyframes(clid, kf_manager)?; }
-        } else { quote! { cl_manager.end_of_processing(clid)?; } };
-        let keyframe_bytes = if keyframe_logging_enabled {
-            quote! { cl_manager.last_keyframe_bytes }
+        let capture_manager = if fixed_keyframes {
+            quote!(self.keyframe_capture)
         } else {
-            quote! { 0 }
+            quote!(self.copper_runtime.keyframes_manager)
         };
-        let dropped_keyframes_total = if keyframe_logging_enabled {
-            quote! { cl_manager.dropped_keyframes_total() }
+        let keyframe_close = quote!(#capture_manager.close_output());
+        let keyframe_manager_binding = keyframe_logging_enabled.then(|| {
+            if fixed_keyframes { quote!(let kf_manager = &mut self.keyframe_capture;) }
+            else { quote!(let kf_manager = &mut runtime.keyframes_manager;) }
+        });
+        let keyframe_reset = keyframe_logging_enabled.then(|| {
+            if fixed_keyframes { quote!(kf_manager.reset(clid, clock);) }
+            else { quote!(kf_manager.try_reset(clid, clock)?;) }
+        });
+        let keyframe_poll = (keyframe_logging_enabled && !fixed_keyframes)
+            .then(|| quote!(cl_manager.poll_keyframes(kf_manager)?;));
+        let completed_output = if fixed_keyframes {
+            quote! {
+                let fixed_keyframe_bytes = kf_manager.finish();
+                cl_manager.end_of_processing(clid)?;
+            }
+        } else if keyframe_logging_enabled {
+            quote!(cl_manager.end_of_processing_with_keyframes(clid, kf_manager)?;)
         } else {
-            quote! { 0 }
+            quote!(cl_manager.end_of_processing(clid)?;)
+        };
+        let (keyframe_bytes, dropped_keyframes_total) = if fixed_keyframes {
+            (quote!(fixed_keyframe_bytes), quote!(kf_manager.dropped))
+        } else if keyframe_logging_enabled {
+            (quote!(cl_manager.last_keyframe_bytes), quote!(cl_manager.dropped_keyframes_total()))
+        } else {
+            (quote!(0), quote!(0))
         };
         let prepare_arena_keyframes = parallel_rt_run_supported.then(|| {
             quote! {
@@ -3426,7 +3450,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         });
         let prepare_manual_frames = manual.then(||quote!{runtime.copperlists_manager.prepare_manual_keyframes(kf_manager)?;});
-        let keyframe_preallocation = keyframe_logging_enabled.then(|| {
+        let keyframe_preallocation = if fixed_keyframes {
+            Some(quote! {
+                let tasks = &self.copper_runtime.tasks;
+                let __cu_bridges = &self.copper_runtime.bridges;
+                self.keyframe_capture.check_initial_capacity(|kf_manager| {
+                    #(#keyframe_preallocation_code)*
+                    Ok(())
+                });
+            })
+        } else { keyframe_logging_enabled.then(|| {
             quote! {
                 {
                     let runtime = &mut self.copper_runtime;
@@ -3441,7 +3474,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     #prepare_arena_keyframes
                 }
             }
-        });
+        }) };
 
 
         let live_completed = live_replay.then(|| {
@@ -3675,7 +3708,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let result = cu29::curuntime::combine_output_results(result, clock_result);
                 let result = if result.is_err() {
                     let cl_close = self.copper_runtime.copperlists_manager.close_output();
-                    let kf_close = self.copper_runtime.keyframes_manager.close_output();
+                    let kf_close = #keyframe_close;
                     let logs_flush = self.logger_runtime.try_flush();
                     cu29::curuntime::combine_output_results(result, cu29::curuntime::combine_output_results(cl_close, cu29::curuntime::combine_output_results(kf_close, logs_flush)))
                 } else { result };
@@ -3979,11 +4012,23 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         } else {
             quote!()
         };
+        let keyframe_record = if fixed_keyframes {
+            quote!(#fixed_module::FixedKeyFrame<#keyframe_capacity>)
+        } else { quote!(KeyFrame) };
+        let fixed_capture_init = fixed_keyframes.then(|| quote! {
+            let interval = config.logging.as_ref().and_then(|l| l.keyframe_interval)
+                .unwrap_or(cu29::config::DEFAULT_KEYFRAME_INTERVAL);
+            let keyframe_capture = #fixed_module::FixedKeyFrameCapture::new(keyframe_sink, interval)?;
+            let keyframe_sink = cu29::curuntime::NullWriteStream;
+            let output_requirements = cu29::curuntime::OutputRequirements::new(
+                output_requirements.completed_copperlists(), false);
+        });
+        let fixed_capture_field = fixed_keyframes.then(|| quote!(keyframe_capture,));
         let local_keyframe_sink_init = if local_keyframe_logging_enabled {
             quote! {
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: creating keyframes stream");
-                let local_keyframe_sink = cu29::prelude::stream_write_context::<KeyFrame, S>(
+                let local_keyframe_sink = cu29::prelude::stream_write_context::<#keyframe_record, S>(
                     unified_logger.clone(),
                     UnifiedLogType::FrozenTasks,
                     1024 * 1024 * 10, log_context, // 10 MiB
@@ -4299,6 +4344,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #local_keyframe_sink_init
 
                 #copperlist_output_graph
+                #fixed_capture_init
                 #late_structured_logger_init
 
                 #[cfg(target_os = "none")]
@@ -4343,6 +4389,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let application = Ok(#application_name {
                     #manual_init
                     copper_runtime,
+                    #fixed_capture_field
                     #clock_maintenance_init
                     #replay_clock_init
                     runtime_lifecycle_sink: Some(Box::new(local_lifecycle_sink)),
@@ -4464,7 +4511,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     if self.shutdown_completed { return Ok(()); }
                     #close_manual
                     let cl_close = self.copper_runtime.copperlists_manager.close_output();
-                    let kf_close = self.copper_runtime.keyframes_manager.close_output();
+                    let kf_close = #keyframe_close;
                     let logs_flush = self.logger_runtime.try_flush();
                     cu29::curuntime::combine_output_results(cl_close, cu29::curuntime::combine_output_results(kf_close, logs_flush))?;
                     self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::ShutdownCompleted)?;
