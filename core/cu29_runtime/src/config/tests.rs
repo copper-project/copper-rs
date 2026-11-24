@@ -202,6 +202,24 @@ fn test_component_config_get_value_scalar_compatibility() {
 }
 
 #[test]
+fn test_component_config_integer_bounds() {
+    let mut config = ComponentConfig::new();
+    config.set("timeout", -1_i32);
+    let error = config.get::<u32>("timeout").unwrap_err().to_string();
+    assert!(error.contains("timeout") && error.contains("-1") && error.contains("u32"));
+
+    config.set("value", 255_i64);
+    assert_eq!(config.get::<u8>("value").unwrap(), Some(u8::MAX));
+    config.set("value", 256_i64);
+    assert!(config.get::<u8>("value").is_err());
+    config.set("value", -129_i16);
+    assert!(config.get::<i8>("value").is_err());
+    config.set("value", u64::MAX);
+    assert!(config.get::<i64>("value").is_err());
+    assert_eq!(config.get::<u64>("value").unwrap(), Some(u64::MAX));
+}
+
+#[test]
 fn test_component_config_get_value_mixed_usage() {
     let txt = r#"
             (
