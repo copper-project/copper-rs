@@ -559,7 +559,7 @@ impl CuMissionPlan {
             let known = entry.pool == DEFAULT_BACKGROUND_POOL
                 || config.runtime.as_ref().is_some_and(|runtime| {
                     runtime
-                        .thread_pools
+                        .thread_pools()
                         .iter()
                         .any(|pool| pool.id == entry.pool)
                 });
@@ -1124,6 +1124,7 @@ mod tests {
         plan.validate(&config).unwrap();
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn background_policy_is_complete_and_only_lag_one_is_deterministic() {
         let config = CuConfig::deserialize_ron(
