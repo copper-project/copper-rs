@@ -389,10 +389,6 @@ fn restore_terminal() -> io::Result<()> {
 }
 
 fn should_start_ui() -> bool {
-    if !stdout().is_tty() || !stdin().is_tty() {
-        return false;
-    }
-
     #[cfg(unix)]
     {
         use std::os::unix::io::AsRawFd;
@@ -409,5 +405,5 @@ fn should_start_ui() -> bool {
         }
     }
 
-    true
+    stdout().is_tty() && stdin().is_tty()
 }
