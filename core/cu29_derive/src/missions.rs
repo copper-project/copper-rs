@@ -57,8 +57,15 @@ pub(crate) fn generate(app: &Ident, vis: &Visibility, modules: &[Ident]) -> Toke
                 self, settings: &mut ::cu29::supervisor::MissionSettings<'_>,
                 logger: ::cu29::__private::sync::Arc<::cu29::__private::sync::Mutex<L>>
             ) -> #result<Self::Active<S,L>> {
-                match self { #(Self::#variants => Ok(#active::#variants(#modules::start_supervised::<S,L>(settings,logger)?))),* }
+                match self { #(Self::#variants => Ok(#active::#variants(#modules::start_supervised::<S,L,#pre::LogStream<S,L>>(settings,logger)?))),* }
             }
+            fn activate_default(
+                self, settings: &mut ::cu29::supervisor::MissionSettings<'_>,
+                logger: ::cu29::__private::sync::Arc<::cu29::__private::sync::Mutex<#pre::NoopLogger>>
+            ) -> #result<Self::Active<#pre::NoopSectionStorage, #pre::NoopLogger>> {
+                match self { #(Self::#variants => Ok(#active::#variants(#modules::start_supervised::<_,_,::cu29::curuntime::NullWriteStream>(settings,logger)?))),* }
+            }
+
         }
     }
 }
