@@ -31,7 +31,7 @@ for line in sys.stdin:
     if core_callers and any("instantiated by" in child["message"] for child in message["children"]):
         core_instantiation_seen = True
     for definition in spans:
-        if not re.search(r"/library/(core|alloc)/src/", definition["file_name"]):
+        if not re.search(r"(?:^|/)library/(core|alloc)/src/", definition["file_name"]):
             continue
         name = re.fullmatch(r"`(.+)` is unvalidated", definition["label"] or "")
         if not name:
