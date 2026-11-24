@@ -106,14 +106,14 @@ lint:
 
 # Formatting and CI-aligned file-hygiene check only
 fmt-check: check-format-tools
-	@cargo +stable fmt --all -- --check
+	@python3 support/ci/format_rust.py --toolchain stable --check
 	@git ls-files -z '*.toml' | xargs -0 -r env RUST_LOG=warn taplo format --check
 	@bash support/ci/check_ron_format.sh
 	@prek run --all-files {{PREK_FMT_CHECK_HOOKS}}
 
 # Apply formatting plus auto-fixable CI hygiene hooks, then verify the full CI fmt gate.
 fmt: check-format-tools
-	@cargo +stable fmt --all
+	@python3 support/ci/format_rust.py --toolchain stable
 	@git ls-files -z '*.toml' | xargs -0 -r env RUST_LOG=warn taplo format >/dev/null
 	@git ls-files -z '*.ron' ':!examples/modular_config_example/motors.ron' ':!examples/cu_flight_controller/mcu_graph.ron' | xargs -0 -r -n 1 sh -c 'test ! -f "$1" || fmtron "$1"' _ >/dev/null
 	@bash -lc 'set -euo pipefail; prek run --all-files {{PREK_FMT_FIX_HOOKS}} || prek run --all-files {{PREK_FMT_FIX_HOOKS}}'
