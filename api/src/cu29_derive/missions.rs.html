@@ -57,9 +57,16 @@
 <a href=#57 id=57 data-nosnippet>57</a>                <span class="self">self</span>, settings: <span class="kw-2">&amp;mut </span>::cu29::supervisor::MissionSettings&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#58 id=58 data-nosnippet>58</a>                logger: ::cu29::__private::sync::Arc&lt;::cu29::__private::sync::Mutex&lt;L&gt;&gt;
 <a href=#59 id=59 data-nosnippet>59</a>            ) -&gt; #result&lt;<span class="self">Self</span>::Active&lt;S,L&gt;&gt; {
-<a href=#60 id=60 data-nosnippet>60</a>                <span class="kw">match </span><span class="self">self </span>{ #(<span class="self">Self</span>::#variants =&gt; <span class="prelude-val">Ok</span>(#active::#variants(#modules::start_supervised::&lt;S,L&gt;(settings,logger)<span class="question-mark">?</span>))),* }
+<a href=#60 id=60 data-nosnippet>60</a>                <span class="kw">match </span><span class="self">self </span>{ #(<span class="self">Self</span>::#variants =&gt; <span class="prelude-val">Ok</span>(#active::#variants(#modules::start_supervised::&lt;S,L,#pre::LogStream&lt;S,L&gt;&gt;(settings,logger)<span class="question-mark">?</span>))),* }
 <a href=#61 id=61 data-nosnippet>61</a>            }
-<a href=#62 id=62 data-nosnippet>62</a>        }
-<a href=#63 id=63 data-nosnippet>63</a>    }
-<a href=#64 id=64 data-nosnippet>64</a>}
+<a href=#62 id=62 data-nosnippet>62</a>            <span class="kw">fn </span>activate_default(
+<a href=#63 id=63 data-nosnippet>63</a>                <span class="self">self</span>, settings: <span class="kw-2">&amp;mut </span>::cu29::supervisor::MissionSettings&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#64 id=64 data-nosnippet>64</a>                logger: ::cu29::__private::sync::Arc&lt;::cu29::__private::sync::Mutex&lt;#pre::NoopLogger&gt;&gt;
+<a href=#65 id=65 data-nosnippet>65</a>            ) -&gt; #result&lt;<span class="self">Self</span>::Active&lt;#pre::NoopSectionStorage, #pre::NoopLogger&gt;&gt; {
+<a href=#66 id=66 data-nosnippet>66</a>                <span class="kw">match </span><span class="self">self </span>{ #(<span class="self">Self</span>::#variants =&gt; <span class="prelude-val">Ok</span>(#active::#variants(#modules::start_supervised::&lt;<span class="kw">_</span>,<span class="kw">_</span>,::cu29::curuntime::NullWriteStream&gt;(settings,logger)<span class="question-mark">?</span>))),* }
+<a href=#67 id=67 data-nosnippet>67</a>            }
+<a href=#68 id=68 data-nosnippet>68</a>
+<a href=#69 id=69 data-nosnippet>69</a>        }
+<a href=#70 id=70 data-nosnippet>70</a>    }
+<a href=#71 id=71 data-nosnippet>71</a>}
 </code></pre></div></section></main></body></html>
