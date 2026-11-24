@@ -2945,9 +2945,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         } else {
             quote! {}
         };
+        let local_sink_bound = quote! {
+            ::cu29::__private::LocalCopperListSink<S, L> + ::cu29::prelude::WriteStream<#mission_mod::CuList> + 'static
+        };
         let build_with_resources_sig = if sim_mode {
             quote! {
-                fn build_with_resources<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static>(
+                fn build_with_resources<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static, Local: #local_sink_bound>(
                     clock: RobotClock,
                     unified_logger: Arc<Mutex<L>>,
                     app_resources: AppResources,
@@ -2958,7 +2961,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         } else {
             quote! {
-                fn build_with_resources<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static>(
+                fn build_with_resources<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static, Local: #local_sink_bound>(
                     clock: RobotClock,
                     unified_logger: Arc<Mutex<L>>,
                     app_resources: AppResources,
@@ -3963,7 +3966,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     instance_id: u32,
                     sim_callback: &mut impl FnMut(SimStep) -> SimOverride,
                 ) -> CuResult<Self> {
-                    Self::build_with_resources(
+                    Self::build_with_resources::<S, L, ::cu29::prelude::LogStream<S, L>>(
                         clock,
                         unified_logger,
                         app_resources,
@@ -3981,7 +3984,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     app_resources: AppResources,
                     instance_id: u32,
                 ) -> CuResult<Self> {
-                    Self::build_with_resources(
+                    Self::build_with_resources::<S, L, ::cu29::prelude::LogStream<S, L>>(
                         clock,
                         unified_logger,
                         app_resources,
@@ -4330,14 +4333,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 );
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: creating copperlist stream");
-                let local_copperlist_sink = cu29::prelude::stream_write_context::<#mission_mod::CuList, S>(
-                    unified_logger.clone(),
-                    UnifiedLogType::CopperList,
-                    default_section_size, log_context,
-                    // the 2 sizes are not directly related as we encode the CuList but we can
-                    // assume the encoded size is close or lower than the non encoded one
-                    // This is to be sure we have the size of at least a Culist and some.
-                )?;
+                let local_copperlist_sink = Local::open(&unified_logger, default_section_size, log_context)?;
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: copperlist stream ready");
 
@@ -4883,6 +4879,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         })};
 
+        // Store the selected constructor so changing the resource factory preserves it.
+        // The local encoder appears in the binary only if a builder selects it.
+        let sim_callback_type = sim_mode.then(|| quote! { &mut F, });
+        let build_runtime_field = quote! {
+            build_runtime: fn(RobotClock, Arc<Mutex<L>>, AppResources, u32, #build_with_resources_logstream_param #sim_callback_type) -> CuResult<#application_name>,
+        };
         let (
             builder_struct,
             builder_impl,
@@ -4910,6 +4912,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         sim_callback: Option<&'a mut F>,
                         #builder_logstream_field
                         #builder_clock_reference_field
+                        #build_runtime_field
                         _storage: core::marker::PhantomData<S>,
                     }
                 },
@@ -4937,6 +4940,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             sim_callback: None,
                             #builder_logstream_init
                             #builder_clock_reference_none
+                            build_runtime: #application_name::build_with_resources::<_, _, ::cu29::curuntime::NullWriteStream>,
                             _storage: core::marker::PhantomData,
                         }
                     }
@@ -4972,6 +4976,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         resources_factory: R,
                         #builder_logstream_field
                         #builder_clock_reference_field
+                        #build_runtime_field
                         _storage: core::marker::PhantomData<S>,
                     }
                 },
@@ -4994,6 +4999,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             resources_factory: #mission_mod::resources_instanciator as fn(&#resource_config_ty) -> CuResult<ResourceManager>,
                             #builder_logstream_init
                             #builder_clock_reference_none
+                            build_runtime: #application_name::build_with_resources::<_, _, ::cu29::curuntime::NullWriteStream>,
                             _storage: core::marker::PhantomData,
                         }
                     }
@@ -5179,6 +5185,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     S2: SectionStorage + 'static,
                     L2: UnifiedLogWrite<S2> + 'static,
                 {
+                    self.with_local_sink::<S2, L2, ::cu29::prelude::LogStream<S2, L2>>(unified_logger)
+                }
+
+                fn with_local_sink<S2: SectionStorage + 'static, L2: UnifiedLogWrite<S2> + 'static, Local2>(
+                    self, unified_logger: Arc<Mutex<L2>>,
+                ) -> #builder_name<#builder_with_logger_generics>
+                where Local2: ::cu29::__private::LocalCopperListSink<S2, L2> + ::cu29::prelude::WriteStream<#mission_mod::CuList> + 'static,
+                {
                     #builder_name {
                         clock: self.clock,
                         unified_logger,
@@ -5189,6 +5203,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         #builder_sim_callback_field_copy
                         #builder_logstream_copy
                         #builder_clock_reference_copy
+                        build_runtime: #application_name::build_with_resources::<S2, L2, Local2>,
                         _storage: core::marker::PhantomData,
                     }
                 }
@@ -5215,6 +5230,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         #builder_sim_callback_field_copy
                         #builder_logstream_copy
                         #builder_clock_reference_copy
+                        build_runtime: self.build_runtime,
                         _storage: core::marker::PhantomData,
                     }
                 }
@@ -5261,7 +5277,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         #builder_build_thread_pools_init
                         #clock_maintenance_init
                     };
-                    #application_name::build_with_resources(
+                    (self.build_runtime)(
                         clock,
                         self.unified_logger,
                         app_resources,
@@ -5434,11 +5450,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             let manual_telemetry = manual.then(||quote!{builder.logstream = settings.manual_telemetry.as_mut().map(|open|open()).transpose()?;});
             let telemetry = logstream_enabled.then(|| quote!(builder.logstream = settings.telemetry.as_mut().map(|open| open()).transpose()?;));
             quote! {
-                pub(super) fn start_supervised<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static>(
+                pub(super) fn start_supervised<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static, Local: #local_sink_bound>(
                     settings: &mut ::cu29::supervisor::MissionSettings<'_>, logger: Arc<Mutex<L>>
                 ) -> CuResult<::cu29::app::CuAppLifecycle<S,L,#application_name,::cu29::app::Running>> {
                     let mut builder = #application_name::builder()
-                        .with_logger::<S,L>(logger)
+                        .with_local_sink::<S,L,Local>(logger)
                         .with_instance_id(settings.instance_id)
                         .save_effective_config(settings.save_effective_config);
                     builder.clock = settings.clock.clone();

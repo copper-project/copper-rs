@@ -1,7 +1,6 @@
 //! Startup configuration shared by the live mission apps of a generated supervisor.
 use crate::__private::sync::{Arc, Mutex};
 use alloc::boxed::Box;
-use core::marker::PhantomData;
 use cu29_clock::{CuDuration, RobotClock};
 use cu29_runtime::app::{ActiveMission, CuRunExit, CuWaitError};
 use cu29_runtime::resource::ResourceManager;
@@ -49,16 +48,34 @@ pub trait ConfiguredMission: Sized {
         settings: &mut MissionSettings<'_>,
         logger: Arc<Mutex<L>>,
     ) -> CuResult<Self::Active<S, L>>;
+    fn activate_default(
+        self,
+        settings: &mut MissionSettings<'_>,
+        logger: Arc<Mutex<NoopLogger>>,
+    ) -> CuResult<Self::Active<NoopSectionStorage, NoopLogger>> {
+        self.activate(settings, logger)
+    }
 }
+
+type ActivateMission<M, S, L> = fn(
+    M,
+    &mut MissionSettings<'_>,
+    Arc<Mutex<L>>,
+) -> CuResult<<M as ConfiguredMission>::Active<S, L>>;
 
 /// Configures all live missions of an app before starting its supervisor.
-pub struct SupervisorBuilder<'a, M, S = NoopSectionStorage, L = NoopLogger> {
+pub struct SupervisorBuilder<
+    'a,
+    M: ConfiguredMission,
+    S: SectionStorage + 'static = NoopSectionStorage,
+    L: UnifiedLogWrite<S> + 'static = NoopLogger,
+> {
     settings: MissionSettings<'a>,
     logger: Arc<Mutex<L>>,
-    types: PhantomData<(M, S)>,
+    activate: ActivateMission<M, S, L>,
 }
 
-impl<M> Default for SupervisorBuilder<'_, M> {
+impl<M: ConfiguredMission> Default for SupervisorBuilder<'_, M> {
     fn default() -> Self {
         Self {
             settings: MissionSettings {
@@ -79,7 +96,7 @@ impl<M> Default for SupervisorBuilder<'_, M> {
                 manual_telemetry: None,
             },
             logger: Arc::new(Mutex::new(NoopLogger::new())),
-            types: PhantomData,
+            activate: M::activate_default,
         }
     }
 }
@@ -107,7 +124,7 @@ impl<'a, M: ConfiguredMission, S: SectionStorage + 'static, L: UnifiedLogWrite<S
         SupervisorBuilder {
             settings: self.settings,
             logger,
-            types: PhantomData,
+            activate: M::activate,
         }
     }
 
@@ -265,8 +282,11 @@ impl<M: ConfiguredMission, S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 
         if self.active.is_some() {
             return Err("a mission is already running".into());
         }
-        self.active =
-            Some(mission.activate(&mut self.builder.settings, self.builder.logger.clone())?);
+        self.active = Some((self.builder.activate)(
+            mission,
+            &mut self.builder.settings,
+            self.builder.logger.clone(),
+        )?);
         Ok(())
     }
 

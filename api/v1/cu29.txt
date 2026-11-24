@@ -154,7 +154,7 @@ pub fn cu29::supervisor::Supervisor<'_, M, S, L>::transition_to(&mut self, missi
 pub fn cu29::supervisor::Supervisor<'_, M, S, L>::wait_until_ready(&mut self, timeout: cu29_clock::CuDuration, ready: impl core::ops::function::FnMut() -> bool) -> core::result::Result<(), cu29_runtime::app::supervision::CuWaitError>
 impl<M: ConfiguredMission, S: cu29_unifiedlog::SectionStorage + 'static, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static> core::ops::drop::Drop for cu29::supervisor::Supervisor<'_, M, S, L>
 pub fn cu29::supervisor::Supervisor<'_, M, S, L>::drop(&mut self)
-pub struct cu29::supervisor::SupervisorBuilder<'a, M, S, L>
+pub struct cu29::supervisor::SupervisorBuilder<'a, M: ConfiguredMission, S: cu29_unifiedlog::SectionStorage + 'static, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static>
 impl<'a, M: ConfiguredMission, S: cu29_unifiedlog::SectionStorage + 'static, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static> cu29::supervisor::SupervisorBuilder<'a, M, S, L>
 pub fn cu29::supervisor::SupervisorBuilder<'a, M, S, L>::build(self) -> cu29_traits::CuResult<cu29::supervisor::Supervisor<'a, M, S, L>>
 pub fn cu29::supervisor::SupervisorBuilder<'a, M, S, L>::save_effective_config(self, save: bool) -> Self
@@ -165,7 +165,7 @@ pub fn cu29::supervisor::SupervisorBuilder<'a, M, S, L>::with_log_path(self, pat
 pub fn cu29::supervisor::SupervisorBuilder<'a, M, S, L>::with_logger<S2: cu29_unifiedlog::SectionStorage + 'static, L2: cu29_unifiedlog::UnifiedLogWrite<S2> + 'static>(self, logger: alloc::sync::Arc<std::sync::poison::mutex::Mutex<L2>>) -> cu29::supervisor::SupervisorBuilder<'a, M, S2, L2>
 pub fn cu29::supervisor::SupervisorBuilder<'a, M, S, L>::with_resources(self, resources: impl core::ops::function::FnMut(&cu29_runtime::config::CuConfig) -> cu29_traits::CuResult<cu29_runtime::resource::ResourceManager> + 'a) -> Self
 pub fn cu29::supervisor::SupervisorBuilder<'a, M, S, L>::with_unified_logger(self, logger: alloc::sync::Arc<std::sync::poison::mutex::Mutex<cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite>>) -> cu29::supervisor::SupervisorBuilder<'a, M, cu29_unifiedlog::memmap::MmapSectionStorage, cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite>
-impl<M> core::default::Default for cu29::supervisor::SupervisorBuilder<'_, M>
+impl<M: ConfiguredMission> core::default::Default for cu29::supervisor::SupervisorBuilder<'_, M>
 pub fn cu29::supervisor::SupervisorBuilder<'_, M>::default() -> Self
 pub macro cu29::defmt_debug!
 pub macro cu29::defmt_error!

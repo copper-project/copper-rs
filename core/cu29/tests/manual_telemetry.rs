@@ -5,8 +5,22 @@ use cu29::logstream::protocol::{CuTelemetryRecord, CuTelemetryTx, TxMode};
 use cu29::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex as StdMutex};
-#[derive(Clone, Debug, Default, PartialEq, Eq, Encode, Decode, Serialize, Deserialize, Reflect)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Decode, Serialize, Deserialize, Reflect)]
 struct StreamMsg(u64);
+
+thread_local! {
+    static PAYLOAD_ENCODES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+impl Encode for StreamMsg {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        PAYLOAD_ENCODES.set(PAYLOAD_ENCODES.get() + 1);
+        Encode::encode(&self.0, encoder)
+    }
+}
 
 #[derive(Default, Reflect)]
 struct StreamSource {
@@ -199,7 +213,36 @@ fn generated_iteration_services_telemetry_and_twin_recovers_from_loss() -> CuRes
     drop(replay);
     drop(s);
     missions::check_managed_loop()?;
+    #[cfg(not(feature = "static-config"))]
+    check_local_payload_accounting()?;
 
+    Ok(())
+}
+
+// A runtime override requests local output in both runs. Only an explicitly
+// installed logger should visit the payload to measure its encoded size.
+#[cfg(not(feature = "static-config"))]
+fn check_local_payload_accounting() -> CuResult<()> {
+    let mut config = CuConfig::deserialize_ron(include_str!("manual_telemetry.ron"))?;
+    config.logging.as_mut().unwrap().enable_task_logging = true;
+    let mut implicit = ManualApp::builder()
+        .with_config(config.clone())
+        .build()?
+        .start()?;
+    PAYLOAD_ENCODES.set(0);
+    implicit.run_one_iteration()?;
+    assert_eq!(PAYLOAD_ENCODES.get(), 0);
+    drop(implicit.stop()?);
+
+    let mut explicit = ManualApp::builder()
+        .with_config(config)
+        .with_logger(Arc::new(StdMutex::new(NoopLogger::new())))
+        .build()?
+        .start()?;
+    PAYLOAD_ENCODES.set(0);
+    explicit.run_one_iteration()?;
+    assert!(PAYLOAD_ENCODES.get() > 0);
+    drop(explicit.stop()?);
     Ok(())
 }
 
