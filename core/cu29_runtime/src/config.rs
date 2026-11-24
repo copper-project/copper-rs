@@ -1963,8 +1963,15 @@ pub struct LoggingConfig {
     )]
     pub keyframe_interval: Option<u32>,
 
+    /// Serialized keyframe budget in bytes for static-config no_std applications.
+    /// Includes framing. Defaults to 4096 bytes. Startup reports the space needed
+    /// by the initial state. A capture that exceeds the budget skips that keyframe
+    /// and retries at the next interval.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub keyframe_capacity: Option<usize>,
+
     /// Named log codec specs reusable across task output bindings.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default = "Vec::new", skip_serializing_if = "Vec::is_empty")]
     pub codecs: Vec<LoggingCodecSpec>,
 }
 
@@ -1977,6 +1984,7 @@ impl Default for LoggingConfig {
             slab_size_mib: None,
             section_size_mib: None,
             keyframe_interval: default_keyframe_interval(),
+            keyframe_capacity: None,
             codecs: Vec::new(),
         }
     }
@@ -2013,6 +2021,7 @@ pub struct RuntimeConfig {
     /// This is a `std`-only concept; on `no_std`/embedded targets there are no
     /// threads and this section is ignored.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg(feature = "std")]
     pub thread_pools: Vec<ThreadPoolConfig>,
 
     /// Execution planner selection, one for the whole config.
@@ -2033,6 +2042,7 @@ struct RuntimeConfigInput {
     clock: Option<ClockSyncConfig>,
     rate_target_hz: Option<u64>,
     #[serde(default)]
+    #[cfg(feature = "std")]
     thread_pools: Vec<ThreadPoolConfig>,
     planner: Option<PlannerConfig>,
 }
@@ -2047,6 +2057,7 @@ impl TryFrom<RuntimeConfigInput> for RuntimeConfig {
             #[cfg(feature = "clock-sync")]
             clock: input.clock,
             rate_target_hz: input.rate_target_hz,
+            #[cfg(feature = "std")]
             thread_pools: input.thread_pools,
             planner: input.planner,
         })
@@ -2292,6 +2303,7 @@ pub struct ThreadPoolConfig {
 /// Checks ids are non-empty and unique, thread counts are non-zero, real-time
 /// priorities and niceness values are in range, and affinity lists are non-empty
 /// when present. This is purely a config-level check; pools are built later.
+#[cfg(feature = "std")]
 fn validate_thread_pools<E>(runtime: &Option<RuntimeConfig>) -> Result<(), E>
 where
     E: From<String>,
@@ -2802,6 +2814,7 @@ where
     cuconfig.log_streaming = representation.log_streaming.clone();
     cuconfig.bridges = representation.bridges.clone().unwrap_or_default();
 
+    #[cfg(feature = "std")]
     validate_thread_pools::<E>(&cuconfig.runtime)?;
 
     Ok(cuconfig)
@@ -4060,6 +4073,18 @@ impl LoggingConfig {
 }
 
 impl RuntimeConfig {
+    /// Pool definitions available to the execution planner on this build.
+    pub(crate) fn thread_pools(&self) -> &[ThreadPoolConfig] {
+        #[cfg(feature = "std")]
+        {
+            &self.thread_pools
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            &[]
+        }
+    }
+
     /// Reference configuration when clock discipline is enabled.
     pub fn clock_sync_config(&self) -> Option<&ClockSyncConfig> {
         #[cfg(feature = "clock-sync")]

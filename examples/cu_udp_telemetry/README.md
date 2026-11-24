@@ -91,3 +91,47 @@ Choose shared capture and keyframe limits that both protocols can carry.
 `Fanout` attempts both outputs and propagates the first error. `BestEffort`
 can wrap either destination to report its first error and disable that output. Sends, polls and
 the error handler share a worker and must all be nonblocking.
+
+## Threadless telemetry
+
+Run the same 48-cycle robot and ground twin with the threadless sender
+over loopback UDP.
+
+```sh
+cargo run -p cu-udp-telemetry --features threadless -- target/threadless-udp-run
+cargo test -p cu-udp-telemetry --features threadless
+```
+
+Enable `cu29/telemetry` on the serial firmware build. The same feature
+works on a host built with synchronous CopperList I/O. The `cu29/logstream`
+feature selects the threaded host sender.
+
+```rust
+let robot = Robot::builder()
+    .with_telemetry_tx(
+        boot_session_id,
+        move |_| Ok(PlainUdpTx::new(endpoint)),
+        TelemetryBufferConfig::new(MAX_PAYLOAD, MAX_PAYLOAD),
+    )
+    .build()?;
+let mut robot = robot.start()?;
+while running() {
+    robot.run_one_iteration()?;
+}
+drop(robot.stop()?);
+```
+
+Supply a unique 16-byte session ID for each construction. After a successful
+task-graph iteration, generated code delivers up to four pending native
+records and polls the protocol once. This budget accommodates a session, a
+keyframe, a CopperList and a structured log. Protocol implementations control
+the number of datagrams per record and must bound both callbacks. Include that
+time in the loop period.
+
+The sender reserves one active CopperList, one complete dataset per capture
+slot, spare keyframe storage sized during task startup, a shared encoding
+buffer, and fixed structured-log buffers. Full queues drop new output while
+the control loop continues. Firmware copies structured-log bytes as the local
+encoder writes them. It transfers CopperLists and keyframes by ownership.
+
+With an `AppRunner`, register a sender factory on the runner builder. The generated managed loop uses the same service pass before the rate limiter. The same loop drives readiness and drain waits.

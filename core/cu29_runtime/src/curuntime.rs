@@ -572,6 +572,8 @@ fn flush_completed_output<P: CopperListTuple>(
 /// Manages the lifecycle and completed-list sink on the synchronous path.
 #[doc(hidden)]
 pub struct SyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usize> {
+    #[cfg(feature = "telemetry")]
+    manual: Option<crate::manual_output::ManualOutput<P>>,
     inner: Option<CuListsManager<P, NBCL>>,
     #[cfg(feature = "std")]
     free_pool: Vec<CuSlotLease<P>>,
@@ -617,6 +619,8 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         P: CuListZeroedInit,
     {
         Ok(Self {
+            #[cfg(feature = "telemetry")]
+            manual: None,
             inner: (!P::DISTRIBUTED).then(CuListsManager::new),
             #[cfg(feature = "std")]
             free_pool: if P::DISTRIBUTED {
@@ -636,7 +640,43 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         })
     }
 
+    #[cfg(feature = "telemetry")]
+    #[doc(hidden)]
+    pub fn enable_manual_output(&mut self, captures: u16, frames: u16) -> CuResult<()>
+    where
+        P: CuListZeroedInit,
+    {
+        if P::DISTRIBUTED || self.next_cl_id() != 0 {
+            return Err("manual telemetry requires an idle serial runtime".into());
+        }
+        self.manual = Some(crate::manual_output::ManualOutput::new(captures, frames)?);
+        self.inner = None;
+        Ok(())
+    }
+    #[cfg(feature = "telemetry")]
+    #[doc(hidden)]
+    pub fn prepare_manual_keyframes(&mut self, keyframes: &KeyFramesManager) -> CuResult<()> {
+        if let (Some(manual), Some(frame)) = (&mut self.manual, &keyframes.inner) {
+            manual.prepare_frames(frame.serialized_tasks.capacity())?;
+        }
+        Ok(())
+    }
+    #[cfg(feature = "telemetry")]
+    #[doc(hidden)]
+    pub fn service_manual_output(
+        &mut self,
+        send: impl FnOnce(crate::manual_output::ManualRecord<'_, P>) -> CuResult<()>,
+    ) -> CuResult<()> {
+        if let Some(manual) = &mut self.manual {
+            manual.service(send)?;
+        }
+        Ok(())
+    }
     pub fn next_cl_id(&self) -> u64 {
+        #[cfg(feature = "telemetry")]
+        if let Some(manual) = &self.manual {
+            return manual.active.next_cl_id();
+        }
         #[cfg(feature = "std")]
         {
             self.inner
@@ -677,6 +717,10 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
     }
 
     pub fn peek(&self) -> Option<&CopperList<P>> {
+        #[cfg(feature = "telemetry")]
+        if let Some(manual) = &self.manual {
+            return manual.active.peek();
+        }
         self.inner.as_ref().and_then(CuListsManager::peek)
     }
 
@@ -702,6 +746,13 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
     where
         P: CuListZeroedInit,
     {
+        #[cfg(feature = "telemetry")]
+        if let Some(manual) = &mut self.manual {
+            return manual
+                .active
+                .create()
+                .ok_or_else(|| CuError::from("manual capture already active"));
+        }
         self.inner
             .as_mut()
             .expect("serial storage")
@@ -719,7 +770,12 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         culistid: u64,
         keyframes: &mut KeyFramesManager,
     ) -> CuResult<()> {
-        let result = self.finish_serial_output(culistid, keyframes.completed_keyframe(culistid));
+        let capture = keyframes.is_capturing(culistid);
+        let frame = keyframes
+            .inner
+            .as_mut()
+            .filter(|frame| capture && frame.culistid == culistid);
+        let result = self.finish_serial_output(culistid, frame);
         keyframes.locked = false;
         result
     }
@@ -735,10 +791,53 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
     }
 
     pub const fn dropped_keyframes_total(&self) -> u64 {
+        #[cfg(feature = "telemetry")]
+        if let Some(manual) = &self.manual {
+            return manual.frame_drops;
+        }
         0
     }
 
-    fn finish_serial_output(&mut self, culistid: u64, keyframe: Option<&KeyFrame>) -> CuResult<()> {
+    fn finish_serial_output(
+        &mut self,
+        culistid: u64,
+        keyframe: Option<&mut KeyFrame>,
+    ) -> CuResult<()> {
+        #[cfg(feature = "telemetry")]
+        if let Some(manual) = &mut self.manual {
+            let list = manual
+                .active
+                .iter_mut()
+                .next()
+                .filter(|list| list.id == culistid)
+                .ok_or_else(|| CuError::from("missing completed capture"))?;
+            list.change_state(CopperListState::BeingSerialized);
+            #[cfg(feature = "remote-debug")]
+            {
+                self.last_completed_encoded = Some(encode_completed_copperlist_snapshot(list)?);
+            }
+            let output = write_completed_output(
+                &mut self.sink,
+                &mut self.keyframe_sink,
+                list,
+                keyframe.as_deref(),
+            );
+            match output {
+                Ok((encoded, handles, frames)) => {
+                    self.last_encoded_bytes = encoded;
+                    self.last_handle_bytes = handles;
+                    self.last_keyframe_bytes = frames;
+                    manual.complete(keyframe);
+                    return Ok(());
+                }
+                Err(error) => {
+                    manual.active.pop();
+                    return Err(error);
+                }
+            }
+        }
+        let keyframe = keyframe.as_deref();
+
         #[cfg(debug_assertions)]
         self.debug_assert_end_of_processing_target(culistid);
 
@@ -782,6 +881,11 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
     /// Recycles the current serial iteration without publishing its partial output.
     #[doc(hidden)]
     pub fn discard_current(&mut self) {
+        #[cfg(feature = "telemetry")]
+        if let Some(manual) = &mut self.manual {
+            manual.active.pop();
+            return;
+        }
         if let Some(inner) = &mut self.inner
             && inner.peek().is_some_and(|culist| {
                 matches!(
@@ -800,6 +904,10 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
     }
 
     pub fn available_copper_lists(&mut self) -> CuResult<usize> {
+        #[cfg(feature = "telemetry")]
+        if let Some(manual) = &self.manual {
+            return Ok(usize::from(manual.active.is_empty()));
+        }
         if let Some(inner) = &self.inner {
             return Ok(NBCL - inner.len());
         }
@@ -815,6 +923,10 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
 
     #[inline]
     pub const fn dropped_copperlists_total(&self) -> u64 {
+        #[cfg(feature = "telemetry")]
+        if let Some(manual) = &self.manual {
+            return manual.drops;
+        }
         0
     }
 
@@ -1636,6 +1748,10 @@ pub type CopperListsManager<P, const NBCL: usize> = AsyncCopperListsManager<P, N
 #[doc(hidden)]
 pub type CopperListsManager<P, const NBCL: usize> = SyncCopperListsManager<P, NBCL>;
 
+#[doc(hidden)]
+#[cfg(any(feature = "static-config", test))]
+pub mod fixed_keyframe;
+
 /// Manages bounded task-state keyframe capture and output.
 pub struct KeyFramesManager {
     distributed: bool,
@@ -1673,18 +1789,37 @@ const MIN_KEYFRAME_CAPTURE_CAPACITY: usize = 4 * 1024;
 #[cfg(all(feature = "std", feature = "async-cl-io"))]
 const ASYNC_KEYFRAME_HANDOFF_CAPACITY: usize = 2;
 
-/// A `Vec` writer that is forbidden from growing its backing allocation.
-struct PreallocatedVecWriter<'a>(&'a mut Vec<u8>);
+trait CapturePayload: core::ops::DerefMut<Target = [u8]> {
+    fn append_bytes(&mut self, bytes: &[u8]) -> Result<(), EncodeError>;
+    fn truncate_to(&mut self, len: usize);
+}
 
-impl Writer for PreallocatedVecWriter<'_> {
-    fn write(&mut self, bytes: &[u8]) -> Result<(), EncodeError> {
-        if bytes.len() > self.0.capacity().saturating_sub(self.0.len()) {
+impl CapturePayload for Vec<u8> {
+    fn append_bytes(&mut self, bytes: &[u8]) -> Result<(), EncodeError> {
+        if bytes.len() > self.capacity() - self.len() {
             return Err(EncodeError::UnexpectedEnd);
         }
-        // The capacity check above makes this append allocation-free.
-        self.0.extend_from_slice(bytes);
+        self.extend_from_slice(bytes);
         Ok(())
     }
+
+    fn truncate_to(&mut self, len: usize) {
+        self.truncate(len);
+    }
+}
+
+struct PayloadWriter<'a, P>(&'a mut P);
+
+impl<P: CapturePayload> Writer for PayloadWriter<'_, P> {
+    fn write(&mut self, bytes: &[u8]) -> Result<(), EncodeError> {
+        self.0.append_bytes(bytes)
+    }
+}
+
+fn frozen_payload_size(item: &impl Freezable) -> Result<usize, EncodeError> {
+    let mut encoder = EncoderImpl::new(SizeWriter::default(), bincode::config::standard());
+    BincodeAdapter(item).encode(&mut encoder)?;
+    Ok(encoder.into_writer().bytes_written)
 }
 
 impl KeyFramesManager {
@@ -1780,11 +1915,8 @@ impl KeyFramesManager {
         if self.inner.is_none() && !self.distributed {
             return Ok(());
         }
-        let mut sizer = EncoderImpl::new(SizeWriter::default(), bincode::config::standard());
-        BincodeAdapter(item)
-            .encode(&mut sizer)
+        let payload_bytes = frozen_payload_size(item)
             .map_err(|_| CuError::from("Failed to size component keyframe state"))?;
-        let payload_bytes = sizer.into_writer().bytes_written as usize;
         if self.distributed {
             self.capture_capacities.push(
                 (KEYFRAME_FRAME_HEADER_LEN + payload_bytes)
@@ -1932,7 +2064,7 @@ impl KeyFramesManager {
     }
 }
 
-fn reserve_keyframe_capacity(keyframe: &mut KeyFrame, requested: usize) -> CuResult<()> {
+pub(crate) fn reserve_keyframe_capacity(keyframe: &mut KeyFrame, requested: usize) -> CuResult<()> {
     if keyframe.serialized_tasks.capacity() < requested {
         let additional = requested.saturating_sub(keyframe.serialized_tasks.len());
         keyframe
@@ -2323,13 +2455,13 @@ where
 /// `serialized_tasks` contains a versioned sequence of length-framed component
 /// snapshots in their generated execution-wave freeze order.
 #[derive(Clone, Decode)]
-pub struct KeyFrame {
+pub struct KeyFrame<P = Vec<u8>> {
     // This is the id of the copper list that this keyframe is associated with (recorded before the copperlist).
     pub culistid: u64,
     // This is the timestamp when the keyframe was created, using the robot clock.
     pub timestamp: CuTime,
     // Versioned, length-framed bincode snapshots of all generated components.
-    pub serialized_tasks: Vec<u8>,
+    pub serialized_tasks: P,
 }
 
 const DISTRIBUTED_KEYFRAME_HEADER: &[u8; 5] = b"CUKD\x01";
@@ -2489,13 +2621,13 @@ fn align_up(value: usize, alignment: usize) -> Option<usize> {
         .map(|value| value & !(alignment - 1))
 }
 
-impl Encode for KeyFrame {
+impl<P: AsRef<[u8]>> Encode for KeyFrame<P> {
     fn encode<__E: bincode::enc::Encoder>(&self, encoder: &mut __E) -> Result<(), EncodeError> {
         self.culistid.encode(encoder)?;
         self.timestamp.encode(encoder)?;
-        let bytes = self.serialized_tasks.as_slice();
+        let bytes = self.serialized_tasks.as_ref();
         let Some(count) = distributed_count(bytes).map_err(EncodeError::Other)? else {
-            return self.serialized_tasks.encode(encoder);
+            return bytes.encode(encoder);
         };
         let mut length = KEYFRAME_PAYLOAD_HEADER.len();
         for component in 0..count {
@@ -2704,43 +2836,29 @@ impl KeyFrame {
         self.serialized_tasks
             .extend_from_slice(KEYFRAME_PAYLOAD_HEADER);
     }
+}
 
-    /// Append one length-framed component snapshot in a single `freeze` pass.
-    fn add_frozen_task(&mut self, task: &impl Freezable) -> Result<usize, EncodeError> {
-        let cfg = bincode::config::standard();
-        let start = self.serialized_tasks.len();
-        let payload_offset =
-            start
-                .checked_add(KEYFRAME_FRAME_HEADER_LEN)
-                .ok_or(EncodeError::Other(
-                    "keyframe component frame offset overflow",
-                ))?;
-        if payload_offset > self.serialized_tasks.capacity() {
-            return Err(EncodeError::UnexpectedEnd);
-        }
-
-        self.serialized_tasks.resize(payload_offset, 0);
-        let length_offset = start;
-        self.serialized_tasks[length_offset..payload_offset].fill(0);
-
-        let mut encoder =
-            EncoderImpl::<_, _>::new(PreallocatedVecWriter(&mut self.serialized_tasks), cfg);
+impl<P> KeyFrame<P> {
+    /// Append one length-framed component snapshot in a single freeze pass.
+    fn add_frozen_task(&mut self, task: &impl Freezable) -> Result<usize, EncodeError>
+    where
+        P: CapturePayload,
+    {
+        let bytes = &mut self.serialized_tasks;
+        let start = bytes.len();
+        bytes.append_bytes(&[0; KEYFRAME_FRAME_HEADER_LEN])?;
+        let payload_offset = bytes.len();
+        let mut encoder = EncoderImpl::new(PayloadWriter(bytes), bincode::config::standard());
         if let Err(error) = BincodeAdapter(task).encode(&mut encoder) {
-            self.serialized_tasks.truncate(start);
+            bytes.truncate_to(start);
             return Err(error);
         }
-        let payload_len = encoder.into_writer().0.len() - payload_offset;
-        let payload_len = u32::try_from(payload_len).map_err(|_| {
-            self.serialized_tasks.truncate(start);
-            EncodeError::OtherString(
-                "keyframe component snapshot exceeds the u32 frame limit".to_string(),
-            )
+        let payload_len = u32::try_from(bytes.len() - payload_offset).map_err(|_| {
+            bytes.truncate_to(start);
+            EncodeError::Other("keyframe component snapshot exceeds the u32 frame limit")
         })?;
-        self.serialized_tasks
-            .truncate(payload_offset + payload_len as usize);
-        self.serialized_tasks[length_offset..payload_offset]
-            .copy_from_slice(&payload_len.to_le_bytes());
-        Ok(self.serialized_tasks.len() - start)
+        bytes[start..payload_offset].copy_from_slice(&payload_len.to_le_bytes());
+        Ok(bytes.len() - start)
     }
 }
 

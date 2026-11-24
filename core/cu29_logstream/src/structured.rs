@@ -5,10 +5,10 @@ use bincode::{
     enc::{Encoder, EncoderImpl, write::Writer},
     error::EncodeError,
 };
+use core::{cell::RefCell, fmt::Debug};
 use cu29_log::CuLogEntry;
 use cu29_traits::{CuResult, WriteStream};
 use cu29_unifiedlog::{LogStream, SectionStorage, UnifiedLogWrite};
-use std::{cell::RefCell, fmt::Debug};
 
 /// Statically composed destinations for one local serialization attempt.
 /// A local section rollover starts a fresh attempt; only successful local writes
@@ -71,7 +71,7 @@ impl<S: SectionStorage, L: UnifiedLogWrite<S>, O: StructuredLogOutput>
     }
 }
 impl<S: SectionStorage, L: UnifiedLogWrite<S>, O: Debug> Debug for StructuredLogStream<S, L, O> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("StructuredLogStream")
             .field("local", &self.local)
             .field("outputs", &self.outputs)
