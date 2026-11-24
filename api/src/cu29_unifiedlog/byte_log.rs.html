@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29_unifiedlog/src/byte_log.rs`."><title>byte_log.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-1e18a8e7.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_unifiedlog" data-themes="" data-resource-suffix="" data-rustdoc-version="1.102.0-nightly (137d1d494 2026-11-22)" data-channel="nightly" data-search-js="search-085293d4.js" data-stringdex-js="stringdex-b5109af9.js" data-settings-js="settings-9b351432.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-419f3a3f.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-101b5a15.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">cu29_unifiedlog/</div>byte_log.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Shared byte addressing, append validation and section reclamation for storage adapters.
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29_unifiedlog/src/byte_log.rs`."><title>byte_log.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-1e18a8e7.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_unifiedlog" data-themes="" data-resource-suffix="" data-rustdoc-version="1.102.0-nightly (20fe935d5 2026-11-23)" data-channel="nightly" data-search-js="search-085293d4.js" data-stringdex-js="stringdex-b5109af9.js" data-settings-js="settings-9b351432.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-419f3a3f.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-101b5a15.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">cu29_unifiedlog/</div>byte_log.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Shared byte addressing, append validation and section reclamation for storage adapters.
 <a href=#2 id=2 data-nosnippet>2</a>
 <a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use crate</span>::{
 <a href=#4 id=4 data-nosnippet>4</a>    ApplicationMetadata, CapacityPolicy, MAIN_MAGIC, MainHeader, SECTION_HEADER_COMPACT_SIZE,
@@ -103,12 +103,12 @@
 <a href=#103 id=103 data-nosnippet>103</a>    }
 <a href=#104 id=104 data-nosnippet>104</a>}
 <a href=#105 id=105 data-nosnippet>105</a>
-<a href=#106 id=106 data-nosnippet>106</a><span class="kw">struct </span>Claims {
-<a href=#107 id=107 data-nosnippet>107</a>    leases: Arc&lt;LeaseTable&gt;,
+<a href=#106 id=106 data-nosnippet>106</a><span class="kw">struct </span>Claims&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#107 id=107 data-nosnippet>107</a>    leases: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>LeaseTable,
 <a href=#108 id=108 data-nosnippet>108</a>    held: [<span class="prelude-ty">Option</span>&lt;(usize, usize)&gt;; LEASES],
 <a href=#109 id=109 data-nosnippet>109</a>}
-<a href=#110 id=110 data-nosnippet>110</a><span class="kw">impl </span>Claims {
-<a href=#111 id=111 data-nosnippet>111</a>    <span class="kw">fn </span>new(leases: Arc&lt;LeaseTable&gt;) -&gt; <span class="self">Self </span>{
+<a href=#110 id=110 data-nosnippet>110</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; Claims&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#111 id=111 data-nosnippet>111</a>    <span class="kw">fn </span>new(leases: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>LeaseTable) -&gt; <span class="self">Self </span>{
 <a href=#112 id=112 data-nosnippet>112</a>        <span class="self">Self </span>{
 <a href=#113 id=113 data-nosnippet>113</a>            leases,
 <a href=#114 id=114 data-nosnippet>114</a>            held: [<span class="prelude-val">None</span>; LEASES],
@@ -151,7 +151,7 @@
 <a href=#151 id=151 data-nosnippet>151</a>        }
 <a href=#152 id=152 data-nosnippet>152</a>    }
 <a href=#153 id=153 data-nosnippet>153</a>}
-<a href=#154 id=154 data-nosnippet>154</a><span class="kw">impl </span>Drop <span class="kw">for </span>Claims {
+<a href=#154 id=154 data-nosnippet>154</a><span class="kw">impl </span>Drop <span class="kw">for </span>Claims&lt;<span class="lifetime">'_</span>&gt; {
 <a href=#155 id=155 data-nosnippet>155</a>    <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
 <a href=#156 id=156 data-nosnippet>156</a>        <span class="kw">for </span><span class="kw-2">&amp;</span>(slot, old) <span class="kw">in </span><span class="self">self</span>.held.iter().flatten() {
 <a href=#157 id=157 data-nosnippet>157</a>            <span class="self">self</span>.leases[slot].store(old, Ordering::Release);
@@ -907,7 +907,7 @@
 <a href=#907 id=907 data-nosnippet>907</a>        <span class="prelude-val">Ok</span>((header.allocated, header.next_section))
 <a href=#908 id=908 data-nosnippet>908</a>    }
 <a href=#909 id=909 data-nosnippet>909</a>    <span class="kw">fn </span>data_header(<span class="kw-2">&amp;</span><span class="self">self</span>, offset: u64) -&gt; CuResult&lt;SectionHeader&gt; {
-<a href=#910 id=910 data-nosnippet>910</a>        <span class="kw">let </span><span class="kw-2">mut </span>claims = Claims::new(<span class="self">self</span>.leases.clone());
+<a href=#910 id=910 data-nosnippet>910</a>        <span class="kw">let </span><span class="kw-2">mut </span>claims = Claims::new(<span class="kw-2">&amp;</span><span class="self">self</span>.leases);
 <a href=#911 id=911 data-nosnippet>911</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(slot) = <span class="self">self
 <a href=#912 id=912 data-nosnippet>912</a>            </span>.leases
 <a href=#913 id=913 data-nosnippet>913</a>            .iter()
@@ -1387,621 +1387,622 @@
 <a href=#1387 id=1387 data-nosnippet>1387</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(<span class="string">"Log is full"</span>));
 <a href=#1388 id=1388 data-nosnippet>1388</a>        }
 <a href=#1389 id=1389 data-nosnippet>1389</a>        <span class="comment">// Claim every affected encoder before any write. A failed preflight restores all leases.
-<a href=#1390 id=1390 data-nosnippet>1390</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>claims = Claims::new(<span class="self">self</span>.leases.clone());
-<a href=#1391 id=1391 data-nosnippet>1391</a>        <span class="kw">let </span><span class="kw-2">mut </span>cursor = <span class="self">self</span>.header.head_section;
-<a href=#1392 id=1392 data-nosnippet>1392</a>        <span class="kw">if </span>last_overlap != <span class="number">0 </span>{
-<a href=#1393 id=1393 data-nosnippet>1393</a>            <span class="kw">let </span><span class="kw-2">mut </span>discard_build = <span class="bool-val">false</span>;
-<a href=#1394 id=1394 data-nosnippet>1394</a>            <span class="kw">loop </span>{
-<a href=#1395 id=1395 data-nosnippet>1395</a>                <span class="kw">let </span>pinned = <span class="self">self
-<a href=#1396 id=1396 data-nosnippet>1396</a>                    </span>.boot_extent
-<a href=#1397 id=1397 data-nosnippet>1397</a>                    .is_some_and(|p| cursor == p.start || cursor == p.tail);
-<a href=#1398 id=1398 data-nosnippet>1398</a>                <span class="kw">let </span>slot = <span class="self">self
-<a href=#1399 id=1399 data-nosnippet>1399</a>                    </span>.leases
-<a href=#1400 id=1400 data-nosnippet>1400</a>                    .iter()
-<a href=#1401 id=1401 data-nosnippet>1401</a>                    .position(|lease| lease.offset() == cursor);
-<a href=#1402 id=1402 data-nosnippet>1402</a>                <span class="kw">if </span>!pinned &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(slot) = slot {
-<a href=#1403 id=1403 data-nosnippet>1403</a>                    claims.claim(slot)<span class="question-mark">?</span>;
-<a href=#1404 id=1404 data-nosnippet>1404</a>                }
-<a href=#1405 id=1405 data-nosnippet>1405</a>                <span class="kw">let </span>h = <span class="self">self</span>.data_header_unlocked(cursor)<span class="question-mark">?</span>;
-<a href=#1406 id=1406 data-nosnippet>1406</a>                <span class="kw">if </span>slot.is_none()
-<a href=#1407 id=1407 data-nosnippet>1407</a>                    &amp;&amp; h.is_open
-<a href=#1408 id=1408 data-nosnippet>1408</a>                    &amp;&amp; read_descriptor(<span class="kw-2">&amp;</span><span class="self">self</span>.storage, cursor)<span class="question-mark">?</span>.generation &gt; <span class="self">self</span>.reopened_generation
-<a href=#1409 id=1409 data-nosnippet>1409</a>                {
-<a href=#1410 id=1410 data-nosnippet>1410</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(<span class="string">"Space is blocked by an open section"</span>));
-<a href=#1411 id=1411 data-nosnippet>1411</a>                }
-<a href=#1412 id=1412 data-nosnippet>1412</a>                <span class="kw">if </span>h.entry_type == UnifiedLogType::ApplicationMetadata {
-<a href=#1413 id=1413 data-nosnippet>1413</a>                    discard_build = !pinned;
-<a href=#1414 id=1414 data-nosnippet>1414</a>                }
-<a href=#1415 id=1415 data-nosnippet>1415</a>                <span class="kw">if </span>cursor == last_overlap {
-<a href=#1416 id=1416 data-nosnippet>1416</a>                    <span class="comment">// Once a build's metadata is gone, drop the rest of that build together.
-<a href=#1417 id=1417 data-nosnippet>1417</a>                    </span><span class="kw">if </span>discard_build
-<a href=#1418 id=1418 data-nosnippet>1418</a>                        &amp;&amp; h.next_section != <span class="number">0
-<a href=#1419 id=1419 data-nosnippet>1419</a>                        </span>&amp;&amp; <span class="self">self</span>.data_header_unlocked(h.next_section)<span class="question-mark">?</span>.entry_type
-<a href=#1420 id=1420 data-nosnippet>1420</a>                            != UnifiedLogType::ApplicationMetadata
-<a href=#1421 id=1421 data-nosnippet>1421</a>                    {
-<a href=#1422 id=1422 data-nosnippet>1422</a>                        last_overlap = h.next_section;
-<a href=#1423 id=1423 data-nosnippet>1423</a>                    } <span class="kw">else </span>{
-<a href=#1424 id=1424 data-nosnippet>1424</a>                        <span class="kw">break</span>;
-<a href=#1425 id=1425 data-nosnippet>1425</a>                    }
-<a href=#1426 id=1426 data-nosnippet>1426</a>                }
-<a href=#1427 id=1427 data-nosnippet>1427</a>                cursor = h.next_section;
-<a href=#1428 id=1428 data-nosnippet>1428</a>            }
-<a href=#1429 id=1429 data-nosnippet>1429</a>        }
-<a href=#1430 id=1430 data-nosnippet>1430</a>        <span class="kw">let </span>free_slot = <span class="self">self
-<a href=#1431 id=1431 data-nosnippet>1431</a>            </span>.leases
-<a href=#1432 id=1432 data-nosnippet>1432</a>            .iter()
-<a href=#1433 id=1433 data-nosnippet>1433</a>            .position(|s| <span class="macro">matches!</span>(s.load(Ordering::Acquire) % <span class="number">4</span>, <span class="number">0 </span>| SEALED));
-<a href=#1434 id=1434 data-nosnippet>1434</a>        <span class="kw">if </span>free_slot.is_none() &amp;&amp; last_overlap == <span class="number">0 </span>{
-<a href=#1435 id=1435 data-nosnippet>1435</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(
-<a href=#1436 id=1436 data-nosnippet>1436</a>                <span class="string">"Too many concurrent section streams (maximum 64)"</span>,
-<a href=#1437 id=1437 data-nosnippet>1437</a>            ));
-<a href=#1438 id=1438 data-nosnippet>1438</a>        }
-<a href=#1439 id=1439 data-nosnippet>1439</a>        <span class="comment">// Validate the mapping geometry before reclamation or header changes.
-<a href=#1440 id=1440 data-nosnippet>1440</a>        </span><span class="kw">if </span>end &lt;= <span class="self">self</span>.storage.len() {
-<a href=#1441 id=1441 data-nosnippet>1441</a>            <span class="kw">let _ </span>= <span class="self">self</span>.storage.region(position, size)<span class="question-mark">?</span>;
-<a href=#1442 id=1442 data-nosnippet>1442</a>        }
-<a href=#1443 id=1443 data-nosnippet>1443</a>        <span class="self">self</span>.activate()<span class="question-mark">?</span>;
-<a href=#1444 id=1444 data-nosnippet>1444</a>        <span class="self">self</span>.faulted = <span class="bool-val">true</span>;
-<a href=#1445 id=1445 data-nosnippet>1445</a>        <span class="kw">if </span>end &gt; <span class="self">self</span>.header.sections_end {
-<a href=#1446 id=1446 data-nosnippet>1446</a>            <span class="self">self</span>.storage.grow(end)<span class="question-mark">?</span>;
-<a href=#1447 id=1447 data-nosnippet>1447</a>            <span class="self">self</span>.header.sections_end = <span class="self">self</span>.storage.len();
-<a href=#1448 id=1448 data-nosnippet>1448</a>        }
-<a href=#1449 id=1449 data-nosnippet>1449</a>        <span class="kw">if </span>last_overlap != <span class="number">0 </span>{
-<a href=#1450 id=1450 data-nosnippet>1450</a>            <span class="kw">let </span><span class="kw-2">mut </span>cursor = <span class="self">self</span>.header.head_section;
-<a href=#1451 id=1451 data-nosnippet>1451</a>            <span class="kw">let </span><span class="kw-2">mut </span>retained_boot = <span class="prelude-val">None</span>;
-<a href=#1452 id=1452 data-nosnippet>1452</a>            <span class="kw">loop </span>{
-<a href=#1453 id=1453 data-nosnippet>1453</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(pin) = <span class="self">self</span>.boot_extent
-<a href=#1454 id=1454 data-nosnippet>1454</a>                    &amp;&amp; cursor == pin.start
-<a href=#1455 id=1455 data-nosnippet>1455</a>                {
-<a href=#1456 id=1456 data-nosnippet>1456</a>                    retained_boot = <span class="prelude-val">Some</span>(pin);
-<a href=#1457 id=1457 data-nosnippet>1457</a>                    cursor = <span class="self">self</span>.data_header_unlocked(pin.tail)<span class="question-mark">?</span>.next_section;
-<a href=#1458 id=1458 data-nosnippet>1458</a>                    <span class="kw">continue</span>;
-<a href=#1459 id=1459 data-nosnippet>1459</a>                }
-<a href=#1460 id=1460 data-nosnippet>1460</a>                <span class="kw">let </span><span class="kw-2">mut </span>h = <span class="self">self</span>.data_header_unlocked(cursor)<span class="question-mark">?</span>;
-<a href=#1461 id=1461 data-nosnippet>1461</a>                h.is_open = <span class="bool-val">false</span>;
-<a href=#1462 id=1462 data-nosnippet>1462</a>                <span class="kw">let </span>generation = read_descriptor(<span class="kw-2">&amp;</span><span class="self">self</span>.storage, cursor)<span class="question-mark">?</span>.generation;
-<a href=#1463 id=1463 data-nosnippet>1463</a>                write_commit(
-<a href=#1464 id=1464 data-nosnippet>1464</a>                    <span class="kw-2">&amp;mut </span><span class="self">self</span>.storage.region(cursor, HEADER)<span class="question-mark">?</span>,
-<a href=#1465 id=1465 data-nosnippet>1465</a>                    <span class="kw-2">&amp;</span>h,
-<a href=#1466 id=1466 data-nosnippet>1466</a>                    cursor,
-<a href=#1467 id=1467 data-nosnippet>1467</a>                    generation,
-<a href=#1468 id=1468 data-nosnippet>1468</a>                )<span class="question-mark">?</span>;
-<a href=#1469 id=1469 data-nosnippet>1469</a>                <span class="self">self</span>.storage.region(cursor, h.allocated)<span class="question-mark">?</span>.flush()<span class="question-mark">?</span>;
-<a href=#1470 id=1470 data-nosnippet>1470</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(slot) = <span class="self">self
-<a href=#1471 id=1471 data-nosnippet>1471</a>                    </span>.leases
-<a href=#1472 id=1472 data-nosnippet>1472</a>                    .iter()
-<a href=#1473 id=1473 data-nosnippet>1473</a>                    .position(|lease| lease.offset() == cursor)
-<a href=#1474 id=1474 data-nosnippet>1474</a>                {
-<a href=#1475 id=1475 data-nosnippet>1475</a>                    claims.seal(slot);
-<a href=#1476 id=1476 data-nosnippet>1476</a>                }
-<a href=#1477 id=1477 data-nosnippet>1477</a>                <span class="self">self</span>.retained_space -= h.allocated;
-<a href=#1478 id=1478 data-nosnippet>1478</a>                <span class="kw">let </span>next = h.next_section;
-<a href=#1479 id=1479 data-nosnippet>1479</a>                <span class="kw">if </span>cursor == last_overlap {
-<a href=#1480 id=1480 data-nosnippet>1480</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(pin) = retained_boot {
-<a href=#1481 id=1481 data-nosnippet>1481</a>                        <span class="kw">let </span>generation = <span class="kw">if </span>next == <span class="number">0 </span>{
-<a href=#1482 id=1482 data-nosnippet>1482</a>                            <span class="number">0
-<a href=#1483 id=1483 data-nosnippet>1483</a>                        </span>} <span class="kw">else </span>{
-<a href=#1484 id=1484 data-nosnippet>1484</a>                            read_descriptor(<span class="kw-2">&amp;</span><span class="self">self</span>.storage, next)<span class="question-mark">?</span>.generation
-<a href=#1485 id=1485 data-nosnippet>1485</a>                        };
-<a href=#1486 id=1486 data-nosnippet>1486</a>                        <span class="self">self</span>.link_sections(pin.tail, next, generation)<span class="question-mark">?</span>;
-<a href=#1487 id=1487 data-nosnippet>1487</a>                        <span class="self">self</span>.header.head_section = pin.start;
-<a href=#1488 id=1488 data-nosnippet>1488</a>                        <span class="kw">if </span>next == <span class="number">0 </span>{
-<a href=#1489 id=1489 data-nosnippet>1489</a>                            <span class="self">self</span>.header.tail_section = pin.tail;
-<a href=#1490 id=1490 data-nosnippet>1490</a>                        }
-<a href=#1491 id=1491 data-nosnippet>1491</a>                    } <span class="kw">else </span>{
-<a href=#1492 id=1492 data-nosnippet>1492</a>                        <span class="self">self</span>.header.head_section = next;
-<a href=#1493 id=1493 data-nosnippet>1493</a>                        <span class="kw">if </span>next == <span class="number">0 </span>{
-<a href=#1494 id=1494 data-nosnippet>1494</a>                            <span class="self">self</span>.header.tail_section = <span class="number">0</span>;
-<a href=#1495 id=1495 data-nosnippet>1495</a>                        }
-<a href=#1496 id=1496 data-nosnippet>1496</a>                    }
-<a href=#1497 id=1497 data-nosnippet>1497</a>                    <span class="kw">break</span>;
-<a href=#1498 id=1498 data-nosnippet>1498</a>                }
-<a href=#1499 id=1499 data-nosnippet>1499</a>                cursor = next;
-<a href=#1500 id=1500 data-nosnippet>1500</a>            }
-<a href=#1501 id=1501 data-nosnippet>1501</a>            <span class="self">self</span>.publish()<span class="question-mark">?</span>;
-<a href=#1502 id=1502 data-nosnippet>1502</a>        }
-<a href=#1503 id=1503 data-nosnippet>1503</a>        <span class="kw">let </span>slot = <span class="self">self
-<a href=#1504 id=1504 data-nosnippet>1504</a>            </span>.leases
-<a href=#1505 id=1505 data-nosnippet>1505</a>            .iter()
-<a href=#1506 id=1506 data-nosnippet>1506</a>            <span class="comment">// A writer may finish between loads. Classify one snapshot and reuse
-<a href=#1507 id=1507 data-nosnippet>1507</a>            // only unassigned or sealed slots; idle streams retain their generation.
-<a href=#1508 id=1508 data-nosnippet>1508</a>            </span>.position(|s| <span class="macro">matches!</span>(s.load(Ordering::Acquire) % <span class="number">4</span>, <span class="number">0 </span>| SEALED))
-<a href=#1509 id=1509 data-nosnippet>1509</a>            .ok_or_else(|| CuError::from(<span class="string">"Too many concurrent section writes"</span>))<span class="question-mark">?</span>;
-<a href=#1510 id=1510 data-nosnippet>1510</a>        <span class="self">self</span>.generation = <span class="self">self
-<a href=#1511 id=1511 data-nosnippet>1511</a>            </span>.generation
-<a href=#1512 id=1512 data-nosnippet>1512</a>            .checked_add(<span class="number">1</span>)
-<a href=#1513 id=1513 data-nosnippet>1513</a>            .filter(|g| <span class="kw-2">*</span>g &lt; usize::MAX / GENERATION_STRIDE)
-<a href=#1514 id=1514 data-nosnippet>1514</a>            .ok_or_else(|| CuError::from(<span class="string">"Section generation exhausted"</span>))<span class="question-mark">?</span>;
-<a href=#1515 id=1515 data-nosnippet>1515</a>        <span class="kw">let </span>header = SectionHeader {
-<a href=#1516 id=1516 data-nosnippet>1516</a>            entry_type: kind,
-<a href=#1517 id=1517 data-nosnippet>1517</a>            allocated: size,
-<a href=#1518 id=1518 data-nosnippet>1518</a>            context,
-<a href=#1519 id=1519 data-nosnippet>1519</a>            ..SectionHeader::default()
-<a href=#1520 id=1520 data-nosnippet>1520</a>        };
-<a href=#1521 id=1521 data-nosnippet>1521</a>        <span class="kw">let </span><span class="kw-2">mut </span>region = <span class="self">self</span>.storage.region(position, size)<span class="question-mark">?</span>;
-<a href=#1522 id=1522 data-nosnippet>1522</a>        initialize_section(<span class="kw-2">&amp;mut </span>region, <span class="kw-2">&amp;</span>header, position, <span class="self">self</span>.generation <span class="kw">as </span>u64)<span class="question-mark">?</span>;
-<a href=#1523 id=1523 data-nosnippet>1523</a>        <span class="kw">if </span><span class="self">self</span>.header.tail_section != <span class="number">0 </span>{
-<a href=#1524 id=1524 data-nosnippet>1524</a>            <span class="kw">let </span>tail = <span class="self">self</span>.header.tail_section;
-<a href=#1525 id=1525 data-nosnippet>1525</a>            <span class="self">self</span>.link_sections(tail, position, <span class="self">self</span>.generation <span class="kw">as </span>u64)<span class="question-mark">?</span>;
-<a href=#1526 id=1526 data-nosnippet>1526</a>        }
-<a href=#1527 id=1527 data-nosnippet>1527</a>        <span class="kw">if </span><span class="self">self</span>.header.head_section == <span class="number">0 </span>{
-<a href=#1528 id=1528 data-nosnippet>1528</a>            <span class="self">self</span>.header.head_section = position;
-<a href=#1529 id=1529 data-nosnippet>1529</a>        }
-<a href=#1530 id=1530 data-nosnippet>1530</a>        <span class="self">self</span>.header.tail_section = position;
-<a href=#1531 id=1531 data-nosnippet>1531</a>        <span class="self">self</span>.header.clean_close = <span class="bool-val">false</span>;
-<a href=#1532 id=1532 data-nosnippet>1532</a>        <span class="self">self</span>.publish()<span class="question-mark">?</span>;
-<a href=#1533 id=1533 data-nosnippet>1533</a>        <span class="self">self</span>.retained_space += size;
-<a href=#1534 id=1534 data-nosnippet>1534</a>        <span class="self">self</span>.allocation_end = <span class="self">self</span>.allocation_end.max(end);
-<a href=#1535 id=1535 data-nosnippet>1535</a>        <span class="kw">for </span>lease <span class="kw">in </span><span class="self">self</span>.leases.iter() {
-<a href=#1536 id=1536 data-nosnippet>1536</a>            <span class="kw">if </span>lease.offset() == position {
-<a href=#1537 id=1537 data-nosnippet>1537</a>                lease.set_offset(<span class="number">0</span>);
-<a href=#1538 id=1538 data-nosnippet>1538</a>            }
-<a href=#1539 id=1539 data-nosnippet>1539</a>        }
-<a href=#1540 id=1540 data-nosnippet>1540</a>        <span class="self">self</span>.leases[slot].set_offset(position);
-<a href=#1541 id=1541 data-nosnippet>1541</a>        <span class="self">self</span>.leases[slot].set_allocated(size);
-<a href=#1542 id=1542 data-nosnippet>1542</a>        <span class="self">self</span>.leases[slot].set_next(<span class="number">0</span>);
-<a href=#1543 id=1543 data-nosnippet>1543</a>        <span class="self">self</span>.leases[slot].store(
-<a href=#1544 id=1544 data-nosnippet>1544</a>            <span class="self">self</span>.generation * GENERATION_STRIDE
-<a href=#1545 id=1545 data-nosnippet>1545</a>                + <span class="kw">if </span><span class="self">self</span>.policy == CapacityPolicy::OverwriteOldest {
-<a href=#1546 id=1546 data-nosnippet>1546</a>                    IDLE
-<a href=#1547 id=1547 data-nosnippet>1547</a>                } <span class="kw">else </span>{
-<a href=#1548 id=1548 data-nosnippet>1548</a>                    BUSY
-<a href=#1549 id=1549 data-nosnippet>1549</a>                },
-<a href=#1550 id=1550 data-nosnippet>1550</a>            Ordering::Release,
-<a href=#1551 id=1551 data-nosnippet>1551</a>        );
-<a href=#1552 id=1552 data-nosnippet>1552</a>        <span class="kw">let </span>append_only = <span class="self">self</span>.policy != CapacityPolicy::OverwriteOldest;
-<a href=#1553 id=1553 data-nosnippet>1553</a>        <span class="kw">let </span>records_per_commit = <span class="kw">if </span>kind == UnifiedLogType::CopperList {
-<a href=#1554 id=1554 data-nosnippet>1554</a>            region.begin_record_batching().get()
-<a href=#1555 id=1555 data-nosnippet>1555</a>        } <span class="kw">else </span>{
-<a href=#1556 id=1556 data-nosnippet>1556</a>            <span class="number">1
-<a href=#1557 id=1557 data-nosnippet>1557</a>        </span>};
-<a href=#1558 id=1558 data-nosnippet>1558</a>        <span class="self">self</span>.leases[slot]
-<a href=#1559 id=1559 data-nosnippet>1559</a>            .batched
-<a href=#1560 id=1560 data-nosnippet>1560</a>            .store(records_per_commit &gt; <span class="number">1</span>, Ordering::Relaxed);
-<a href=#1561 id=1561 data-nosnippet>1561</a>        <span class="kw">let </span>storage = ByteSection {
-<a href=#1562 id=1562 data-nosnippet>1562</a>            region,
-<a href=#1563 id=1563 data-nosnippet>1563</a>            position: HEADER,
-<a href=#1564 id=1564 data-nosnippet>1564</a>            header: header.clone(),
-<a href=#1565 id=1565 data-nosnippet>1565</a>            leases: <span class="self">self</span>.leases.clone(),
-<a href=#1566 id=1566 data-nosnippet>1566</a>            slot,
-<a href=#1567 id=1567 data-nosnippet>1567</a>            generation: <span class="self">self</span>.generation,
-<a href=#1568 id=1568 data-nosnippet>1568</a>            offset: position,
-<a href=#1569 id=1569 data-nosnippet>1569</a>            write_reserved: <span class="bool-val">false</span>,
-<a href=#1570 id=1570 data-nosnippet>1570</a>            append_only,
-<a href=#1571 id=1571 data-nosnippet>1571</a>            records_per_commit,
-<a href=#1572 id=1572 data-nosnippet>1572</a>            pending_records: <span class="number">0</span>,
-<a href=#1573 id=1573 data-nosnippet>1573</a>        };
-<a href=#1574 id=1574 data-nosnippet>1574</a>        <span class="kw">let </span>handle = SectionHandle::create(header, storage)<span class="question-mark">?</span>;
-<a href=#1575 id=1575 data-nosnippet>1575</a>        <span class="self">self</span>.faulted = <span class="bool-val">false</span>;
-<a href=#1576 id=1576 data-nosnippet>1576</a>        <span class="prelude-val">Ok</span>(handle)
-<a href=#1577 id=1577 data-nosnippet>1577</a>    }
-<a href=#1578 id=1578 data-nosnippet>1578</a>    <span class="kw">fn </span>flush_section(<span class="kw-2">&amp;mut </span><span class="self">self</span>, section: <span class="kw-2">&amp;mut </span>SectionHandle&lt;ByteSection&lt;B::Region&gt;&gt;) {
-<a href=#1579 id=1579 data-nosnippet>1579</a>        <span class="kw">let _ </span>= <span class="self">self</span>.try_flush_section(section);
-<a href=#1580 id=1580 data-nosnippet>1580</a>    }
-<a href=#1581 id=1581 data-nosnippet>1581</a>    <span class="kw">fn </span>try_flush_section(
-<a href=#1582 id=1582 data-nosnippet>1582</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#1583 id=1583 data-nosnippet>1583</a>        section: <span class="kw-2">&amp;mut </span>SectionHandle&lt;ByteSection&lt;B::Region&gt;&gt;,
-<a href=#1584 id=1584 data-nosnippet>1584</a>    ) -&gt; CuResult&lt;()&gt; {
-<a href=#1585 id=1585 data-nosnippet>1585</a>        <span class="kw">if </span><span class="self">self</span>.faulted || <span class="self">self</span>.leases.poisoned.load(Ordering::Acquire) {
-<a href=#1586 id=1586 data-nosnippet>1586</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(<span class="string">"Logger faulted after a storage failure"</span>));
-<a href=#1587 id=1587 data-nosnippet>1587</a>        }
-<a href=#1588 id=1588 data-nosnippet>1588</a>        <span class="kw">if let </span><span class="prelude-val">Err</span>(error) = section.storage.flush() {
-<a href=#1589 id=1589 data-nosnippet>1589</a>            <span class="self">self</span>.faulted = <span class="bool-val">true</span>;
-<a href=#1590 id=1590 data-nosnippet>1590</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(error);
-<a href=#1591 id=1591 data-nosnippet>1591</a>        }
-<a href=#1592 id=1592 data-nosnippet>1592</a>        section.mark_closed();
-<a href=#1593 id=1593 data-nosnippet>1593</a>        <span class="prelude-val">Ok</span>(())
-<a href=#1594 id=1594 data-nosnippet>1594</a>    }
-<a href=#1595 id=1595 data-nosnippet>1595</a>    <span class="kw">fn </span>status(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; UnifiedLogStatus {
-<a href=#1596 id=1596 data-nosnippet>1596</a>        UnifiedLogStatus {
-<a href=#1597 id=1597 data-nosnippet>1597</a>            total_used_space: usize::try_from(<span class="self">self</span>.header.sections_begin + <span class="self">self</span>.retained_space)
-<a href=#1598 id=1598 data-nosnippet>1598</a>                .unwrap_or(usize::MAX),
-<a href=#1599 id=1599 data-nosnippet>1599</a>            total_allocated_space: usize::try_from(<span class="self">self</span>.header.sections_end).unwrap_or(usize::MAX),
-<a href=#1600 id=1600 data-nosnippet>1600</a>        }
-<a href=#1601 id=1601 data-nosnippet>1601</a>    }
-<a href=#1602 id=1602 data-nosnippet>1602</a>}
-<a href=#1603 id=1603 data-nosnippet>1603</a><span class="kw">impl</span>&lt;B: ByteStorage&gt; Drop <span class="kw">for </span>ByteLogger&lt;B&gt; {
-<a href=#1604 id=1604 data-nosnippet>1604</a>    <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-<a href=#1605 id=1605 data-nosnippet>1605</a>        <span class="kw">let _ </span>= <span class="self">self</span>.close();
-<a href=#1606 id=1606 data-nosnippet>1606</a>    }
-<a href=#1607 id=1607 data-nosnippet>1607</a>}
-<a href=#1608 id=1608 data-nosnippet>1608</a>
-<a href=#1609 id=1609 data-nosnippet>1609</a><span class="attr">#[cfg(all(test, feature = <span class="string">"std"</span>))]
-<a href=#1610 id=1610 data-nosnippet>1610</a></span><span class="kw">mod </span>tests {
-<a href=#1611 id=1611 data-nosnippet>1611</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#1612 id=1612 data-nosnippet>1612</a>    <span class="kw">use crate</span>::{
-<a href=#1613 id=1613 data-nosnippet>1613</a>        LogStream, UnifiedLogRead, UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerRead,
-<a href=#1614 id=1614 data-nosnippet>1614</a>    };
-<a href=#1615 id=1615 data-nosnippet>1615</a>    <span class="kw">use </span>cu29_traits::WriteStream;
-<a href=#1616 id=1616 data-nosnippet>1616</a>    <span class="kw">use </span>std::cell::{Cell, RefCell};
-<a href=#1617 id=1617 data-nosnippet>1617</a>    <span class="kw">use </span>std::sync::Mutex;
-<a href=#1618 id=1618 data-nosnippet>1618</a>
-<a href=#1619 id=1619 data-nosnippet>1619</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">enum </span>LeaseEvent {
-<a href=#1620 id=1620 data-nosnippet>1620</a>        Loaded(usize),
-<a href=#1621 id=1621 data-nosnippet>1621</a>        BeforeCompareExchange,
-<a href=#1622 id=1622 data-nosnippet>1622</a>        AfterCompareExchange,
-<a href=#1623 id=1623 data-nosnippet>1623</a>    }
-<a href=#1624 id=1624 data-nosnippet>1624</a>
-<a href=#1625 id=1625 data-nosnippet>1625</a>    <span class="kw">type </span>LeaseHook = Box&lt;<span class="kw">dyn </span>FnMut(<span class="kw-2">&amp;</span>Lease, LeaseEvent)&gt;;
-<a href=#1626 id=1626 data-nosnippet>1626</a>    <span class="macro">std::thread_local!</span> {
-<a href=#1627 id=1627 data-nosnippet>1627</a>        <span class="kw">static </span>LEASE_HOOK: RefCell&lt;<span class="prelude-ty">Option</span>&lt;LeaseHook&gt;&gt; = RefCell::new(<span class="prelude-val">None</span>);
-<a href=#1628 id=1628 data-nosnippet>1628</a>    }
-<a href=#1629 id=1629 data-nosnippet>1629</a>
-<a href=#1630 id=1630 data-nosnippet>1630</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>lease_event(lease: <span class="kw-2">&amp;</span>Lease, event: LeaseEvent) {
-<a href=#1631 id=1631 data-nosnippet>1631</a>        LEASE_HOOK.with(|cell| {
-<a href=#1632 id=1632 data-nosnippet>1632</a>            <span class="kw">let </span><span class="kw-2">mut </span>hook = cell.borrow_mut().take();
-<a href=#1633 id=1633 data-nosnippet>1633</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(hook) = hook.as_mut() {
-<a href=#1634 id=1634 data-nosnippet>1634</a>                hook(lease, event);
-<a href=#1635 id=1635 data-nosnippet>1635</a>            }
-<a href=#1636 id=1636 data-nosnippet>1636</a>            <span class="kw-2">*</span>cell.borrow_mut() = hook;
-<a href=#1637 id=1637 data-nosnippet>1637</a>        });
-<a href=#1638 id=1638 data-nosnippet>1638</a>    }
-<a href=#1639 id=1639 data-nosnippet>1639</a>
-<a href=#1640 id=1640 data-nosnippet>1640</a>    <span class="kw">fn </span>saved_values(path: <span class="kw-2">&amp;</span>std::path::Path) -&gt; Vec&lt;u32&gt; {
-<a href=#1641 id=1641 data-nosnippet>1641</a>        <span class="kw">let </span><span class="kw-2">mut </span>reader = UnifiedLoggerRead::new(path).unwrap();
-<a href=#1642 id=1642 data-nosnippet>1642</a>        <span class="kw">let </span><span class="kw-2">mut </span>saved = Vec::new();
-<a href=#1643 id=1643 data-nosnippet>1643</a>        <span class="kw">while let </span><span class="prelude-val">Some</span>(bytes) = reader
-<a href=#1644 id=1644 data-nosnippet>1644</a>            .read_next_section_type(UnifiedLogType::CopperList)
-<a href=#1645 id=1645 data-nosnippet>1645</a>            .unwrap()
-<a href=#1646 id=1646 data-nosnippet>1646</a>        {
-<a href=#1647 id=1647 data-nosnippet>1647</a>            <span class="kw">let </span><span class="kw-2">mut </span>bytes = bytes.as_slice();
-<a href=#1648 id=1648 data-nosnippet>1648</a>            <span class="kw">while </span>!bytes.is_empty() {
-<a href=#1649 id=1649 data-nosnippet>1649</a>                <span class="kw">let </span>(value, used) = decode_from_slice::&lt;u32, <span class="kw">_</span>&gt;(bytes, standard()).unwrap();
-<a href=#1650 id=1650 data-nosnippet>1650</a>                saved.push(value);
-<a href=#1651 id=1651 data-nosnippet>1651</a>                bytes = <span class="kw-2">&amp;</span>bytes[used..];
-<a href=#1652 id=1652 data-nosnippet>1652</a>            }
-<a href=#1653 id=1653 data-nosnippet>1653</a>        }
-<a href=#1654 id=1654 data-nosnippet>1654</a>        saved
-<a href=#1655 id=1655 data-nosnippet>1655</a>    }
-<a href=#1656 id=1656 data-nosnippet>1656</a>
-<a href=#1657 id=1657 data-nosnippet>1657</a>    <span class="kw">fn </span>logger(path: <span class="kw-2">&amp;</span>std::path::Path, policy: CapacityPolicy) -&gt; <span class="kw">crate</span>::UnifiedLoggerWrite {
-<a href=#1658 id=1658 data-nosnippet>1658</a>        <span class="kw">match </span>UnifiedLoggerBuilder::new()
-<a href=#1659 id=1659 data-nosnippet>1659</a>            .file_base_name(path)
-<a href=#1660 id=1660 data-nosnippet>1660</a>            .preallocated_size(<span class="number">16384</span>)
-<a href=#1661 id=1661 data-nosnippet>1661</a>            .capacity(<span class="number">16384</span>, policy)
-<a href=#1662 id=1662 data-nosnippet>1662</a>            .write(<span class="bool-val">true</span>)
-<a href=#1663 id=1663 data-nosnippet>1663</a>            .create(<span class="bool-val">true</span>)
-<a href=#1664 id=1664 data-nosnippet>1664</a>            .build()
-<a href=#1665 id=1665 data-nosnippet>1665</a>            .unwrap()
-<a href=#1666 id=1666 data-nosnippet>1666</a>        {
-<a href=#1667 id=1667 data-nosnippet>1667</a>            UnifiedLogger::Write(logger) =&gt; logger,
-<a href=#1668 id=1668 data-nosnippet>1668</a>            <span class="kw">_ </span>=&gt; <span class="macro">unreachable!</span>(),
-<a href=#1669 id=1669 data-nosnippet>1669</a>        }
-<a href=#1670 id=1670 data-nosnippet>1670</a>    }
-<a href=#1671 id=1671 data-nosnippet>1671</a>
-<a href=#1672 id=1672 data-nosnippet>1672</a>    <span class="attr">#[test]
-<a href=#1673 id=1673 data-nosnippet>1673</a>    </span><span class="kw">fn </span>test_reclamation_cas_is_absent_from_append_only_records() {
-<a href=#1674 id=1674 data-nosnippet>1674</a>        <span class="kw">let </span>dir = tempfile::tempdir().unwrap();
-<a href=#1675 id=1675 data-nosnippet>1675</a>        <span class="kw">for </span>policy <span class="kw">in </span>[
-<a href=#1676 id=1676 data-nosnippet>1676</a>            CapacityPolicy::Grow,
-<a href=#1677 id=1677 data-nosnippet>1677</a>            CapacityPolicy::StopWhenFull,
-<a href=#1678 id=1678 data-nosnippet>1678</a>            CapacityPolicy::OverwriteOldest,
-<a href=#1679 id=1679 data-nosnippet>1679</a>        ] {
-<a href=#1680 id=1680 data-nosnippet>1680</a>            <span class="kw">let </span>path = dir.path().join(<span class="macro">format!</span>(<span class="string">"cas-{policy:?}.copper"</span>));
-<a href=#1681 id=1681 data-nosnippet>1681</a>            <span class="kw">let </span><span class="kw-2">mut </span>logger = logger(<span class="kw-2">&amp;</span>path, policy);
-<a href=#1682 id=1682 data-nosnippet>1682</a>            <span class="kw">let </span><span class="kw-2">mut </span>section = logger
-<a href=#1683 id=1683 data-nosnippet>1683</a>                .add_section(UnifiedLogType::CopperList, <span class="number">4096</span>)
-<a href=#1684 id=1684 data-nosnippet>1684</a>                .unwrap();
-<a href=#1685 id=1685 data-nosnippet>1685</a>            <span class="kw">let </span>calls = Arc::new(AtomicUsize::new(<span class="number">0</span>));
-<a href=#1686 id=1686 data-nosnippet>1686</a>            <span class="kw">let </span>observed = calls.clone();
-<a href=#1687 id=1687 data-nosnippet>1687</a>            LEASE_HOOK.with(|cell| {
-<a href=#1688 id=1688 data-nosnippet>1688</a>                <span class="kw-2">*</span>cell.borrow_mut() = <span class="prelude-val">Some</span>(Box::new(<span class="kw">move </span>|<span class="kw">_</span>, event| {
-<a href=#1689 id=1689 data-nosnippet>1689</a>                    <span class="kw">if </span><span class="macro">matches!</span>(event, LeaseEvent::BeforeCompareExchange) {
-<a href=#1690 id=1690 data-nosnippet>1690</a>                        observed.fetch_add(<span class="number">1</span>, Ordering::Relaxed);
-<a href=#1691 id=1691 data-nosnippet>1691</a>                    }
-<a href=#1692 id=1692 data-nosnippet>1692</a>                }))
-<a href=#1693 id=1693 data-nosnippet>1693</a>            });
-<a href=#1694 id=1694 data-nosnippet>1694</a>            <span class="kw">for </span>value <span class="kw">in </span><span class="number">0</span>..<span class="number">100u32 </span>{
-<a href=#1695 id=1695 data-nosnippet>1695</a>                section.append(value).unwrap();
-<a href=#1696 id=1696 data-nosnippet>1696</a>            }
-<a href=#1697 id=1697 data-nosnippet>1697</a>            LEASE_HOOK.with(|cell| cell.borrow_mut().take());
-<a href=#1698 id=1698 data-nosnippet>1698</a>            <span class="macro">assert_eq!</span>(
-<a href=#1699 id=1699 data-nosnippet>1699</a>                calls.load(Ordering::Relaxed),
-<a href=#1700 id=1700 data-nosnippet>1700</a>                <span class="kw">if </span>policy == CapacityPolicy::OverwriteOldest {
-<a href=#1701 id=1701 data-nosnippet>1701</a>                    <span class="number">200
-<a href=#1702 id=1702 data-nosnippet>1702</a>                </span>} <span class="kw">else </span>{
-<a href=#1703 id=1703 data-nosnippet>1703</a>                    <span class="number">0
-<a href=#1704 id=1704 data-nosnippet>1704</a>                </span>}
-<a href=#1705 id=1705 data-nosnippet>1705</a>            );
-<a href=#1706 id=1706 data-nosnippet>1706</a>            logger.try_flush_section(<span class="kw-2">&amp;mut </span>section).unwrap();
-<a href=#1707 id=1707 data-nosnippet>1707</a>            logger.close().unwrap();
-<a href=#1708 id=1708 data-nosnippet>1708</a>            <span class="macro">assert_eq!</span>(saved_values(<span class="kw-2">&amp;</span>path), (<span class="number">0</span>..<span class="number">100</span>).collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;());
-<a href=#1709 id=1709 data-nosnippet>1709</a>        }
-<a href=#1710 id=1710 data-nosnippet>1710</a>    }
-<a href=#1711 id=1711 data-nosnippet>1711</a>
-<a href=#1712 id=1712 data-nosnippet>1712</a>    <span class="attr">#[test]
-<a href=#1713 id=1713 data-nosnippet>1713</a>    </span><span class="kw">fn </span>test_append_only_close_waits_for_the_owner_and_drop_seals_it() {
-<a href=#1714 id=1714 data-nosnippet>1714</a>        <span class="kw">let </span>dir = tempfile::tempdir().unwrap();
-<a href=#1715 id=1715 data-nosnippet>1715</a>        <span class="kw">for </span>policy <span class="kw">in </span>[CapacityPolicy::Grow, CapacityPolicy::StopWhenFull] {
-<a href=#1716 id=1716 data-nosnippet>1716</a>            <span class="kw">let </span>path = dir.path().join(<span class="macro">format!</span>(<span class="string">"close-{policy:?}.copper"</span>));
-<a href=#1717 id=1717 data-nosnippet>1717</a>            <span class="kw">let </span><span class="kw-2">mut </span>logger = logger(<span class="kw-2">&amp;</span>path, policy);
-<a href=#1718 id=1718 data-nosnippet>1718</a>            <span class="kw">let </span><span class="kw-2">mut </span>section = logger
-<a href=#1719 id=1719 data-nosnippet>1719</a>                .add_section(UnifiedLogType::CopperList, <span class="number">2048</span>)
-<a href=#1720 id=1720 data-nosnippet>1720</a>                .unwrap();
-<a href=#1721 id=1721 data-nosnippet>1721</a>            section.append(<span class="number">41u32</span>).unwrap();
-<a href=#1722 id=1722 data-nosnippet>1722</a>            <span class="macro">assert!</span>(logger.close().is_err());
-<a href=#1723 id=1723 data-nosnippet>1723</a>            section.append(<span class="number">42u32</span>).unwrap();
-<a href=#1724 id=1724 data-nosnippet>1724</a>            drop(section);
-<a href=#1725 id=1725 data-nosnippet>1725</a>            logger.close().unwrap();
-<a href=#1726 id=1726 data-nosnippet>1726</a>            <span class="macro">assert_eq!</span>(saved_values(<span class="kw-2">&amp;</span>path), [<span class="number">41</span>, <span class="number">42</span>]);
-<a href=#1727 id=1727 data-nosnippet>1727</a>        }
-<a href=#1728 id=1728 data-nosnippet>1728</a>    }
-<a href=#1729 id=1729 data-nosnippet>1729</a>
-<a href=#1730 id=1730 data-nosnippet>1730</a>    <span class="attr">#[test]
-<a href=#1731 id=1731 data-nosnippet>1731</a>    </span><span class="kw">fn </span>test_metadata_owners_fit_independent_physical_blocks() {
-<a href=#1732 id=1732 data-nosnippet>1732</a>        <span class="kw">let </span>header = SectionHeader {
-<a href=#1733 id=1733 data-nosnippet>1733</a>            entry_type: UnifiedLogType::CopperList,
-<a href=#1734 id=1734 data-nosnippet>1734</a>            allocated: u64::MAX,
-<a href=#1735 id=1735 data-nosnippet>1735</a>            next_section: u64::MAX,
-<a href=#1736 id=1736 data-nosnippet>1736</a>            used: u32::MAX,
-<a href=#1737 id=1737 data-nosnippet>1737</a>            context: SectionContext {
-<a href=#1738 id=1738 data-nosnippet>1738</a>                run_id: u64::MAX,
-<a href=#1739 id=1739 data-nosnippet>1739</a>                instance_id: u32::MAX,
-<a href=#1740 id=1740 data-nosnippet>1740</a>                mission_index: u32::MAX,
-<a href=#1741 id=1741 data-nosnippet>1741</a>            },
-<a href=#1742 id=1742 data-nosnippet>1742</a>            ..SectionHeader::default()
-<a href=#1743 id=1743 data-nosnippet>1743</a>        };
-<a href=#1744 id=1744 data-nosnippet>1744</a>        <span class="kw">let </span><span class="kw-2">mut </span>descriptor = SectionDescriptor::new(<span class="kw-2">&amp;</span>header, u64::MAX, u64::MAX);
-<a href=#1745 id=1745 data-nosnippet>1745</a>        descriptor.next_generation = u64::MAX;
-<a href=#1746 id=1746 data-nosnippet>1746</a>        <span class="kw">let </span>commit = SectionCommit {
-<a href=#1747 id=1747 data-nosnippet>1747</a>            position: u64::MAX,
-<a href=#1748 id=1748 data-nosnippet>1748</a>            generation: u64::MAX,
-<a href=#1749 id=1749 data-nosnippet>1749</a>            used: u32::MAX,
-<a href=#1750 id=1750 data-nosnippet>1750</a>            is_open: <span class="bool-val">true</span>,
-<a href=#1751 id=1751 data-nosnippet>1751</a>        };
-<a href=#1752 id=1752 data-nosnippet>1752</a>        <span class="kw">let </span><span class="kw-2">mut </span>block = [<span class="number">0u8</span>; <span class="number">512</span>];
-<a href=#1753 id=1753 data-nosnippet>1753</a>        <span class="macro">assert!</span>(encode_into_slice(descriptor, <span class="kw-2">&amp;mut </span>block, standard()).unwrap() &lt; block.len());
-<a href=#1754 id=1754 data-nosnippet>1754</a>        <span class="macro">assert!</span>(encode_into_slice(commit, <span class="kw-2">&amp;mut </span>block, standard()).unwrap() &lt; block.len());
-<a href=#1755 id=1755 data-nosnippet>1755</a>    }
-<a href=#1756 id=1756 data-nosnippet>1756</a>
-<a href=#1757 id=1757 data-nosnippet>1757</a>    <span class="attr">#[test]
-<a href=#1758 id=1758 data-nosnippet>1758</a>    </span><span class="kw">fn </span>test_grow_allocation_does_not_visit_retained_extents() {
-<a href=#1759 id=1759 data-nosnippet>1759</a>        <span class="kw">let </span>dir = tempfile::tempdir().unwrap();
-<a href=#1760 id=1760 data-nosnippet>1760</a>        <span class="kw">let </span>path = dir.path().join(<span class="string">"allocation-visits.copper"</span>);
-<a href=#1761 id=1761 data-nosnippet>1761</a>        <span class="kw">let </span><span class="kw-2">mut </span>logger = logger(<span class="kw-2">&amp;</span>path, CapacityPolicy::Grow);
-<a href=#1762 id=1762 data-nosnippet>1762</a>        <span class="kw">for </span>value <span class="kw">in </span><span class="number">0</span>..<span class="number">512u32 </span>{
-<a href=#1763 id=1763 data-nosnippet>1763</a>            <span class="kw">let </span>visits = logger.extent_visits.load(Ordering::Relaxed);
-<a href=#1764 id=1764 data-nosnippet>1764</a>            <span class="kw">let </span><span class="kw-2">mut </span>section = logger
-<a href=#1765 id=1765 data-nosnippet>1765</a>                .add_section(UnifiedLogType::CopperList, <span class="number">2048</span>)
-<a href=#1766 id=1766 data-nosnippet>1766</a>                .unwrap();
-<a href=#1767 id=1767 data-nosnippet>1767</a>            <span class="macro">assert_eq!</span>(
-<a href=#1768 id=1768 data-nosnippet>1768</a>                logger.extent_visits.load(Ordering::Relaxed),
-<a href=#1769 id=1769 data-nosnippet>1769</a>                visits,
-<a href=#1770 id=1770 data-nosnippet>1770</a>                <span class="string">"Grow allocation visited retained geometry after {value} sections"
-<a href=#1771 id=1771 data-nosnippet>1771</a>            </span>);
-<a href=#1772 id=1772 data-nosnippet>1772</a>            section.append(value).unwrap();
-<a href=#1773 id=1773 data-nosnippet>1773</a>            logger.try_flush_section(<span class="kw-2">&amp;mut </span>section).unwrap();
-<a href=#1774 id=1774 data-nosnippet>1774</a>        }
-<a href=#1775 id=1775 data-nosnippet>1775</a>        drop(logger);
-<a href=#1776 id=1776 data-nosnippet>1776</a>        <span class="macro">assert_eq!</span>(saved_values(<span class="kw-2">&amp;</span>path), (<span class="number">0</span>..<span class="number">512</span>).collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;());
-<a href=#1777 id=1777 data-nosnippet>1777</a>    }
-<a href=#1778 id=1778 data-nosnippet>1778</a>
-<a href=#1779 id=1779 data-nosnippet>1779</a>    <span class="attr">#[test]
-<a href=#1780 id=1780 data-nosnippet>1780</a>    </span><span class="kw">fn </span>test_grow_after_wrap_uses_free_suffix_without_visiting_retained_extents() {
-<a href=#1781 id=1781 data-nosnippet>1781</a>        <span class="kw">let </span>dir = tempfile::tempdir().unwrap();
-<a href=#1782 id=1782 data-nosnippet>1782</a>        <span class="kw">let </span>path = dir.path().join(<span class="string">"wrapped-allocation-visits.copper"</span>);
-<a href=#1783 id=1783 data-nosnippet>1783</a>        {
-<a href=#1784 id=1784 data-nosnippet>1784</a>            <span class="kw">let </span><span class="kw-2">mut </span>logger = logger(<span class="kw-2">&amp;</span>path, CapacityPolicy::OverwriteOldest);
-<a href=#1785 id=1785 data-nosnippet>1785</a>            <span class="kw">for </span>value <span class="kw">in </span><span class="number">0</span>..<span class="number">8u32 </span>{
-<a href=#1786 id=1786 data-nosnippet>1786</a>                <span class="kw">let </span><span class="kw-2">mut </span>section = logger
-<a href=#1787 id=1787 data-nosnippet>1787</a>                    .add_section(UnifiedLogType::CopperList, <span class="number">2048</span>)
-<a href=#1788 id=1788 data-nosnippet>1788</a>                    .unwrap();
-<a href=#1789 id=1789 data-nosnippet>1789</a>                section.append(value).unwrap();
-<a href=#1790 id=1790 data-nosnippet>1790</a>                logger.try_flush_section(<span class="kw-2">&amp;mut </span>section).unwrap();
-<a href=#1791 id=1791 data-nosnippet>1791</a>            }
-<a href=#1792 id=1792 data-nosnippet>1792</a>            <span class="macro">assert_eq!</span>(logger.header.tail_section, BLOCK, <span class="string">"the log must wrap"</span>);
-<a href=#1793 id=1793 data-nosnippet>1793</a>        }
-<a href=#1794 id=1794 data-nosnippet>1794</a>        <span class="kw">let </span><span class="kw-2">mut </span>logger = <span class="kw">match </span>UnifiedLoggerBuilder::new()
-<a href=#1795 id=1795 data-nosnippet>1795</a>            .file_base_name(<span class="kw-2">&amp;</span>path)
-<a href=#1796 id=1796 data-nosnippet>1796</a>            .preallocated_size(<span class="number">16384</span>)
-<a href=#1797 id=1797 data-nosnippet>1797</a>            .write(<span class="bool-val">true</span>)
-<a href=#1798 id=1798 data-nosnippet>1798</a>            .create(<span class="bool-val">true</span>)
-<a href=#1799 id=1799 data-nosnippet>1799</a>            .append(<span class="bool-val">true</span>)
-<a href=#1800 id=1800 data-nosnippet>1800</a>            .build()
-<a href=#1801 id=1801 data-nosnippet>1801</a>            .unwrap()
-<a href=#1802 id=1802 data-nosnippet>1802</a>        {
-<a href=#1803 id=1803 data-nosnippet>1803</a>            UnifiedLogger::Write(logger) =&gt; logger,
-<a href=#1804 id=1804 data-nosnippet>1804</a>            <span class="kw">_ </span>=&gt; <span class="macro">unreachable!</span>(),
-<a href=#1805 id=1805 data-nosnippet>1805</a>        };
-<a href=#1806 id=1806 data-nosnippet>1806</a>        <span class="kw">let </span><span class="kw-2">mut </span>section = logger
-<a href=#1807 id=1807 data-nosnippet>1807</a>            .add_section(UnifiedLogType::CopperList, <span class="number">2048</span>)
-<a href=#1808 id=1808 data-nosnippet>1808</a>            .unwrap();
-<a href=#1809 id=1809 data-nosnippet>1809</a>        <span class="macro">assert_eq!</span>(logger.extent_visits.load(Ordering::Relaxed), <span class="number">0</span>);
-<a href=#1810 id=1810 data-nosnippet>1810</a>        <span class="macro">assert_eq!</span>(
-<a href=#1811 id=1811 data-nosnippet>1811</a>            logger.header.tail_section,
-<a href=#1812 id=1812 data-nosnippet>1812</a>            BLOCK + <span class="number">7 </span>* <span class="number">2048</span>,
-<a href=#1813 id=1813 data-nosnippet>1813</a>            <span class="string">"Grow must use the free suffix beyond the highest retained extent"
-<a href=#1814 id=1814 data-nosnippet>1814</a>        </span>);
-<a href=#1815 id=1815 data-nosnippet>1815</a>        section.append(<span class="number">8u32</span>).unwrap();
-<a href=#1816 id=1816 data-nosnippet>1816</a>        logger.try_flush_section(<span class="kw-2">&amp;mut </span>section).unwrap();
-<a href=#1817 id=1817 data-nosnippet>1817</a>        drop(logger);
-<a href=#1818 id=1818 data-nosnippet>1818</a>        <span class="macro">assert_eq!</span>(saved_values(<span class="kw-2">&amp;</span>path), (<span class="number">1</span>..<span class="number">9</span>).collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;());
-<a href=#1819 id=1819 data-nosnippet>1819</a>    }
-<a href=#1820 id=1820 data-nosnippet>1820</a>
-<a href=#1821 id=1821 data-nosnippet>1821</a>    <span class="attr">#[test]
-<a href=#1822 id=1822 data-nosnippet>1822</a>    </span><span class="kw">fn </span>test_writer_finishing_during_slot_selection_keeps_its_generation() {
-<a href=#1823 id=1823 data-nosnippet>1823</a>        <span class="kw">let </span>dir = tempfile::tempdir().unwrap();
-<a href=#1824 id=1824 data-nosnippet>1824</a>        <span class="kw">let </span>path = dir.path().join(<span class="string">"selection.copper"</span>);
-<a href=#1825 id=1825 data-nosnippet>1825</a>        <span class="kw">let </span><span class="kw-2">mut </span>logger = logger(<span class="kw-2">&amp;</span>path, CapacityPolicy::OverwriteOldest);
-<a href=#1826 id=1826 data-nosnippet>1826</a>        <span class="kw">let </span><span class="kw-2">mut </span>first = logger
-<a href=#1827 id=1827 data-nosnippet>1827</a>            .add_section(UnifiedLogType::CopperList, <span class="number">2048</span>)
-<a href=#1828 id=1828 data-nosnippet>1828</a>            .unwrap();
-<a href=#1829 id=1829 data-nosnippet>1829</a>        first.append(<span class="number">41u32</span>).unwrap();
-<a href=#1830 id=1830 data-nosnippet>1830</a>        <span class="kw">let </span>section = first.get_storage();
-<a href=#1831 id=1831 data-nosnippet>1831</a>        <span class="kw">let </span>leases = section.leases.clone();
-<a href=#1832 id=1832 data-nosnippet>1832</a>        <span class="kw">let </span>slot = section.slot;
-<a href=#1833 id=1833 data-nosnippet>1833</a>        <span class="kw">let </span>idle = section.token(IDLE);
-<a href=#1834 id=1834 data-nosnippet>1834</a>        leases[slot].store(section.token(BUSY), Ordering::Release);
-<a href=#1835 id=1835 data-nosnippet>1835</a>        <span class="kw">let </span>loads = Arc::new(AtomicUsize::new(<span class="number">0</span>));
-<a href=#1836 id=1836 data-nosnippet>1836</a>        <span class="kw">let </span>observed = loads.clone();
-<a href=#1837 id=1837 data-nosnippet>1837</a>        LEASE_HOOK.with(|cell| {
-<a href=#1838 id=1838 data-nosnippet>1838</a>            <span class="kw-2">*</span>cell.borrow_mut() = <span class="prelude-val">Some</span>(Box::new(<span class="kw">move </span>|lease, event| {
-<a href=#1839 id=1839 data-nosnippet>1839</a>                <span class="kw">if </span>core::ptr::eq(lease, <span class="kw-2">&amp;</span>leases[slot])
-<a href=#1840 id=1840 data-nosnippet>1840</a>                    &amp;&amp; <span class="kw">let </span>LeaseEvent::Loaded(state) = event
-<a href=#1841 id=1841 data-nosnippet>1841</a>                    &amp;&amp; state % <span class="number">4 </span>== BUSY
-<a href=#1842 id=1842 data-nosnippet>1842</a>                    &amp;&amp; observed.fetch_add(<span class="number">1</span>, Ordering::Relaxed) == <span class="number">1
-<a href=#1843 id=1843 data-nosnippet>1843</a>                </span>{
-<a href=#1844 id=1844 data-nosnippet>1844</a>                    <span class="comment">// Finish after the final slot-selection load has observed BUSY.
-<a href=#1845 id=1845 data-nosnippet>1845</a>                    </span>lease.store(idle, Ordering::Release);
-<a href=#1846 id=1846 data-nosnippet>1846</a>                }
-<a href=#1847 id=1847 data-nosnippet>1847</a>            }));
-<a href=#1848 id=1848 data-nosnippet>1848</a>        });
-<a href=#1849 id=1849 data-nosnippet>1849</a>        <span class="kw">let </span><span class="kw-2">mut </span>next = logger
-<a href=#1850 id=1850 data-nosnippet>1850</a>            .add_section(UnifiedLogType::CopperList, <span class="number">2048</span>)
-<a href=#1851 id=1851 data-nosnippet>1851</a>            .unwrap();
-<a href=#1852 id=1852 data-nosnippet>1852</a>        LEASE_HOOK.with(|cell| cell.borrow_mut().take());
-<a href=#1853 id=1853 data-nosnippet>1853</a>        <span class="macro">assert_eq!</span>(loads.load(Ordering::Relaxed), <span class="number">2</span>);
-<a href=#1854 id=1854 data-nosnippet>1854</a>        <span class="macro">assert_ne!</span>(
-<a href=#1855 id=1855 data-nosnippet>1855</a>            next.get_storage().slot,
-<a href=#1856 id=1856 data-nosnippet>1856</a>            slot,
-<a href=#1857 id=1857 data-nosnippet>1857</a>            <span class="string">"an idle live lease cannot be reused"
-<a href=#1858 id=1858 data-nosnippet>1858</a>        </span>);
-<a href=#1859 id=1859 data-nosnippet>1859</a>        first.append(<span class="number">42u32</span>).unwrap();
-<a href=#1860 id=1860 data-nosnippet>1860</a>        next.append(<span class="number">43u32</span>).unwrap();
-<a href=#1861 id=1861 data-nosnippet>1861</a>        logger.try_flush_section(<span class="kw-2">&amp;mut </span>first).unwrap();
-<a href=#1862 id=1862 data-nosnippet>1862</a>        logger.try_flush_section(<span class="kw-2">&amp;mut </span>next).unwrap();
-<a href=#1863 id=1863 data-nosnippet>1863</a>        drop(logger);
-<a href=#1864 id=1864 data-nosnippet>1864</a>        <span class="macro">assert_eq!</span>(saved_values(<span class="kw-2">&amp;</span>path), [<span class="number">41</span>, <span class="number">42</span>, <span class="number">43</span>]);
-<a href=#1865 id=1865 data-nosnippet>1865</a>    }
-<a href=#1866 id=1866 data-nosnippet>1866</a>
-<a href=#1867 id=1867 data-nosnippet>1867</a>    <span class="attr">#[test]
-<a href=#1868 id=1868 data-nosnippet>1868</a>    </span><span class="kw">fn </span>test_sealing_between_stream_precheck_and_acquisition_rebinds() {
-<a href=#1869 id=1869 data-nosnippet>1869</a>        <span class="kw">struct </span>Counted&lt;<span class="lifetime">'a</span>&gt;(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>Cell&lt;usize&gt;);
-<a href=#1870 id=1870 data-nosnippet>1870</a>        <span class="kw">impl </span>Encode <span class="kw">for </span>Counted&lt;<span class="lifetime">'_</span>&gt; {
-<a href=#1871 id=1871 data-nosnippet>1871</a>            <span class="kw">fn </span>encode&lt;E: bincode::enc::Encoder&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, encoder: <span class="kw-2">&amp;mut </span>E) -&gt; <span class="prelude-ty">Result</span>&lt;(), EncodeError&gt; {
-<a href=#1872 id=1872 data-nosnippet>1872</a>                <span class="self">self</span>.<span class="number">0</span>.set(<span class="self">self</span>.<span class="number">0</span>.get() + <span class="number">1</span>);
-<a href=#1873 id=1873 data-nosnippet>1873</a>                <span class="number">42u32</span>.encode(encoder)
-<a href=#1874 id=1874 data-nosnippet>1874</a>            }
-<a href=#1875 id=1875 data-nosnippet>1875</a>        }
-<a href=#1876 id=1876 data-nosnippet>1876</a>        <span class="kw">let </span>dir = tempfile::tempdir().unwrap();
-<a href=#1877 id=1877 data-nosnippet>1877</a>        <span class="kw">for </span>policy <span class="kw">in </span>[CapacityPolicy::OverwriteOldest] {
-<a href=#1878 id=1878 data-nosnippet>1878</a>            <span class="kw">for </span>empty <span class="kw">in </span>[<span class="bool-val">false</span>, <span class="bool-val">true</span>] {
-<a href=#1879 id=1879 data-nosnippet>1879</a>                <span class="kw">let </span>path = dir
-<a href=#1880 id=1880 data-nosnippet>1880</a>                    .path()
-<a href=#1881 id=1881 data-nosnippet>1881</a>                    .join(<span class="macro">format!</span>(<span class="string">"acquisition-{policy:?}-{empty}.copper"</span>));
-<a href=#1882 id=1882 data-nosnippet>1882</a>                <span class="kw">let </span>logger = Arc::new(Mutex::new(logger(<span class="kw-2">&amp;</span>path, policy)));
-<a href=#1883 id=1883 data-nosnippet>1883</a>                <span class="kw">let </span><span class="kw-2">mut </span>stream =
-<a href=#1884 id=1884 data-nosnippet>1884</a>                    LogStream::new(UnifiedLogType::CopperList, logger.clone(), <span class="number">2048</span>).unwrap();
-<a href=#1885 id=1885 data-nosnippet>1885</a>                <span class="kw">if </span>!empty {
-<a href=#1886 id=1886 data-nosnippet>1886</a>                    stream.log(<span class="kw-2">&amp;</span><span class="number">41u32</span>).unwrap();
-<a href=#1887 id=1887 data-nosnippet>1887</a>                }
-<a href=#1888 id=1888 data-nosnippet>1888</a>                <span class="kw">let </span>section = <span class="kw-2">&amp;</span>stream.current_section.storage;
-<a href=#1889 id=1889 data-nosnippet>1889</a>                <span class="kw">let </span>leases = section.leases.clone();
-<a href=#1890 id=1890 data-nosnippet>1890</a>                <span class="kw">let </span>slot = section.slot;
-<a href=#1891 id=1891 data-nosnippet>1891</a>                <span class="kw">let </span>idle = section.token(IDLE);
-<a href=#1892 id=1892 data-nosnippet>1892</a>                <span class="kw">let </span>injected = Arc::new(AtomicBool::new(<span class="bool-val">false</span>));
-<a href=#1893 id=1893 data-nosnippet>1893</a>                <span class="kw">let </span>observed = injected.clone();
-<a href=#1894 id=1894 data-nosnippet>1894</a>                <span class="kw">let </span><span class="kw-2">mut </span>pending = <span class="bool-val">false</span>;
-<a href=#1895 id=1895 data-nosnippet>1895</a>                LEASE_HOOK.with(|cell| {
-<a href=#1896 id=1896 data-nosnippet>1896</a>                    <span class="kw-2">*</span>cell.borrow_mut() = <span class="prelude-val">Some</span>(Box::new(<span class="kw">move </span>|lease, event| {
-<a href=#1897 id=1897 data-nosnippet>1897</a>                        <span class="kw">if </span>!core::ptr::eq(lease, <span class="kw-2">&amp;</span>leases[slot]) {
-<a href=#1898 id=1898 data-nosnippet>1898</a>                            <span class="kw">return</span>;
-<a href=#1899 id=1899 data-nosnippet>1899</a>                        }
-<a href=#1900 id=1900 data-nosnippet>1900</a>                        <span class="kw">match </span>event {
-<a href=#1901 id=1901 data-nosnippet>1901</a>                            LeaseEvent::BeforeCompareExchange
-<a href=#1902 id=1902 data-nosnippet>1902</a>                                <span class="kw">if </span>!observed.load(Ordering::Relaxed) =&gt;
-<a href=#1903 id=1903 data-nosnippet>1903</a>                            {
-<a href=#1904 id=1904 data-nosnippet>1904</a>                                <span class="comment">// Reclamation seals the idle section before acquisition.
-<a href=#1905 id=1905 data-nosnippet>1905</a>                                </span>lease.store(
-<a href=#1906 id=1906 data-nosnippet>1906</a>                                    idle / GENERATION_STRIDE * GENERATION_STRIDE + SEALED,
-<a href=#1907 id=1907 data-nosnippet>1907</a>                                    Ordering::Release,
-<a href=#1908 id=1908 data-nosnippet>1908</a>                                );
-<a href=#1909 id=1909 data-nosnippet>1909</a>                                pending = <span class="bool-val">true</span>;
-<a href=#1910 id=1910 data-nosnippet>1910</a>                                observed.store(<span class="bool-val">true</span>, Ordering::Relaxed);
-<a href=#1911 id=1911 data-nosnippet>1911</a>                            }
-<a href=#1912 id=1912 data-nosnippet>1912</a>                            LeaseEvent::AfterCompareExchange <span class="kw">if </span>pending =&gt; {
-<a href=#1913 id=1913 data-nosnippet>1913</a>                                <span class="comment">// Publication completes before the stream handles the failed CAS.
-<a href=#1914 id=1914 data-nosnippet>1914</a>                                </span>lease.store(idle, Ordering::Release);
-<a href=#1915 id=1915 data-nosnippet>1915</a>                                pending = <span class="bool-val">false</span>;
-<a href=#1916 id=1916 data-nosnippet>1916</a>                            }
-<a href=#1917 id=1917 data-nosnippet>1917</a>                            <span class="kw">_ </span>=&gt; {}
-<a href=#1918 id=1918 data-nosnippet>1918</a>                        }
-<a href=#1919 id=1919 data-nosnippet>1919</a>                    }));
-<a href=#1920 id=1920 data-nosnippet>1920</a>                });
-<a href=#1921 id=1921 data-nosnippet>1921</a>                <span class="kw">let </span>encodes = Cell::new(<span class="number">0</span>);
-<a href=#1922 id=1922 data-nosnippet>1922</a>                <span class="kw">let </span>result = stream.log(<span class="kw-2">&amp;</span>Counted(<span class="kw-2">&amp;</span>encodes));
-<a href=#1923 id=1923 data-nosnippet>1923</a>                LEASE_HOOK.with(|cell| cell.borrow_mut().take());
-<a href=#1924 id=1924 data-nosnippet>1924</a>                <span class="macro">assert!</span>(injected.load(Ordering::Relaxed));
-<a href=#1925 id=1925 data-nosnippet>1925</a>                result.unwrap();
-<a href=#1926 id=1926 data-nosnippet>1926</a>                <span class="macro">assert_eq!</span>(encodes.get(), <span class="number">1</span>, <span class="string">"rebinding must precede encoding"</span>);
-<a href=#1927 id=1927 data-nosnippet>1927</a>                drop(stream);
-<a href=#1928 id=1928 data-nosnippet>1928</a>                drop(logger);
-<a href=#1929 id=1929 data-nosnippet>1929</a>                <span class="macro">assert_eq!</span>(
-<a href=#1930 id=1930 data-nosnippet>1930</a>                    saved_values(<span class="kw-2">&amp;</span>path),
-<a href=#1931 id=1931 data-nosnippet>1931</a>                    <span class="kw">if </span>empty { <span class="macro">vec!</span>[<span class="number">42</span>] } <span class="kw">else </span>{ <span class="macro">vec!</span>[<span class="number">41</span>, <span class="number">42</span>] }
-<a href=#1932 id=1932 data-nosnippet>1932</a>                );
-<a href=#1933 id=1933 data-nosnippet>1933</a>            }
-<a href=#1934 id=1934 data-nosnippet>1934</a>        }
-<a href=#1935 id=1935 data-nosnippet>1935</a>    }
-<a href=#1936 id=1936 data-nosnippet>1936</a>
-<a href=#1937 id=1937 data-nosnippet>1937</a>    <span class="attr">#[test]
-<a href=#1938 id=1938 data-nosnippet>1938</a>    </span><span class="kw">fn </span>test_reclamation_before_acquisition_rebinds_a_stale_stream() {
-<a href=#1939 id=1939 data-nosnippet>1939</a>        <span class="kw">let </span>dir = tempfile::tempdir().unwrap();
-<a href=#1940 id=1940 data-nosnippet>1940</a>        <span class="kw">let </span>path = dir.path().join(<span class="string">"revocation.copper"</span>);
-<a href=#1941 id=1941 data-nosnippet>1941</a>        <span class="kw">let </span>logger = Arc::new(Mutex::new(logger(<span class="kw-2">&amp;</span>path, CapacityPolicy::OverwriteOldest)));
-<a href=#1942 id=1942 data-nosnippet>1942</a>        <span class="kw">let </span><span class="kw-2">mut </span>stream = LogStream::new(UnifiedLogType::CopperList, logger.clone(), <span class="number">2048</span>).unwrap();
-<a href=#1943 id=1943 data-nosnippet>1943</a>        stream.log(<span class="kw-2">&amp;</span><span class="number">41u32</span>).unwrap();
-<a href=#1944 id=1944 data-nosnippet>1944</a>        <span class="comment">// Leave the next allocation to wrap and reclaim the idle first stream.
-<a href=#1945 id=1945 data-nosnippet>1945</a>        </span><span class="kw">for </span>value <span class="kw">in </span><span class="number">0</span>..<span class="number">6u32 </span>{
-<a href=#1946 id=1946 data-nosnippet>1946</a>            <span class="kw">let </span><span class="kw-2">mut </span>logger = logger.lock().unwrap();
-<a href=#1947 id=1947 data-nosnippet>1947</a>            <span class="kw">let </span><span class="kw-2">mut </span>section = logger
-<a href=#1948 id=1948 data-nosnippet>1948</a>                .add_section(UnifiedLogType::CopperList, <span class="number">2048</span>)
-<a href=#1949 id=1949 data-nosnippet>1949</a>                .unwrap();
-<a href=#1950 id=1950 data-nosnippet>1950</a>            section.append(value).unwrap();
-<a href=#1951 id=1951 data-nosnippet>1951</a>            logger.try_flush_section(<span class="kw-2">&amp;mut </span>section).unwrap();
-<a href=#1952 id=1952 data-nosnippet>1952</a>        }
-<a href=#1953 id=1953 data-nosnippet>1953</a>        <span class="kw">let </span>first = <span class="kw-2">&amp;</span>stream.current_section.storage;
-<a href=#1954 id=1954 data-nosnippet>1954</a>        <span class="kw">let </span>leases = first.leases.clone();
-<a href=#1955 id=1955 data-nosnippet>1955</a>        <span class="kw">let </span>slot = first.slot;
-<a href=#1956 id=1956 data-nosnippet>1956</a>        <span class="kw">let </span>parent = logger.clone();
-<a href=#1957 id=1957 data-nosnippet>1957</a>        <span class="kw">let </span><span class="kw-2">mut </span>injected = <span class="bool-val">false</span>;
-<a href=#1958 id=1958 data-nosnippet>1958</a>        LEASE_HOOK.with(|cell| {
-<a href=#1959 id=1959 data-nosnippet>1959</a>            <span class="kw-2">*</span>cell.borrow_mut() = <span class="prelude-val">Some</span>(Box::new(<span class="kw">move </span>|lease, event| {
-<a href=#1960 id=1960 data-nosnippet>1960</a>                <span class="kw">if </span>core::ptr::eq(lease, <span class="kw-2">&amp;</span>leases[slot])
-<a href=#1961 id=1961 data-nosnippet>1961</a>                    &amp;&amp; <span class="macro">matches!</span>(event, LeaseEvent::BeforeCompareExchange)
-<a href=#1962 id=1962 data-nosnippet>1962</a>                    &amp;&amp; !injected
-<a href=#1963 id=1963 data-nosnippet>1963</a>                {
-<a href=#1964 id=1964 data-nosnippet>1964</a>                    injected = <span class="bool-val">true</span>;
-<a href=#1965 id=1965 data-nosnippet>1965</a>                    <span class="kw">let </span><span class="kw-2">mut </span>logger = parent.lock().unwrap();
-<a href=#1966 id=1966 data-nosnippet>1966</a>                    <span class="kw">let </span><span class="kw-2">mut </span>section = logger
-<a href=#1967 id=1967 data-nosnippet>1967</a>                        .add_section(UnifiedLogType::CopperList, <span class="number">2048</span>)
-<a href=#1968 id=1968 data-nosnippet>1968</a>                        .unwrap();
-<a href=#1969 id=1969 data-nosnippet>1969</a>                    section.append(<span class="number">43u32</span>).unwrap();
-<a href=#1970 id=1970 data-nosnippet>1970</a>                    logger.try_flush_section(<span class="kw-2">&amp;mut </span>section).unwrap();
-<a href=#1971 id=1971 data-nosnippet>1971</a>                }
-<a href=#1972 id=1972 data-nosnippet>1972</a>            }));
-<a href=#1973 id=1973 data-nosnippet>1973</a>        });
-<a href=#1974 id=1974 data-nosnippet>1974</a>        <span class="kw">let </span>result = stream.log(<span class="kw-2">&amp;</span><span class="number">42u32</span>);
-<a href=#1975 id=1975 data-nosnippet>1975</a>        LEASE_HOOK.with(|cell| cell.borrow_mut().take());
-<a href=#1976 id=1976 data-nosnippet>1976</a>        result.unwrap();
-<a href=#1977 id=1977 data-nosnippet>1977</a>        drop(stream);
-<a href=#1978 id=1978 data-nosnippet>1978</a>        drop(logger);
-<a href=#1979 id=1979 data-nosnippet>1979</a>        <span class="macro">assert_eq!</span>(saved_values(<span class="kw-2">&amp;</span>path), [<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">5</span>, <span class="number">43</span>, <span class="number">42</span>]);
-<a href=#1980 id=1980 data-nosnippet>1980</a>    }
-<a href=#1981 id=1981 data-nosnippet>1981</a>
-<a href=#1982 id=1982 data-nosnippet>1982</a>    <span class="attr">#[test]
-<a href=#1983 id=1983 data-nosnippet>1983</a>    </span><span class="kw">fn </span>test_stream_encoding_error_keeps_its_section_and_committed_prefix() {
-<a href=#1984 id=1984 data-nosnippet>1984</a>        <span class="kw">struct </span>Failing;
-<a href=#1985 id=1985 data-nosnippet>1985</a>        <span class="kw">impl </span>Encode <span class="kw">for </span>Failing {
-<a href=#1986 id=1986 data-nosnippet>1986</a>            <span class="kw">fn </span>encode&lt;E: bincode::enc::Encoder&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, encoder: <span class="kw-2">&amp;mut </span>E) -&gt; <span class="prelude-ty">Result</span>&lt;(), EncodeError&gt; {
-<a href=#1987 id=1987 data-nosnippet>1987</a>                <span class="number">99u32</span>.encode(encoder)<span class="question-mark">?</span>;
-<a href=#1988 id=1988 data-nosnippet>1988</a>                <span class="prelude-val">Err</span>(EncodeError::Other(<span class="string">"injected encode failure"</span>))
-<a href=#1989 id=1989 data-nosnippet>1989</a>            }
-<a href=#1990 id=1990 data-nosnippet>1990</a>        }
-<a href=#1991 id=1991 data-nosnippet>1991</a>        <span class="kw">let </span>dir = tempfile::tempdir().unwrap();
-<a href=#1992 id=1992 data-nosnippet>1992</a>        <span class="kw">let </span>path = dir.path().join(<span class="string">"failure.copper"</span>);
-<a href=#1993 id=1993 data-nosnippet>1993</a>        <span class="kw">let </span>logger = Arc::new(Mutex::new(logger(<span class="kw-2">&amp;</span>path, CapacityPolicy::Grow)));
-<a href=#1994 id=1994 data-nosnippet>1994</a>        <span class="kw">let </span><span class="kw-2">mut </span>stream = LogStream::new(UnifiedLogType::CopperList, logger.clone(), <span class="number">2048</span>).unwrap();
-<a href=#1995 id=1995 data-nosnippet>1995</a>        stream.log(<span class="kw-2">&amp;</span><span class="number">41u32</span>).unwrap();
-<a href=#1996 id=1996 data-nosnippet>1996</a>        <span class="kw">let </span>slot = stream.current_section.storage.slot;
-<a href=#1997 id=1997 data-nosnippet>1997</a>        <span class="kw">let </span>generation = stream.current_section.storage.generation;
-<a href=#1998 id=1998 data-nosnippet>1998</a>        <span class="macro">assert!</span>(stream.log(<span class="kw-2">&amp;</span>Failing).is_err());
-<a href=#1999 id=1999 data-nosnippet>1999</a>        <span class="macro">assert_eq!</span>(stream.current_section.storage.slot, slot);
-<a href=#2000 id=2000 data-nosnippet>2000</a>        <span class="macro">assert_eq!</span>(stream.current_section.storage.generation, generation);
-<a href=#2001 id=2001 data-nosnippet>2001</a>        stream.log(<span class="kw-2">&amp;</span><span class="number">42u32</span>).unwrap();
-<a href=#2002 id=2002 data-nosnippet>2002</a>        drop(stream);
-<a href=#2003 id=2003 data-nosnippet>2003</a>        drop(logger);
-<a href=#2004 id=2004 data-nosnippet>2004</a>        <span class="macro">assert_eq!</span>(saved_values(<span class="kw-2">&amp;</span>path), [<span class="number">41</span>, <span class="number">42</span>]);
-<a href=#2005 id=2005 data-nosnippet>2005</a>    }
-<a href=#2006 id=2006 data-nosnippet>2006</a>}
+<a href=#1390 id=1390 data-nosnippet>1390</a>        </span><span class="kw">let </span>leases = <span class="self">self</span>.leases.clone();
+<a href=#1391 id=1391 data-nosnippet>1391</a>        <span class="kw">let </span><span class="kw-2">mut </span>claims = Claims::new(<span class="kw-2">&amp;</span>leases);
+<a href=#1392 id=1392 data-nosnippet>1392</a>        <span class="kw">let </span><span class="kw-2">mut </span>cursor = <span class="self">self</span>.header.head_section;
+<a href=#1393 id=1393 data-nosnippet>1393</a>        <span class="kw">if </span>last_overlap != <span class="number">0 </span>{
+<a href=#1394 id=1394 data-nosnippet>1394</a>            <span class="kw">let </span><span class="kw-2">mut </span>discard_build = <span class="bool-val">false</span>;
+<a href=#1395 id=1395 data-nosnippet>1395</a>            <span class="kw">loop </span>{
+<a href=#1396 id=1396 data-nosnippet>1396</a>                <span class="kw">let </span>pinned = <span class="self">self
+<a href=#1397 id=1397 data-nosnippet>1397</a>                    </span>.boot_extent
+<a href=#1398 id=1398 data-nosnippet>1398</a>                    .is_some_and(|p| cursor == p.start || cursor == p.tail);
+<a href=#1399 id=1399 data-nosnippet>1399</a>                <span class="kw">let </span>slot = <span class="self">self
+<a href=#1400 id=1400 data-nosnippet>1400</a>                    </span>.leases
+<a href=#1401 id=1401 data-nosnippet>1401</a>                    .iter()
+<a href=#1402 id=1402 data-nosnippet>1402</a>                    .position(|lease| lease.offset() == cursor);
+<a href=#1403 id=1403 data-nosnippet>1403</a>                <span class="kw">if </span>!pinned &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(slot) = slot {
+<a href=#1404 id=1404 data-nosnippet>1404</a>                    claims.claim(slot)<span class="question-mark">?</span>;
+<a href=#1405 id=1405 data-nosnippet>1405</a>                }
+<a href=#1406 id=1406 data-nosnippet>1406</a>                <span class="kw">let </span>h = <span class="self">self</span>.data_header_unlocked(cursor)<span class="question-mark">?</span>;
+<a href=#1407 id=1407 data-nosnippet>1407</a>                <span class="kw">if </span>slot.is_none()
+<a href=#1408 id=1408 data-nosnippet>1408</a>                    &amp;&amp; h.is_open
+<a href=#1409 id=1409 data-nosnippet>1409</a>                    &amp;&amp; read_descriptor(<span class="kw-2">&amp;</span><span class="self">self</span>.storage, cursor)<span class="question-mark">?</span>.generation &gt; <span class="self">self</span>.reopened_generation
+<a href=#1410 id=1410 data-nosnippet>1410</a>                {
+<a href=#1411 id=1411 data-nosnippet>1411</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(<span class="string">"Space is blocked by an open section"</span>));
+<a href=#1412 id=1412 data-nosnippet>1412</a>                }
+<a href=#1413 id=1413 data-nosnippet>1413</a>                <span class="kw">if </span>h.entry_type == UnifiedLogType::ApplicationMetadata {
+<a href=#1414 id=1414 data-nosnippet>1414</a>                    discard_build = !pinned;
+<a href=#1415 id=1415 data-nosnippet>1415</a>                }
+<a href=#1416 id=1416 data-nosnippet>1416</a>                <span class="kw">if </span>cursor == last_overlap {
+<a href=#1417 id=1417 data-nosnippet>1417</a>                    <span class="comment">// Once a build's metadata is gone, drop the rest of that build together.
+<a href=#1418 id=1418 data-nosnippet>1418</a>                    </span><span class="kw">if </span>discard_build
+<a href=#1419 id=1419 data-nosnippet>1419</a>                        &amp;&amp; h.next_section != <span class="number">0
+<a href=#1420 id=1420 data-nosnippet>1420</a>                        </span>&amp;&amp; <span class="self">self</span>.data_header_unlocked(h.next_section)<span class="question-mark">?</span>.entry_type
+<a href=#1421 id=1421 data-nosnippet>1421</a>                            != UnifiedLogType::ApplicationMetadata
+<a href=#1422 id=1422 data-nosnippet>1422</a>                    {
+<a href=#1423 id=1423 data-nosnippet>1423</a>                        last_overlap = h.next_section;
+<a href=#1424 id=1424 data-nosnippet>1424</a>                    } <span class="kw">else </span>{
+<a href=#1425 id=1425 data-nosnippet>1425</a>                        <span class="kw">break</span>;
+<a href=#1426 id=1426 data-nosnippet>1426</a>                    }
+<a href=#1427 id=1427 data-nosnippet>1427</a>                }
+<a href=#1428 id=1428 data-nosnippet>1428</a>                cursor = h.next_section;
+<a href=#1429 id=1429 data-nosnippet>1429</a>            }
+<a href=#1430 id=1430 data-nosnippet>1430</a>        }
+<a href=#1431 id=1431 data-nosnippet>1431</a>        <span class="kw">let </span>free_slot = <span class="self">self
+<a href=#1432 id=1432 data-nosnippet>1432</a>            </span>.leases
+<a href=#1433 id=1433 data-nosnippet>1433</a>            .iter()
+<a href=#1434 id=1434 data-nosnippet>1434</a>            .position(|s| <span class="macro">matches!</span>(s.load(Ordering::Acquire) % <span class="number">4</span>, <span class="number">0 </span>| SEALED));
+<a href=#1435 id=1435 data-nosnippet>1435</a>        <span class="kw">if </span>free_slot.is_none() &amp;&amp; last_overlap == <span class="number">0 </span>{
+<a href=#1436 id=1436 data-nosnippet>1436</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(
+<a href=#1437 id=1437 data-nosnippet>1437</a>                <span class="string">"Too many concurrent section streams (maximum 64)"</span>,
+<a href=#1438 id=1438 data-nosnippet>1438</a>            ));
+<a href=#1439 id=1439 data-nosnippet>1439</a>        }
+<a href=#1440 id=1440 data-nosnippet>1440</a>        <span class="comment">// Validate the mapping geometry before reclamation or header changes.
+<a href=#1441 id=1441 data-nosnippet>1441</a>        </span><span class="kw">if </span>end &lt;= <span class="self">self</span>.storage.len() {
+<a href=#1442 id=1442 data-nosnippet>1442</a>            <span class="kw">let _ </span>= <span class="self">self</span>.storage.region(position, size)<span class="question-mark">?</span>;
+<a href=#1443 id=1443 data-nosnippet>1443</a>        }
+<a href=#1444 id=1444 data-nosnippet>1444</a>        <span class="self">self</span>.activate()<span class="question-mark">?</span>;
+<a href=#1445 id=1445 data-nosnippet>1445</a>        <span class="self">self</span>.faulted = <span class="bool-val">true</span>;
+<a href=#1446 id=1446 data-nosnippet>1446</a>        <span class="kw">if </span>end &gt; <span class="self">self</span>.header.sections_end {
+<a href=#1447 id=1447 data-nosnippet>1447</a>            <span class="self">self</span>.storage.grow(end)<span class="question-mark">?</span>;
+<a href=#1448 id=1448 data-nosnippet>1448</a>            <span class="self">self</span>.header.sections_end = <span class="self">self</span>.storage.len();
+<a href=#1449 id=1449 data-nosnippet>1449</a>        }
+<a href=#1450 id=1450 data-nosnippet>1450</a>        <span class="kw">if </span>last_overlap != <span class="number">0 </span>{
+<a href=#1451 id=1451 data-nosnippet>1451</a>            <span class="kw">let </span><span class="kw-2">mut </span>cursor = <span class="self">self</span>.header.head_section;
+<a href=#1452 id=1452 data-nosnippet>1452</a>            <span class="kw">let </span><span class="kw-2">mut </span>retained_boot = <span class="prelude-val">None</span>;
+<a href=#1453 id=1453 data-nosnippet>1453</a>            <span class="kw">loop </span>{
+<a href=#1454 id=1454 data-nosnippet>1454</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(pin) = <span class="self">self</span>.boot_extent
+<a href=#1455 id=1455 data-nosnippet>1455</a>                    &amp;&amp; cursor == pin.start
+<a href=#1456 id=1456 data-nosnippet>1456</a>                {
+<a href=#1457 id=1457 data-nosnippet>1457</a>                    retained_boot = <span class="prelude-val">Some</span>(pin);
+<a href=#1458 id=1458 data-nosnippet>1458</a>                    cursor = <span class="self">self</span>.data_header_unlocked(pin.tail)<span class="question-mark">?</span>.next_section;
+<a href=#1459 id=1459 data-nosnippet>1459</a>                    <span class="kw">continue</span>;
+<a href=#1460 id=1460 data-nosnippet>1460</a>                }
+<a href=#1461 id=1461 data-nosnippet>1461</a>                <span class="kw">let </span><span class="kw-2">mut </span>h = <span class="self">self</span>.data_header_unlocked(cursor)<span class="question-mark">?</span>;
+<a href=#1462 id=1462 data-nosnippet>1462</a>                h.is_open = <span class="bool-val">false</span>;
+<a href=#1463 id=1463 data-nosnippet>1463</a>                <span class="kw">let </span>generation = read_descriptor(<span class="kw-2">&amp;</span><span class="self">self</span>.storage, cursor)<span class="question-mark">?</span>.generation;
+<a href=#1464 id=1464 data-nosnippet>1464</a>                write_commit(
+<a href=#1465 id=1465 data-nosnippet>1465</a>                    <span class="kw-2">&amp;mut </span><span class="self">self</span>.storage.region(cursor, HEADER)<span class="question-mark">?</span>,
+<a href=#1466 id=1466 data-nosnippet>1466</a>                    <span class="kw-2">&amp;</span>h,
+<a href=#1467 id=1467 data-nosnippet>1467</a>                    cursor,
+<a href=#1468 id=1468 data-nosnippet>1468</a>                    generation,
+<a href=#1469 id=1469 data-nosnippet>1469</a>                )<span class="question-mark">?</span>;
+<a href=#1470 id=1470 data-nosnippet>1470</a>                <span class="self">self</span>.storage.region(cursor, h.allocated)<span class="question-mark">?</span>.flush()<span class="question-mark">?</span>;
+<a href=#1471 id=1471 data-nosnippet>1471</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(slot) = <span class="self">self
+<a href=#1472 id=1472 data-nosnippet>1472</a>                    </span>.leases
+<a href=#1473 id=1473 data-nosnippet>1473</a>                    .iter()
+<a href=#1474 id=1474 data-nosnippet>1474</a>                    .position(|lease| lease.offset() == cursor)
+<a href=#1475 id=1475 data-nosnippet>1475</a>                {
+<a href=#1476 id=1476 data-nosnippet>1476</a>                    claims.seal(slot);
+<a href=#1477 id=1477 data-nosnippet>1477</a>                }
+<a href=#1478 id=1478 data-nosnippet>1478</a>                <span class="self">self</span>.retained_space -= h.allocated;
+<a href=#1479 id=1479 data-nosnippet>1479</a>                <span class="kw">let </span>next = h.next_section;
+<a href=#1480 id=1480 data-nosnippet>1480</a>                <span class="kw">if </span>cursor == last_overlap {
+<a href=#1481 id=1481 data-nosnippet>1481</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(pin) = retained_boot {
+<a href=#1482 id=1482 data-nosnippet>1482</a>                        <span class="kw">let </span>generation = <span class="kw">if </span>next == <span class="number">0 </span>{
+<a href=#1483 id=1483 data-nosnippet>1483</a>                            <span class="number">0
+<a href=#1484 id=1484 data-nosnippet>1484</a>                        </span>} <span class="kw">else </span>{
+<a href=#1485 id=1485 data-nosnippet>1485</a>                            read_descriptor(<span class="kw-2">&amp;</span><span class="self">self</span>.storage, next)<span class="question-mark">?</span>.generation
+<a href=#1486 id=1486 data-nosnippet>1486</a>                        };
+<a href=#1487 id=1487 data-nosnippet>1487</a>                        <span class="self">self</span>.link_sections(pin.tail, next, generation)<span class="question-mark">?</span>;
+<a href=#1488 id=1488 data-nosnippet>1488</a>                        <span class="self">self</span>.header.head_section = pin.start;
+<a href=#1489 id=1489 data-nosnippet>1489</a>                        <span class="kw">if </span>next == <span class="number">0 </span>{
+<a href=#1490 id=1490 data-nosnippet>1490</a>                            <span class="self">self</span>.header.tail_section = pin.tail;
+<a href=#1491 id=1491 data-nosnippet>1491</a>                        }
+<a href=#1492 id=1492 data-nosnippet>1492</a>                    } <span class="kw">else </span>{
+<a href=#1493 id=1493 data-nosnippet>1493</a>                        <span class="self">self</span>.header.head_section = next;
+<a href=#1494 id=1494 data-nosnippet>1494</a>                        <span class="kw">if </span>next == <span class="number">0 </span>{
+<a href=#1495 id=1495 data-nosnippet>1495</a>                            <span class="self">self</span>.header.tail_section = <span class="number">0</span>;
+<a href=#1496 id=1496 data-nosnippet>1496</a>                        }
+<a href=#1497 id=1497 data-nosnippet>1497</a>                    }
+<a href=#1498 id=1498 data-nosnippet>1498</a>                    <span class="kw">break</span>;
+<a href=#1499 id=1499 data-nosnippet>1499</a>                }
+<a href=#1500 id=1500 data-nosnippet>1500</a>                cursor = next;
+<a href=#1501 id=1501 data-nosnippet>1501</a>            }
+<a href=#1502 id=1502 data-nosnippet>1502</a>            <span class="self">self</span>.publish()<span class="question-mark">?</span>;
+<a href=#1503 id=1503 data-nosnippet>1503</a>        }
+<a href=#1504 id=1504 data-nosnippet>1504</a>        <span class="kw">let </span>slot = <span class="self">self
+<a href=#1505 id=1505 data-nosnippet>1505</a>            </span>.leases
+<a href=#1506 id=1506 data-nosnippet>1506</a>            .iter()
+<a href=#1507 id=1507 data-nosnippet>1507</a>            <span class="comment">// A writer may finish between loads. Classify one snapshot and reuse
+<a href=#1508 id=1508 data-nosnippet>1508</a>            // only unassigned or sealed slots; idle streams retain their generation.
+<a href=#1509 id=1509 data-nosnippet>1509</a>            </span>.position(|s| <span class="macro">matches!</span>(s.load(Ordering::Acquire) % <span class="number">4</span>, <span class="number">0 </span>| SEALED))
+<a href=#1510 id=1510 data-nosnippet>1510</a>            .ok_or_else(|| CuError::from(<span class="string">"Too many concurrent section writes"</span>))<span class="question-mark">?</span>;
+<a href=#1511 id=1511 data-nosnippet>1511</a>        <span class="self">self</span>.generation = <span class="self">self
+<a href=#1512 id=1512 data-nosnippet>1512</a>            </span>.generation
+<a href=#1513 id=1513 data-nosnippet>1513</a>            .checked_add(<span class="number">1</span>)
+<a href=#1514 id=1514 data-nosnippet>1514</a>            .filter(|g| <span class="kw-2">*</span>g &lt; usize::MAX / GENERATION_STRIDE)
+<a href=#1515 id=1515 data-nosnippet>1515</a>            .ok_or_else(|| CuError::from(<span class="string">"Section generation exhausted"</span>))<span class="question-mark">?</span>;
+<a href=#1516 id=1516 data-nosnippet>1516</a>        <span class="kw">let </span>header = SectionHeader {
+<a href=#1517 id=1517 data-nosnippet>1517</a>            entry_type: kind,
+<a href=#1518 id=1518 data-nosnippet>1518</a>            allocated: size,
+<a href=#1519 id=1519 data-nosnippet>1519</a>            context,
+<a href=#1520 id=1520 data-nosnippet>1520</a>            ..SectionHeader::default()
+<a href=#1521 id=1521 data-nosnippet>1521</a>        };
+<a href=#1522 id=1522 data-nosnippet>1522</a>        <span class="kw">let </span><span class="kw-2">mut </span>region = <span class="self">self</span>.storage.region(position, size)<span class="question-mark">?</span>;
+<a href=#1523 id=1523 data-nosnippet>1523</a>        initialize_section(<span class="kw-2">&amp;mut </span>region, <span class="kw-2">&amp;</span>header, position, <span class="self">self</span>.generation <span class="kw">as </span>u64)<span class="question-mark">?</span>;
+<a href=#1524 id=1524 data-nosnippet>1524</a>        <span class="kw">if </span><span class="self">self</span>.header.tail_section != <span class="number">0 </span>{
+<a href=#1525 id=1525 data-nosnippet>1525</a>            <span class="kw">let </span>tail = <span class="self">self</span>.header.tail_section;
+<a href=#1526 id=1526 data-nosnippet>1526</a>            <span class="self">self</span>.link_sections(tail, position, <span class="self">self</span>.generation <span class="kw">as </span>u64)<span class="question-mark">?</span>;
+<a href=#1527 id=1527 data-nosnippet>1527</a>        }
+<a href=#1528 id=1528 data-nosnippet>1528</a>        <span class="kw">if </span><span class="self">self</span>.header.head_section == <span class="number">0 </span>{
+<a href=#1529 id=1529 data-nosnippet>1529</a>            <span class="self">self</span>.header.head_section = position;
+<a href=#1530 id=1530 data-nosnippet>1530</a>        }
+<a href=#1531 id=1531 data-nosnippet>1531</a>        <span class="self">self</span>.header.tail_section = position;
+<a href=#1532 id=1532 data-nosnippet>1532</a>        <span class="self">self</span>.header.clean_close = <span class="bool-val">false</span>;
+<a href=#1533 id=1533 data-nosnippet>1533</a>        <span class="self">self</span>.publish()<span class="question-mark">?</span>;
+<a href=#1534 id=1534 data-nosnippet>1534</a>        <span class="self">self</span>.retained_space += size;
+<a href=#1535 id=1535 data-nosnippet>1535</a>        <span class="self">self</span>.allocation_end = <span class="self">self</span>.allocation_end.max(end);
+<a href=#1536 id=1536 data-nosnippet>1536</a>        <span class="kw">for </span>lease <span class="kw">in </span><span class="self">self</span>.leases.iter() {
+<a href=#1537 id=1537 data-nosnippet>1537</a>            <span class="kw">if </span>lease.offset() == position {
+<a href=#1538 id=1538 data-nosnippet>1538</a>                lease.set_offset(<span class="number">0</span>);
+<a href=#1539 id=1539 data-nosnippet>1539</a>            }
+<a href=#1540 id=1540 data-nosnippet>1540</a>        }
+<a href=#1541 id=1541 data-nosnippet>1541</a>        <span class="self">self</span>.leases[slot].set_offset(position);
+<a href=#1542 id=1542 data-nosnippet>1542</a>        <span class="self">self</span>.leases[slot].set_allocated(size);
+<a href=#1543 id=1543 data-nosnippet>1543</a>        <span class="self">self</span>.leases[slot].set_next(<span class="number">0</span>);
+<a href=#1544 id=1544 data-nosnippet>1544</a>        <span class="self">self</span>.leases[slot].store(
+<a href=#1545 id=1545 data-nosnippet>1545</a>            <span class="self">self</span>.generation * GENERATION_STRIDE
+<a href=#1546 id=1546 data-nosnippet>1546</a>                + <span class="kw">if </span><span class="self">self</span>.policy == CapacityPolicy::OverwriteOldest {
+<a href=#1547 id=1547 data-nosnippet>1547</a>                    IDLE
+<a href=#1548 id=1548 data-nosnippet>1548</a>                } <span class="kw">else </span>{
+<a href=#1549 id=1549 data-nosnippet>1549</a>                    BUSY
+<a href=#1550 id=1550 data-nosnippet>1550</a>                },
+<a href=#1551 id=1551 data-nosnippet>1551</a>            Ordering::Release,
+<a href=#1552 id=1552 data-nosnippet>1552</a>        );
+<a href=#1553 id=1553 data-nosnippet>1553</a>        <span class="kw">let </span>append_only = <span class="self">self</span>.policy != CapacityPolicy::OverwriteOldest;
+<a href=#1554 id=1554 data-nosnippet>1554</a>        <span class="kw">let </span>records_per_commit = <span class="kw">if </span>kind == UnifiedLogType::CopperList {
+<a href=#1555 id=1555 data-nosnippet>1555</a>            region.begin_record_batching().get()
+<a href=#1556 id=1556 data-nosnippet>1556</a>        } <span class="kw">else </span>{
+<a href=#1557 id=1557 data-nosnippet>1557</a>            <span class="number">1
+<a href=#1558 id=1558 data-nosnippet>1558</a>        </span>};
+<a href=#1559 id=1559 data-nosnippet>1559</a>        <span class="self">self</span>.leases[slot]
+<a href=#1560 id=1560 data-nosnippet>1560</a>            .batched
+<a href=#1561 id=1561 data-nosnippet>1561</a>            .store(records_per_commit &gt; <span class="number">1</span>, Ordering::Relaxed);
+<a href=#1562 id=1562 data-nosnippet>1562</a>        <span class="kw">let </span>storage = ByteSection {
+<a href=#1563 id=1563 data-nosnippet>1563</a>            region,
+<a href=#1564 id=1564 data-nosnippet>1564</a>            position: HEADER,
+<a href=#1565 id=1565 data-nosnippet>1565</a>            header: header.clone(),
+<a href=#1566 id=1566 data-nosnippet>1566</a>            leases: <span class="self">self</span>.leases.clone(),
+<a href=#1567 id=1567 data-nosnippet>1567</a>            slot,
+<a href=#1568 id=1568 data-nosnippet>1568</a>            generation: <span class="self">self</span>.generation,
+<a href=#1569 id=1569 data-nosnippet>1569</a>            offset: position,
+<a href=#1570 id=1570 data-nosnippet>1570</a>            write_reserved: <span class="bool-val">false</span>,
+<a href=#1571 id=1571 data-nosnippet>1571</a>            append_only,
+<a href=#1572 id=1572 data-nosnippet>1572</a>            records_per_commit,
+<a href=#1573 id=1573 data-nosnippet>1573</a>            pending_records: <span class="number">0</span>,
+<a href=#1574 id=1574 data-nosnippet>1574</a>        };
+<a href=#1575 id=1575 data-nosnippet>1575</a>        <span class="kw">let </span>handle = SectionHandle::create(header, storage)<span class="question-mark">?</span>;
+<a href=#1576 id=1576 data-nosnippet>1576</a>        <span class="self">self</span>.faulted = <span class="bool-val">false</span>;
+<a href=#1577 id=1577 data-nosnippet>1577</a>        <span class="prelude-val">Ok</span>(handle)
+<a href=#1578 id=1578 data-nosnippet>1578</a>    }
+<a href=#1579 id=1579 data-nosnippet>1579</a>    <span class="kw">fn </span>flush_section(<span class="kw-2">&amp;mut </span><span class="self">self</span>, section: <span class="kw-2">&amp;mut </span>SectionHandle&lt;ByteSection&lt;B::Region&gt;&gt;) {
+<a href=#1580 id=1580 data-nosnippet>1580</a>        <span class="kw">let _ </span>= <span class="self">self</span>.try_flush_section(section);
+<a href=#1581 id=1581 data-nosnippet>1581</a>    }
+<a href=#1582 id=1582 data-nosnippet>1582</a>    <span class="kw">fn </span>try_flush_section(
+<a href=#1583 id=1583 data-nosnippet>1583</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#1584 id=1584 data-nosnippet>1584</a>        section: <span class="kw-2">&amp;mut </span>SectionHandle&lt;ByteSection&lt;B::Region&gt;&gt;,
+<a href=#1585 id=1585 data-nosnippet>1585</a>    ) -&gt; CuResult&lt;()&gt; {
+<a href=#1586 id=1586 data-nosnippet>1586</a>        <span class="kw">if </span><span class="self">self</span>.faulted || <span class="self">self</span>.leases.poisoned.load(Ordering::Acquire) {
+<a href=#1587 id=1587 data-nosnippet>1587</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(<span class="string">"Logger faulted after a storage failure"</span>));
+<a href=#1588 id=1588 data-nosnippet>1588</a>        }
+<a href=#1589 id=1589 data-nosnippet>1589</a>        <span class="kw">if let </span><span class="prelude-val">Err</span>(error) = section.storage.flush() {
+<a href=#1590 id=1590 data-nosnippet>1590</a>            <span class="self">self</span>.faulted = <span class="bool-val">true</span>;
+<a href=#1591 id=1591 data-nosnippet>1591</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(error);
+<a href=#1592 id=1592 data-nosnippet>1592</a>        }
+<a href=#1593 id=1593 data-nosnippet>1593</a>        section.mark_closed();
+<a href=#1594 id=1594 data-nosnippet>1594</a>        <span class="prelude-val">Ok</span>(())
+<a href=#1595 id=1595 data-nosnippet>1595</a>    }
+<a href=#1596 id=1596 data-nosnippet>1596</a>    <span class="kw">fn </span>status(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; UnifiedLogStatus {
+<a href=#1597 id=1597 data-nosnippet>1597</a>        UnifiedLogStatus {
+<a href=#1598 id=1598 data-nosnippet>1598</a>            total_used_space: usize::try_from(<span class="self">self</span>.header.sections_begin + <span class="self">self</span>.retained_space)
+<a href=#1599 id=1599 data-nosnippet>1599</a>                .unwrap_or(usize::MAX),
+<a href=#1600 id=1600 data-nosnippet>1600</a>            total_allocated_space: usize::try_from(<span class="self">self</span>.header.sections_end).unwrap_or(usize::MAX),
+<a href=#1601 id=1601 data-nosnippet>1601</a>        }
+<a href=#1602 id=1602 data-nosnippet>1602</a>    }
+<a href=#1603 id=1603 data-nosnippet>1603</a>}
+<a href=#1604 id=1604 data-nosnippet>1604</a><span class="kw">impl</span>&lt;B: ByteStorage&gt; Drop <span class="kw">for </span>ByteLogger&lt;B&gt; {
+<a href=#1605 id=1605 data-nosnippet>1605</a>    <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#1606 id=1606 data-nosnippet>1606</a>        <span class="kw">let _ </span>= <span class="self">self</span>.close();
+<a href=#1607 id=1607 data-nosnippet>1607</a>    }
+<a href=#1608 id=1608 data-nosnippet>1608</a>}
+<a href=#1609 id=1609 data-nosnippet>1609</a>
+<a href=#1610 id=1610 data-nosnippet>1610</a><span class="attr">#[cfg(all(test, feature = <span class="string">"std"</span>))]
+<a href=#1611 id=1611 data-nosnippet>1611</a></span><span class="kw">mod </span>tests {
+<a href=#1612 id=1612 data-nosnippet>1612</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#1613 id=1613 data-nosnippet>1613</a>    <span class="kw">use crate</span>::{
+<a href=#1614 id=1614 data-nosnippet>1614</a>        LogStream, UnifiedLogRead, UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerRead,
+<a href=#1615 id=1615 data-nosnippet>1615</a>    };
+<a href=#1616 id=1616 data-nosnippet>1616</a>    <span class="kw">use </span>cu29_traits::WriteStream;
+<a href=#1617 id=1617 data-nosnippet>1617</a>    <span class="kw">use </span>std::cell::{Cell, RefCell};
+<a href=#1618 id=1618 data-nosnippet>1618</a>    <span class="kw">use </span>std::sync::Mutex;
+<a href=#1619 id=1619 data-nosnippet>1619</a>
+<a href=#1620 id=1620 data-nosnippet>1620</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">enum </span>LeaseEvent {
+<a href=#1621 id=1621 data-nosnippet>1621</a>        Loaded(usize),
+<a href=#1622 id=1622 data-nosnippet>1622</a>        BeforeCompareExchange,
+<a href=#1623 id=1623 data-nosnippet>1623</a>        AfterCompareExchange,
+<a href=#1624 id=1624 data-nosnippet>1624</a>    }
+<a href=#1625 id=1625 data-nosnippet>1625</a>
+<a href=#1626 id=1626 data-nosnippet>1626</a>    <span class="kw">type </span>LeaseHook = Box&lt;<span class="kw">dyn </span>FnMut(<span class="kw-2">&amp;</span>Lease, LeaseEvent)&gt;;
+<a href=#1627 id=1627 data-nosnippet>1627</a>    <span class="macro">std::thread_local!</span> {
+<a href=#1628 id=1628 data-nosnippet>1628</a>        <span class="kw">static </span>LEASE_HOOK: RefCell&lt;<span class="prelude-ty">Option</span>&lt;LeaseHook&gt;&gt; = RefCell::new(<span class="prelude-val">None</span>);
+<a href=#1629 id=1629 data-nosnippet>1629</a>    }
+<a href=#1630 id=1630 data-nosnippet>1630</a>
+<a href=#1631 id=1631 data-nosnippet>1631</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>lease_event(lease: <span class="kw-2">&amp;</span>Lease, event: LeaseEvent) {
+<a href=#1632 id=1632 data-nosnippet>1632</a>        LEASE_HOOK.with(|cell| {
+<a href=#1633 id=1633 data-nosnippet>1633</a>            <span class="kw">let </span><span class="kw-2">mut </span>hook = cell.borrow_mut().take();
+<a href=#1634 id=1634 data-nosnippet>1634</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(hook) = hook.as_mut() {
+<a href=#1635 id=1635 data-nosnippet>1635</a>                hook(lease, event);
+<a href=#1636 id=1636 data-nosnippet>1636</a>            }
+<a href=#1637 id=1637 data-nosnippet>1637</a>            <span class="kw-2">*</span>cell.borrow_mut() = hook;
+<a href=#1638 id=1638 data-nosnippet>1638</a>        });
+<a href=#1639 id=1639 data-nosnippet>1639</a>    }
+<a href=#1640 id=1640 data-nosnippet>1640</a>
+<a href=#1641 id=1641 data-nosnippet>1641</a>    <span class="kw">fn </span>saved_values(path: <span class="kw-2">&amp;</span>std::path::Path) -&gt; Vec&lt;u32&gt; {
+<a href=#1642 id=1642 data-nosnippet>1642</a>        <span class="kw">let </span><span class="kw-2">mut </span>reader = UnifiedLoggerRead::new(path).unwrap();
+<a href=#1643 id=1643 data-nosnippet>1643</a>        <span class="kw">let </span><span class="kw-2">mut </span>saved = Vec::new();
+<a href=#1644 id=1644 data-nosnippet>1644</a>        <span class="kw">while let </span><span class="prelude-val">Some</span>(bytes) = reader
+<a href=#1645 id=1645 data-nosnippet>1645</a>            .read_next_section_type(UnifiedLogType::CopperList)
+<a href=#1646 id=1646 data-nosnippet>1646</a>            .unwrap()
+<a href=#1647 id=1647 data-nosnippet>1647</a>        {
+<a href=#1648 id=1648 data-nosnippet>1648</a>            <span class="kw">let </span><span class="kw-2">mut </span>bytes = bytes.as_slice();
+<a href=#1649 id=1649 data-nosnippet>1649</a>            <span class="kw">while </span>!bytes.is_empty() {
+<a href=#1650 id=1650 data-nosnippet>1650</a>                <span class="kw">let </span>(value, used) = decode_from_slice::&lt;u32, <span class="kw">_</span>&gt;(bytes, standard()).unwrap();
+<a href=#1651 id=1651 data-nosnippet>1651</a>                saved.push(value);
+<a href=#1652 id=1652 data-nosnippet>1652</a>                bytes = <span class="kw-2">&amp;</span>bytes[used..];
+<a href=#1653 id=1653 data-nosnippet>1653</a>            }
+<a href=#1654 id=1654 data-nosnippet>1654</a>        }
+<a href=#1655 id=1655 data-nosnippet>1655</a>        saved
+<a href=#1656 id=1656 data-nosnippet>1656</a>    }
+<a href=#1657 id=1657 data-nosnippet>1657</a>
+<a href=#1658 id=1658 data-nosnippet>1658</a>    <span class="kw">fn </span>logger(path: <span class="kw-2">&amp;</span>std::path::Path, policy: CapacityPolicy) -&gt; <span class="kw">crate</span>::UnifiedLoggerWrite {
+<a href=#1659 id=1659 data-nosnippet>1659</a>        <span class="kw">match </span>UnifiedLoggerBuilder::new()
+<a href=#1660 id=1660 data-nosnippet>1660</a>            .file_base_name(path)
+<a href=#1661 id=1661 data-nosnippet>1661</a>            .preallocated_size(<span class="number">16384</span>)
+<a href=#1662 id=1662 data-nosnippet>1662</a>            .capacity(<span class="number">16384</span>, policy)
+<a href=#1663 id=1663 data-nosnippet>1663</a>            .write(<span class="bool-val">true</span>)
+<a href=#1664 id=1664 data-nosnippet>1664</a>            .create(<span class="bool-val">true</span>)
+<a href=#1665 id=1665 data-nosnippet>1665</a>            .build()
+<a href=#1666 id=1666 data-nosnippet>1666</a>            .unwrap()
+<a href=#1667 id=1667 data-nosnippet>1667</a>        {
+<a href=#1668 id=1668 data-nosnippet>1668</a>            UnifiedLogger::Write(logger) =&gt; logger,
+<a href=#1669 id=1669 data-nosnippet>1669</a>            <span class="kw">_ </span>=&gt; <span class="macro">unreachable!</span>(),
+<a href=#1670 id=1670 data-nosnippet>1670</a>        }
+<a href=#1671 id=1671 data-nosnippet>1671</a>    }
+<a href=#1672 id=1672 data-nosnippet>1672</a>
+<a href=#1673 id=1673 data-nosnippet>1673</a>    <span class="attr">#[test]
+<a href=#1674 id=1674 data-nosnippet>1674</a>    </span><span class="kw">fn </span>test_reclamation_cas_is_absent_from_append_only_records() {
+<a href=#1675 id=1675 data-nosnippet>1675</a>        <span class="kw">let </span>dir = tempfile::tempdir().unwrap();
+<a href=#1676 id=1676 data-nosnippet>1676</a>        <span class="kw">for </span>policy <span class="kw">in </span>[
+<a href=#1677 id=1677 data-nosnippet>1677</a>            CapacityPolicy::Grow,
+<a href=#1678 id=1678 data-nosnippet>1678</a>            CapacityPolicy::StopWhenFull,
+<a href=#1679 id=1679 data-nosnippet>1679</a>            CapacityPolicy::OverwriteOldest,
+<a href=#1680 id=1680 data-nosnippet>1680</a>        ] {
+<a href=#1681 id=1681 data-nosnippet>1681</a>            <span class="kw">let </span>path = dir.path().join(<span class="macro">format!</span>(<span class="string">"cas-{policy:?}.copper"</span>));
+<a href=#1682 id=1682 data-nosnippet>1682</a>            <span class="kw">let </span><span class="kw-2">mut </span>logger = logger(<span class="kw-2">&amp;</span>path, policy);
+<a href=#1683 id=1683 data-nosnippet>1683</a>            <span class="kw">let </span><span class="kw-2">mut </span>section = logger
+<a href=#1684 id=1684 data-nosnippet>1684</a>                .add_section(UnifiedLogType::CopperList, <span class="number">4096</span>)
+<a href=#1685 id=1685 data-nosnippet>1685</a>                .unwrap();
+<a href=#1686 id=1686 data-nosnippet>1686</a>            <span class="kw">let </span>calls = Arc::new(AtomicUsize::new(<span class="number">0</span>));
+<a href=#1687 id=1687 data-nosnippet>1687</a>            <span class="kw">let </span>observed = calls.clone();
+<a href=#1688 id=1688 data-nosnippet>1688</a>            LEASE_HOOK.with(|cell| {
+<a href=#1689 id=1689 data-nosnippet>1689</a>                <span class="kw-2">*</span>cell.borrow_mut() = <span class="prelude-val">Some</span>(Box::new(<span class="kw">move </span>|<span class="kw">_</span>, event| {
+<a href=#1690 id=1690 data-nosnippet>1690</a>                    <span class="kw">if </span><span class="macro">matches!</span>(event, LeaseEvent::BeforeCompareExchange) {
+<a href=#1691 id=1691 data-nosnippet>1691</a>                        observed.fetch_add(<span class="number">1</span>, Ordering::Relaxed);
+<a href=#1692 id=1692 data-nosnippet>1692</a>                    }
+<a href=#1693 id=1693 data-nosnippet>1693</a>                }))
+<a href=#1694 id=1694 data-nosnippet>1694</a>            });
+<a href=#1695 id=1695 data-nosnippet>1695</a>            <span class="kw">for </span>value <span class="kw">in </span><span class="number">0</span>..<span class="number">100u32 </span>{
+<a href=#1696 id=1696 data-nosnippet>1696</a>                section.append(value).unwrap();
+<a href=#1697 id=1697 data-nosnippet>1697</a>            }
+<a href=#1698 id=1698 data-nosnippet>1698</a>            LEASE_HOOK.with(|cell| cell.borrow_mut().take());
+<a href=#1699 id=1699 data-nosnippet>1699</a>            <span class="macro">assert_eq!</span>(
+<a href=#1700 id=1700 data-nosnippet>1700</a>                calls.load(Ordering::Relaxed),
+<a href=#1701 id=1701 data-nosnippet>1701</a>                <span class="kw">if </span>policy == CapacityPolicy::OverwriteOldest {
+<a href=#1702 id=1702 data-nosnippet>1702</a>                    <span class="number">200
+<a href=#1703 id=1703 data-nosnippet>1703</a>                </span>} <span class="kw">else </span>{
+<a href=#1704 id=1704 data-nosnippet>1704</a>                    <span class="number">0
+<a href=#1705 id=1705 data-nosnippet>1705</a>                </span>}
+<a href=#1706 id=1706 data-nosnippet>1706</a>            );
+<a href=#1707 id=1707 data-nosnippet>1707</a>            logger.try_flush_section(<span class="kw-2">&amp;mut </span>section).unwrap();
+<a href=#1708 id=1708 data-nosnippet>1708</a>            logger.close().unwrap();
+<a href=#1709 id=1709 data-nosnippet>1709</a>            <span class="macro">assert_eq!</span>(saved_values(<span class="kw-2">&amp;</span>path), (<span class="number">0</span>..<span class="number">100</span>).collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;());
+<a href=#1710 id=1710 data-nosnippet>1710</a>        }
+<a href=#1711 id=1711 data-nosnippet>1711</a>    }
+<a href=#1712 id=1712 data-nosnippet>1712</a>
+<a href=#1713 id=1713 data-nosnippet>1713</a>    <span class="attr">#[test]
+<a href=#1714 id=1714 data-nosnippet>1714</a>    </span><span class="kw">fn </span>test_append_only_close_waits_for_the_owner_and_drop_seals_it() {
+<a href=#1715 id=1715 data-nosnippet>1715</a>        <span class="kw">let </span>dir = tempfile::tempdir().unwrap();
+<a href=#1716 id=1716 data-nosnippet>1716</a>        <span class="kw">for </span>policy <span class="kw">in </span>[CapacityPolicy::Grow, CapacityPolicy::StopWhenFull] {
+<a href=#1717 id=1717 data-nosnippet>1717</a>            <span class="kw">let </span>path = dir.path().join(<span class="macro">format!</span>(<span class="string">"close-{policy:?}.copper"</span>));
+<a href=#1718 id=1718 data-nosnippet>1718</a>            <span class="kw">let </span><span class="kw-2">mut </span>logger = logger(<span class="kw-2">&amp;</span>path, policy);
+<a href=#1719 id=1719 data-nosnippet>1719</a>            <span class="kw">let </span><span class="kw-2">mut </span>section = logger
+<a href=#1720 id=1720 data-nosnippet>1720</a>                .add_section(UnifiedLogType::CopperList, <span class="number">2048</span>)
+<a href=#1721 id=1721 data-nosnippet>1721</a>                .unwrap();
+<a href=#1722 id=1722 data-nosnippet>1722</a>            section.append(<span class="number">41u32</span>).unwrap();
+<a href=#1723 id=1723 data-nosnippet>1723</a>            <span class="macro">assert!</span>(logger.close().is_err());
+<a href=#1724 id=1724 data-nosnippet>1724</a>            section.append(<span class="number">42u32</span>).unwrap();
+<a href=#1725 id=1725 data-nosnippet>1725</a>            drop(section);
+<a href=#1726 id=1726 data-nosnippet>1726</a>            logger.close().unwrap();
+<a href=#1727 id=1727 data-nosnippet>1727</a>            <span class="macro">assert_eq!</span>(saved_values(<span class="kw-2">&amp;</span>path), [<span class="number">41</span>, <span class="number">42</span>]);
+<a href=#1728 id=1728 data-nosnippet>1728</a>        }
+<a href=#1729 id=1729 data-nosnippet>1729</a>    }
+<a href=#1730 id=1730 data-nosnippet>1730</a>
+<a href=#1731 id=1731 data-nosnippet>1731</a>    <span class="attr">#[test]
+<a href=#1732 id=1732 data-nosnippet>1732</a>    </span><span class="kw">fn </span>test_metadata_owners_fit_independent_physical_blocks() {
+<a href=#1733 id=1733 data-nosnippet>1733</a>        <span class="kw">let </span>header = SectionHeader {
+<a href=#1734 id=1734 data-nosnippet>1734</a>            entry_type: UnifiedLogType::CopperList,
+<a href=#1735 id=1735 data-nosnippet>1735</a>            allocated: u64::MAX,
+<a href=#1736 id=1736 data-nosnippet>1736</a>            next_section: u64::MAX,
+<a href=#1737 id=1737 data-nosnippet>1737</a>            used: u32::MAX,
+<a href=#1738 id=1738 data-nosnippet>1738</a>            context: SectionContext {
+<a href=#1739 id=1739 data-nosnippet>1739</a>                run_id: u64::MAX,
+<a href=#1740 id=1740 data-nosnippet>1740</a>                instance_id: u32::MAX,
+<a href=#1741 id=1741 data-nosnippet>1741</a>                mission_index: u32::MAX,
+<a href=#1742 id=1742 data-nosnippet>1742</a>            },
+<a href=#1743 id=1743 data-nosnippet>1743</a>            ..SectionHeader::default()
+<a href=#1744 id=1744 data-nosnippet>1744</a>        };
+<a href=#1745 id=1745 data-nosnippet>1745</a>        <span class="kw">let </span><span class="kw-2">mut </span>descriptor = SectionDescriptor::new(<span class="kw-2">&amp;</span>header, u64::MAX, u64::MAX);
+<a href=#1746 id=1746 data-nosnippet>1746</a>        descriptor.next_generation = u64::MAX;
+<a href=#1747 id=1747 data-nosnippet>1747</a>        <span class="kw">let </span>commit = SectionCommit {
+<a href=#1748 id=1748 data-nosnippet>1748</a>            position: u64::MAX,
+<a href=#1749 id=1749 data-nosnippet>1749</a>            generation: u64::MAX,
+<a href=#1750 id=1750 data-nosnippet>1750</a>            used: u32::MAX,
+<a href=#1751 id=1751 data-nosnippet>1751</a>            is_open: <span class="bool-val">true</span>,
+<a href=#1752 id=1752 data-nosnippet>1752</a>        };
+<a href=#1753 id=1753 data-nosnippet>1753</a>        <span class="kw">let </span><span class="kw-2">mut </span>block = [<span class="number">0u8</span>; <span class="number">512</span>];
+<a href=#1754 id=1754 data-nosnippet>1754</a>        <span class="macro">assert!</span>(encode_into_slice(descriptor, <span class="kw-2">&amp;mut </span>block, standard()).unwrap() &lt; block.len());
+<a href=#1755 id=1755 data-nosnippet>1755</a>        <span class="macro">assert!</span>(encode_into_slice(commit, <span class="kw-2">&amp;mut </span>block, standard()).unwrap() &lt; block.len());
+<a href=#1756 id=1756 data-nosnippet>1756</a>    }
+<a href=#1757 id=1757 data-nosnippet>1757</a>
+<a href=#1758 id=1758 data-nosnippet>1758</a>    <span class="attr">#[test]
+<a href=#1759 id=1759 data-nosnippet>1759</a>    </span><span class="kw">fn </span>test_grow_allocation_does_not_visit_retained_extents() {
+<a href=#1760 id=1760 data-nosnippet>1760</a>        <span class="kw">let </span>dir = tempfile::tempdir().unwrap();
+<a href=#1761 id=1761 data-nosnippet>1761</a>        <span class="kw">let </span>path = dir.path().join(<span class="string">"allocation-visits.copper"</span>);
+<a href=#1762 id=1762 data-nosnippet>1762</a>        <span class="kw">let </span><span class="kw-2">mut </span>logger = logger(<span class="kw-2">&amp;</span>path, CapacityPolicy::Grow);
+<a href=#1763 id=1763 data-nosnippet>1763</a>        <span class="kw">for </span>value <span class="kw">in </span><span class="number">0</span>..<span class="number">512u32 </span>{
+<a href=#1764 id=1764 data-nosnippet>1764</a>            <span class="kw">let </span>visits = logger.extent_visits.load(Ordering::Relaxed);
+<a href=#1765 id=1765 data-nosnippet>1765</a>            <span class="kw">let </span><span class="kw-2">mut </span>section = logger
+<a href=#1766 id=1766 data-nosnippet>1766</a>                .add_section(UnifiedLogType::CopperList, <span class="number">2048</span>)
+<a href=#1767 id=1767 data-nosnippet>1767</a>                .unwrap();
+<a href=#1768 id=1768 data-nosnippet>1768</a>            <span class="macro">assert_eq!</span>(
+<a href=#1769 id=1769 data-nosnippet>1769</a>                logger.extent_visits.load(Ordering::Relaxed),
+<a href=#1770 id=1770 data-nosnippet>1770</a>                visits,
+<a href=#1771 id=1771 data-nosnippet>1771</a>                <span class="string">"Grow allocation visited retained geometry after {value} sections"
+<a href=#1772 id=1772 data-nosnippet>1772</a>            </span>);
+<a href=#1773 id=1773 data-nosnippet>1773</a>            section.append(value).unwrap();
+<a href=#1774 id=1774 data-nosnippet>1774</a>            logger.try_flush_section(<span class="kw-2">&amp;mut </span>section).unwrap();
+<a href=#1775 id=1775 data-nosnippet>1775</a>        }
+<a href=#1776 id=1776 data-nosnippet>1776</a>        drop(logger);
+<a href=#1777 id=1777 data-nosnippet>1777</a>        <span class="macro">assert_eq!</span>(saved_values(<span class="kw-2">&amp;</span>path), (<span class="number">0</span>..<span class="number">512</span>).collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;());
+<a href=#1778 id=1778 data-nosnippet>1778</a>    }
+<a href=#1779 id=1779 data-nosnippet>1779</a>
+<a href=#1780 id=1780 data-nosnippet>1780</a>    <span class="attr">#[test]
+<a href=#1781 id=1781 data-nosnippet>1781</a>    </span><span class="kw">fn </span>test_grow_after_wrap_uses_free_suffix_without_visiting_retained_extents() {
+<a href=#1782 id=1782 data-nosnippet>1782</a>        <span class="kw">let </span>dir = tempfile::tempdir().unwrap();
+<a href=#1783 id=1783 data-nosnippet>1783</a>        <span class="kw">let </span>path = dir.path().join(<span class="string">"wrapped-allocation-visits.copper"</span>);
+<a href=#1784 id=1784 data-nosnippet>1784</a>        {
+<a href=#1785 id=1785 data-nosnippet>1785</a>            <span class="kw">let </span><span class="kw-2">mut </span>logger = logger(<span class="kw-2">&amp;</span>path, CapacityPolicy::OverwriteOldest);
+<a href=#1786 id=1786 data-nosnippet>1786</a>            <span class="kw">for </span>value <span class="kw">in </span><span class="number">0</span>..<span class="number">8u32 </span>{
+<a href=#1787 id=1787 data-nosnippet>1787</a>                <span class="kw">let </span><span class="kw-2">mut </span>section = logger
+<a href=#1788 id=1788 data-nosnippet>1788</a>                    .add_section(UnifiedLogType::CopperList, <span class="number">2048</span>)
+<a href=#1789 id=1789 data-nosnippet>1789</a>                    .unwrap();
+<a href=#1790 id=1790 data-nosnippet>1790</a>                section.append(value).unwrap();
+<a href=#1791 id=1791 data-nosnippet>1791</a>                logger.try_flush_section(<span class="kw-2">&amp;mut </span>section).unwrap();
+<a href=#1792 id=1792 data-nosnippet>1792</a>            }
+<a href=#1793 id=1793 data-nosnippet>1793</a>            <span class="macro">assert_eq!</span>(logger.header.tail_section, BLOCK, <span class="string">"the log must wrap"</span>);
+<a href=#1794 id=1794 data-nosnippet>1794</a>        }
+<a href=#1795 id=1795 data-nosnippet>1795</a>        <span class="kw">let </span><span class="kw-2">mut </span>logger = <span class="kw">match </span>UnifiedLoggerBuilder::new()
+<a href=#1796 id=1796 data-nosnippet>1796</a>            .file_base_name(<span class="kw-2">&amp;</span>path)
+<a href=#1797 id=1797 data-nosnippet>1797</a>            .preallocated_size(<span class="number">16384</span>)
+<a href=#1798 id=1798 data-nosnippet>1798</a>            .write(<span class="bool-val">true</span>)
+<a href=#1799 id=1799 data-nosnippet>1799</a>            .create(<span class="bool-val">true</span>)
+<a href=#1800 id=1800 data-nosnippet>1800</a>            .append(<span class="bool-val">true</span>)
+<a href=#1801 id=1801 data-nosnippet>1801</a>            .build()
+<a href=#1802 id=1802 data-nosnippet>1802</a>            .unwrap()
+<a href=#1803 id=1803 data-nosnippet>1803</a>        {
+<a href=#1804 id=1804 data-nosnippet>1804</a>            UnifiedLogger::Write(logger) =&gt; logger,
+<a href=#1805 id=1805 data-nosnippet>1805</a>            <span class="kw">_ </span>=&gt; <span class="macro">unreachable!</span>(),
+<a href=#1806 id=1806 data-nosnippet>1806</a>        };
+<a href=#1807 id=1807 data-nosnippet>1807</a>        <span class="kw">let </span><span class="kw-2">mut </span>section = logger
+<a href=#1808 id=1808 data-nosnippet>1808</a>            .add_section(UnifiedLogType::CopperList, <span class="number">2048</span>)
+<a href=#1809 id=1809 data-nosnippet>1809</a>            .unwrap();
+<a href=#1810 id=1810 data-nosnippet>1810</a>        <span class="macro">assert_eq!</span>(logger.extent_visits.load(Ordering::Relaxed), <span class="number">0</span>);
+<a href=#1811 id=1811 data-nosnippet>1811</a>        <span class="macro">assert_eq!</span>(
+<a href=#1812 id=1812 data-nosnippet>1812</a>            logger.header.tail_section,
+<a href=#1813 id=1813 data-nosnippet>1813</a>            BLOCK + <span class="number">7 </span>* <span class="number">2048</span>,
+<a href=#1814 id=1814 data-nosnippet>1814</a>            <span class="string">"Grow must use the free suffix beyond the highest retained extent"
+<a href=#1815 id=1815 data-nosnippet>1815</a>        </span>);
+<a href=#1816 id=1816 data-nosnippet>1816</a>        section.append(<span class="number">8u32</span>).unwrap();
+<a href=#1817 id=1817 data-nosnippet>1817</a>        logger.try_flush_section(<span class="kw-2">&amp;mut </span>section).unwrap();
+<a href=#1818 id=1818 data-nosnippet>1818</a>        drop(logger);
+<a href=#1819 id=1819 data-nosnippet>1819</a>        <span class="macro">assert_eq!</span>(saved_values(<span class="kw-2">&amp;</span>path), (<span class="number">1</span>..<span class="number">9</span>).collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;());
+<a href=#1820 id=1820 data-nosnippet>1820</a>    }
+<a href=#1821 id=1821 data-nosnippet>1821</a>
+<a href=#1822 id=1822 data-nosnippet>1822</a>    <span class="attr">#[test]
+<a href=#1823 id=1823 data-nosnippet>1823</a>    </span><span class="kw">fn </span>test_writer_finishing_during_slot_selection_keeps_its_generation() {
+<a href=#1824 id=1824 data-nosnippet>1824</a>        <span class="kw">let </span>dir = tempfile::tempdir().unwrap();
+<a href=#1825 id=1825 data-nosnippet>1825</a>        <span class="kw">let </span>path = dir.path().join(<span class="string">"selection.copper"</span>);
+<a href=#1826 id=1826 data-nosnippet>1826</a>        <span class="kw">let </span><span class="kw-2">mut </span>logger = logger(<span class="kw-2">&amp;</span>path, CapacityPolicy::OverwriteOldest);
+<a href=#1827 id=1827 data-nosnippet>1827</a>        <span class="kw">let </span><span class="kw-2">mut </span>first = logger
+<a href=#1828 id=1828 data-nosnippet>1828</a>            .add_section(UnifiedLogType::CopperList, <span class="number">2048</span>)
+<a href=#1829 id=1829 data-nosnippet>1829</a>            .unwrap();
+<a href=#1830 id=1830 data-nosnippet>1830</a>        first.append(<span class="number">41u32</span>).unwrap();
+<a href=#1831 id=1831 data-nosnippet>1831</a>        <span class="kw">let </span>section = first.get_storage();
+<a href=#1832 id=1832 data-nosnippet>1832</a>        <span class="kw">let </span>leases = section.leases.clone();
+<a href=#1833 id=1833 data-nosnippet>1833</a>        <span class="kw">let </span>slot = section.slot;
+<a href=#1834 id=1834 data-nosnippet>1834</a>        <span class="kw">let </span>idle = section.token(IDLE);
+<a href=#1835 id=1835 data-nosnippet>1835</a>        leases[slot].store(section.token(BUSY), Ordering::Release);
+<a href=#1836 id=1836 data-nosnippet>1836</a>        <span class="kw">let </span>loads = Arc::new(AtomicUsize::new(<span class="number">0</span>));
+<a href=#1837 id=1837 data-nosnippet>1837</a>        <span class="kw">let </span>observed = loads.clone();
+<a href=#1838 id=1838 data-nosnippet>1838</a>        LEASE_HOOK.with(|cell| {
+<a href=#1839 id=1839 data-nosnippet>1839</a>            <span class="kw-2">*</span>cell.borrow_mut() = <span class="prelude-val">Some</span>(Box::new(<span class="kw">move </span>|lease, event| {
+<a href=#1840 id=1840 data-nosnippet>1840</a>                <span class="kw">if </span>core::ptr::eq(lease, <span class="kw-2">&amp;</span>leases[slot])
+<a href=#1841 id=1841 data-nosnippet>1841</a>                    &amp;&amp; <span class="kw">let </span>LeaseEvent::Loaded(state) = event
+<a href=#1842 id=1842 data-nosnippet>1842</a>                    &amp;&amp; state % <span class="number">4 </span>== BUSY
+<a href=#1843 id=1843 data-nosnippet>1843</a>                    &amp;&amp; observed.fetch_add(<span class="number">1</span>, Ordering::Relaxed) == <span class="number">1
+<a href=#1844 id=1844 data-nosnippet>1844</a>                </span>{
+<a href=#1845 id=1845 data-nosnippet>1845</a>                    <span class="comment">// Finish after the final slot-selection load has observed BUSY.
+<a href=#1846 id=1846 data-nosnippet>1846</a>                    </span>lease.store(idle, Ordering::Release);
+<a href=#1847 id=1847 data-nosnippet>1847</a>                }
+<a href=#1848 id=1848 data-nosnippet>1848</a>            }));
+<a href=#1849 id=1849 data-nosnippet>1849</a>        });
+<a href=#1850 id=1850 data-nosnippet>1850</a>        <span class="kw">let </span><span class="kw-2">mut </span>next = logger
+<a href=#1851 id=1851 data-nosnippet>1851</a>            .add_section(UnifiedLogType::CopperList, <span class="number">2048</span>)
+<a href=#1852 id=1852 data-nosnippet>1852</a>            .unwrap();
+<a href=#1853 id=1853 data-nosnippet>1853</a>        LEASE_HOOK.with(|cell| cell.borrow_mut().take());
+<a href=#1854 id=1854 data-nosnippet>1854</a>        <span class="macro">assert_eq!</span>(loads.load(Ordering::Relaxed), <span class="number">2</span>);
+<a href=#1855 id=1855 data-nosnippet>1855</a>        <span class="macro">assert_ne!</span>(
+<a href=#1856 id=1856 data-nosnippet>1856</a>            next.get_storage().slot,
+<a href=#1857 id=1857 data-nosnippet>1857</a>            slot,
+<a href=#1858 id=1858 data-nosnippet>1858</a>            <span class="string">"an idle live lease cannot be reused"
+<a href=#1859 id=1859 data-nosnippet>1859</a>        </span>);
+<a href=#1860 id=1860 data-nosnippet>1860</a>        first.append(<span class="number">42u32</span>).unwrap();
+<a href=#1861 id=1861 data-nosnippet>1861</a>        next.append(<span class="number">43u32</span>).unwrap();
+<a href=#1862 id=1862 data-nosnippet>1862</a>        logger.try_flush_section(<span class="kw-2">&amp;mut </span>first).unwrap();
+<a href=#1863 id=1863 data-nosnippet>1863</a>        logger.try_flush_section(<span class="kw-2">&amp;mut </span>next).unwrap();
+<a href=#1864 id=1864 data-nosnippet>1864</a>        drop(logger);
+<a href=#1865 id=1865 data-nosnippet>1865</a>        <span class="macro">assert_eq!</span>(saved_values(<span class="kw-2">&amp;</span>path), [<span class="number">41</span>, <span class="number">42</span>, <span class="number">43</span>]);
+<a href=#1866 id=1866 data-nosnippet>1866</a>    }
+<a href=#1867 id=1867 data-nosnippet>1867</a>
+<a href=#1868 id=1868 data-nosnippet>1868</a>    <span class="attr">#[test]
+<a href=#1869 id=1869 data-nosnippet>1869</a>    </span><span class="kw">fn </span>test_sealing_between_stream_precheck_and_acquisition_rebinds() {
+<a href=#1870 id=1870 data-nosnippet>1870</a>        <span class="kw">struct </span>Counted&lt;<span class="lifetime">'a</span>&gt;(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>Cell&lt;usize&gt;);
+<a href=#1871 id=1871 data-nosnippet>1871</a>        <span class="kw">impl </span>Encode <span class="kw">for </span>Counted&lt;<span class="lifetime">'_</span>&gt; {
+<a href=#1872 id=1872 data-nosnippet>1872</a>            <span class="kw">fn </span>encode&lt;E: bincode::enc::Encoder&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, encoder: <span class="kw-2">&amp;mut </span>E) -&gt; <span class="prelude-ty">Result</span>&lt;(), EncodeError&gt; {
+<a href=#1873 id=1873 data-nosnippet>1873</a>                <span class="self">self</span>.<span class="number">0</span>.set(<span class="self">self</span>.<span class="number">0</span>.get() + <span class="number">1</span>);
+<a href=#1874 id=1874 data-nosnippet>1874</a>                <span class="number">42u32</span>.encode(encoder)
+<a href=#1875 id=1875 data-nosnippet>1875</a>            }
+<a href=#1876 id=1876 data-nosnippet>1876</a>        }
+<a href=#1877 id=1877 data-nosnippet>1877</a>        <span class="kw">let </span>dir = tempfile::tempdir().unwrap();
+<a href=#1878 id=1878 data-nosnippet>1878</a>        <span class="kw">for </span>policy <span class="kw">in </span>[CapacityPolicy::OverwriteOldest] {
+<a href=#1879 id=1879 data-nosnippet>1879</a>            <span class="kw">for </span>empty <span class="kw">in </span>[<span class="bool-val">false</span>, <span class="bool-val">true</span>] {
+<a href=#1880 id=1880 data-nosnippet>1880</a>                <span class="kw">let </span>path = dir
+<a href=#1881 id=1881 data-nosnippet>1881</a>                    .path()
+<a href=#1882 id=1882 data-nosnippet>1882</a>                    .join(<span class="macro">format!</span>(<span class="string">"acquisition-{policy:?}-{empty}.copper"</span>));
+<a href=#1883 id=1883 data-nosnippet>1883</a>                <span class="kw">let </span>logger = Arc::new(Mutex::new(logger(<span class="kw-2">&amp;</span>path, policy)));
+<a href=#1884 id=1884 data-nosnippet>1884</a>                <span class="kw">let </span><span class="kw-2">mut </span>stream =
+<a href=#1885 id=1885 data-nosnippet>1885</a>                    LogStream::new(UnifiedLogType::CopperList, logger.clone(), <span class="number">2048</span>).unwrap();
+<a href=#1886 id=1886 data-nosnippet>1886</a>                <span class="kw">if </span>!empty {
+<a href=#1887 id=1887 data-nosnippet>1887</a>                    stream.log(<span class="kw-2">&amp;</span><span class="number">41u32</span>).unwrap();
+<a href=#1888 id=1888 data-nosnippet>1888</a>                }
+<a href=#1889 id=1889 data-nosnippet>1889</a>                <span class="kw">let </span>section = <span class="kw-2">&amp;</span>stream.current_section.storage;
+<a href=#1890 id=1890 data-nosnippet>1890</a>                <span class="kw">let </span>leases = section.leases.clone();
+<a href=#1891 id=1891 data-nosnippet>1891</a>                <span class="kw">let </span>slot = section.slot;
+<a href=#1892 id=1892 data-nosnippet>1892</a>                <span class="kw">let </span>idle = section.token(IDLE);
+<a href=#1893 id=1893 data-nosnippet>1893</a>                <span class="kw">let </span>injected = Arc::new(AtomicBool::new(<span class="bool-val">false</span>));
+<a href=#1894 id=1894 data-nosnippet>1894</a>                <span class="kw">let </span>observed = injected.clone();
+<a href=#1895 id=1895 data-nosnippet>1895</a>                <span class="kw">let </span><span class="kw-2">mut </span>pending = <span class="bool-val">false</span>;
+<a href=#1896 id=1896 data-nosnippet>1896</a>                LEASE_HOOK.with(|cell| {
+<a href=#1897 id=1897 data-nosnippet>1897</a>                    <span class="kw-2">*</span>cell.borrow_mut() = <span class="prelude-val">Some</span>(Box::new(<span class="kw">move </span>|lease, event| {
+<a href=#1898 id=1898 data-nosnippet>1898</a>                        <span class="kw">if </span>!core::ptr::eq(lease, <span class="kw-2">&amp;</span>leases[slot]) {
+<a href=#1899 id=1899 data-nosnippet>1899</a>                            <span class="kw">return</span>;
+<a href=#1900 id=1900 data-nosnippet>1900</a>                        }
+<a href=#1901 id=1901 data-nosnippet>1901</a>                        <span class="kw">match </span>event {
+<a href=#1902 id=1902 data-nosnippet>1902</a>                            LeaseEvent::BeforeCompareExchange
+<a href=#1903 id=1903 data-nosnippet>1903</a>                                <span class="kw">if </span>!observed.load(Ordering::Relaxed) =&gt;
+<a href=#1904 id=1904 data-nosnippet>1904</a>                            {
+<a href=#1905 id=1905 data-nosnippet>1905</a>                                <span class="comment">// Reclamation seals the idle section before acquisition.
+<a href=#1906 id=1906 data-nosnippet>1906</a>                                </span>lease.store(
+<a href=#1907 id=1907 data-nosnippet>1907</a>                                    idle / GENERATION_STRIDE * GENERATION_STRIDE + SEALED,
+<a href=#1908 id=1908 data-nosnippet>1908</a>                                    Ordering::Release,
+<a href=#1909 id=1909 data-nosnippet>1909</a>                                );
+<a href=#1910 id=1910 data-nosnippet>1910</a>                                pending = <span class="bool-val">true</span>;
+<a href=#1911 id=1911 data-nosnippet>1911</a>                                observed.store(<span class="bool-val">true</span>, Ordering::Relaxed);
+<a href=#1912 id=1912 data-nosnippet>1912</a>                            }
+<a href=#1913 id=1913 data-nosnippet>1913</a>                            LeaseEvent::AfterCompareExchange <span class="kw">if </span>pending =&gt; {
+<a href=#1914 id=1914 data-nosnippet>1914</a>                                <span class="comment">// Publication completes before the stream handles the failed CAS.
+<a href=#1915 id=1915 data-nosnippet>1915</a>                                </span>lease.store(idle, Ordering::Release);
+<a href=#1916 id=1916 data-nosnippet>1916</a>                                pending = <span class="bool-val">false</span>;
+<a href=#1917 id=1917 data-nosnippet>1917</a>                            }
+<a href=#1918 id=1918 data-nosnippet>1918</a>                            <span class="kw">_ </span>=&gt; {}
+<a href=#1919 id=1919 data-nosnippet>1919</a>                        }
+<a href=#1920 id=1920 data-nosnippet>1920</a>                    }));
+<a href=#1921 id=1921 data-nosnippet>1921</a>                });
+<a href=#1922 id=1922 data-nosnippet>1922</a>                <span class="kw">let </span>encodes = Cell::new(<span class="number">0</span>);
+<a href=#1923 id=1923 data-nosnippet>1923</a>                <span class="kw">let </span>result = stream.log(<span class="kw-2">&amp;</span>Counted(<span class="kw-2">&amp;</span>encodes));
+<a href=#1924 id=1924 data-nosnippet>1924</a>                LEASE_HOOK.with(|cell| cell.borrow_mut().take());
+<a href=#1925 id=1925 data-nosnippet>1925</a>                <span class="macro">assert!</span>(injected.load(Ordering::Relaxed));
+<a href=#1926 id=1926 data-nosnippet>1926</a>                result.unwrap();
+<a href=#1927 id=1927 data-nosnippet>1927</a>                <span class="macro">assert_eq!</span>(encodes.get(), <span class="number">1</span>, <span class="string">"rebinding must precede encoding"</span>);
+<a href=#1928 id=1928 data-nosnippet>1928</a>                drop(stream);
+<a href=#1929 id=1929 data-nosnippet>1929</a>                drop(logger);
+<a href=#1930 id=1930 data-nosnippet>1930</a>                <span class="macro">assert_eq!</span>(
+<a href=#1931 id=1931 data-nosnippet>1931</a>                    saved_values(<span class="kw-2">&amp;</span>path),
+<a href=#1932 id=1932 data-nosnippet>1932</a>                    <span class="kw">if </span>empty { <span class="macro">vec!</span>[<span class="number">42</span>] } <span class="kw">else </span>{ <span class="macro">vec!</span>[<span class="number">41</span>, <span class="number">42</span>] }
+<a href=#1933 id=1933 data-nosnippet>1933</a>                );
+<a href=#1934 id=1934 data-nosnippet>1934</a>            }
+<a href=#1935 id=1935 data-nosnippet>1935</a>        }
+<a href=#1936 id=1936 data-nosnippet>1936</a>    }
+<a href=#1937 id=1937 data-nosnippet>1937</a>
+<a href=#1938 id=1938 data-nosnippet>1938</a>    <span class="attr">#[test]
+<a href=#1939 id=1939 data-nosnippet>1939</a>    </span><span class="kw">fn </span>test_reclamation_before_acquisition_rebinds_a_stale_stream() {
+<a href=#1940 id=1940 data-nosnippet>1940</a>        <span class="kw">let </span>dir = tempfile::tempdir().unwrap();
+<a href=#1941 id=1941 data-nosnippet>1941</a>        <span class="kw">let </span>path = dir.path().join(<span class="string">"revocation.copper"</span>);
+<a href=#1942 id=1942 data-nosnippet>1942</a>        <span class="kw">let </span>logger = Arc::new(Mutex::new(logger(<span class="kw-2">&amp;</span>path, CapacityPolicy::OverwriteOldest)));
+<a href=#1943 id=1943 data-nosnippet>1943</a>        <span class="kw">let </span><span class="kw-2">mut </span>stream = LogStream::new(UnifiedLogType::CopperList, logger.clone(), <span class="number">2048</span>).unwrap();
+<a href=#1944 id=1944 data-nosnippet>1944</a>        stream.log(<span class="kw-2">&amp;</span><span class="number">41u32</span>).unwrap();
+<a href=#1945 id=1945 data-nosnippet>1945</a>        <span class="comment">// Leave the next allocation to wrap and reclaim the idle first stream.
+<a href=#1946 id=1946 data-nosnippet>1946</a>        </span><span class="kw">for </span>value <span class="kw">in </span><span class="number">0</span>..<span class="number">6u32 </span>{
+<a href=#1947 id=1947 data-nosnippet>1947</a>            <span class="kw">let </span><span class="kw-2">mut </span>logger = logger.lock().unwrap();
+<a href=#1948 id=1948 data-nosnippet>1948</a>            <span class="kw">let </span><span class="kw-2">mut </span>section = logger
+<a href=#1949 id=1949 data-nosnippet>1949</a>                .add_section(UnifiedLogType::CopperList, <span class="number">2048</span>)
+<a href=#1950 id=1950 data-nosnippet>1950</a>                .unwrap();
+<a href=#1951 id=1951 data-nosnippet>1951</a>            section.append(value).unwrap();
+<a href=#1952 id=1952 data-nosnippet>1952</a>            logger.try_flush_section(<span class="kw-2">&amp;mut </span>section).unwrap();
+<a href=#1953 id=1953 data-nosnippet>1953</a>        }
+<a href=#1954 id=1954 data-nosnippet>1954</a>        <span class="kw">let </span>first = <span class="kw-2">&amp;</span>stream.current_section.storage;
+<a href=#1955 id=1955 data-nosnippet>1955</a>        <span class="kw">let </span>leases = first.leases.clone();
+<a href=#1956 id=1956 data-nosnippet>1956</a>        <span class="kw">let </span>slot = first.slot;
+<a href=#1957 id=1957 data-nosnippet>1957</a>        <span class="kw">let </span>parent = logger.clone();
+<a href=#1958 id=1958 data-nosnippet>1958</a>        <span class="kw">let </span><span class="kw-2">mut </span>injected = <span class="bool-val">false</span>;
+<a href=#1959 id=1959 data-nosnippet>1959</a>        LEASE_HOOK.with(|cell| {
+<a href=#1960 id=1960 data-nosnippet>1960</a>            <span class="kw-2">*</span>cell.borrow_mut() = <span class="prelude-val">Some</span>(Box::new(<span class="kw">move </span>|lease, event| {
+<a href=#1961 id=1961 data-nosnippet>1961</a>                <span class="kw">if </span>core::ptr::eq(lease, <span class="kw-2">&amp;</span>leases[slot])
+<a href=#1962 id=1962 data-nosnippet>1962</a>                    &amp;&amp; <span class="macro">matches!</span>(event, LeaseEvent::BeforeCompareExchange)
+<a href=#1963 id=1963 data-nosnippet>1963</a>                    &amp;&amp; !injected
+<a href=#1964 id=1964 data-nosnippet>1964</a>                {
+<a href=#1965 id=1965 data-nosnippet>1965</a>                    injected = <span class="bool-val">true</span>;
+<a href=#1966 id=1966 data-nosnippet>1966</a>                    <span class="kw">let </span><span class="kw-2">mut </span>logger = parent.lock().unwrap();
+<a href=#1967 id=1967 data-nosnippet>1967</a>                    <span class="kw">let </span><span class="kw-2">mut </span>section = logger
+<a href=#1968 id=1968 data-nosnippet>1968</a>                        .add_section(UnifiedLogType::CopperList, <span class="number">2048</span>)
+<a href=#1969 id=1969 data-nosnippet>1969</a>                        .unwrap();
+<a href=#1970 id=1970 data-nosnippet>1970</a>                    section.append(<span class="number">43u32</span>).unwrap();
+<a href=#1971 id=1971 data-nosnippet>1971</a>                    logger.try_flush_section(<span class="kw-2">&amp;mut </span>section).unwrap();
+<a href=#1972 id=1972 data-nosnippet>1972</a>                }
+<a href=#1973 id=1973 data-nosnippet>1973</a>            }));
+<a href=#1974 id=1974 data-nosnippet>1974</a>        });
+<a href=#1975 id=1975 data-nosnippet>1975</a>        <span class="kw">let </span>result = stream.log(<span class="kw-2">&amp;</span><span class="number">42u32</span>);
+<a href=#1976 id=1976 data-nosnippet>1976</a>        LEASE_HOOK.with(|cell| cell.borrow_mut().take());
+<a href=#1977 id=1977 data-nosnippet>1977</a>        result.unwrap();
+<a href=#1978 id=1978 data-nosnippet>1978</a>        drop(stream);
+<a href=#1979 id=1979 data-nosnippet>1979</a>        drop(logger);
+<a href=#1980 id=1980 data-nosnippet>1980</a>        <span class="macro">assert_eq!</span>(saved_values(<span class="kw-2">&amp;</span>path), [<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">5</span>, <span class="number">43</span>, <span class="number">42</span>]);
+<a href=#1981 id=1981 data-nosnippet>1981</a>    }
+<a href=#1982 id=1982 data-nosnippet>1982</a>
+<a href=#1983 id=1983 data-nosnippet>1983</a>    <span class="attr">#[test]
+<a href=#1984 id=1984 data-nosnippet>1984</a>    </span><span class="kw">fn </span>test_stream_encoding_error_keeps_its_section_and_committed_prefix() {
+<a href=#1985 id=1985 data-nosnippet>1985</a>        <span class="kw">struct </span>Failing;
+<a href=#1986 id=1986 data-nosnippet>1986</a>        <span class="kw">impl </span>Encode <span class="kw">for </span>Failing {
+<a href=#1987 id=1987 data-nosnippet>1987</a>            <span class="kw">fn </span>encode&lt;E: bincode::enc::Encoder&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, encoder: <span class="kw-2">&amp;mut </span>E) -&gt; <span class="prelude-ty">Result</span>&lt;(), EncodeError&gt; {
+<a href=#1988 id=1988 data-nosnippet>1988</a>                <span class="number">99u32</span>.encode(encoder)<span class="question-mark">?</span>;
+<a href=#1989 id=1989 data-nosnippet>1989</a>                <span class="prelude-val">Err</span>(EncodeError::Other(<span class="string">"injected encode failure"</span>))
+<a href=#1990 id=1990 data-nosnippet>1990</a>            }
+<a href=#1991 id=1991 data-nosnippet>1991</a>        }
+<a href=#1992 id=1992 data-nosnippet>1992</a>        <span class="kw">let </span>dir = tempfile::tempdir().unwrap();
+<a href=#1993 id=1993 data-nosnippet>1993</a>        <span class="kw">let </span>path = dir.path().join(<span class="string">"failure.copper"</span>);
+<a href=#1994 id=1994 data-nosnippet>1994</a>        <span class="kw">let </span>logger = Arc::new(Mutex::new(logger(<span class="kw-2">&amp;</span>path, CapacityPolicy::Grow)));
+<a href=#1995 id=1995 data-nosnippet>1995</a>        <span class="kw">let </span><span class="kw-2">mut </span>stream = LogStream::new(UnifiedLogType::CopperList, logger.clone(), <span class="number">2048</span>).unwrap();
+<a href=#1996 id=1996 data-nosnippet>1996</a>        stream.log(<span class="kw-2">&amp;</span><span class="number">41u32</span>).unwrap();
+<a href=#1997 id=1997 data-nosnippet>1997</a>        <span class="kw">let </span>slot = stream.current_section.storage.slot;
+<a href=#1998 id=1998 data-nosnippet>1998</a>        <span class="kw">let </span>generation = stream.current_section.storage.generation;
+<a href=#1999 id=1999 data-nosnippet>1999</a>        <span class="macro">assert!</span>(stream.log(<span class="kw-2">&amp;</span>Failing).is_err());
+<a href=#2000 id=2000 data-nosnippet>2000</a>        <span class="macro">assert_eq!</span>(stream.current_section.storage.slot, slot);
+<a href=#2001 id=2001 data-nosnippet>2001</a>        <span class="macro">assert_eq!</span>(stream.current_section.storage.generation, generation);
+<a href=#2002 id=2002 data-nosnippet>2002</a>        stream.log(<span class="kw-2">&amp;</span><span class="number">42u32</span>).unwrap();
+<a href=#2003 id=2003 data-nosnippet>2003</a>        drop(stream);
+<a href=#2004 id=2004 data-nosnippet>2004</a>        drop(logger);
+<a href=#2005 id=2005 data-nosnippet>2005</a>        <span class="macro">assert_eq!</span>(saved_values(<span class="kw-2">&amp;</span>path), [<span class="number">41</span>, <span class="number">42</span>]);
+<a href=#2006 id=2006 data-nosnippet>2006</a>    }
+<a href=#2007 id=2007 data-nosnippet>2007</a>}
 </code></pre></div></section></main></body></html>
