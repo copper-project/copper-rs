@@ -17,17 +17,21 @@ self-describing-logs = [
 ]
 verify-reconstruction = ["demo", "cu29/logstream-verify"]
 # Keep async runtime features out of ordinary workspace builds.
-demo = [
+arm = [
   "dep:cu29",
+  "dep:serde",
+  "cu29/reflect",
+  "cu29/units",
+  "dep:cu-transform",
+]
+demo = [
+  "arm",
   "dep:cu29-logstream",
   "dep:cu29-unifiedlog",
   "dep:clap",
-  "dep:serde",
   "dep:cu29-export",
   "dep:cu29-logstream-udp",
   "cu29/logstream",
-  "cu29/reflect",
-  "dep:cu-transform",
 ]
 replay = ["demo", "cu29/remote-debug"]
 tui = ["demo", "dep:ratatui", "dep:cu29-intern-strs"]

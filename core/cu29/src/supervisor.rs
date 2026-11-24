@@ -1,7 +1,6 @@
 //! Startup configuration shared by the live mission apps of a generated supervisor.
 use crate::__private::sync::{Arc, Mutex};
 use alloc::boxed::Box;
-use core::marker::PhantomData;
 use cu29_clock::{CuDuration, RobotClock};
 use cu29_runtime::app::{ActiveMission, CuRunExit, CuWaitError};
 use cu29_runtime::resource::ResourceManager;
@@ -32,6 +31,9 @@ pub struct MissionSettings<'a> {
     pub config: Option<cu29_runtime::config::CuConfig>,
     #[cfg(feature = "clock-sync")]
     pub reference: Option<Box<dyn FnMut() -> CuResult<Reference> + 'a>>,
+    #[cfg(all(feature = "telemetry", not(feature = "async-cl-io")))]
+    pub manual_telemetry:
+        Option<Box<dyn FnMut() -> CuResult<crate::logstream::manual::ManualDestination> + 'a>>,
     #[cfg(feature = "logstream")]
     pub telemetry:
         Option<Box<dyn FnMut() -> CuResult<crate::logstream::TelemetryDestination> + 'a>>,
@@ -46,16 +48,34 @@ pub trait ConfiguredMission: Sized {
         settings: &mut MissionSettings<'_>,
         logger: Arc<Mutex<L>>,
     ) -> CuResult<Self::Active<S, L>>;
+    fn activate_default(
+        self,
+        settings: &mut MissionSettings<'_>,
+        logger: Arc<Mutex<NoopLogger>>,
+    ) -> CuResult<Self::Active<NoopSectionStorage, NoopLogger>> {
+        self.activate(settings, logger)
+    }
 }
+
+type ActivateMission<M, S, L> = fn(
+    M,
+    &mut MissionSettings<'_>,
+    Arc<Mutex<L>>,
+) -> CuResult<<M as ConfiguredMission>::Active<S, L>>;
 
 /// Configures all live missions of an app before starting its supervisor.
-pub struct SupervisorBuilder<'a, M, S = NoopSectionStorage, L = NoopLogger> {
+pub struct SupervisorBuilder<
+    'a,
+    M: ConfiguredMission,
+    S: SectionStorage + 'static = NoopSectionStorage,
+    L: UnifiedLogWrite<S> + 'static = NoopLogger,
+> {
     settings: MissionSettings<'a>,
     logger: Arc<Mutex<L>>,
-    types: PhantomData<(M, S)>,
+    activate: ActivateMission<M, S, L>,
 }
 
-impl<M> Default for SupervisorBuilder<'_, M> {
+impl<M: ConfiguredMission> Default for SupervisorBuilder<'_, M> {
     fn default() -> Self {
         Self {
             settings: MissionSettings {
@@ -72,9 +92,11 @@ impl<M> Default for SupervisorBuilder<'_, M> {
                 reference: None,
                 #[cfg(feature = "logstream")]
                 telemetry: None,
+                #[cfg(all(feature = "telemetry", not(feature = "async-cl-io")))]
+                manual_telemetry: None,
             },
             logger: Arc::new(Mutex::new(NoopLogger::new())),
-            types: PhantomData,
+            activate: M::activate_default,
         }
     }
 }
@@ -102,7 +124,7 @@ impl<'a, M: ConfiguredMission, S: SectionStorage + 'static, L: UnifiedLogWrite<S
         SupervisorBuilder {
             settings: self.settings,
             logger,
-            types: PhantomData,
+            activate: M::activate,
         }
     }
 
@@ -166,6 +188,24 @@ impl<'a, M: ConfiguredMission, S: SectionStorage + 'static, L: UnifiedLogWrite<S
         settings: crate::clock_sync::MaintenanceConfig,
     ) -> Self {
         self.settings.reference = Some(Box::new(move || Ok((Box::new(open()?), settings))));
+        self
+    }
+
+    /// Open a fresh session and native transmitter for each mission activation.
+    #[cfg(all(feature = "telemetry", not(feature = "async-cl-io")))]
+    pub fn with_telemetry_tx<T: crate::logstream::protocol::CuTelemetryTx + 'static>(
+        mut self,
+        mut open: impl FnMut() -> CuResult<([u8; 16], T)> + 'a,
+        buffers: crate::logstream::TelemetryBufferConfig,
+    ) -> Self {
+        self.settings.manual_telemetry = Some(Box::new(move || {
+            let (session_id, tx) = open()?;
+            Ok(crate::logstream::manual::ManualDestination {
+                session_id,
+                buffers,
+                make_tx: Box::new(move |_| Ok(Box::new(tx))),
+            })
+        }));
         self
     }
 
@@ -242,8 +282,11 @@ impl<M: ConfiguredMission, S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 
         if self.active.is_some() {
             return Err("a mission is already running".into());
         }
-        self.active =
-            Some(mission.activate(&mut self.builder.settings, self.builder.logger.clone())?);
+        self.active = Some((self.builder.activate)(
+            mission,
+            &mut self.builder.settings,
+            self.builder.logger.clone(),
+        )?);
         Ok(())
     }
 

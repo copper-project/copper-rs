@@ -25,18 +25,20 @@ fn run_robot<T: CuTelemetryTx + 'static>(
     log: &Path,
 ) -> Result<(), Box<dyn Error>> {
     let (clock, mock) = RobotClock::mock();
-    let robot = Robot::builder()
+    let builder = Robot::builder()
         .with_clock(clock)
-        .with_log_path(log, Some(cu_logstream_demo::SLAB_BYTES))?
-        .with_telemetry_tx(
-            make_tx,
-            TelemetryBufferConfig {
-                capture_count: 1,
-                keyframe_count: 1,
-                structured_log_count: 1,
-                ..TelemetryBufferConfig::new(MAX_PAYLOAD, MAX_PAYLOAD)
-            },
-        )
+        .with_log_path(log, Some(cu_logstream_demo::SLAB_BYTES))?;
+    let buffers = TelemetryBufferConfig {
+        capture_count: 1,
+        keyframe_count: 1,
+        structured_log_count: 1,
+        ..TelemetryBufferConfig::new(MAX_PAYLOAD, MAX_PAYLOAD)
+    };
+    #[cfg(feature = "host")]
+    let robot = builder.with_telemetry_tx(make_tx, buffers).build()?;
+    #[cfg(not(feature = "host"))]
+    let robot = builder
+        .with_telemetry_tx(cu29_logstream::new_session_id(), make_tx, buffers)
         .build()?;
     let mut running = robot.start()?;
     for id in 0..CYCLES {
@@ -120,6 +122,21 @@ mod tests {
         }
     }
 
+    #[cfg(not(feature = "host"))]
+    #[test]
+    fn threadless_udp_recovers_at_the_next_keyframe() -> Result<(), Box<dyn Error>> {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("logs");
+        std::fs::create_dir_all(&root)?;
+        let dir = tempfile::tempdir_in(root)?;
+        let status = loopback(dir.path(), |_, udp| Ok(SkipOne(udp)))?;
+        assert_eq!(status.gaps, 1);
+        assert_eq!(status.archived, CYCLES - 1);
+        assert_eq!(status.recovery_point, Some(32));
+        assert!(status.structured_logs > 0);
+        Ok(())
+    }
+
+    #[cfg(feature = "host")]
     #[test]
     fn fec_keeps_every_capture_while_plain_udp_recovers_from_loss() -> Result<(), Box<dyn Error>> {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("logs");

@@ -11,7 +11,7 @@ export CARGO_BUILD_WARNINGS := "deny"
 # Keep imported recipes anchored to the file that defines them.
 export ROOT := source_directory()
 MSRV := shell('''python3 -c 'import pathlib, sys, tomllib; print(tomllib.loads((pathlib.Path(sys.argv[1]) / "Cargo.toml").read_text())["workspace"]["package"]["rust-version"])' "$1"''', ROOT)
-WORKSPACE_EXCLUDES := shell('python3 $1/support/ci/workspace_excludes.py excludes --toolchain stable', ROOT)
+WORKSPACE_EXCLUDES := shell('python3 "$1/support/ci/workspace_excludes.py" excludes --toolchain stable', ROOT)
 PREK_FMT_FIX_HOOKS := "trailing-whitespace mixed-line-ending"
 PREK_FMT_CHECK_HOOKS := "trailing-whitespace check-merge-conflict detect-private-key check-case-conflict check-added-large-files check-yaml check-json check-xml check-symlinks mixed-line-ending"
 PREK_FMT_CI_HOOKS := "trailing-whitespace check-merge-conflict detect-private-key check-case-conflict check-added-large-files check-yaml check-json check-xml check-symlinks mixed-line-ending typos check-rust check-ron check-toml"
@@ -61,6 +61,7 @@ pr-check:
 	cargo +stable check -p cu29-logstream --no-default-features
 	cargo +stable clippy -p cu29 --features logstream --test logstream_runtime -- --deny warnings
 	cargo +stable test -p cu29 --features logstream --test logstream_runtime
+	cargo +stable test -p cu29 --features telemetry,memory_monitoring --test manual_telemetry
 	cargo +stable clippy -p cu-logstream-demo --all-targets --features replay -- --deny warnings
 	cargo +stable test -p cu29-runtime --test replay_primitives --features cu29/async-cl-io
 	just --justfile examples/cu_logstream_demo/justfile check
@@ -115,14 +116,14 @@ lint:
 
 # Formatting and CI-aligned file-hygiene check only
 fmt-check: check-format-tools
-	@cargo +stable fmt --all -- --check
+	@python3 support/ci/format_rust.py --toolchain stable --check
 	@git ls-files -z '*.toml' | xargs -0 -r env RUST_LOG=warn taplo format --check
 	@bash support/ci/check_ron_format.sh
 	@prek run --all-files {{PREK_FMT_CHECK_HOOKS}}
 
 # Apply formatting plus auto-fixable CI hygiene hooks, then verify the full CI fmt gate.
 fmt: check-format-tools
-	@cargo +stable fmt --all
+	@python3 support/ci/format_rust.py --toolchain stable
 	@git ls-files -z '*.toml' | xargs -0 -r env RUST_LOG=warn taplo format >/dev/null
 	@git ls-files -z '*.ron' ':!examples/modular_config_example/motors.ron' ':!examples/cu_flight_controller/mcu_graph.ron' | xargs -0 -r -n 1 sh -c 'test ! -f "$1" || fmtron "$1"' _ >/dev/null
 	@bash -lc 'set -euo pipefail; prek run --all-files {{PREK_FMT_FIX_HOOKS}} || prek run --all-files {{PREK_FMT_FIX_HOOKS}}'

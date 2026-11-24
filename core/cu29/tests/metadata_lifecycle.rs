@@ -50,6 +50,9 @@ impl CuSinkTask for Sink {
 struct FatalMonitor;
 impl CuMonitor for FatalMonitor {
     fn new(metadata: CuMonitoringMetadata, _: CuMonitoringRuntime) -> CuResult<Self> {
+        // Float parameters must also build from flash-backed static configs.
+        let config = metadata.monitor_config().unwrap();
+        assert_eq!(config.get::<f32>("gain")?, Some(0.5));
         let topology = metadata.topology();
         assert_eq!(topology.nodes.len(), 2);
         assert_eq!(topology.connections[0].src, "source");

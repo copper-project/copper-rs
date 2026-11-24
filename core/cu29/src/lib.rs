@@ -74,7 +74,7 @@ extern crate alloc;
 extern crate self as cu29;
 
 pub use cu29_derive::{bundle_resources, resources, safety_case};
-#[cfg(feature = "logstream")]
+#[cfg(any(feature = "logstream", feature = "telemetry"))]
 pub use cu29_logstream as logstream;
 pub use cu29_runtime::app;
 pub mod supervisor;
@@ -192,7 +192,43 @@ pub use rayon;
 
 #[doc(hidden)]
 pub mod __private {
+    use crate::curuntime::NullWriteStream;
+    use crate::prelude::{
+        CuResult, LogStream, SectionContext, SectionStorage, UnifiedLogType, UnifiedLogWrite,
+    };
     pub use cu29_value::StaticValue;
+    use sync::{Arc, Mutex};
+
+    /// Local CopperList output chosen by the generated builder at compile time.
+    pub trait LocalCopperListSink<S: SectionStorage, L: UnifiedLogWrite<S>>: Sized {
+        fn open(
+            logger: &Arc<Mutex<L>>,
+            section_size: usize,
+            context: SectionContext,
+        ) -> CuResult<Self>;
+    }
+
+    impl<S: SectionStorage, L: UnifiedLogWrite<S>> LocalCopperListSink<S, L> for LogStream<S, L> {
+        fn open(
+            logger: &Arc<Mutex<L>>,
+            section_size: usize,
+            context: SectionContext,
+        ) -> CuResult<Self> {
+            Self::with_context(
+                UnifiedLogType::CopperList,
+                logger.clone(),
+                section_size,
+                context,
+            )
+        }
+    }
+
+    impl<S: SectionStorage, L: UnifiedLogWrite<S>> LocalCopperListSink<S, L> for NullWriteStream {
+        fn open(_: &Arc<Mutex<L>>, _: usize, _: SectionContext) -> CuResult<Self> {
+            Ok(Self)
+        }
+    }
+
     #[doc(hidden)]
     pub mod sync {
         #[cfg(not(feature = "std"))]

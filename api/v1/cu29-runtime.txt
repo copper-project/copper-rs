@@ -1068,16 +1068,16 @@ pub fn cu29_runtime::curuntime::CuRuntime<CT, CB, P, M, NBCL>::instance_id(&self
 pub fn cu29_runtime::curuntime::CuRuntime<CT, CB, P, M, NBCL>::subsystem_code(&self) -> u16
 impl<CT, CB, P: cu29_traits::CopperListTuple + cu29_runtime::copperlist::CuListZeroedInit + core::default::Default + AsyncCopperListPayload, M: cu29_runtime::monitoring::CuMonitor, const NBCL: usize> cu29_clock::ClockProvider for cu29_runtime::curuntime::CuRuntime<CT, CB, P, M, NBCL>
 pub fn cu29_runtime::curuntime::CuRuntime<CT, CB, P, M, NBCL>::get_clock(&self) -> cu29_clock::RobotClock
-pub struct cu29_runtime::curuntime::KeyFrame
+pub struct cu29_runtime::curuntime::KeyFrame<P>
 pub cu29_runtime::curuntime::KeyFrame::culistid: u64
-pub cu29_runtime::curuntime::KeyFrame::serialized_tasks: alloc::vec::Vec<u8>
+pub cu29_runtime::curuntime::KeyFrame::serialized_tasks: P
 pub cu29_runtime::curuntime::KeyFrame::timestamp: cu29_clock::CuTime
-impl cu_bincode::enc::Encode for cu29_runtime::curuntime::KeyFrame
-pub fn cu29_runtime::curuntime::KeyFrame::encode<__E: cu_bincode::enc::Encoder>(&self, encoder: &mut __E) -> core::result::Result<(), cu_bincode::error::EncodeError>
-impl<'__de, __Context> cu_bincode::de::BorrowDecode<'__de, __Context> for cu29_runtime::curuntime::KeyFrame
-pub fn cu29_runtime::curuntime::KeyFrame::borrow_decode<__D: cu_bincode::de::BorrowDecoder<'__de, Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
-impl<__Context> cu_bincode::de::Decode<__Context> for cu29_runtime::curuntime::KeyFrame
-pub fn cu29_runtime::curuntime::KeyFrame::decode<__D: cu_bincode::de::Decoder<Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
+impl<'__de, P, __Context> cu_bincode::de::BorrowDecode<'__de, __Context> for cu29_runtime::curuntime::KeyFrame<P> where P: cu_bincode::de::BorrowDecode<'__de, __Context>
+pub fn cu29_runtime::curuntime::KeyFrame<P>::borrow_decode<__D: cu_bincode::de::BorrowDecoder<'__de, Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
+impl<P, __Context> cu_bincode::de::Decode<__Context> for cu29_runtime::curuntime::KeyFrame<P> where P: cu_bincode::de::Decode<__Context>
+pub fn cu29_runtime::curuntime::KeyFrame<P>::decode<__D: cu_bincode::de::Decoder<Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
+impl<P: core::convert::AsRef<[u8]>> cu_bincode::enc::Encode for cu29_runtime::curuntime::KeyFrame<P>
+pub fn cu29_runtime::curuntime::KeyFrame<P>::encode<__E: cu_bincode::enc::Encoder>(&self, encoder: &mut __E) -> core::result::Result<(), cu_bincode::error::EncodeError>
 pub struct cu29_runtime::curuntime::KeyFramesManager
 pub cu29_runtime::curuntime::KeyFramesManager::last_encoded_bytes: u64
 impl cu29_runtime::curuntime::KeyFramesManager

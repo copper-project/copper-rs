@@ -112,14 +112,16 @@ jobs:
       - name: Test enabled features
         if: inputs.full
         run: cargo +${{ inputs.toolchain }} nextest run --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $WORKSPACE_EXCLUDES -- --skip test_compile_fail
-      - name: Check selected Windows components
-        if: inputs.full && runner.os == 'Windows'
+      - name: Lint monitors and portable components on Windows
+        if: runner.os == 'Windows'
         run: >
-          cargo +${{ inputs.toolchain }} check --all-targets
+          cargo +${{ inputs.toolchain }} clippy --all-targets
+          -p cu-bevymon
           -p cu-consolemon
-          -p cu-tuimon
           -p cu-logmon
+          -p cu-memmon
           -p cu-safetymon
+          -p cu-tuimon
           -p cu-sensor-payloads
           -p cu-spatial-payloads
           -p cu-gnss-payloads
@@ -131,6 +133,7 @@ jobs:
           -p cu-bridge-test
           -p cu-resources-test
           -p cu-monitoring
+          -- --deny warnings
       - name: Test portable Windows components
         if: inputs.full && runner.os == 'Windows'
         run: >
