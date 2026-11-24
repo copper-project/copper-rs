@@ -11,7 +11,7 @@ export CARGO_BUILD_WARNINGS := "deny"
 # Keep imported recipes anchored to the file that defines them.
 export ROOT := source_directory()
 MSRV := shell('''python3 -c 'import pathlib, sys, tomllib; print(tomllib.loads((pathlib.Path(sys.argv[1]) / "Cargo.toml").read_text())["workspace"]["package"]["rust-version"])' "$1"''', ROOT)
-WORKSPACE_EXCLUDES := shell('python3 $1/support/ci/workspace_excludes.py excludes --toolchain stable', ROOT)
+WORKSPACE_EXCLUDES := shell('python3 "$1/support/ci/workspace_excludes.py" excludes --toolchain stable', ROOT)
 PREK_FMT_FIX_HOOKS := "trailing-whitespace mixed-line-ending"
 PREK_FMT_CHECK_HOOKS := "trailing-whitespace check-merge-conflict detect-private-key check-case-conflict check-added-large-files check-yaml check-json check-xml check-symlinks mixed-line-ending"
 PREK_FMT_CI_HOOKS := "trailing-whitespace check-merge-conflict detect-private-key check-case-conflict check-added-large-files check-yaml check-json check-xml check-symlinks mixed-line-ending typos check-rust check-ron check-toml"
