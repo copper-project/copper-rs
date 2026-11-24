@@ -4094,6 +4094,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let (injected_logstream_sinks, injected_structured) = injected_logstream_sinks.unzip();
                 let structured_outputs = (injected_structured.flatten(), structured_outputs);
                 let (injected_logstream_sink, injected_logstream_keyframe_sink) = injected_logstream_sinks.unzip();
+                let stream_keyframes_required = #configured_logstream_count != 0
+                    || injected_logstream_keyframe_sink.as_ref().is_some_and(|sink| sink.enabled());
                 let copperlist_sink = ::cu29::fanout::OptionalWriteStream::new(
                     local_copperlist_output_required.then_some(local_copperlist_sink),
                 );
@@ -4111,7 +4113,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 );
                 let output_requirements = cu29::curuntime::OutputRequirements::new(
                     local_copperlist_output_required || logstream_output_required,
-                    local_keyframe_output_required || logstream_output_required,
+                    local_keyframe_output_required || stream_keyframes_required,
                 );
             }
         } else {

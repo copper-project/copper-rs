@@ -431,3 +431,100 @@ fn telemetry_pools_drop_independently_at_the_configured_depth() -> CuResult<()> 
     }
     Ok(())
 }
+
+use cu29::logstream::TelemetryBufferConfig;
+use cu29::logstream::protocol::{CuTelemetryRecord, CuTelemetryTx};
+use std::sync::mpsc;
+
+struct Recorder(mpsc::Sender<RecordKind>);
+impl CuTelemetryTx for Recorder {
+    fn send(&mut self, record: CuTelemetryRecord<'_>) -> CuResult<()> {
+        let kind = match record {
+            CuTelemetryRecord::Session(_) => RecordKind::Manifest,
+            CuTelemetryRecord::CopperList { .. } => RecordKind::CopperList,
+            CuTelemetryRecord::StructuredLog { .. } => RecordKind::StructuredLog,
+            CuTelemetryRecord::KeyFrame { .. } => RecordKind::KeyFrame,
+        };
+        self.0.send(kind).unwrap();
+        Ok(())
+    }
+}
+
+#[test]
+fn native_session_streams_ordinary_records_with_zero_keyframes() -> CuResult<()> {
+    let (tx, rx) = mpsc::channel();
+    let builder = LogstreamRuntimeApp::builder()
+        .with_instance_id(24)
+        .with_telemetry_tx(
+            move |_| Ok(Recorder(tx)),
+            TelemetryBufferConfig {
+                keyframe_count: 0,
+                ..TelemetryBufferConfig::new(RECORD_BYTES, RECORD_BYTES)
+            },
+        );
+    #[cfg(not(feature = "static-config"))]
+    let builder = {
+        let mut config =
+            cu29::config::CuConfig::deserialize_ron(include_str!("logstream_runtime_config.ron"))?;
+        // A zero interval is only accepted when no output requires state capture.
+        config.logging.as_mut().unwrap().keyframe_interval = Some(0);
+        builder.with_config(config)
+    };
+    let mut running = builder.build()?.start()?;
+    running.run_one_iteration()?;
+    drop(running.stop()?);
+    let records: Vec<_> = rx.into_iter().collect();
+    assert_eq!(records.first(), Some(&RecordKind::Manifest));
+    assert!(records.contains(&RecordKind::CopperList));
+    assert!(records.contains(&RecordKind::StructuredLog));
+    assert!(!records.contains(&RecordKind::KeyFrame));
+    Ok(())
+}
+
+mod local_keyframes {
+    use super::{
+        RECORD_BYTES, RecordKind, Recorder, StreamMsg, StreamSource, TelemetryBufferConfig,
+    };
+    use cu29::prelude::*;
+
+    #[copper_runtime(config = "tests/logstream_local_keyframes.ron")]
+    struct LocalApp {}
+
+    #[test]
+    fn local_keyframes_survive_native_opt_out() -> CuResult<()> {
+        let dir =
+            tempfile::tempdir_in(concat!(env!("CARGO_MANIFEST_DIR"), "/../../target")).unwrap();
+        let path = dir.path().join("local.copper");
+        let (tx, rx) = std::sync::mpsc::channel();
+        let app = LocalApp::builder()
+            .with_instance_id(25)
+            .with_log_path(&path, Some(1024 * 1024))?
+            .with_telemetry_tx(
+                move |_| Ok(Recorder(tx)),
+                TelemetryBufferConfig {
+                    keyframe_count: 0,
+                    ..TelemetryBufferConfig::new(RECORD_BYTES, RECORD_BYTES)
+                },
+            )
+            .build()?;
+        let mut running = app.start()?;
+        running.run_one_iteration()?;
+        drop(running.stop()?);
+        let records: Vec<_> = rx.into_iter().collect();
+        assert!(records.contains(&RecordKind::CopperList));
+        assert!(!records.contains(&RecordKind::KeyFrame));
+        let UnifiedLogger::Read(logger) = UnifiedLoggerBuilder::new()
+            .file_base_name(&path)
+            .build()
+            .expect("open local log")
+        else {
+            panic!("expected a log reader");
+        };
+        let mut reader =
+            cu29_unifiedlog::UnifiedLoggerIOReader::new(logger, UnifiedLogType::FrozenTasks);
+        let frame: KeyFrame =
+            bincode::decode_from_std_read(&mut reader, bincode::config::standard()).unwrap();
+        assert_eq!(frame.culistid, 0);
+        Ok(())
+    }
+}

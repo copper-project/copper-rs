@@ -38,7 +38,7 @@ const MAX_RECORDS_PER_POLL: usize = 6;
 const MAX_LOGS_PER_POLL: usize = 4;
 
 /// Preallocated native records shared by all destinations on one telemetry worker.
-/// A full pool drops the incoming record of that kind. Counts and byte limits must be positive.
+/// A full pool drops the incoming record of that kind. Only the keyframe count may be zero.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TelemetryBufferConfig {
     /// Maximum encoded payload per CopperList capture.
@@ -47,7 +47,7 @@ pub struct TelemetryBufferConfig {
     pub max_keyframe_bytes: usize,
     /// Number of capture buffers.
     pub capture_count: u16,
-    /// Number of keyframe buffers.
+    /// Number of keyframe buffers. Zero disables native telemetry keyframes.
     pub keyframe_count: u16,
     /// Number of structured-log buffers.
     pub structured_log_count: u16,
@@ -73,8 +73,8 @@ impl TelemetryBufferConfig {
         if self.max_capture_bytes == 0 || self.max_keyframe_bytes == 0 {
             return Err("telemetry record limits must be positive".into());
         }
-        if self.capture_count == 0 || self.keyframe_count == 0 || self.structured_log_count == 0 {
-            return Err("telemetry buffer counts must be positive".into());
+        if self.capture_count == 0 || self.structured_log_count == 0 {
+            return Err("telemetry capture and structured-log counts must be positive".into());
         }
         let pools = [
             (self.max_capture_bytes, self.capture_count),
@@ -340,15 +340,25 @@ impl<P: CopperListTuple + Send + Sync> WriteStream<CopperList<P>> for ScheduledC
 /// Bounded keyframe encoding; capture objects are released before pacing begins.
 #[derive(Debug)]
 pub struct ScheduledKeyFrameSink {
-    inbox: Inbox,
+    inbox: Option<Inbox>,
     interval: u32,
 }
+impl ScheduledKeyFrameSink {
+    /// Whether this destination requests runtime keyframe capture.
+    pub fn enabled(&self) -> bool {
+        self.inbox.is_some()
+    }
+}
+
 impl WriteStream<KeyFrame> for ScheduledKeyFrameSink {
     fn log(&mut self, keyframe: &KeyFrame) -> CuResult<()> {
+        let Some(inbox) = &mut self.inbox else {
+            return Ok(());
+        };
         if !keyframe.culistid.is_multiple_of(u64::from(self.interval)) {
             return Ok(());
         }
-        self.inbox.submit(true, keyframe.culistid, |bytes| {
+        inbox.submit(true, keyframe.culistid, |bytes| {
             bincode::encode_into_slice(keyframe, bytes, bincode::config::standard())
                 .map_err(|error| CuError::from(error.to_string()))
         })
@@ -987,12 +997,12 @@ fn spawn_worker<P: CopperListTuple + Send + Sync>(
             _payload: PhantomData,
         },
         ScheduledKeyFrameSink {
-            inbox: Inbox {
+            inbox: (keyframe_count > 0).then_some(Inbox {
                 worker,
                 pending,
                 free: Mutex::new(kf_free),
                 recycled: kf_recycled,
-            },
+            }),
             interval,
         },
         SenderMonitor(shared),
@@ -1091,13 +1101,18 @@ mod tests {
             TelemetryBufferConfig::new(1, 8192).payload_bytes().unwrap(),
             4 + 2 * 8192 + 4 * 4096
         );
+        assert_eq!(
+            TelemetryBufferConfig {
+                keyframe_count: 0,
+                ..small
+            }
+            .payload_bytes()
+            .unwrap(),
+            2342
+        );
         for invalid in [
             TelemetryBufferConfig {
                 capture_count: 0,
-                ..small
-            },
-            TelemetryBufferConfig {
-                keyframe_count: 0,
                 ..small
             },
             TelemetryBufferConfig {
