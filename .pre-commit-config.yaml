@@ -25,7 +25,7 @@ repos:
         types: [text]
       - id: check-rust
         name: check rust format
-        entry: cargo fmt --all
+        entry: python3 support/ci/format_rust.py
         language: system
         pass_filenames: false
       - id: check-ron
