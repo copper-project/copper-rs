@@ -174,9 +174,8 @@ pub(super) fn runtime_support(
         impl ::cu29::logstream::twin::LiveReplay for #app {
             type DataSet = #mission::CuStampedDataSet;
             const MISSION_INDEX: u32 = #mission_index;
-            fn seal_archive_metadata(logger: &mut cu29::prelude::UnifiedLoggerWrite) -> CuResult<()> {
-                let metadata = Self::application_log_metadata(String::new());
-                Self::seal_log_metadata::<cu29::prelude::memmap::MmapSectionStorage, _>(logger, &metadata)
+            fn seal_archive_metadata(logger: &mut cu29::prelude::UnifiedLoggerWrite, metadata: &cu29::prelude::ApplicationMetadata) -> CuResult<()> {
+                Self::seal_log_metadata::<cu29::prelude::memmap::MmapSectionStorage, _>(logger, metadata)
             }
             #[allow(deprecated)]
             fn build_twin() -> CuResult<(Self, RobotClockMock)> {

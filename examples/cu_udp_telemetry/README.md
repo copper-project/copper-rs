@@ -17,7 +17,9 @@ the robot and ground archives. [src/main.rs](src/main.rs) shows where to split
 the two processes. On the robot call
 `with_telemetry_tx(move |_| Ok(PlainUdpTx::new(tx)), buffers)`.
 On the ground call `Twin::from_telemetry(PlainUdpRx::new(rx))`.
-Use the same graph and encoding features on both ends.
+Use the same graph and encoding features on both ends. The example omits the
+effective RON from both logs so the producer metadata fits its single-datagram
+session header.
 
 ## Packet layout
 

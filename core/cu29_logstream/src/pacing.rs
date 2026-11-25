@@ -128,6 +128,7 @@ pub struct SenderCore {
     manifest_cursor: usize,
     recovery_cursor: usize,
     next_repeat: CuTime,
+    next_manifest: Option<CuTime>,
     last_now: CuTime,
     credit: u128,
     capacity: u128,
@@ -149,6 +150,7 @@ impl SenderCore {
             crate::SessionManifest::decode_record(&self.config.recovery.manifest_record)?;
         if manifest.identity != session.identity
             || manifest.context != session.context
+            || manifest.metadata != session.metadata
             || manifest.application_schema != session.schema
         {
             return Err(Error::InvalidConfig(
@@ -172,6 +174,9 @@ impl SenderCore {
     pub fn new(config: LogStreamSenderConfig, now: CuTime, reserved_bytes: usize) -> Result<Self> {
         config.validate()?;
         let policy = config.pacing;
+        let interval = config.recovery.metadata_repeat_secs;
+        let next_manifest =
+            (interval != 0).then(|| now + CuDuration::from_secs(u64::from(interval)));
         if policy.bitrate_bps == 0
             || policy.burst_packets == 0
             || policy.max_latency.as_nanos() == 0
@@ -314,6 +319,7 @@ impl SenderCore {
             latest_id: None,
             manifest_cursor: 0,
             recovery_cursor: 0,
+            next_manifest,
             next_repeat: now + RECOVERY_REPEAT_INTERVAL,
             last_now: now,
             credit: capacity,
@@ -488,9 +494,6 @@ impl SenderCore {
         if self.stopping || self.control_packet().is_some() {
             return;
         }
-        if self.manifest_cursor >= self.manifest.len {
-            self.manifest_cursor = 0;
-        }
         if self.recovery_cursor >= self.recovery_len() {
             self.recovery_cursor = 0;
         }
@@ -578,6 +581,17 @@ impl SenderCore {
             self.stats.recovery_rounds = self.stats.recovery_rounds.saturating_add(1);
             self.next_repeat = now + RECOVERY_REPEAT_INTERVAL;
         }
+        if !self.stopping && self.next_manifest.is_some_and(|deadline| now >= deadline) {
+            if self.manifest_cursor == self.manifest.len {
+                self.manifest_cursor = 0;
+            }
+            self.next_manifest = Some(
+                now + CuDuration::from_secs(u64::from(self.config.recovery.metadata_repeat_secs)),
+            );
+        }
+        let next_periodic = self
+            .next_manifest
+            .map_or(self.next_repeat, |t| t.min(self.next_repeat));
         let mut work = 0;
         for queue in [&mut self.data, &mut self.structured] {
             while queue.len > 0
@@ -628,7 +642,7 @@ impl SenderCore {
                 return Ok(Some(if self.stopping {
                     deadline
                 } else {
-                    deadline.min(self.next_repeat)
+                    deadline.min(next_periodic)
                 }));
             }
             match transport.try_send(packet) {
@@ -659,7 +673,7 @@ impl SenderCore {
             } else if self.stopping {
                 None
             } else {
-                Some(self.next_repeat)
+                Some(next_periodic)
             },
         )
     }

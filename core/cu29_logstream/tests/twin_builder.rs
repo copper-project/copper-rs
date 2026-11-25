@@ -57,7 +57,10 @@ struct App;
 impl LiveReplay for App {
     type DataSet = Cameras;
     const MISSION_INDEX: u32 = 0;
-    fn seal_archive_metadata(_: &mut cu29_unifiedlog::UnifiedLoggerWrite) -> CuResult<()> {
+    fn seal_archive_metadata(
+        _: &mut cu29_unifiedlog::UnifiedLoggerWrite,
+        _: &cu29_unifiedlog::ApplicationMetadata,
+    ) -> CuResult<()> {
         Ok(())
     }
     fn build_twin() -> CuResult<(Self, cu29_clock::RobotClockMock)> {
@@ -105,10 +108,11 @@ fn packets(max_record_bytes: u64, count: u64) -> VecDeque<Vec<u8>> {
             max_object_bytes: 128 * 1024,
             repair_symbols_per_block: 8,
         },
+        metadata_repeat_secs: 5,
         recovery_interval: 100,
         max_record_bytes,
     };
-    let sender = plan
+    let mut sender = plan
         .sender_config(
             StreamIdentity {
                 session_id: *b"twin-builder-001",
@@ -121,6 +125,20 @@ fn packets(max_record_bytes: u64, count: u64) -> VecDeque<Vec<u8>> {
                 mission_index: App::MISSION_INDEX,
             },
         )
+        .unwrap();
+    sender
+        .set_application_metadata(cu29_unifiedlog::ApplicationMetadata {
+            app_type: "Robot".into(),
+            app_name: "onboard".into(),
+            app_version: "1".into(),
+            git_commit: None,
+            git_dirty: None,
+            subsystem_id: None,
+            subsystem_code: 0,
+            effective_config_ron: String::new(),
+            missions: vec![],
+            catalog_offset: 0,
+        })
         .unwrap();
     let mut packets = Vec::new();
     let mut finite = FiniteObjectEncoder::new(sender.recovery.finite).unwrap();

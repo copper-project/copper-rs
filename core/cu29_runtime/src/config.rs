@@ -766,7 +766,14 @@ pub struct LogStreamDestinationConfig {
     pub fec: LogStreamFecConfig,
     /// Recovery interval in CopperLists; a nonzero multiple of logging.keyframe_interval.
     pub recovery_interval: u32,
+    /// Seconds between producer metadata transmissions. Zero sends only at startup.
+    #[serde(default = "default_metadata_repeat_secs")]
+    pub metadata_repeat_secs: u32,
     pub max_record_bytes: u64,
+}
+
+const fn default_metadata_repeat_secs() -> u32 {
+    5
 }
 
 /// Explicit reverse resource and advisory feedback policy for one destination.

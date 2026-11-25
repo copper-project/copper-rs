@@ -3872,7 +3872,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             pub struct AppResources {
                 #config_visibility config: CuConfig,
                 pub config_source: RuntimeLifecycleConfigSource,
-                pub log_context: Option<cu29::prelude::SectionContext>,
+                pub log_context: Option<(cu29::prelude::SectionContext, cu29::prelude::ApplicationMetadata)>,
                 pub resources: ResourceManager,
                 #app_resources_thread_pools_field
                 #clock_maintenance_field
@@ -4082,7 +4082,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     .destinations[#index];
                 let plan = ::cu29::logstream::LogStreamPlan::resolve(destination)
                     .map_err(|error| CuError::from(error.to_string()))?;
-                let sender_config = plan
+                let mut sender_config = plan
                     .sender_config(
                         ::cu29::logstream::StreamIdentity {
                             session_id: logstream_session_id,
@@ -4092,6 +4092,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         log_context,
                     )
                     .map_err(|error| CuError::from(error.to_string()))?;
+                sender_config.set_application_metadata(_producer_metadata.clone()).map_err(|error| CuError::from(error.to_string()))?;
                 let #transport_ident: #transport_type = resources
                     .take(
                         cu29::resource::ResourceKey::<()>::new(
@@ -4135,7 +4136,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let local_frames = config.logging.as_ref().is_none_or(|l| l.enable_task_logging && l.enable_keyframe_logging);
                 let manual_buffers = manual_destination.as_ref().map(|d| d.buffers);
                 let (manual_telemetry, manual_logs) = manual_destination
-                    .map(|d| d.start::<#mission_mod::CuStampedDataSet>(clock.clone(), log_context))
+                    .map(|d| d.start::<#mission_mod::CuStampedDataSet>(clock.clone(), log_context, _producer_metadata.clone()))
                     .transpose()?.unzip();
                 let output_requirements = cu29::curuntime::OutputRequirements::new(local_lists || manual_telemetry.is_some(), local_frames || manual_buffers.is_some_and(|buffers| buffers.keyframe_count != 0));
                 let copperlist_sink = ::cu29::fanout::OptionalWriteStream::new(local_lists.then_some(local_copperlist_sink));
@@ -4162,7 +4163,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #(#configured_logstream_initializers)*
                 let injected_logstream_sinks = logstream
                     .map(|destination| {
-                        let (mut copperlist,keyframe,monitor) = destination.start::<#mission_mod::CuStampedDataSet>(log_context, clock.clone())?;
+                        let (mut copperlist,keyframe,monitor) = destination.start::<#mission_mod::CuStampedDataSet>(log_context, clock.clone(), _producer_metadata.clone())?;
                         stream_monitors.extend(monitor);
                         let structured = copperlist.take_structured_log_sink();
                         Ok::<_, CuError>(((copperlist, keyframe), structured))
@@ -4306,7 +4307,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #[allow(unused_mut)]
                 let mut resources = resources;
                 #clock_maintenance_compat
-                let log_context = match log_context {
+                let (log_context, _producer_metadata) = match log_context {
                     Some(context) => context,
                     None => Self::prepare_log_metadata::<S, L>(&unified_logger, &config, instance_id, true)?,
                 };
@@ -4452,7 +4453,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     config: &CuConfig,
                     instance_id: u32,
                     save_effective_config: bool,
-                ) -> CuResult<cu29::prelude::SectionContext> {
+                ) -> CuResult<(cu29::prelude::SectionContext, cu29::prelude::ApplicationMetadata)> {
                     let effective_config_ron = if !#static_config && save_effective_config {
                         config.serialize_ron()?
                     } else {
@@ -4461,7 +4462,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     let metadata = Self::application_log_metadata(effective_config_ron);
                     #metadata_log_lock
                     Self::seal_log_metadata::<S, L>(&mut *logger, &metadata)?;
-                    logger.construction_context(instance_id, #mission_index)
+                    Ok((logger.construction_context(instance_id, #mission_index)?, metadata))
                 }
 
                 pub fn original_config() -> String {

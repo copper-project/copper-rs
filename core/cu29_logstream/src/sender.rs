@@ -33,11 +33,13 @@ pub struct ContinuousSenderConfig {
     pub repair_density: DensityThreshold,
 }
 
-/// Finite-object recovery policy and the canonical manifest record repeated at every recovery point.
+/// Finite-object recovery policy and the canonical session manifest.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RecoverySenderConfig {
     pub finite: FiniteObjectSenderConfig,
     pub manifest_record: Vec<u8>,
+    /// Scheduled manifest repeat interval in seconds. Zero sends only at startup.
+    pub metadata_repeat_secs: u32,
     /// CopperList interval between transmitted keyframe/recovery point groups.
     pub recovery_interval: u32,
 }

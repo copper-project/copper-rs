@@ -94,7 +94,6 @@ fn generated_runtime_streams_without_local_copperlist_logging() -> CuResult<()> 
     };
     let sender = sender_config(identity)?;
     let fec = sender.continuous.fec;
-    let manifest = sender.recovery.manifest_record.clone();
 
     let app = LogstreamRuntimeApp::builder()
         .with_instance_id(identity.sender_id)
@@ -245,7 +244,12 @@ fn generated_runtime_streams_without_local_copperlist_logging() -> CuResult<()> 
         .expect("generated runtime should stream its recovery point");
     assert_eq!(recovery_point.copperlist_id, 0);
     assert!(recovery_point.references_keyframe(keyframe));
-    assert!(recovery_point.references_manifest(decode_record(&manifest).unwrap()));
+    let manifest = object_records
+        .iter()
+        .map(|record| decode_record(record).unwrap())
+        .find(|record| record.kind == RecordKind::Manifest)
+        .unwrap();
+    assert!(recovery_point.references_manifest(manifest));
     Ok(())
 }
 
@@ -300,6 +304,7 @@ fn sender_config(identity: StreamIdentity) -> CuResult<LogStreamSenderConfig> {
                 repair_symbols_per_block: 8,
             },
             manifest_record: manifest.clone(),
+            metadata_repeat_secs: 5,
             recovery_interval: 1,
         },
     })
@@ -404,8 +409,22 @@ fn telemetry_pools_drop_independently_at_the_configured_depth() -> CuResult<()> 
             }))
         }),
     };
-    let (mut captures, mut keyframes, _) = destination
-        .start::<default::CuStampedDataSet>(SectionContext::default(), RobotClock::new())?;
+    let (mut captures, mut keyframes, _) = destination.start::<default::CuStampedDataSet>(
+        SectionContext::default(),
+        RobotClock::new(),
+        cu29::prelude::ApplicationMetadata {
+            app_type: "Robot".into(),
+            app_name: "onboard".into(),
+            app_version: "1".into(),
+            git_commit: None,
+            git_dirty: None,
+            subsystem_id: None,
+            subsystem_code: 0,
+            effective_config_ron: String::new(),
+            missions: vec!["default".into()],
+            catalog_offset: 0,
+        },
+    )?;
     let mut logs = captures.take_structured_log_sink().unwrap();
     for id in 0..4 {
         captures.log(&default::CuList::default())?;

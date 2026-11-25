@@ -25,9 +25,12 @@ pub trait LiveReplay: Sized + 'static {
     /// Index into the generated application's shared mission catalog.
     #[doc(hidden)]
     const MISSION_INDEX: u32;
-    /// Seal locally generated application metadata and the optional decode catalog.
+    /// Seal the producer metadata and the optional decode catalog.
     #[doc(hidden)]
-    fn seal_archive_metadata(logger: &mut cu29_unifiedlog::UnifiedLoggerWrite) -> CuResult<()>;
+    fn seal_archive_metadata(
+        logger: &mut cu29_unifiedlog::UnifiedLoggerWrite,
+        metadata: &cu29_unifiedlog::ApplicationMetadata,
+    ) -> CuResult<()>;
     fn build_twin() -> CuResult<(Self, RobotClockMock)>;
     fn stop_twin(&mut self) -> CuResult<()> {
         Ok(())

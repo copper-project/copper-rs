@@ -95,6 +95,7 @@ impl ManualDestination {
         self,
         clock: RobotClock,
         context: SectionContext,
+        metadata: cu29_unifiedlog::ApplicationMetadata,
     ) -> CuResult<(ManualTelemetry, ManualLogs)> {
         self.buffers.payload_bytes()?;
         let count = usize::from(self.buffers.structured_log_count);
@@ -117,6 +118,7 @@ impl ManualDestination {
                 sender_id: context.instance_id,
             },
             schema,
+            metadata: Some(metadata),
             context,
         };
         let bytes = vec![

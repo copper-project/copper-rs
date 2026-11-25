@@ -22,6 +22,7 @@ fn plan() -> LogStreamPlan {
             max_object_bytes: 4096,
             repair_symbols_per_block: 2,
         },
+        metadata_repeat_secs: 5,
         recovery_interval: 1,
         max_record_bytes: 4096,
     }
@@ -132,6 +133,20 @@ fn shared_budget_burst_and_queue_pressure_are_bounded() {
 }
 
 #[test]
+fn startup_only_manifest_is_sent_once_without_captures() {
+    let (clock, mock) = RobotClock::mock();
+    let mut config = config();
+    config.recovery.metadata_repeat_secs = 0;
+    let mut core = SenderCore::new(config, clock.now(), 0).unwrap();
+    let mut tx = Capture::default();
+    advance(&mut core, &mut tx, &clock, &mock, 0, 100);
+    assert!(!tx.packets.is_empty());
+    tx.packets.clear();
+    advance(&mut core, &mut tx, &clock, &mock, 101, 10_000);
+    assert!(tx.packets.is_empty());
+}
+
+#[test]
 fn missed_bootstrap_recovers_during_idle_without_new_captures() {
     let (clock, mock) = RobotClock::mock();
     let mut core = SenderCore::new(config(), clock.now(), 0).unwrap();
@@ -140,7 +155,12 @@ fn missed_bootstrap_recovers_during_idle_without_new_captures() {
     let mut tx = Capture::default();
     advance(&mut core, &mut tx, &clock, &mock, 0, 200);
     tx.packets.clear(); // Lose the entire initial transmission, including CL32.
-    advance(&mut core, &mut tx, &clock, &mock, 201, 600);
+    advance(&mut core, &mut tx, &clock, &mock, 201, 4999);
+    assert!(tx.packets.iter().all(|(_, bytes)| {
+        WirePacketRef::decode(bytes).unwrap().header.record_kind != RecordKind::Manifest
+    }));
+    tx.packets.clear();
+    advance(&mut core, &mut tx, &clock, &mock, 5000, 5300);
     let mut router = SessionRouter::<1128, 64, 64>::new(SessionRouterLimits {
         max_sessions: 1,
         max_startup_packets: 64,
@@ -438,6 +458,7 @@ fn fec_expiry_starts_at_send_on_the_injected_clock() {
 
     let manifest = SessionManifest::decode_record(&config().recovery.manifest_record).unwrap();
     let session = CuTelemetrySession {
+        metadata: None,
         identity: manifest.identity,
         schema: manifest.application_schema,
         context: manifest.context,

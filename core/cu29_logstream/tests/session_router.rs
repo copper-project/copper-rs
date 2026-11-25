@@ -36,6 +36,7 @@ fn destination() -> LogStreamDestinationConfig {
                 repair_symbols_per_block: 8,
             },
         },
+        metadata_repeat_secs: 5,
         recovery_interval: 100,
         max_record_bytes: 65_536,
     }

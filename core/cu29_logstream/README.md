@@ -77,7 +77,11 @@ worker, archive and live-twin builder use `std`.
   repairs, recovery packets, and structured logs. The budget counts Copper packet bytes, excluding
   UDP/IP or other carrier overhead. Replay, recovery, and structured logs share byte-deficit
   scheduling with weights 3:1:1; unused capacity is available to any ready lane.
-- Manifest and latest complete keyframe/recovery point/boundary recovery repeat on a
+- The FEC sender transmits the session manifest at startup and every
+  `metadata_repeat_secs` seconds (default 5, zero for startup only). Its RaptorQ
+  source and repair packets use the destination bitrate budget. A saved effective
+  config increases the manifest size and can require a larger `max_object_bytes`.
+- The latest complete keyframe/recovery point/boundary recovery repeat on a
   250 ms local deadline, with overlapping requests coalesced. A pending bundle
   finishes before a newer one replaces it. New recovery points wait for older queued
   source packets to be attempted or expired, preventing avoidable receiver gaps. No new task capture is required.
@@ -331,12 +335,12 @@ and shutdown. The caller owns the frame reader and presentation. Pausing or drop
 that reader never blocks recording. Dropping the twin stops and joins its workers;
 `stop()` also reports receiver errors and final counters. `archive_only()` records
 without running a twin. Each handle accepts one sender session and a fresh log path.
-At archive startup, the generated twin seals its local application metadata. With
+The first recovered sender session opens the archive and seals the producer’s
+application metadata, including its saved effective configuration. With
 `cu29/self-describing-logs`, it also seals the same generated decode catalog as the
 onboard application, enabling standalone decoding of received captures. Catalogs
 are generated from the compiled missions, payload recipes and encoding features;
-use the same definitions and features for sender and twin. Configuration capture
-is deferred: the archive's effective configuration string is empty.
+use the same definitions and features for sender and twin.
 The shared catalog includes streamed payload recipes when onboard task logging is
 disabled, so streaming-only recordings also support standalone decoding.
 Use `.with_log_rollover(bytes)` on the twin builder to bound storage and overwrite
@@ -397,7 +401,7 @@ the same digests for the same semantic records. Truncated headers are rejected;
 truncated payloads and appended bytes fail digest verification. Receiver allocation
 bounds still apply to the complete framed record before assembly.
 Session manifests encode identity, `ReceiverRequirements`, application schema and
-the producing construction's section context using standard bincode encoding.
+the producing construction's section context and application metadata using standard bincode encoding.
 Requirements carry only symbol size, RLC field,
 window symbols, maximum complete CopperList record bytes, and optional feedback
 requirements (report interval and destination key). Receivers validate
@@ -408,7 +412,7 @@ Destination ID, MTU, bitrate, sender memory budget, latency, burst allowance,
 repair cadence/density/count, recovery interval, and sender object bounds stay in
 `LogStreamPlan`; they are not repeated in manifests. For the `ground` test profile
 (1128-byte symbols, GF(256), window 64, 65536-byte records), requirements occupy
-11 bincode bytes instead of the 40-byte sender plan, saving 29 bytes per manifest
+11 bincode bytes instead of the 41-byte sender plan, saving 30 bytes per manifest
 in addition to the previously removed version byte. Savings vary with sender
 policy values and destination-name length. Schema strings and reconstruction ABI
 checks remain intact. The record digest still binds the exact manifest bytes;

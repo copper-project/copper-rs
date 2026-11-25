@@ -271,6 +271,9 @@ impl<A: LiveReplay, R: CuTelemetryRx + 'static> CuTwinBuilder<A, R> {
                                 {
                                     return Err("twin requires one matching sender mission".into());
                                 }
+                                let metadata = session.metadata.as_ref().ok_or_else(|| {
+                                    CuError::from("session missing producer metadata")
+                                })?;
                                 status.identity = Some(session.identity);
                                 let mut builder = UnifiedLoggerBuilder::new()
                                     .file_base_name(&path)
@@ -285,7 +288,7 @@ impl<A: LiveReplay, R: CuTelemetryRx + 'static> CuTwinBuilder<A, R> {
                                 else {
                                     unreachable!()
                                 };
-                                A::seal_archive_metadata(&mut logger)?;
+                                A::seal_archive_metadata(&mut logger, metadata)?;
                                 archive = Some(
                                     CaptureArchive::<A::DataSet>::from_session(
                                         session,

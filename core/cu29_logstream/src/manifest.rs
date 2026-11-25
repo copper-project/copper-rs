@@ -30,6 +30,7 @@ pub struct LogStreamPlan {
     pub objects: ResolvedObjectFec,
     /// Recovery interval in CopperLists.
     pub recovery_interval: u32,
+    pub metadata_repeat_secs: u32,
     pub max_record_bytes: u64,
 }
 
@@ -159,6 +160,28 @@ pub struct SessionManifest {
     pub application_schema: ApplicationSchema,
     /// Onboard section identity for this construction; repeated for late joins.
     pub context: SectionContext,
+    /// Producer metadata for managed telemetry sessions.
+    pub metadata: Option<cu29_unifiedlog::ApplicationMetadata>,
+}
+
+impl LogStreamSenderConfig {
+    /// Bind producer metadata before the manifest digest and FEC symbols are generated.
+    pub fn set_application_metadata(
+        &mut self,
+        metadata: cu29_unifiedlog::ApplicationMetadata,
+    ) -> Result<()> {
+        let mut manifest = SessionManifest::decode_record(&self.recovery.manifest_record)?;
+        manifest.metadata = Some(metadata);
+        let bytes = manifest.encode_record()?;
+        if bytes.len() as u64 > self.recovery.finite.max_object_bytes {
+            return Err(Error::ObjectTooLarge {
+                actual: bytes.len() as u64,
+                maximum: self.recovery.finite.max_object_bytes,
+            });
+        }
+        self.recovery.manifest_record = bytes;
+        Ok(())
+    }
 }
 
 impl SessionManifest {
@@ -172,6 +195,7 @@ impl SessionManifest {
             identity,
             requirements,
             application_schema,
+            metadata: None,
             context,
         }
     }
@@ -255,6 +279,7 @@ impl LogStreamPlan {
                 repair_symbols_per_block: config.fec.objects.repair_symbols_per_block,
             },
             recovery_interval: config.recovery_interval,
+            metadata_repeat_secs: config.metadata_repeat_secs,
             max_record_bytes: config.max_record_bytes,
         };
         plan.validate()?;
@@ -399,6 +424,7 @@ impl LogStreamPlan {
                     repair_symbols_per_block: self.objects.repair_symbols_per_block,
                 },
                 manifest_record: manifest,
+                metadata_repeat_secs: self.metadata_repeat_secs,
                 recovery_interval: self.recovery_interval,
             },
         })

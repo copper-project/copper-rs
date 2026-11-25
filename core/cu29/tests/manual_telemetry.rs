@@ -295,7 +295,22 @@ fn manual_handoff_and_service_do_not_allocate_after_setup() -> CuResult<()> {
         buffers,
         make_tx: Box::new(|_| Ok(Box::new(Discard))),
     }
-    .start::<default::CuStampedDataSet>(clock.clone(), Default::default())?;
+    .start::<default::CuStampedDataSet>(
+        clock.clone(),
+        Default::default(),
+        cu29::prelude::ApplicationMetadata {
+            app_type: "Robot".into(),
+            app_name: "onboard".into(),
+            app_version: "1".into(),
+            git_commit: None,
+            git_dirty: None,
+            subsystem_id: None,
+            subsystem_code: 0,
+            effective_config_ron: String::new(),
+            missions: vec!["default".into()],
+            catalog_offset: 0,
+        },
+    )?;
     let mut lists = SyncCopperListsManager::<default::CuStampedDataSet, 2>::new(None)?;
     lists.enable_manual_output(1, 1)?;
     let mut frames = KeyFramesManager::new(Some(Box::new(cu29::curuntime::NullWriteStream)), 1)?;

@@ -34,6 +34,7 @@ fn destination() -> LogStreamDestinationConfig {
                 repair_symbols_per_block: 8,
             },
         },
+        metadata_repeat_secs: 5,
         recovery_interval: 100,
         max_record_bytes: 65_536,
     }
@@ -81,6 +82,7 @@ fn config_resolves_to_sender_config_and_manifest() {
             plan.receiver_requirements(),
             schema(),
             manifest.context,
+            &manifest.metadata,
         ),
         bincode::config::standard(),
     )
@@ -186,8 +188,8 @@ fn manifest_contains_only_receiver_requirements() {
     // Bincode varints: symbol size 1128, GF(256), window 64, record bound 65536.
     assert_eq!(encoded, [0, 251, 104, 4, 1, 64, 252, 0, 0, 1, 0]);
     let old_plan = bincode::encode_to_vec(&plan, bincode::config::standard()).unwrap();
-    assert_eq!(old_plan.len(), 40);
-    assert_eq!(old_plan.len() - encoded.len(), 29);
+    assert_eq!(old_plan.len(), 41);
+    assert_eq!(old_plan.len() - encoded.len(), 30);
 
     let identity = StreamIdentity {
         session_id: [7; 16],
