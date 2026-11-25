@@ -305,7 +305,7 @@ impl cu29_logstream::CuStreamRx for PacketRx {
 fn twin_rollover_bounds_disk_usage_and_retains_metadata_and_recent_entries() {
     use cu29::prelude::*;
     use cu29_logstream::capture::CaptureDataSet;
-    use cu29_logstream::{FiniteObjectEncoder, Lane, LogStreamPlan, RecordKind, StreamIdentity};
+    use cu29_logstream::{FiniteObjectEncoder, Lane, LogStreamPlan, RecordKind};
 
     let _serial = SERIAL.lock().unwrap();
     let logs = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("logs");
@@ -316,18 +316,11 @@ fn twin_rollover_bounds_disk_usage_and_retains_metadata_and_recent_entries() {
     let plan = LogStreamPlan::resolve(&config.log_streaming.unwrap().destinations[0]).unwrap();
     let sender = plan
         .sender_config(
-            StreamIdentity {
-                session_id: [4; 16],
-                sender_id: 41,
-            },
+            [4; 16],
             DataSet::stream_schema(),
             cu29_unifiedlog::SectionContext {
                 run_id: 1,
-                instance_id: (StreamIdentity {
-                    session_id: [4; 16],
-                    sender_id: 41,
-                })
-                .sender_id,
+                instance_id: 41,
                 mission_index: 0,
             },
         )
@@ -446,10 +439,7 @@ fn twin_rejects_another_mission_even_when_output_types_match() {
             .unwrap();
     let sender = plan
         .sender_config(
-            cu29_logstream::StreamIdentity {
-                session_id: [5; 16],
-                sender_id: 41,
-            },
+            [5; 16],
             DataSet::stream_schema(),
             SectionContext {
                 run_id: 7,

@@ -9,7 +9,7 @@ use cu29_logstream::{CuStreamRx, CuStreamRxError, CuStreamTx, CuStreamTxError};
 use cu29_runtime::continuity::SourceGapReason;
 use cu29_traits::{CuError, CuResult};
 
-const MAGIC: &[u8; 4] = b"CUT1";
+const MAGIC: &[u8; 4] = b"CUT2";
 const SESSION: u8 = 0;
 const LIST: u8 = 1;
 const KEYFRAME: u8 = 2;
@@ -49,10 +49,10 @@ impl<T: CuStreamTx> CuTelemetryTx for PlainUdpTx<T> {
         let (kind, id, bytes) = match record {
             CuTelemetryRecord::Session(session) => {
                 self.session[..4].copy_from_slice(MAGIC);
-                self.session[4..20].copy_from_slice(&session.identity.session_id);
+                self.session[4..20].copy_from_slice(&session.session_id);
                 self.session[20] = SESSION;
                 let len = bincode::encode_into_slice(
-                    session,
+                    (session.context, &session.schema),
                     &mut self.session[HEADER..],
                     bincode::config::standard(),
                 )
@@ -135,13 +135,16 @@ impl<R: CuStreamRx> CuTelemetryRx for PlainUdpRx<R> {
         let record = match kind {
             SESSION if self.session.is_none() && id == 0 => {
                 // Bound decoded allocations as well as the wire length.
-                if let Ok((session, used)) = bincode::decode_from_slice::<CuTelemetrySession, _>(
+                if let Ok(((context, schema), used)) = bincode::decode_from_slice(
                     payload,
                     bincode::config::standard().with_limit::<16384>(),
                 ) && used == payload.len()
-                    && session.identity.session_id == session_id
-                    && session.context.instance_id == session.identity.sender_id
                 {
+                    let session = CuTelemetrySession {
+                        session_id,
+                        context,
+                        schema,
+                    };
                     deliver(CuTelemetryEvent::Record(CuTelemetryRecord::Session(
                         &session,
                     )))?;

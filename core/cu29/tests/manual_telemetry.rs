@@ -67,7 +67,7 @@ mod missions {
         impl CuTelemetryTx for ManagedProbe {
             fn send(&mut self, record: CuTelemetryRecord<'_>) -> CuResult<()> {
                 if let CuTelemetryRecord::Session(session) = record {
-                    assert_eq!(session.identity.session_id, [self.1; 16]);
+                    assert_eq!(session.session_id, [self.1; 16]);
                 }
                 Ok(())
             }
@@ -125,7 +125,7 @@ impl CuTelemetryTx for Probe {
         let mut seen = self.0.lock().unwrap();
         match record {
             CuTelemetryRecord::Session(session) => {
-                assert_eq!(session.identity.session_id, [9; 16]);
+                assert_eq!(session.session_id, [9; 16]);
                 seen.sessions += 1;
             }
             CuTelemetryRecord::CopperList { id, capture } => {

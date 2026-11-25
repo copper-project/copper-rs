@@ -150,7 +150,7 @@ fn generated_runtime_binds_configured_transport_and_emits_manifest() -> CuResult
             _ => None,
         })
         .expect("configured sender must emit a decodable manifest");
-    assert_eq!(manifest.identity.sender_id, 41);
+    assert_eq!(manifest.identity().sender_id, 41);
     assert_eq!(manifest.requirements.symbol_size, 1128);
     assert_eq!(manifest.application_schema.outputs.len(), 1);
     assert_eq!(

@@ -278,10 +278,7 @@ fn reporter_uses_local_cadence_and_advertised_capability() {
         max_record_bytes: 4096,
     };
     let manifest = SessionManifest::new(
-        StreamIdentity {
-            session_id: [1; 16],
-            sender_id: 7,
-        },
+        [1; 16],
         plan.receiver_requirements(),
         ApplicationSchema {
             outputs: vec![],

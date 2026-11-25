@@ -50,7 +50,7 @@ fn manifest_bootstraps_continuous_decoder_without_out_of_band_fec_config() {
     let plan = LogStreamPlan::resolve(&destination()).unwrap();
     let sender = plan
         .sender_config(
-            identity,
+            identity.session_id,
             ApplicationSchema {
                 outputs: vec![],
                 reconstruction: vec![],
@@ -137,7 +137,7 @@ fn setup() -> (
     let sender = LogStreamPlan::resolve(&destination())
         .unwrap()
         .sender_config(
-            identity,
+            identity.session_id,
             ApplicationSchema {
                 outputs: vec![],
                 reconstruction: vec![],
@@ -934,7 +934,7 @@ fn structured_handoff_allocates_nothing_preserves_local_logs_and_stops_without_l
     let config = LogStreamPlan::resolve(&destination)
         .unwrap()
         .sender_config(
-            setup().0.continuous.identity,
+            setup().0.continuous.identity.session_id,
             ApplicationSchema {
                 outputs: vec![],
                 reconstruction: vec![],

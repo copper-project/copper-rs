@@ -112,10 +112,7 @@ impl ManualDestination {
         let schema = P::stream_schema();
         let selective = !schema.reconstruction.is_empty();
         let session = CuTelemetrySession {
-            identity: crate::StreamIdentity {
-                session_id: self.session_id,
-                sender_id: context.instance_id,
-            },
+            session_id: self.session_id,
             schema,
             context,
         };

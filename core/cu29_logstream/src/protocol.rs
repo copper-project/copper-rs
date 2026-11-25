@@ -13,9 +13,18 @@ use cu29_unifiedlog::SectionContext;
 /// Identifies the robot construction, active mission and selected output slots.
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
 pub struct CuTelemetrySession {
-    pub identity: StreamIdentity,
+    pub session_id: [u8; 16],
     pub context: SectionContext,
     pub schema: ApplicationSchema,
+}
+
+impl CuTelemetrySession {
+    pub fn identity(&self) -> StreamIdentity {
+        StreamIdentity {
+            session_id: self.session_id,
+            sender_id: self.context.instance_id,
+        }
+    }
 }
 
 /// Borrowed for one synchronous handoff. No packet or FEC header is included.

@@ -154,7 +154,7 @@ impl ReceiverRequirements {
 /// application's decoder; these schema checks do not establish binary compatibility.
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
 pub struct SessionManifest {
-    pub identity: StreamIdentity,
+    pub session_id: [u8; 16],
     pub requirements: ReceiverRequirements,
     pub application_schema: ApplicationSchema,
     /// Onboard section identity for this construction; repeated for late joins.
@@ -162,14 +162,21 @@ pub struct SessionManifest {
 }
 
 impl SessionManifest {
+    pub fn identity(&self) -> StreamIdentity {
+        StreamIdentity {
+            session_id: self.session_id,
+            sender_id: self.context.instance_id,
+        }
+    }
+
     pub fn new(
-        identity: StreamIdentity,
+        session_id: [u8; 16],
         requirements: ReceiverRequirements,
         application_schema: ApplicationSchema,
         context: SectionContext,
     ) -> Self {
         Self {
-            identity,
+            session_id,
             requirements,
             application_schema,
             context,
@@ -188,21 +195,36 @@ impl SessionManifest {
     }
 
     pub(crate) fn from_decoded(record: crate::DecodedRecord<'_>) -> Result<Self> {
-        if record.kind != RecordKind::Manifest {
-            return Err(Error::InvalidConfig("record is not a session manifest"));
-        }
-        let (manifest, consumed): (Self, usize) =
-            bincode::decode_from_slice(record.payload, bincode::config::standard())
-                .map_err(|error| Error::Codec(error.to_string()))?;
+        let config = bincode::config::standard();
+        let (manifest, consumed) = match record.kind {
+            RecordKind::Manifest => bincode::decode_from_slice(record.payload, config)
+                .map_err(|error| Error::Codec(error.to_string()))?,
+            RecordKind::LegacyManifest => {
+                type Legacy = (
+                    StreamIdentity,
+                    ReceiverRequirements,
+                    ApplicationSchema,
+                    SectionContext,
+                );
+                let ((identity, requirements, schema, context), used) =
+                    bincode::decode_from_slice::<Legacy, _>(record.payload, config)
+                        .map_err(|error| Error::Codec(error.to_string()))?;
+                if identity.sender_id != context.instance_id {
+                    return Err(Error::InvalidConfig(
+                        "manifest instance differs from sender identity",
+                    ));
+                }
+                (
+                    Self::new(identity.session_id, requirements, schema, context),
+                    used,
+                )
+            }
+            _ => return Err(Error::InvalidConfig("record is not a session manifest")),
+        };
         if consumed != record.payload.len() {
             return Err(Error::Codec("session manifest has trailing bytes".into()));
         }
         manifest.requirements.validate()?;
-        if manifest.context.instance_id != manifest.identity.sender_id {
-            return Err(Error::InvalidConfig(
-                "manifest instance differs from sender identity",
-            ));
-        }
         Ok(manifest)
     }
 }
@@ -349,21 +371,17 @@ impl LogStreamPlan {
     /// Builds both sender lanes and their canonical repeated manifest.
     pub fn sender_config(
         &self,
-        identity: StreamIdentity,
+        session_id: [u8; 16],
         schema: ApplicationSchema,
         context: SectionContext,
     ) -> Result<LogStreamSenderConfig> {
         self.validate()?;
-        if context.instance_id != identity.sender_id {
-            return Err(Error::InvalidConfig(
-                "manifest instance differs from sender identity",
-            ));
-        }
         let max_record_bytes = usize::try_from(self.max_record_bytes)
             .map_err(|_| Error::InvalidConfig("record bound exceeds usize"))?;
-        let manifest =
-            SessionManifest::new(identity, self.receiver_requirements(), schema, context)
-                .encode_record()?;
+        let session =
+            SessionManifest::new(session_id, self.receiver_requirements(), schema, context);
+        let identity = session.identity();
+        let manifest = session.encode_record()?;
         if manifest.len() as u64 > self.objects.max_object_bytes {
             return Err(Error::ObjectTooLarge {
                 actual: manifest.len() as u64,

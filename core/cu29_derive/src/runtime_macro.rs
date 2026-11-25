@@ -4092,10 +4092,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     .map_err(|error| CuError::from(error.to_string()))?;
                 let sender_config = plan
                     .sender_config(
-                        ::cu29::logstream::StreamIdentity {
-                            session_id: logstream_session_id,
-                            sender_id: instance_id,
-                        },
+                        logstream_session_id,
                         logstream_schema.clone(),
                         log_context,
                     )

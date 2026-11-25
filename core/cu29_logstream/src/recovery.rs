@@ -29,7 +29,7 @@ impl RecoveryPoint {
 
     /// Checks that a recovered manifest is exactly the record referenced here.
     pub fn references_manifest(&self, record: DecodedRecord<'_>) -> bool {
-        record.kind == RecordKind::Manifest
+        record.kind.is_manifest()
             && record.object_id == self.manifest_object_id
             && record.digest == self.manifest_record_digest
     }

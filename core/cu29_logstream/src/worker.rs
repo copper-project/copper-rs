@@ -345,10 +345,7 @@ impl TelemetryDestination {
                 buffers.payload_bytes()?;
                 let tx = make_tx(clock.clone())?;
                 let session = CuTelemetrySession {
-                    identity: crate::StreamIdentity {
-                        session_id: crate::new_session_id(),
-                        sender_id: context.instance_id,
-                    },
+                    session_id: crate::new_session_id(),
                     context,
                     schema,
                 };
@@ -373,7 +370,7 @@ impl TelemetryDestination {
                 }
                 config.continuous.identity.sender_id = context.instance_id;
                 config.recovery.finite.identity.sender_id = context.instance_id;
-                manifest.identity = config.continuous.identity;
+                manifest.session_id = config.continuous.identity.session_id;
                 manifest.context = context;
                 config.recovery.manifest_record = manifest
                     .encode_record()
@@ -479,7 +476,7 @@ where
         session: FecSession::Active(Box::new(state)),
     };
     let session = manifest.ok().map(|m| CuTelemetrySession {
-        identity: m.identity,
+        session_id: m.session_id,
         schema: m.application_schema,
         context: m.context,
     });
@@ -577,7 +574,7 @@ impl<T: CuStreamTx + CuFeedbackRx> CuTelemetryTx for FecTelemetryTx<T> {
                     return Err("FEC sender requires an opening session".into());
                 };
                 let config = plan
-                    .sender_config(session.identity, session.schema.clone(), session.context)
+                    .sender_config(session.session_id, session.schema.clone(), session.context)
                     .map_err(|e| CuError::from(e.to_string()))?;
                 let manifest =
                     crate::SessionManifest::decode_record(&config.recovery.manifest_record)
@@ -620,7 +617,7 @@ impl FecState {
             ));
         }
         if let (Some(policy), Some(advertised)) = (policy, advertised)
-            && (manifest.expect("validated feedback manifest").identity
+            && (manifest.expect("validated feedback manifest").identity()
                 != config.continuous.identity
                 || advertised.report_interval_ms != policy.report_interval_ms)
         {

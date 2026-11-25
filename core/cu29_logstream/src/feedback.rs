@@ -444,7 +444,7 @@ impl FeedbackReporter {
         let requirements = manifest.requirements.feedback?;
         Some(Self {
             requirements,
-            identity: manifest.identity,
+            identity: manifest.identity(),
             destination: requirements.destination,
             receiver_id,
             started: now,

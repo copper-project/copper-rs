@@ -30,10 +30,7 @@ fn plan() -> LogStreamPlan {
 fn config() -> LogStreamSenderConfig {
     plan()
         .sender_config(
-            StreamIdentity {
-                session_id: *b"paced-session001",
-                sender_id: 1,
-            },
+            *b"paced-session001",
             ApplicationSchema {
                 outputs: vec![],
                 reconstruction: vec![],
@@ -438,7 +435,7 @@ fn fec_expiry_starts_at_send_on_the_injected_clock() {
 
     let manifest = SessionManifest::decode_record(&config().recovery.manifest_record).unwrap();
     let session = CuTelemetrySession {
-        identity: manifest.identity,
+        session_id: manifest.session_id,
         schema: manifest.application_schema,
         context: manifest.context,
     };

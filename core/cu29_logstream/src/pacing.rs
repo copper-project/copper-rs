@@ -147,7 +147,7 @@ impl SenderCore {
     ) -> Result<()> {
         let manifest =
             crate::SessionManifest::decode_record(&self.config.recovery.manifest_record)?;
-        if manifest.identity != session.identity
+        if manifest.session_id != session.session_id
             || manifest.context != session.context
             || manifest.application_schema != session.schema
         {

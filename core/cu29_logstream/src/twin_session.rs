@@ -271,7 +271,7 @@ impl<A: LiveReplay, R: CuTelemetryRx + 'static> CuTwinBuilder<A, R> {
                                 {
                                     return Err("twin requires one matching sender mission".into());
                                 }
-                                status.identity = Some(session.identity);
+                                status.identity = Some(session.identity());
                                 let mut builder = UnifiedLoggerBuilder::new()
                                     .file_base_name(&path)
                                     .preallocated_size(self.log_rollover.unwrap_or(self.slab_bytes))

@@ -92,7 +92,7 @@ fn configured_feedback_resource_is_owned_and_advertised() -> CuResult<()> {
                 .receive_datagram(&packet[..len], |event| {
                     match event {
                         SessionEvent::Manifest(manifest) => {
-                            identity = Some(manifest.manifest().identity);
+                            identity = Some(manifest.manifest().identity());
                             reporter =
                                 FeedbackReporter::new(manifest.manifest(), [9; 16], clock.now());
                             assert!(reporter.is_some());
@@ -161,7 +161,7 @@ fn udp_feedback_worker_adapts_and_survives_a_lost_return_channel() -> CuResult<(
     };
     let config = plan
         .sender_config(
-            identity,
+            identity.session_id,
             ApplicationSchema {
                 outputs: vec![],
                 reconstruction: vec![],

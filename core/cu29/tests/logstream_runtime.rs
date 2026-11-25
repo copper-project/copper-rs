@@ -263,7 +263,7 @@ fn sender_config(identity: StreamIdentity) -> CuResult<LogStreamSenderConfig> {
         repair_density: DensityThreshold::FULL,
     };
     let manifest = cu29::logstream::SessionManifest::new(
-        identity,
+        identity.session_id,
         cu29::logstream::ReceiverRequirements {
             feedback: None,
             symbol_size: SYMBOL_SIZE as u16,

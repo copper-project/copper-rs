@@ -23,11 +23,11 @@ Use the same graph and encoding features on both ends.
 
 | Bytes | Contents |
 | --- | --- |
-| 0–3 | ASCII `CUT1` |
+| 0–3 | ASCII `CUT2` |
 | 4–19 | Sender’s 16-byte session ID |
 | 20 | Kind (0 session, 1 CopperList, 2 keyframe, 3 structured log) |
 | 21–28 | Big-endian u64 ID (zero for session, cycle for list/keyframe, sequence for log) |
-| 29 onward | Complete native payload, or standard bincode session descriptor |
+| 29 onward | Complete native payload, or bincode (section context, application schema) for a session |
 
 The 1200-byte cap leaves 1171 bytes per record. An oversize record is an error.
 Choose a cap suitable for your link or implement fragmentation for larger records.

@@ -6,7 +6,7 @@ use cu29_logstream::twin::LiveReplay;
 use cu29_logstream::{
     ApplicationSchema, ContinuousEncoder, CuStreamRx, CuStreamRxError, CuTwin, EncodingSymbolId,
     FiniteObjectEncoder, FiniteObjectLimits, LogStreamPlan, ResolvedContinuousFec,
-    ResolvedObjectFec, ResolvedRlcField, SessionRouterLimits, StreamIdentity,
+    ResolvedObjectFec, ResolvedRlcField, SessionRouterLimits,
 };
 use cu29_runtime::copperlist::CopperList;
 use cu29_runtime::curuntime::KeyFrame;
@@ -110,10 +110,7 @@ fn packets(max_record_bytes: u64, count: u64) -> VecDeque<Vec<u8>> {
     };
     let sender = plan
         .sender_config(
-            StreamIdentity {
-                session_id: *b"twin-builder-001",
-                sender_id: 7,
-            },
+            *b"twin-builder-001",
             Cameras::stream_schema(),
             cu29_unifiedlog::SectionContext {
                 run_id: 1,

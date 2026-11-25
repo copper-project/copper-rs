@@ -124,7 +124,7 @@ impl<P: CopperListTuple> NativeArchive<P> {
             logger,
             section_bytes,
             manifest.context,
-            manifest.identity,
+            manifest.identity(),
             decode,
         )?;
         archive.manifest_digest = received.record().decoded().digest;
@@ -210,7 +210,7 @@ impl<P: CopperListTuple> NativeArchive<P> {
 
     fn accept_inner(&mut self, event: &SessionEventRef<'_>) -> Result<Option<CapturedList<P>>> {
         let identity = match event {
-            SessionEvent::Manifest(manifest) => manifest.manifest().identity,
+            SessionEvent::Manifest(manifest) => manifest.manifest().identity(),
             SessionEvent::ContinuousRecord { identity, .. }
             | SessionEvent::Gap { identity, .. }
             | SessionEvent::Object { identity, .. }
@@ -365,18 +365,16 @@ impl<P: crate::capture::CaptureDataSet> CaptureArchive<P> {
         section_bytes: usize,
         logger: UnifiedLoggerWrite,
     ) -> Result<Self> {
-        if session.schema != P::stream_schema()
-            || session.context.instance_id != session.identity.sender_id
-        {
+        if session.schema != P::stream_schema() {
             return Err(Error::InvalidConfig(
-                "telemetry session requires matching sender identity and application schema",
+                "telemetry session requires matching application schema",
             ));
         }
         let mut archive = NativeArchive::open_streams(
             logger,
             section_bytes,
             session.context,
-            session.identity,
+            session.identity(),
             crate::capture::decode_capture,
         )?;
         let record =

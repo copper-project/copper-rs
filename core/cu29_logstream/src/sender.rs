@@ -1,8 +1,8 @@
 use crate::rlc::RepairSchedule;
 use crate::{
     ContinuousEncoder, CuStreamTx, CuStreamTxError, Error, FiniteObjectEncoder,
-    FiniteObjectSenderConfig, Lane, PACKET_HEADER_LEN, RecordKind, Result, StreamIdentity,
-    decode_record, encode_copperlist_record_into, encode_keyframe_and_recovery_point,
+    FiniteObjectSenderConfig, Lane, PACKET_HEADER_LEN, Result, StreamIdentity, decode_record,
+    encode_copperlist_record_into, encode_keyframe_and_recovery_point,
 };
 use alloc::{boxed::Box, string::ToString, vec, vec::Vec};
 use core::{fmt::Debug, marker::PhantomData};
@@ -65,7 +65,7 @@ impl LogStreamSenderConfig {
             ));
         }
         let manifest = decode_record(&self.recovery.manifest_record)?;
-        if manifest.kind != RecordKind::Manifest {
+        if !manifest.kind.is_manifest() {
             return Err(Error::InvalidConfig(
                 "recovery configuration requires a manifest record",
             ));
@@ -130,7 +130,7 @@ impl<T: CuStreamTx> RecoveryPointSink<T> {
             ));
         }
         let manifest = decode_record(&config.manifest_record)?;
-        if manifest.kind != RecordKind::Manifest {
+        if !manifest.kind.is_manifest() {
             return Err(Error::InvalidConfig(
                 "recovery configuration requires a manifest record",
             ));

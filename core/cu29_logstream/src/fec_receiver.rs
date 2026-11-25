@@ -67,7 +67,7 @@ impl<R: CuStreamRx> CuTelemetryRx for FecTelemetryRx<R> {
                     let record = match event {
                         SessionEvent::Manifest(received) => {
                             let m = received.manifest();
-                            self.identity = Some(m.identity);
+                            self.identity = Some(m.identity());
                             if self.feedback.is_some() {
                                 self.reporter = FeedbackReporter::new(
                                     m,
@@ -77,7 +77,7 @@ impl<R: CuStreamRx> CuTelemetryRx for FecTelemetryRx<R> {
                             }
                             return deliver(CuTelemetryEvent::Record(Record::Session(
                                 &CuTelemetrySession {
-                                    identity: m.identity,
+                                    session_id: m.session_id,
                                     context: m.context,
                                     schema: m.application_schema.clone(),
                                 },

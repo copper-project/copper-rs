@@ -549,7 +549,7 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
             self.sessions[index].structured_seen = Some(updated);
             return Ok(());
         }
-        if record.decoded().kind == crate::RecordKind::Manifest {
+        if record.decoded().kind.is_manifest() {
             if let Some(existing) = &self.sessions[index].manifest {
                 if existing.record.decoded().digest != record.decoded().digest {
                     return Err(Error::InconsistentObject);
@@ -557,7 +557,7 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
                 return Ok(());
             }
             let manifest = ReceivedManifest::from_record(record)?;
-            if manifest.manifest.identity != self.sessions[index].identity {
+            if manifest.manifest.identity() != self.sessions[index].identity {
                 return Err(Error::InconsistentObject);
             }
             self.sessions[index].continuous = Some(Self::decoder_from_manifest(
@@ -707,7 +707,7 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
             ));
         }
         let mut decoder = ContinuousDecoder::new(
-            manifest.identity,
+            manifest.identity(),
             Lane::ReplayCritical,
             manifest.requirements.rlc_config()?,
             limits.equation_capacity,

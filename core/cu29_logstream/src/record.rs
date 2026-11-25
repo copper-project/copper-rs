@@ -12,13 +12,20 @@ const RECORD_DIGEST_OFFSET: usize = 13;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum RecordKind {
-    Manifest = 0,
+    LegacyManifest = 0,
     CopperList = 1,
     KeyFrame = 2,
     StructuredLog = 3,
     Lifecycle = 4,
     Gap = 5,
     RecoveryPoint = 6,
+    Manifest = 7,
+}
+
+impl RecordKind {
+    pub(crate) fn is_manifest(self) -> bool {
+        matches!(self, Self::Manifest | Self::LegacyManifest)
+    }
 }
 
 impl TryFrom<u8> for RecordKind {
@@ -26,13 +33,14 @@ impl TryFrom<u8> for RecordKind {
 
     fn try_from(value: u8) -> Result<Self> {
         match value {
-            0 => Ok(Self::Manifest),
+            0 => Ok(Self::LegacyManifest),
             1 => Ok(Self::CopperList),
             2 => Ok(Self::KeyFrame),
             3 => Ok(Self::StructuredLog),
             4 => Ok(Self::Lifecycle),
             5 => Ok(Self::Gap),
             6 => Ok(Self::RecoveryPoint),
+            7 => Ok(Self::Manifest),
             _ => Err(Error::UnknownRecordKind(value)),
         }
     }
