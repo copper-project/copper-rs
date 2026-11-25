@@ -11,7 +11,10 @@ use cu29::logstream::{
 };
 use cu29::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+
+// Starting and dropping a generated runtime replaces the process-wide structured log sink.
+static RUNTIME_LOGGER: Mutex<()> = Mutex::new(());
 
 const SYMBOL_SIZE: usize = 256;
 const WINDOW_SYMBOLS: usize = 64;
@@ -85,6 +88,7 @@ struct LogstreamRuntimeApp {}
 
 #[test]
 fn generated_runtime_streams_without_local_copperlist_logging() -> CuResult<()> {
+    let _logger = RUNTIME_LOGGER.lock().unwrap();
     const ITERATIONS: usize = 4;
     let transport = CapturingTx::default();
     let captured = transport.clone();
@@ -470,6 +474,7 @@ impl CuTelemetryTx for Recorder {
 
 #[test]
 fn native_session_streams_ordinary_records_with_zero_keyframes() -> CuResult<()> {
+    let _logger = RUNTIME_LOGGER.lock().unwrap();
     let (tx, rx) = mpsc::channel();
     let builder = LogstreamRuntimeApp::builder()
         .with_instance_id(24)
@@ -510,6 +515,7 @@ mod local_keyframes {
 
     #[test]
     fn local_keyframes_survive_native_opt_out() -> CuResult<()> {
+        let _logger = super::RUNTIME_LOGGER.lock().unwrap();
         let dir =
             tempfile::tempdir_in(concat!(env!("CARGO_MANIFEST_DIR"), "/../../target")).unwrap();
         let path = dir.path().join("local.copper");
