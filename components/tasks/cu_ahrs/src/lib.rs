@@ -77,7 +77,11 @@ impl CuAhrs {
         ki: f32,
         orientation: UnitQuaternion<f32>,
     ) -> Mahony {
-        let params = MahonyParams { kp, ki };
+        let params = MahonyParams {
+            kp,
+            ki,
+            tau_accelerometer: Duration::ZERO,
+        };
         Mahony::new_with_orientation(
             Duration::from_secs_f32(sample_period_s.max(1.0e-5)),
             params,
