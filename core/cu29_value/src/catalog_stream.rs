@@ -251,8 +251,7 @@ impl Types {
             }
         }
         catalog.missions.len().encode(encoder)?;
-        for (index, mission) in catalog.missions.iter().enumerate() {
-            (index as u32).encode(encoder)?;
+        for mission in catalog.missions {
             mission.slots.len().encode(encoder)?;
             for slot in mission.slots {
                 slot.task_id.encode(encoder)?;

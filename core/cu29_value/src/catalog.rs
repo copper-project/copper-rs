@@ -28,7 +28,7 @@ pub struct ValueDecodeCatalogSlot {
 /// for both the catalog body and the recorded native payloads. Common CopperList
 /// metadata is identified by `layout`. The format fixes the Compact and Flat envelope
 /// rules as well as payload encoding; changing either requires a new version.
-#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ValueDecodeCatalog {
     /// Bincode catalog format version, compressed with the description body.
     pub version: u16,
@@ -43,9 +43,66 @@ pub struct ValueDecodeCatalog {
 /// Output slots for one numeric mission index in application metadata.
 #[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct ValueDecodeCatalogMission {
-    pub mission_index: u32,
     pub slots: Vec<ValueDecodeCatalogSlot>,
 }
+
+impl Encode for ValueDecodeCatalog {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        self.version.encode(encoder)?;
+        self.layout.encode(encoder)?;
+        self.description.encode(encoder)?;
+        match self.version {
+            VERSION => self.missions.encode(encoder),
+            1 => {
+                self.missions.len().encode(encoder)?;
+                for (index, mission) in self.missions.iter().enumerate() {
+                    (index as u32, mission).encode(encoder)?;
+                }
+                Ok(())
+            }
+            _ => Err(bincode::error::EncodeError::Other(
+                "Unsupported catalog version",
+            )),
+        }
+    }
+}
+
+impl<Context> Decode<Context> for ValueDecodeCatalog {
+    fn decode<D: bincode::de::Decoder<Context = Context>>(
+        decoder: &mut D,
+    ) -> Result<Self, DecodeError> {
+        let version = u16::decode(decoder)?;
+        if !matches!(version, 1 | VERSION) {
+            return Err(DecodeError::Other("Unsupported catalog version"));
+        }
+        let layout = Decode::decode(decoder)?;
+        let description = Decode::decode(decoder)?;
+        let missions = if version == 1 {
+            Vec::<(u32, ValueDecodeCatalogMission)>::decode(decoder)?
+                .into_iter()
+                .enumerate()
+                .map(|(position, (index, mission))| {
+                    if position != index as usize {
+                        return Err(DecodeError::Other("Invalid catalog mission index"));
+                    }
+                    Ok(mission)
+                })
+                .collect::<Result<_, _>>()?
+        } else {
+            Decode::decode(decoder)?
+        };
+        Ok(Self {
+            version,
+            layout,
+            description,
+            missions,
+        })
+    }
+}
+bincode::impl_borrow_decode!(ValueDecodeCatalog);
 
 impl ValueDecodeCatalog {
     /// Decompress and read a catalog offline, enforcing the fixed size limit.
@@ -120,14 +177,8 @@ impl ValueDecodeCatalog {
         if consumed != raw.len() {
             return Err(DecodeError::Other("trailing ValueDecodeCatalog body bytes"));
         }
-        if catalog.version != VERSION {
-            return Err(DecodeError::Other("Unsupported catalog version"));
-        }
         catalog.description.validate()?;
-        for (index, mission) in catalog.missions.iter().enumerate() {
-            if mission.mission_index as usize != index {
-                return Err(DecodeError::Other("Invalid catalog mission index"));
-            }
+        for mission in &catalog.missions {
             for slot in &mission.slots {
                 if slot
                     .binding

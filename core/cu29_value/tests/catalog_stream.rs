@@ -171,3 +171,26 @@ fn empty_catalog_remains_valid() {
             .is_empty()
     );
 }
+
+#[test]
+fn reads_v1_mission_indices_and_rejects_out_of_order_indices() {
+    let catalog = ValueDecodeCatalog::from_blob(&blob()).unwrap();
+    let config = bincode::config::standard();
+    for index in [0u32, 1] {
+        let legacy = (
+            1u16,
+            catalog.layout,
+            &catalog.description,
+            vec![(index, &catalog.missions[0].slots)],
+        );
+        let bytes = bincode::encode_to_vec(legacy, config).unwrap();
+        let decoded = bincode::decode_from_slice::<ValueDecodeCatalog, _>(&bytes, config);
+        if index == 0 {
+            let (decoded, used) = decoded.unwrap();
+            assert_eq!(used, bytes.len());
+            assert_eq!(bincode::encode_to_vec(decoded, config).unwrap(), bytes);
+        } else {
+            assert!(decoded.is_err());
+        }
+    }
+}
