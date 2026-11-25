@@ -1,9 +1,8 @@
 //! Mapped-file adapter for the byte-addressed section chain.
-use crate::byte_log::{ByteLogger, ByteRegion, ByteSection, ByteStorage, read_header, read_main};
-use crate::{
-    ApplicationMetadata, CapacityPolicy, MainHeader, SECTION_HEADER_COMPACT_SIZE, SectionHeader,
-    UnifiedLogRead,
+use crate::byte_log::{
+    ByteLogger, ByteRegion, ByteSection, ByteStorage, read_main, read_section_header,
 };
+use crate::{ApplicationMetadata, CapacityPolicy, MainHeader, SectionHeader, UnifiedLogRead};
 use alloc::sync::Arc;
 use bincode::{config::standard, decode_from_slice};
 use cu29_traits::{CuError, CuResult, UnifiedLogType};
@@ -432,23 +431,28 @@ impl MmapUnifiedLoggerRead {
         if self.main_header.metadata_offset == 0 {
             return Ok(None);
         }
-        let h = self.section_header(self.main_header.metadata_offset)?;
+        self.application_metadata_at(self.main_header.metadata_offset)
+            .map(Some)
+    }
+    /// Read a committed application metadata section at its log offset.
+    pub fn application_metadata_at(&self, offset: u64) -> CuResult<ApplicationMetadata> {
+        let h = self.section_header(offset)?;
         if h.entry_type != UnifiedLogType::ApplicationMetadata || h.is_open {
             return Err(CuError::from("Invalid static application metadata"));
         }
         let mut data = vec![0; h.used as usize];
         self.storage
-            .region(
-                self.main_header.metadata_offset + SECTION_HEADER_COMPACT_SIZE as u64,
-                h.used as u64,
-            )?
+            .region(offset + u64::from(h.block_size), h.used as u64)?
             .read(0, &mut data)?;
         let (metadata, used) = decode_from_slice::<ApplicationMetadata, _>(&data, standard())
             .map_err(|e| CuError::new_with_cause("Invalid application metadata", e))?;
-        if used != data.len() || metadata.catalog_offset != h.next_section {
-            return Err(CuError::from("Invalid metadata body or catalog offset"));
+        // Earlier writers appended a redundant catalog pointer.
+        if used != data.len()
+            && !matches!(decode_from_slice::<u64, _>(&data[used..], standard()), Ok((_, n)) if used + n == data.len())
+        {
+            return Err(CuError::from("Invalid metadata body length"));
         }
-        Ok(Some(metadata))
+        Ok(metadata)
     }
     fn section_header(&self, offset: u64) -> CuResult<SectionHeader> {
         if !offset.is_multiple_of(512)
@@ -457,7 +461,7 @@ impl MmapUnifiedLoggerRead {
         {
             return Err(CuError::from("Invalid section offset"));
         }
-        let h = read_header(&self.storage, offset)?;
+        let h = read_section_header(&self.storage, offset, self.main_header.format_version)?;
         let limit = if offset < self.main_header.sections_begin {
             self.main_header.sections_begin
         } else {
@@ -541,10 +545,7 @@ impl UnifiedLogRead for MmapUnifiedLoggerRead {
         let h = self.section_header(self.cursor)?;
         let mut bytes = vec![0; h.used as usize];
         self.storage
-            .region(
-                self.cursor + SECTION_HEADER_COMPACT_SIZE as u64,
-                h.used as u64,
-            )?
+            .region(self.cursor + u64::from(h.block_size), h.used as u64)?
             .read(0, &mut bytes)?;
         self.advance(&h)?;
         Ok((h, bytes))

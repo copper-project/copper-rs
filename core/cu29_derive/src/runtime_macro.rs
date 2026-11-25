@@ -4443,7 +4443,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         subsystem_code: Self::subsystem().code(),
                         effective_config_ron,
                         missions: vec![#(#mission_names.to_string()),*],
-                        catalog_offset: 0,
                     }
                 }
 

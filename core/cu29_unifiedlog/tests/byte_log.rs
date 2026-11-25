@@ -22,7 +22,6 @@ fn metadata() -> ApplicationMetadata {
         subsystem_code: 7,
         effective_config_ron: "(tasks:[])".into(),
         missions: vec!["alpha".into(), "beta".into()],
-        catalog_offset: 0,
     }
 }
 fn writer(
@@ -137,7 +136,6 @@ fn repeated_wrap_rebinds_sparse_streams_and_preserves_metadata() {
     let mut reader = UnifiedLoggerRead::new(&path).unwrap();
     let saved = reader.application_metadata().unwrap().unwrap();
     assert_eq!(saved.effective_config_ron, metadata().effective_config_ron);
-    assert!(saved.catalog_offset != 0);
     let bytes = reader
         .read_next_section_type(UnifiedLogType::ValueDecodeCatalog)
         .unwrap()
@@ -638,4 +636,51 @@ fn rollover_first_encode_releases_allocator_lock_while_holding_writing_rights() 
         expected.extend(bincode::encode_to_vec(([2u8; 900], 42u32, 43u32), standard()).unwrap());
         assert_eq!(saved, expected);
     }
+}
+
+#[test]
+fn reads_v2_catalog_by_section_link_with_stale_embedded_offset() {
+    // Copper 1.3 stores a single 512-byte header before each payload.
+    let directory = test_dir();
+    let path = directory.path().join("legacy.copper");
+    let mut slab = vec![0; 2560];
+    let main = MainHeader {
+        magic: MAIN_MAGIC,
+        format_version: 2,
+        page_size: 512,
+        metadata_offset: 512,
+        sections_begin: 2560,
+        sections_end: 2560,
+        head_section: 0,
+        tail_section: 0,
+        clean_close: true,
+    };
+    encode_into_slice(main, &mut slab[..512], standard()).unwrap();
+    // The trailing u64 was part of the v2 body. Its stale value points at metadata.
+    let len = encode_into_slice((metadata(), 512u64), &mut slab[1024..1536], standard()).unwrap();
+    let mut section = SectionHeader {
+        block_size: 512,
+        entry_type: UnifiedLogType::ApplicationMetadata,
+        allocated: 1024,
+        next_section: 1536,
+        used: len as u32,
+        is_open: false,
+        ..Default::default()
+    };
+    encode_into_slice(&section, &mut slab[512..1024], standard()).unwrap();
+    section.entry_type = UnifiedLogType::ValueDecodeCatalog;
+    section.next_section = 0;
+    section.used = 3;
+    encode_into_slice(section, &mut slab[1536..2048], standard()).unwrap();
+    slab[2048..2051].copy_from_slice(b"cat");
+    std::fs::write(directory.path().join("legacy_0.copper"), slab).unwrap();
+    let mut reader = UnifiedLoggerRead::new(&path).unwrap();
+    assert_eq!(reader.application_metadata().unwrap(), Some(metadata()));
+    assert_eq!(
+        reader
+            .read_next_section_type(UnifiedLogType::ValueDecodeCatalog)
+            .unwrap()
+            .unwrap(),
+        b"cat"
+    );
 }

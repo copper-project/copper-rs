@@ -2,10 +2,10 @@
 mod probe;
 
 use anyhow::{Context, Result, bail, ensure};
-use bincode::{config::standard, decode_from_slice, encode_into_slice, encode_to_vec};
+use bincode::{config::standard, decode_from_slice, encode_into_slice};
 use cu29_traits::{CuError, CuResult, UnifiedLogType};
 use cu29_unifiedlog::byte_log::{
-    ByteRegion, ByteStorage, encode_copied_section, read_header, read_main,
+    ByteRegion, ByteStorage, encode_copied_section, read_main, read_section_header,
 };
 use cu29_unifiedlog::{ApplicationMetadata, MainHeader, SectionHeader};
 use probe::{BLOCK, CHUNK, Probe};
@@ -102,7 +102,7 @@ fn list(card: &Card, main: &MainHeader) -> Result<BTreeMap<u64, Run>> {
                 offset >= lower && offset < upper && seen.insert(offset),
                 "invalid or cyclic section at {offset}"
             );
-            let header = read_header(card, offset)?;
+            let header = read_section_header(card, offset, main.format_version)?;
             ensure!(
                 header.allocated <= upper - offset,
                 "section extends past its region"
@@ -154,31 +154,26 @@ fn download(card: &Card, mut main: MainHeader, run: Run, id: u64) -> Result<()> 
     );
     let mut raw = vec![0; used];
     for (i, page) in raw.chunks_mut(CHUNK).enumerate() {
-        card.read(run.app.offset + HEADER + (i * CHUNK) as u64, page)?;
+        card.read(
+            run.app.offset + u64::from(run.app.header.block_size) + (i * CHUNK) as u64,
+            page,
+        )?;
     }
-    let (mut app, n): (ApplicationMetadata, _) =
+    let (app, n): (ApplicationMetadata, _) =
         decode_from_slice(&raw, standard().with_limit::<16777216>())?;
     ensure!(
-        n == used && app.catalog_offset == run.catalog.as_ref().map_or(0, |c| c.offset),
-        "catalog and application metadata disagree"
+        n == raw.len()
+            || matches!(decode_from_slice::<u64, _>(&raw[n..], standard()), Ok((_, suffix)) if n + suffix == raw.len()),
+        "invalid metadata body length"
     );
+    raw.truncate(n); // Drop the legacy trailing catalog offset when copying metadata.
     if let Some(c) = &run.catalog {
-        ensure!(!c.header.is_open, "catalog is uncommitted");
+        ensure!(
+            run.app.header.next_section == c.offset && !c.header.is_open,
+            "invalid catalog link or uncommitted catalog"
+        );
     }
     let aligned = |n: u64| n.next_multiple_of(BLOCK as u64);
-    // Relocating the catalog can change the varint length of its pointer.
-    loop {
-        raw = encode_to_vec(&app, standard())?;
-        let pointer = if run.catalog.is_some() {
-            BLOCK as u64 + aligned(HEADER + raw.len() as u64)
-        } else {
-            0
-        };
-        if app.catalog_offset == pointer {
-            break;
-        }
-        app.catalog_offset = pointer;
-    }
     let mut sections = vec![run.app];
     sections[0].header.used = raw.len().try_into()?;
     sections.extend(run.catalog);
@@ -189,6 +184,7 @@ fn download(card: &Card, mut main: MainHeader, run: Run, id: u64) -> Result<()> 
         s.header.allocated = aligned(HEADER + u64::from(s.header.used));
         positions.push(positions.last().unwrap() + s.header.allocated);
     }
+    main.format_version = cu29_unifiedlog::UNIFIED_LOG_FORMAT_VERSION;
     main.page_size = BLOCK as u16;
     main.metadata_offset = positions[0];
     main.sections_begin = positions[first_record];
@@ -215,6 +211,8 @@ fn download(card: &Card, mut main: MainHeader, run: Run, id: u64) -> Result<()> 
         } else {
             positions[i + 1]
         };
+        let source_header_size = u64::from(section.header.block_size);
+        section.header.block_size = HEADER as u16;
         out.write_all(&encode_copied_section(&section.header, positions[i])?)?;
         let used = section.header.used as usize;
         if used >= CHUNK {
@@ -225,7 +223,7 @@ fn download(card: &Card, mut main: MainHeader, run: Run, id: u64) -> Result<()> 
         } else {
             for j in (0..used).step_by(CHUNK) {
                 let chunk = &mut buffer[..CHUNK.min(used - j)];
-                card.read(section.offset + HEADER + j as u64, chunk)?;
+                card.read(section.offset + source_header_size + j as u64, chunk)?;
                 out.write_all(chunk)?;
             }
         }

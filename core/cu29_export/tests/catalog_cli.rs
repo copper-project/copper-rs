@@ -51,7 +51,6 @@ fn metadata() -> ApplicationMetadata {
         subsystem_code: 0,
         effective_config_ron: "()".into(),
         missions: vec!["default".into()],
-        catalog_offset: 0,
     }
 }
 fn fixture(path: &Path, catalog: bool, corrupt: bool, duplicate: bool) {
