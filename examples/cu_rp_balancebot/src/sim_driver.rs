@@ -1,6 +1,5 @@
 use crate::motor_model;
 use crate::world::{AppliedForce, Cart, DragState, Rod};
-use avian3d::math::Vector;
 use avian3d::prelude::{ConstantForce, Physics};
 use bevy::app::AppExit;
 use bevy::prelude::*;
@@ -262,7 +261,7 @@ pub fn run_copper_callback(
                 }
                 if let Some(motor_actuation) = maybe_motor_actuation {
                     if motor_actuation.power.get::<ratio>().is_nan() {
-                        cart_force.0 = Vector::ZERO;
+                        cart_force.0 = Vec3::ZERO;
                         set_process_timing(&clock, output);
                         return SimOverride::ExecutedBySim;
                     }
@@ -271,7 +270,7 @@ pub fn run_copper_callback(
                         motor_actuation.power.get::<ratio>(),
                         total_mass,
                     );
-                    let new_force = Vector::new(force_magnitude, 0.0, 0.0);
+                    let new_force = Vec3::new(force_magnitude, 0.0, 0.0);
                     cart_force.0 = new_force;
                     applied_force.0 = new_force;
                     output
@@ -280,7 +279,7 @@ pub fn run_copper_callback(
                     set_process_timing(&clock, output);
                     SimOverride::ExecutedBySim
                 } else {
-                    cart_force.0 = Vector::ZERO;
+                    cart_force.0 = Vec3::ZERO;
                     set_process_timing(&clock, output);
                     SimOverride::Errored("Safety Mode.".into())
                 }

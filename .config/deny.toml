@@ -14,5 +14,4 @@ ignore = [
   "RUSTSEC-2026-0194", # quick-xml quadratic duplicate-attribute checks.
   "RUSTSEC-2026-0195", # quick-xml unbounded namespace-declaration allocation.
   "RUSTSEC-2026-0291", # Zenoh shared memory -> lockfree -> owned-alloc; no fixed release. Track eclipse-zenoh/zenoh#2811.
-  "RUSTSEC-2026-0344", # ruzstd decompression bomb; Bevy 0.19.1 requires ruzstd 0.8. Remove when Bevy supports ruzstd >=0.9.1.
 ]

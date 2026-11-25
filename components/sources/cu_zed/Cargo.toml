@@ -21,10 +21,19 @@ host_os = ["linux"]
 zed-rerun-demo = []
 
 [dependencies]
-cu29 = { workspace = true }
 cu-sensor-payloads = { workspace = true }
 serde = { workspace = true }
 cu-transform = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+cu29 = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+cu29 = { path = "../../../core/cu29", version = "~1.4.0-dev", default-features = false, features = [
+  "std",
+  "textlogs",
+  "units",
+] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 zed-sdk = { workspace = true }
