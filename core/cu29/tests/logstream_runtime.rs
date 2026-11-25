@@ -422,7 +422,6 @@ fn telemetry_pools_drop_independently_at_the_configured_depth() -> CuResult<()> 
             subsystem_code: 0,
             effective_config_ron: String::new(),
             missions: vec!["default".into()],
-            catalog_offset: 0,
         },
     )?;
     let mut logs = captures.take_structured_log_sink().unwrap();

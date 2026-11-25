@@ -308,7 +308,6 @@ fn manual_handoff_and_service_do_not_allocate_after_setup() -> CuResult<()> {
             subsystem_code: 0,
             effective_config_ron: String::new(),
             missions: vec!["default".into()],
-            catalog_offset: 0,
         },
     )?;
     let mut lists = SyncCopperListsManager::<default::CuStampedDataSet, 2>::new(None)?;
