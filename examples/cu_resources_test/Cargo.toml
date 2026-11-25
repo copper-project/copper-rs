@@ -24,7 +24,7 @@ cu29 = { workspace = true, features = ["log-level-debug"] }
 # cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "~1.4.0-dev" }
 serde = { workspace = true }
 bincode = { workspace = true }
-parking_lot = "0.12"
+parking_lot = "0.13"
 
 [features]
 default = []
