@@ -384,19 +384,19 @@ mod tests {
         }
     }
     impl BlockDevice for Device {
-        type Error = ();
+        type Error = std::io::Error;
         #[cfg(all(feature = "eh02", not(feature = "eh1")))]
-        fn read(&self, blocks: &mut [Block], start: BlockIdx, _: &str) -> Result<(), ()> {
+        fn read(&self, blocks: &mut [Block], start: BlockIdx, _: &str) -> std::io::Result<()> {
             self.read_blocks(blocks, start)
         }
         #[cfg(feature = "eh1")]
-        fn read(&self, blocks: &mut [Block], start: BlockIdx) -> Result<(), ()> {
+        fn read(&self, blocks: &mut [Block], start: BlockIdx) -> std::io::Result<()> {
             self.read_blocks(blocks, start)
         }
-        fn write(&self, blocks: &[Block], start: BlockIdx) -> Result<(), ()> {
+        fn write(&self, blocks: &[Block], start: BlockIdx) -> std::io::Result<()> {
             let left = self.fail_after.load(Ordering::Relaxed);
             if left == 0 {
-                return Err(());
+                return Err(std::io::Error::other("injected write failure"));
             }
             if left != usize::MAX {
                 self.fail_after.fetch_sub(1, Ordering::Relaxed);
@@ -409,12 +409,12 @@ mod tests {
             self.writes.lock().unwrap().push(blocks.len());
             Ok(())
         }
-        fn num_blocks(&self) -> Result<BlockCount, ()> {
+        fn num_blocks(&self) -> std::io::Result<BlockCount> {
             Ok(BlockCount(48))
         }
     }
     impl Device {
-        fn read_blocks(&self, blocks: &mut [Block], start: BlockIdx) -> Result<(), ()> {
+        fn read_blocks(&self, blocks: &mut [Block], start: BlockIdx) -> std::io::Result<()> {
             self.reads.fetch_add(blocks.len(), Ordering::Relaxed);
             let bytes = self.bytes.lock().unwrap();
             for (index, block) in blocks.iter_mut().enumerate() {

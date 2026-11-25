@@ -44,7 +44,7 @@ defmt-rtt = { workspace = true }
 embedded-hal = "1.0"
 embedded-hal-bus = "0.3"
 embedded-io = { version = "0.7.1", default-features = false }
-embedded-sdmmc = { version = "0.9", features = [
+embedded-sdmmc = { version = "0.10", features = [
   "defmt-log",
 ], default-features = false }
 panic-probe = { workspace = true, features = ["defmt", "print-defmt"] }

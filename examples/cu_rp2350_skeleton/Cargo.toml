@@ -54,7 +54,7 @@ portable-atomic = { version = "1.11", optional = true, default-features = false,
   "float",
   "fallback",
 ] } # required
-embedded-sdmmc = { version = "0.9", optional = true, features = [
+embedded-sdmmc = { version = "0.10", optional = true, features = [
   "defmt-log",
 ], default-features = false }
 
