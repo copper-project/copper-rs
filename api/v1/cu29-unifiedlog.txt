@@ -19,6 +19,7 @@ pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::write(self, write: boo
 pub struct cu29_unifiedlog::memmap::MmapUnifiedLoggerRead
 impl cu29_unifiedlog::memmap::MmapUnifiedLoggerRead
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::application_metadata(&self) -> cu29_traits::CuResult<core::option::Option<cu29_unifiedlog::ApplicationMetadata>>
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::application_metadata_at(&self, offset: u64) -> cu29_traits::CuResult<cu29_unifiedlog::ApplicationMetadata>
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::end_of_log(&mut self) -> cu29_traits::CuResult<cu29_unifiedlog::memmap::LogPosition>
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::new(path: &std::path::Path) -> std::io::error::Result<Self>
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::position(&self) -> cu29_unifiedlog::memmap::LogPosition
@@ -71,7 +72,6 @@ pub struct cu29_unifiedlog::ApplicationMetadata
 pub cu29_unifiedlog::ApplicationMetadata::app_name: alloc::string::String
 pub cu29_unifiedlog::ApplicationMetadata::app_type: alloc::string::String
 pub cu29_unifiedlog::ApplicationMetadata::app_version: alloc::string::String
-pub cu29_unifiedlog::ApplicationMetadata::catalog_offset: u64
 pub cu29_unifiedlog::ApplicationMetadata::effective_config_ron: alloc::string::String
 pub cu29_unifiedlog::ApplicationMetadata::git_commit: core::option::Option<alloc::string::String>
 pub cu29_unifiedlog::ApplicationMetadata::git_dirty: core::option::Option<bool>
@@ -201,6 +201,7 @@ pub fn cu29_unifiedlog::memmap::UnifiedLoggerIOReader::read(&mut self, bytes: &m
 pub struct cu29_unifiedlog::UnifiedLoggerRead
 impl cu29_unifiedlog::memmap::MmapUnifiedLoggerRead
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::application_metadata(&self) -> cu29_traits::CuResult<core::option::Option<cu29_unifiedlog::ApplicationMetadata>>
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::application_metadata_at(&self, offset: u64) -> cu29_traits::CuResult<cu29_unifiedlog::ApplicationMetadata>
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::end_of_log(&mut self) -> cu29_traits::CuResult<cu29_unifiedlog::memmap::LogPosition>
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::new(path: &std::path::Path) -> std::io::error::Result<Self>
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::position(&self) -> cu29_unifiedlog::memmap::LogPosition

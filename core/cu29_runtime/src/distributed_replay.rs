@@ -1727,7 +1727,6 @@ mod tests {
             subsystem_code: stack.subsystem_code,
             effective_config_ron: "(runtime: ())".into(),
             missions: vec![mission.unwrap_or("default").into()],
-            catalog_offset: 0,
         };
         let context = {
             let mut logger = logger.lock().unwrap();

@@ -77,7 +77,6 @@ fn metadata() -> ApplicationMetadata {
         subsystem_code: 0,
         effective_config_ron: "()".into(),
         missions: vec!["drive".into(), "park".into()],
-        catalog_offset: 0,
     }
 }
 fn write_run(

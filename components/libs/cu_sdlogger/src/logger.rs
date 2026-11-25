@@ -513,7 +513,6 @@ mod tests {
             subsystem_code: 0,
             effective_config_ron: "(tasks:[])".into(),
             missions: alloc::vec!["alpha".into(), "beta".into()],
-            catalog_offset: 0,
         }
     }
     fn trace<S: SectionStorage, L: UnifiedLogWrite<S>>(logger: &mut L) {

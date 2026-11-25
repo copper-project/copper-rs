@@ -1356,7 +1356,6 @@ mod tests {
                     subsystem_code: 0,
                     effective_config_ron: "(tasks:[])".into(),
                     missions: vec!["alpha".into()],
-                    catalog_offset: 0,
                 },
                 None::<&u8>,
             )

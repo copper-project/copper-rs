@@ -356,6 +356,34 @@ fn initialize_section<R: ByteRegion>(
         &SectionDescriptor::new(header, position, generation),
     )
 }
+/// Read a section from a supported container format.
+pub fn read_section_header<B: ByteStorage>(
+    storage: &B,
+    offset: u64,
+    version: u8,
+) -> CuResult<SectionHeader> {
+    if version == UNIFIED_LOG_FORMAT_VERSION {
+        return read_header(storage, offset);
+    }
+    if version != 2 {
+        return Err(CuError::from("Unsupported section format"));
+    }
+    let mut bytes = [0; 512];
+    storage.region(offset, BLOCK)?.read(0, &mut bytes)?;
+    let (header, _) = decode_from_slice::<SectionHeader, _>(&bytes, standard())
+        .map_err(|e| CuError::from("Invalid format v2 section header").add_cause(&e.to_string()))?;
+    if header.magic != SECTION_MAGIC
+        || u64::from(header.block_size) != BLOCK
+        || header.allocated < BLOCK
+        || !header.allocated.is_multiple_of(BLOCK)
+        || u64::from(header.used) > header.allocated - BLOCK
+    {
+        return Err(CuError::from(
+            "Invalid format v2 section size or committed length",
+        ));
+    }
+    Ok(header)
+}
 pub fn read_header<B: ByteStorage>(storage: &B, offset: u64) -> CuResult<SectionHeader> {
     let descriptor = read_descriptor(storage, offset)?;
     let mut bytes = [0u8; 512];
@@ -418,7 +446,7 @@ pub fn read_main<B: ByteStorage>(storage: &B) -> CuResult<MainHeader> {
     let (header, _) = decode_from_slice::<MainHeader, _>(&bytes, standard())
         .map_err(|e| CuError::from("Invalid main header").add_cause(&e.to_string()))?;
     if header.magic != MAIN_MAGIC
-        || header.format_version != UNIFIED_LOG_FORMAT_VERSION
+        || !matches!(header.format_version, 2 | UNIFIED_LOG_FORMAT_VERSION)
         || header.page_size == 0
         || !(header.page_size as u64).is_multiple_of(BLOCK)
         || header.sections_begin < header.page_size as u64
@@ -798,6 +826,9 @@ impl<B: ByteStorage> ByteLogger<B> {
         after_reset: bool,
     ) -> CuResult<Self> {
         let header = read_main(&storage)?;
+        if header.format_version != UNIFIED_LOG_FORMAT_VERSION {
+            return Err(CuError::from("Cannot append to a previous log format"));
+        }
         if !header.clean_close && !after_reset {
             return Err(CuError::from("Cannot append: log was not cleanly closed"));
         }
@@ -1010,7 +1041,18 @@ impl<B: ByteStorage> ByteLogger<B> {
         };
         let mut encoder = EncoderImpl::new(writer, standard());
         value.encode(&mut encoder).map_err(|_| CuError::from("Cannot append: static metadata does not match; appending different applications or versions to the same log is not supported."))?;
-        if encoder.into_writer().position != h.used as u64 {
+        let used = encoder.into_writer().position;
+        if used != h.used as u64 {
+            // Older metadata bodies ended with a varint catalog offset.
+            let remaining = (h.used as u64 - used) as usize;
+            if kind == UnifiedLogType::ApplicationMetadata && remaining <= 9 {
+                let mut tail = [0; 9];
+                region.read(used, &mut tail[..remaining])?;
+                if matches!(decode_from_slice::<u64, _>(&tail[..remaining], standard()), Ok((_, n)) if n == remaining)
+                {
+                    return Ok(());
+                }
+            }
             return Err(CuError::from(
                 "Cannot append: static metadata does not match; appending different applications or versions to the same log is not supported.",
             ));
@@ -1153,53 +1195,22 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
         metadata: &ApplicationMetadata,
         catalog: Option<&C>,
     ) -> CuResult<()> {
-        #[derive(Encode)]
-        struct MetadataBody<'a> {
-            app_type: &'a str,
-            app_name: &'a str,
-            app_version: &'a str,
-            git_commit: Option<&'a str>,
-            git_dirty: Option<bool>,
-            subsystem_id: Option<&'a str>,
-            subsystem_code: u16,
-            effective_config_ron: &'a str,
-            missions: &'a [alloc::string::String],
-            catalog_offset: u64,
-        }
-        let mut metadata = MetadataBody {
-            app_type: &metadata.app_type,
-            app_name: &metadata.app_name,
-            app_version: &metadata.app_version,
-            git_commit: metadata.git_commit.as_deref(),
-            git_dirty: metadata.git_dirty,
-            subsystem_id: metadata.subsystem_id.as_deref(),
-            subsystem_code: metadata.subsystem_code,
-            effective_config_ron: &metadata.effective_config_ron,
-            missions: &metadata.missions,
-            catalog_offset: 0,
-        };
         let new_epoch = self.record_boot_metadata && self.header.metadata_offset != 0;
         let catalog_size = catalog
             .map(|c| encoded_size(c).and_then(|s| aligned(HEADER + s)))
             .transpose()?
             .unwrap_or(0);
-        let mut base = self.header.page_size as u64;
-        let mut app_size = 0;
-        for _ in 0..8 {
-            app_size = aligned(HEADER + encoded_size(&metadata)?)?;
-            if new_epoch {
-                base = self.next_extent(app_size + catalog_size)?;
-            }
-            let offset = if catalog.is_some() {
-                base + app_size
-            } else {
-                0
-            };
-            if metadata.catalog_offset == offset {
-                break;
-            }
-            metadata.catalog_offset = offset;
-        }
+        let app_size = aligned(HEADER + encoded_size(metadata)?)?;
+        let base = if new_epoch {
+            self.next_extent(app_size + catalog_size)?
+        } else {
+            self.header.page_size as u64
+        };
+        let catalog_offset = if catalog.is_some() {
+            base + app_size
+        } else {
+            0
+        };
         let end = base
             .checked_add(app_size)
             .and_then(|s| s.checked_add(catalog_size))
@@ -1217,7 +1228,7 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
             self.write_boot_metadata(
                 UnifiedLogType::ApplicationMetadata,
                 app_size,
-                &metadata,
+                metadata,
                 context,
             )?;
             if let Some(catalog) = catalog {
@@ -1239,13 +1250,13 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
             return Ok(());
         }
         if self.header.metadata_offset != 0 {
-            self.compare(base, UnifiedLogType::ApplicationMetadata, &metadata)?;
+            self.compare(base, UnifiedLogType::ApplicationMetadata, metadata)?;
+            let catalog_offset = read_header(&self.storage, base)?.next_section;
+            if catalog.is_some() != (catalog_offset != 0) {
+                return Err(CuError::from("Static metadata catalog presence differs"));
+            }
             if let Some(catalog) = catalog {
-                self.compare(
-                    metadata.catalog_offset,
-                    UnifiedLogType::ValueDecodeCatalog,
-                    catalog,
-                )?;
+                self.compare(catalog_offset, UnifiedLogType::ValueDecodeCatalog, catalog)?;
             }
             self.activate()?;
             return Ok(());
@@ -1262,13 +1273,13 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
         self.write_static(
             base,
             app_size,
-            metadata.catalog_offset,
+            catalog_offset,
             UnifiedLogType::ApplicationMetadata,
-            &metadata,
+            metadata,
         )?;
         if let Some(catalog) = catalog {
             self.write_static(
-                metadata.catalog_offset,
+                catalog_offset,
                 catalog_size,
                 0,
                 UnifiedLogType::ValueDecodeCatalog,

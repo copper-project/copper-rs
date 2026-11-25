@@ -71,6 +71,8 @@ pub(crate) fn discover(path: &Path) -> CuResult<Vec<RecordedRun>> {
     let mut reader = build_read_logger(path)?;
     let mut metadata = reader.application_metadata()?;
     let mut metadata_position = LogPosition(reader.raw_main_header().metadata_offset);
+    let mut catalog_position = LogPosition(0);
+    let mut next_after_metadata = 0;
     let beginning = reader.position();
     let mut runs = Vec::<RecordedRun>::new();
     let mut remaining = reader.raw_main_header().sections_end / 512 + 1;
@@ -93,22 +95,18 @@ pub(crate) fn discover(path: &Path) -> CuResult<Vec<RecordedRun>> {
             && position.0 >= reader.raw_main_header().sections_begin
             && !header.is_open
         {
-            reader.seek(position)?;
-            let (_, bytes) = reader.raw_read_section()?;
-            let (next, used) = decode_from_slice(&bytes, standard())
-                .map_err(|e| CuError::new_with_cause("Invalid boot metadata", e))?;
-            if used != bytes.len() {
-                return Err("Invalid boot metadata length".into());
-            }
-            metadata = Some(next);
+            metadata = Some(reader.application_metadata_at(position.0)?);
             metadata_position = position;
         }
-        if header.entry_type == UnifiedLogType::ValueDecodeCatalog
-            && metadata
-                .as_ref()
-                .is_none_or(|m| m.catalog_offset != position.0)
-        {
-            return Err("Unexpected ValueDecodeCatalog outside the recorded metadata".into());
+        if header.entry_type == UnifiedLogType::ApplicationMetadata && !header.is_open {
+            catalog_position = LogPosition(0);
+            next_after_metadata = header.next_section;
+        }
+        if header.entry_type == UnifiedLogType::ValueDecodeCatalog {
+            if position.0 != next_after_metadata || header.is_open {
+                return Err("Unexpected or uncommitted ValueDecodeCatalog".into());
+            }
+            catalog_position = position;
         }
         if matches!(
             header.entry_type,
@@ -122,7 +120,7 @@ pub(crate) fn discover(path: &Path) -> CuResult<Vec<RecordedRun>> {
         } else {
             let mut run = RecordedRun::new(runs.len(), beginning);
             run.metadata_position = metadata_position;
-            run.catalog_position = LogPosition(metadata.as_ref().map_or(0, |m| m.catalog_offset));
+            run.catalog_position = catalog_position;
             run.run_id = run_id;
             run.mission_index = header.context.mission_index;
             if let Some(metadata) = &metadata {
@@ -197,7 +195,7 @@ pub(crate) fn discover(path: &Path) -> CuResult<Vec<RecordedRun>> {
         let mut run = RecordedRun::new(0, beginning);
         run.metadata_position = metadata_position;
         if let Some(metadata) = metadata {
-            run.catalog_position = LogPosition(metadata.catalog_offset);
+            run.catalog_position = catalog_position;
             run.config = (!metadata.effective_config_ron.is_empty())
                 .then_some(metadata.effective_config_ron);
             run.missions.extend(metadata.missions.into_iter().take(1));
@@ -366,7 +364,6 @@ mod tests {
             subsystem_code: 0,
             effective_config_ron: "(tasks:[])".into(),
             missions: vec!["alpha".into(), "beta".into()],
-            catalog_offset: 0,
         }
     }
     fn directory() -> tempfile::TempDir {

@@ -103,14 +103,7 @@ mod tests {
             .with_logger::<memmap::MmapSectionStorage, UnifiedLoggerWrite>(shared.clone())
             .with_resources(|_| {
                 let mut reader = UnifiedLoggerRead::new(&path).unwrap();
-                assert!(
-                    reader
-                        .application_metadata()
-                        .unwrap()
-                        .unwrap()
-                        .catalog_offset
-                        > 0
-                );
+                assert!(reader.application_metadata().unwrap().is_some());
                 assert!(
                     reader
                         .read_next_section_type(UnifiedLogType::ValueDecodeCatalog)
