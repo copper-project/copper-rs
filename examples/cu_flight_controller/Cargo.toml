@@ -27,7 +27,7 @@ embedded_build_release = true
 ignored = ["bincode"]
 
 [dependencies]
-bevy_ecs = { version = "0.19.1", default-features = false }
+bevy_ecs = { workspace = true }
 ## Flight controller components
 
 ### Hardware
@@ -82,7 +82,6 @@ avian3d = { workspace = true, default-features = false, features = [
   "collider-from-mesh",
   "debug-plugin",
   "parallel",
-  "f32",
   "3d",
   "parry-f32",
 ], optional = true }

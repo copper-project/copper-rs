@@ -821,11 +821,11 @@ impl ReflectSerializedPayloadSchema {
 }
 
 #[cfg(feature = "reflect")]
-impl<T> bevy_reflect::FromType<T> for ReflectSerializedPayloadSchema
+impl<T> bevy_reflect::CreateTypeData<T> for ReflectSerializedPayloadSchema
 where
     T: SerializedPayloadSchema,
 {
-    fn from_type() -> Self {
+    fn create_type_data((): ()) -> Self {
         Self {
             schema_fn: T::serialized_payload_schema,
         }

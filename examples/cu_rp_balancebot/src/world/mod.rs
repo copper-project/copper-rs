@@ -1,5 +1,4 @@
 use crate::motor_model;
-use avian3d::math::Vector;
 use avian3d::physics_transform::{PreSolveDeltaPosition, PreSolveDeltaRotation};
 use avian3d::prelude::*;
 use bevy::asset::RenderAssetUsages;
@@ -84,7 +83,7 @@ enum SimulationState {
 pub struct DragState {
     pub override_motor: bool,
     /// Currently active drag: (entity, force)
-    pub active_drag: Option<(Entity, Vector)>,
+    pub active_drag: Option<(Entity, Vec3)>,
 }
 
 #[derive(Resource, Default)]
@@ -105,7 +104,7 @@ pub struct SplitSceneCamera;
 struct SceneLoadingOverlay;
 
 #[derive(Component, Debug, Clone, Copy, Default)]
-pub struct AppliedForce(pub Vector);
+pub struct AppliedForce(pub Vec3);
 
 #[derive(Resource, Clone, Copy)]
 struct WorldLayout {
@@ -854,7 +853,7 @@ fn get_rigid_body_entity(
 
 /// Called immediately when drag starts (before any mouse movement)
 fn on_drag_start(
-    drag: On<Pointer<DragStart>>,
+    drag: On<PointerDragStart>,
     parents: Query<(&ChildOf, Option<&RigidBody>)>,
     cart: Query<(), With<Cart>>,
     mut drag_state: ResMut<DragState>,
@@ -872,11 +871,11 @@ fn on_drag_start(
     }
 
     // Initialize drag with zero force - on_drag will update with actual force
-    drag_state.active_drag = Some((target_entity, Vector::ZERO));
+    drag_state.active_drag = Some((target_entity, Vec3::ZERO));
 }
 
 fn on_drag(
-    drag: On<Pointer<Drag>>,
+    drag: On<PointerDrag>,
     camera_query: Option<Single<&Transform, With<Camera3d>>>,
     parents: Query<(&ChildOf, Option<&RigidBody>)>,
     cart: Query<(), With<Cart>>,
@@ -893,7 +892,7 @@ fn on_drag(
         return;
     };
 
-    // Use drag.entity (the Pointer<E>.entity field) to get the originally hit entity
+    // Use drag.entity to get the originally hit entity
     let original_target = drag.entity;
     let target_entity = get_rigid_body_entity(original_target, &parents);
     let is_cart = cart.get(target_entity).is_ok();
@@ -908,7 +907,7 @@ fn on_drag(
         drag.distance.x * camera_transform.right() + drag.distance.y * camera_transform.down();
 
     // apply a force to that object based on the world length and direction of the mouse drag
-    let applied_force_vec: Vector = (drag_delta_world / drag_control.pixels_per_newton)
+    let applied_force_vec: Vec3 = (drag_delta_world / drag_control.pixels_per_newton)
         .clamp_length_max(drag_control.max_force);
 
     // Store the drag state - a system will apply force continuously
@@ -920,7 +919,7 @@ fn on_drag(
 }
 
 fn on_drag_end(
-    drag: On<Pointer<DragEnd>>,
+    drag: On<PointerDragEnd>,
     parents: Query<(&ChildOf, Option<&RigidBody>)>,
     cart: Query<(), With<Cart>>,
     mut applied_forces: Query<&mut AppliedForce>,
@@ -941,7 +940,7 @@ fn on_drag_end(
     drag_state.active_drag = None;
 
     if let Ok(mut recorded_force) = applied_forces.get_mut(target_entity) {
-        recorded_force.0 = Vector::ZERO;
+        recorded_force.0 = Vec3::ZERO;
     }
 }
 
@@ -1039,16 +1038,16 @@ fn reset_sim(
                 let is_cart: bool = cart_component.is_some();
 
                 // Calculate the target translations once so we can apply them to both Transform and Position.
-                let rod_translation: Vector = Vector::new(
+                let rod_translation = Vec3::new(
                     0.0,
                     ROD_HEIGHT / 2.0 + CART_HEIGHT,
                     CART_DEPTH / 2.0 + ROD_DEPTH / 2.0 + AXIS_LENGTH,
                 );
-                let mut cart_translation: Vector = transform
+                let mut cart_translation = transform
                     .as_ref()
-                    .map(|t| Vector::new(t.translation.x, t.translation.y, t.translation.z))
+                    .map(|t| t.translation)
                     .or_else(|| position.as_ref().map(|p| p.0))
-                    .unwrap_or(Vector::ZERO);
+                    .unwrap_or(Vec3::ZERO);
                 cart_translation.x = 0.0;
 
                 if let Some(mut transform) = transform {
@@ -1077,16 +1076,16 @@ fn reset_sim(
                     *rotation = Rotation::IDENTITY;
                 }
                 if let Some(mut presolve_position) = presolve_position {
-                    **presolve_position = Vector::ZERO;
+                    **presolve_position = Vec3::ZERO;
                 }
                 if let Some(mut presolve_rotation) = presolve_rotation {
-                    **presolve_rotation = Rotation::IDENTITY;
+                    **presolve_rotation = Quat::IDENTITY;
                 }
                 if let Some(mut ext_force) = ext_force {
-                    ext_force.0 = Vector::ZERO;
+                    ext_force.0 = Vec3::ZERO;
                 }
                 if let Some(mut constant_force) = constant_force {
-                    constant_force.0 = Vector::ZERO;
+                    constant_force.0 = Vec3::ZERO;
                 }
 
                 // Defer force resets until after this query borrow is dropped.

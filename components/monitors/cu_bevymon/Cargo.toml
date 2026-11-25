@@ -48,7 +48,3 @@ ratatui = { version = "0.30.0", default-features = false }
 soft_ratatui = { version = "0.2.0", default-features = false, features = [
   "embedded-ttf",
 ] }
-
-[target.'cfg(false)'.dependencies]
-# Constrain Bevy's transitive derive implementation to its syn 2-compatible release.
-encase_derive_impl = { workspace = true }

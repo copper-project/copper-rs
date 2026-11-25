@@ -380,10 +380,10 @@ compact_str = { version = "0.10", default-features = false, features = [
   "serde",
 ] }
 paste = { version = "1.0.15", default-features = false }
-bevy_reflect = { version = "0.19.1", default-features = false, features = [
+bevy_reflect = { version = "0.20.1", default-features = false, features = [
   "auto_register_static",
 ] }
-bevy_reflect_derive = "0.19.1"
+bevy_reflect_derive = "0.20.1"
 
 # used across testing
 tempfile = { version = "3.23", default-features = false }
@@ -416,8 +416,10 @@ hashbrown = { version = "0.17", features = ["serde"] }
 # Shared external dependencies of workspace members.
 anyhow = { version = "1.0", default-features = false }
 arrayvec = { version = "0.7", default-features = false }
-avian3d = { version = "0.7.0", default-features = false }
-bevy = { version = "0.19.1", default-features = false }
+avian3d = { version = "0.8.0", default-features = false }
+bevy = { version = "0.20.1", default-features = false }
+bevy_anti_alias = "0.20.1"
+bevy_ecs = { version = "0.20.1", default-features = false }
 buddy_system_allocator = { version = "0.13", default-features = false }
 bytemuck = "1.23.0"
 # Use ZIP >=9 until https://github.com/epwalsh/rust-cached-path/pull/92 is released.
@@ -431,8 +433,6 @@ ctrlc = "3.5"
 defmt = { version = "1.0", default-features = false }
 defmt-rtt = "1.1"
 embedded-alloc = { version = "0.7", default-features = false }
-# Bevy 0.19.1 passes syn 2 types into this crate, but 0.12.2 switched to syn 3.
-encase_derive_impl = "=0.12.1"
 ffmpeg-next = { version = "9.0.0", default-features = false, features = [
   "codec",
   "format",

@@ -68,7 +68,7 @@ use bevy::render::render_resource::{
 };
 use bevy::render::renderer::{RenderContext, ViewQuery};
 use bevy::render::texture::GpuImage;
-use bevy::render::view::ViewDepthTexture;
+use bevy::render::view::ViewDepthStencilTexture;
 #[cfg(not(target_arch = "wasm32"))]
 use cached_path::{Cache, Error as CacheError, ProgressBar};
 #[cfg(feature = "bevymon")]
@@ -740,7 +740,7 @@ type ZedCameraFilter = (
 #[derive(Clone, Resource)]
 struct ZedDepthTexture(Handle<Image>);
 
-impl ExtractResource for ZedDepthTexture {
+impl ExtractResource<RenderApp> for ZedDepthTexture {
     type Source = Self;
 
     fn extract_resource(source: &Self::Source) -> Self {
@@ -1494,7 +1494,7 @@ fn zed_depth_preview() -> Image {
 }
 
 fn copy_zed_depth_texture(
-    view: ViewQuery<(&ExtractedCamera, &ViewDepthTexture)>,
+    view: ViewQuery<(&ExtractedCamera, &ViewDepthStencilTexture)>,
     depth_texture: Option<Res<ZedDepthTexture>>,
     image_assets: Res<RenderAssets<GpuImage>>,
     mut ctx: RenderContext,
@@ -1512,7 +1512,7 @@ fn copy_zed_depth_texture(
 
     ctx.command_encoder().copy_texture_to_texture(
         TexelCopyTextureInfo {
-            texture: &view_depth.texture,
+            texture: view_depth.texture(),
             mip_level: 0,
             origin: Origin3d::default(),
             aspect: TextureAspect::DepthOnly,
@@ -1942,7 +1942,9 @@ fn spawn_quadcopter_when_world_ready(
             AngularInertia::new(Vec3::new(0.012, 0.02, 0.012)),
             AngularDamping(0.4),
             LinearDamping(0.2),
-            SweptCcd::NON_LINEAR,
+            SweptCcd::new()
+                .with_filter(CcdFilter::ALL)
+                .with_threshold(0.0),
         ))
         .insert(Visibility::Visible);
     commands.remove_resource::<PendingQuadcopterSpawn>();
