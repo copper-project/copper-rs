@@ -166,6 +166,7 @@ config_struct!(LogStreamDestinationConfig {
     link,
     fec,
     recovery_interval,
+    metadata_repeat_secs,
     max_record_bytes,
 });
 config_struct!(LogStreamTransportConfig { type_, resource });
@@ -314,5 +315,53 @@ impl StaticExpr for LoggingConfig {
             copperlist_count: #copperlist_count, slab_size_mib: #slab_size_mib, section_size_mib: #section_size_mib,
             keyframe_interval: Some(#interval), keyframe_capacity: #keyframe_capacity, codecs: vec![],
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::{BTreeMap, BTreeSet};
+    use syn::{ExprStruct, Item};
+
+    #[test]
+    fn config_struct_mirrors_every_declared_field() {
+        let schema = syn::parse_file(include_str!("../../cu29_runtime/src/config.rs")).unwrap();
+        let structs: BTreeMap<_, _> = schema
+            .items
+            .into_iter()
+            .filter_map(|item| {
+                let Item::Struct(definition) = item else {
+                    return None;
+                };
+                Some((definition.ident.to_string(), definition.fields))
+            })
+            .collect();
+
+        // Read the declarations before cfg expansion so optional mirrors are checked too.
+        let emitter = syn::parse_file(include_str!("static_config.rs")).unwrap();
+        let mut checked = 0;
+        for item in emitter.items {
+            let Item::Macro(item) = item else { continue };
+            if !item.mac.path.is_ident("config_struct") {
+                continue;
+            }
+            let mirror: ExprStruct = item.mac.parse_body().unwrap();
+            let name = mirror.path.get_ident().unwrap().to_string();
+            let expected: BTreeSet<_> = structs[&name]
+                .iter()
+                .map(|field| field.ident.as_ref().unwrap().to_string())
+                .collect();
+            let actual: BTreeSet<_> = mirror
+                .fields
+                .iter()
+                .map(|field| match &field.member {
+                    syn::Member::Named(ident) => ident.to_string(),
+                    syn::Member::Unnamed(_) => panic!("expected named fields in {name}"),
+                })
+                .collect();
+            assert_eq!(actual, expected, "static config fields for {name}");
+            checked += 1;
+        }
+        assert!(checked > 0, "no config_struct! mirrors found");
     }
 }

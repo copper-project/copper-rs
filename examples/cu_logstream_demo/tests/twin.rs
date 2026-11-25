@@ -312,7 +312,6 @@ fn sender_metadata() -> cu29_unifiedlog::ApplicationMetadata {
         subsystem_code: 0,
         effective_config_ron: String::new(),
         missions: vec!["default".into()],
-        catalog_offset: 0,
     }
 }
 
