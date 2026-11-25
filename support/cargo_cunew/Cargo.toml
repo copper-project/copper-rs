@@ -24,7 +24,7 @@ semver = "~1.0"
 clap = { workspace = true }
 include_dir = "0.7.4"
 pathdiff = "0.2.3"
-ureq = { version = "~3.4", default-features = false, features = [
+ureq = { version = "~3.5", default-features = false, features = [
   "json",
   "rustls",
 ] }
