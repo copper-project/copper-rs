@@ -224,7 +224,7 @@ impl ManualInbox {
                 let native = match record {
                     ManualRecord::Capture(list) => {
                         let out = &mut self.bytes[..self.buffers.max_capture_bytes];
-                        let n = if self.selective {
+                        let n = if P::SELECTIVE_CAPTURE.unwrap_or(self.selective) {
                             crate::capture::encode_capture_into(list, out)
                                 .map_err(|e| CuError::from(e.to_string()))?
                         } else {

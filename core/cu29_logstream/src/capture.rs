@@ -25,6 +25,10 @@ macro_rules! __with_reconstruction_verification {
 pub trait CaptureDataSet: CopperListTuple {
     /// Per-output flags: `true` for reconstructed outputs, `false` for captured outputs.
     const RECONSTRUCTION: &'static [bool];
+    /// Generated datasets select the native capture encoding at compile time.
+    /// Other implementations use the session schema to select it at startup.
+    #[doc(hidden)]
+    const SELECTIVE_CAPTURE: Option<bool> = None;
     fn stream_schema() -> ApplicationSchema;
     fn encode_capture<E: Encoder>(&self, encoder: &mut E) -> core::result::Result<(), EncodeError>;
     fn validate_capture(&self) -> Result<()>;
