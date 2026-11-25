@@ -2169,6 +2169,21 @@ pub struct PlannerConfig {
 }
 
 impl PlannerConfig {
+    /// Reconstruct the validated planner settings emitted by the runtime macro.
+    #[doc(hidden)]
+    pub fn from_static(kind: PlannerKind, config: Option<Config<StaticStorage>>) -> Self {
+        Self {
+            kind,
+            config: config.map(|params| {
+                let mut owned = Config::new();
+                for (key, value) in params.entries() {
+                    owned.set(key, value.into_owned());
+                }
+                owned
+            }),
+        }
+    }
+
     #[allow(dead_code)]
     pub fn kind(&self) -> PlannerKind {
         self.kind

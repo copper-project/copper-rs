@@ -277,7 +277,31 @@ impl Value {
 
 impl Value {
     fn from_static(value: StaticValue) -> Self {
-        Self(RonValue::deserialize(value).expect("static config must represent a RON value"))
+        fn owned(value: StaticValue) -> RonValue {
+            match value {
+                StaticValue::Bool(v) => v.into(),
+                StaticValue::Char(v) => v.into(),
+                StaticValue::String(v) => v.into(),
+                StaticValue::Bytes(v) => RonValue::Bytes(v.to_vec()),
+                StaticValue::I8(v) => v.into(),
+                StaticValue::I16(v) => v.into(),
+                StaticValue::I32(v) => v.into(),
+                StaticValue::I64(v) => v.into(),
+                StaticValue::U8(v) => v.into(),
+                StaticValue::U16(v) => v.into(),
+                StaticValue::U32(v) => v.into(),
+                StaticValue::U64(v) => v.into(),
+                StaticValue::F32(v) => v.into(),
+                StaticValue::F64(v) => v.into(),
+                StaticValue::Unit => RonValue::Unit,
+                StaticValue::Option(v) => RonValue::Option(v.map(|v| Box::new(owned(*v)))),
+                StaticValue::Seq(v) => RonValue::Seq(v.iter().copied().map(owned).collect()),
+                StaticValue::Map(v) => {
+                    RonValue::Map(v.iter().map(|&(k, v)| (owned(k), owned(v))).collect())
+                }
+            }
+        }
+        Self(owned(value))
     }
 }
 

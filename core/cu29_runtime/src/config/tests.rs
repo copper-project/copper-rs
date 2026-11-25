@@ -2670,6 +2670,24 @@ fn static_and_owned_configs_share_read_and_serialization_behavior() {
 }
 
 #[test]
+fn static_planner_preserves_owned_parameter_values() {
+    use StaticValue as V;
+    const NESTED: V = V::Map(&[
+        (V::Char('x'), V::Seq(&[V::I16(-3), V::F32(-0.0), V::Unit])),
+        (V::Bool(true), V::Option(Some(&V::Bytes(&[0, 255])))),
+        (V::U64(u64::MAX), V::Option(None)),
+    ]);
+    let planner = PlannerConfig::from_static(
+        PlannerKind::ExplicitSchedule,
+        Some(Config::from_static(&[("nested", NESTED)])),
+    );
+    let params = planner.get_config().unwrap();
+    let (_, value) = params.entries().next().unwrap();
+    assert_eq!(planner.kind(), PlannerKind::ExplicitSchedule);
+    assert_eq!(value.as_ron(), &ron::Value::deserialize(NESTED).unwrap());
+}
+
+#[test]
 fn static_structured_values_deserialize_directly() {
     #[derive(Deserialize, Debug, PartialEq)]
     struct Settings {
