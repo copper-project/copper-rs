@@ -2708,9 +2708,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         let config_load_stmt = if static_config {
             use static_config::StaticExpr;
-            let runtime = copper_config.runtime.expr();
-            let logging = copper_config.logging.expr();
-            let streaming = copper_config.log_streaming.expr();
+            // Graphs and component declarations are compiled separately.
+            let CuConfig {
+                runtime, logging, log_streaming,
+                graphs: _, constants: _, monitors: _, resources: _, bridges: _,
+            } = &copper_config;
+            let runtime = runtime.expr();
+            let logging = logging.expr();
+            let streaming = log_streaming.expr();
             let reject_override = std.then(|| quote!{if config_override.is_some() {return Err("Runtime overrides are disabled by static-config".into());}});
             quote! {
                 #reject_override

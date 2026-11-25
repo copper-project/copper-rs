@@ -86,7 +86,7 @@ runs:
       run: |
         cargo +${{ inputs.toolchain }} test -p cu29-logstream --test pacing
         cargo +${{ inputs.toolchain }} test -p cu29 --features logstream --test logstream_runtime
-        cargo +${{ inputs.toolchain }} test -p cu29 --features logstream,static-config --test logstream_configured_runtime
+        cargo +${{ inputs.toolchain }} test -p cu29 --features logstream,static-config,clock-sync --test logstream_configured_runtime
         cargo +${{ inputs.toolchain }} clippy -p cu-logstream-demo --all-targets --features replay -- --deny warnings
         cargo +${{ inputs.toolchain }} build -p cu-logstream-demo --features replay --bins
         python3 examples/cu_logstream_demo/run.py all --binary "${CARGO_TARGET_DIR:-target}/debug/cu-logstream-demo"
