@@ -130,15 +130,98 @@ impl Encode for CuGstBuffer {
 
 pub type CuDefaultGStreamer = CuGStreamer<8>;
 
+/// Frame delivery policy for [`CuGStreamer`]'s internal ring buffer.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Reflect)]
+pub enum FrameMode {
+    /// Deliver buffered frames in FIFO order (default).
+    #[default]
+    Fifo,
+    /// Deliver the most recent buffered frame and discard older queued frames.
+    Newest,
+}
+
+impl FrameMode {
+    pub fn from_config(config: &ComponentConfig) -> CuResult<Self> {
+        match config.get::<String>("frame_mode")? {
+            None => Ok(Self::default()),
+            Some(mode) => match mode.as_str() {
+                "fifo" => Ok(Self::Fifo),
+                "newest" => Ok(Self::Newest),
+                other => Err(CuError::from(format!(
+                    "Invalid frame_mode '{other}': expected \"fifo\" or \"newest\"."
+                ))),
+            },
+        }
+    }
+}
+
+struct FrameRing<const N: usize> {
+    buffer: FixedCircularBuffer<CuGstBuffer, N>,
+    mode: FrameMode,
+    dropped_frames: u64,
+}
+
+impl<const N: usize> FrameRing<N> {
+    fn new(mode: FrameMode) -> Self {
+        Self {
+            buffer: FixedCircularBuffer::new(),
+            mode,
+            dropped_frames: 0,
+        }
+    }
+
+    fn push(&mut self, frame: CuGstBuffer) {
+        if self.buffer.push_back(frame).is_some() {
+            self.dropped_frames = self.dropped_frames.saturating_add(1);
+        }
+    }
+
+    fn pop(&mut self) -> Option<CuGstBuffer> {
+        match self.mode {
+            FrameMode::Fifo => self.buffer.pop_front(),
+            FrameMode::Newest => {
+                let newest = self.buffer.pop_back()?;
+                let stale = self.buffer.len() as u64;
+                if stale > 0 {
+                    self.dropped_frames = self.dropped_frames.saturating_add(stale);
+                    self.buffer.clear();
+                }
+                Some(newest)
+            }
+        }
+    }
+
+    fn dropped_frames(&self) -> u64 {
+        self.dropped_frames
+    }
+
+    fn reset(&mut self) {
+        self.buffer.clear();
+        self.dropped_frames = 0;
+    }
+
+    fn clear_buffer(&mut self) {
+        self.buffer.clear();
+    }
+}
+
 #[derive(Reflect)]
 #[reflect(from_reflect = false)]
 pub struct CuGStreamer<const N: usize> {
     #[reflect(ignore)]
     pipeline: Pipeline,
     #[reflect(ignore)]
-    circular_buffer: Arc<Mutex<FixedCircularBuffer<CuGstBuffer, N>>>,
+    frame_ring: Arc<Mutex<FrameRing<N>>>,
     #[reflect(ignore)]
     _appsink: AppSink,
+    dropped_frames: u64,
+}
+
+impl<const N: usize> CuGStreamer<N> {
+    /// Returns the number of frames dropped by the frame ring since the last `start()`.
+    pub fn dropped_frames(&self) -> u64 {
+        self.frame_ring.lock().unwrap().dropped_frames()
+    }
 }
 
 impl<const N: usize> Freezable for CuGStreamer<N> {}
@@ -159,6 +242,7 @@ impl<const N: usize> CuSrcTask for CuGStreamer<N> {
         }
 
         let config = config.ok_or_else(|| CuError::from("No config provided."))?;
+        let frame_mode = FrameMode::from_config(config)?;
 
         let pipeline = if let Some(pipeline_str) = config.get::<String>("pipeline")? {
             // Pipeline properties can contain credentials.
@@ -191,23 +275,23 @@ impl<const N: usize> CuSrcTask for CuGStreamer<N> {
 
         appsink.set_caps(Some(&caps));
 
-        let circular_buffer = Arc::new(Mutex::new(FixedCircularBuffer::new()));
+        let frame_ring = Arc::new(Mutex::new(FrameRing::new(frame_mode)));
 
         // Configure `appsink` to handle incoming buffers
         appsink.set_callbacks(
             AppSinkCallbacks::builder()
                 .new_sample({
-                    let circular_buffer = circular_buffer.clone();
+                    let frame_ring = frame_ring.clone();
                     move |appsink| {
                         let sample = appsink
                             .pull_sample()
                             .map_err(|_| gstreamer::FlowError::Eos)?;
                         let buffer: &BufferRef =
                             sample.buffer().ok_or(gstreamer::FlowError::Error)?;
-                        circular_buffer
+                        frame_ring
                             .lock()
                             .unwrap()
-                            .push_back(CuGstBuffer::Live(buffer.to_owned()));
+                            .push(CuGstBuffer::Live(buffer.to_owned()));
                         Ok(FlowSuccess::Ok)
                     }
                 })
@@ -216,15 +300,17 @@ impl<const N: usize> CuSrcTask for CuGStreamer<N> {
 
         let s = CuGStreamer {
             pipeline,
-            circular_buffer,
+            frame_ring,
             _appsink: appsink,
+            dropped_frames: 0,
         };
         Ok(s)
     }
 
     fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
         debug!(ctx, "Gstreamer: Starting pipeline.");
-        self.circular_buffer.lock().unwrap().clear();
+        self.frame_ring.lock().unwrap().reset();
+        self.dropped_frames = 0;
         self.pipeline
             .set_state(gstreamer::State::Playing)
             .map_err(|e| CuError::new_with_cause("Failed to start the gstreamer pipeline.", e))?;
@@ -233,14 +319,36 @@ impl<const N: usize> CuSrcTask for CuGStreamer<N> {
     }
 
     fn process(&mut self, ctx: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
-        let mut circular_buffer = self.circular_buffer.lock().unwrap();
-        if let Some(buffer) = circular_buffer.pop_front() {
+        let (buffer, dropped) = {
+            let mut frame_ring = self.frame_ring.lock().unwrap();
+            let buffer = frame_ring.pop();
+            let dropped = frame_ring.dropped_frames();
+            (buffer, dropped)
+        };
+        let prev_dropped = self.dropped_frames;
+        self.dropped_frames = dropped;
+
+        if let Some(buffer) = buffer {
             // TODO: do precise timing metadata from gstreamer
             new_msg.tov = ctx.now().into();
             new_msg.set_payload(buffer);
         } else {
             debug!(ctx, "Gstreamer: Empty circular buffer, sending no payload.");
             new_msg.clear_payload();
+        }
+
+        if dropped > 0 {
+            new_msg
+                .metadata
+                .set_status(format_args!("dropped: {dropped}"));
+            if dropped > prev_dropped {
+                debug!(
+                    ctx,
+                    "Gstreamer: dropped {} frames (+{} since last tick).",
+                    dropped,
+                    dropped - prev_dropped
+                );
+            }
         }
         Ok(())
     }
@@ -249,9 +357,156 @@ impl<const N: usize> CuSrcTask for CuGStreamer<N> {
         self.pipeline
             .set_state(gstreamer::State::Null)
             .map_err(|e| CuError::new_with_cause("Failed to stop the gstreamer pipeline.", e))?;
-        self.circular_buffer.lock().unwrap().clear();
+        let mut frame_ring = self.frame_ring.lock().unwrap();
+        frame_ring.clear_buffer();
+        self.dropped_frames = frame_ring.dropped_frames();
         Ok(())
     }
 }
 
-// No test here, see the integration tests.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn frame(id: u8) -> CuGstBuffer {
+        CuGstBuffer::Replay(vec![id].into())
+    }
+
+    fn frame_id(buffer: CuGstBuffer) -> u8 {
+        buffer.map_readable().unwrap().as_slice()[0]
+    }
+
+    #[test]
+    fn fifo_keeps_up_without_drops() {
+        let mut ring = FrameRing::<4>::new(FrameMode::Fifo);
+        ring.push(frame(1));
+        ring.push(frame(2));
+        ring.push(frame(3));
+
+        assert_eq!(ring.dropped_frames(), 0);
+        assert_eq!(frame_id(ring.pop().unwrap()), 1);
+        assert_eq!(frame_id(ring.pop().unwrap()), 2);
+        assert_eq!(frame_id(ring.pop().unwrap()), 3);
+        assert!(ring.pop().is_none());
+        assert_eq!(ring.dropped_frames(), 0);
+    }
+
+    #[test]
+    fn fifo_counts_overwritten_frames() {
+        let mut ring = FrameRing::<4>::new(FrameMode::Fifo);
+        for id in 0..6u8 {
+            ring.push(frame(id));
+        }
+
+        assert_eq!(ring.dropped_frames(), 2);
+        assert_eq!(frame_id(ring.pop().unwrap()), 2);
+        assert_eq!(frame_id(ring.pop().unwrap()), 3);
+        assert_eq!(frame_id(ring.pop().unwrap()), 4);
+        assert_eq!(frame_id(ring.pop().unwrap()), 5);
+        assert!(ring.pop().is_none());
+        assert_eq!(ring.dropped_frames(), 2);
+    }
+
+    #[test]
+    fn newest_delivers_latest_and_counts_overwritten_and_stale_frames() {
+        let mut ring = FrameRing::<4>::new(FrameMode::Newest);
+        for id in 0..6u8 {
+            ring.push(frame(id));
+        }
+
+        // 2 frames overwritten on push (0, 1); popping back delivers 5 and clears 3 stale (2, 3, 4).
+        assert_eq!(ring.dropped_frames(), 2);
+        assert_eq!(frame_id(ring.pop().unwrap()), 5);
+        assert_eq!(ring.dropped_frames(), 5);
+        assert!(ring.pop().is_none());
+        assert_eq!(ring.dropped_frames(), 5);
+    }
+
+    #[test]
+    fn newest_single_frame_has_no_drops() {
+        let mut ring = FrameRing::<4>::new(FrameMode::Newest);
+        ring.push(frame(42));
+
+        assert_eq!(frame_id(ring.pop().unwrap()), 42);
+        assert_eq!(ring.dropped_frames(), 0);
+        assert!(ring.pop().is_none());
+    }
+
+    #[test]
+    fn capacity_one_counts_every_overwrite_in_both_modes() {
+        for mode in [FrameMode::Fifo, FrameMode::Newest] {
+            let mut ring = FrameRing::<1>::new(mode);
+            for id in 0..4u8 {
+                ring.push(frame(id));
+            }
+            assert_eq!(ring.dropped_frames(), 3);
+            assert_eq!(frame_id(ring.pop().unwrap()), 3);
+            assert!(ring.pop().is_none());
+            assert_eq!(ring.dropped_frames(), 3);
+        }
+    }
+
+    #[test]
+    fn empty_pop_does_not_modify_drop_count() {
+        for mode in [FrameMode::Fifo, FrameMode::Newest] {
+            let mut ring = FrameRing::<2>::new(mode);
+            assert!(ring.pop().is_none());
+            assert_eq!(ring.dropped_frames(), 0);
+
+            ring.push(frame(1));
+            ring.push(frame(2));
+            ring.push(frame(3));
+            let _ = ring.pop();
+            let _ = ring.pop();
+            let drops = ring.dropped_frames();
+            assert!(ring.pop().is_none());
+            assert_eq!(ring.dropped_frames(), drops);
+        }
+    }
+
+    #[test]
+    fn reset_and_clear_buffer_lifecycle_semantics() {
+        let mut ring = FrameRing::<2>::new(FrameMode::Fifo);
+        ring.push(frame(1));
+        ring.push(frame(2));
+        ring.push(frame(3));
+        assert_eq!(ring.dropped_frames(), 1);
+
+        // stop(): clear queued frames while preserving dropped_frames
+        ring.clear_buffer();
+        assert!(ring.pop().is_none());
+        assert_eq!(ring.dropped_frames(), 1);
+
+        // start(): clear queued frames and reset dropped_frames
+        ring.push(frame(4));
+        ring.reset();
+        assert!(ring.pop().is_none());
+        assert_eq!(ring.dropped_frames(), 0);
+    }
+
+    #[test]
+    fn frame_mode_from_config_parsing() {
+        let empty = ComponentConfig::new();
+        assert_eq!(FrameMode::from_config(&empty).unwrap(), FrameMode::Fifo);
+
+        let mut fifo_cfg = ComponentConfig::new();
+        fifo_cfg.set("frame_mode", "fifo".to_string());
+        assert_eq!(FrameMode::from_config(&fifo_cfg).unwrap(), FrameMode::Fifo);
+
+        let mut newest_cfg = ComponentConfig::new();
+        newest_cfg.set("frame_mode", "newest".to_string());
+        assert_eq!(
+            FrameMode::from_config(&newest_cfg).unwrap(),
+            FrameMode::Newest
+        );
+
+        let mut invalid_cfg = ComponentConfig::new();
+        invalid_cfg.set("frame_mode", "drop_all".to_string());
+        let err = FrameMode::from_config(&invalid_cfg).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("drop_all") && msg.contains("fifo") && msg.contains("newest"),
+            "unexpected error message: {msg}"
+        );
+    }
+}

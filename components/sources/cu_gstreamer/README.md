@@ -16,10 +16,20 @@ Add the driver like any other source in Copper:
             config: {   // a gstreamer pipeline example that takes a mjpeg webcam and converts it to NV12. IMPORTANT: the appsink has to be named "copper"
                 "pipeline": "v4l2src device=/dev/video0 ! image/jpeg, width=1920, height=1080 ! jpegdec ! videoconvert ! video/x-raw, format=NV12 ! appsink name=copper",
                 "caps": "video/x-raw, format=NV12, width=1920, height=1080",  // this is what the Copper source will accept, here we just match the pipeline we define.
+                "frame_mode": "fifo",  // optional: "fifo" (default) or "newest"
             },
         ),
      ],
 ```
+
+### Frame mode and dropped-frame tracking
+
+The optional `"frame_mode"` parameter controls how buffered frames are drained on each `process()` tick:
+
+- `"fifo"` (default): delivers buffered frames in oldest-first order. When the ring buffer is full, incoming frames overwrite the oldest queued frame and increment the dropped-frame counter.
+- `"newest"`: delivers the most recent buffered frame and clears any older queued frames, counting both ring overwrites and discarded stale frames as dropped.
+
+Dropped frames can be inspected via `CuGStreamer::dropped_frames()` (and through `Reflect`). The counter resets on `start()` and is preserved across `stop()`. While the drop count is non-zero, `process()` also reports `dropped: <count>` in the output message metadata status.
 
 When you connect this driver to the rest of the system you need to use the `cu_gstreamer::CuGstBuffer` message type.
 
