@@ -317,3 +317,30 @@ impl StaticExpr for LoggingConfig {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cu29_runtime::config::CuConfig;
+
+    #[test]
+    fn static_destination_preserves_metadata_repeat_interval() {
+        let config = CuConfig::deserialize_ron(include_str!(
+            "../../cu29/tests/logstream_configured_runtime.ron"
+        ))
+        .unwrap();
+        let mut destination = config.log_streaming.unwrap().destinations.remove(0);
+        for seconds in [0, 17] {
+            destination.metadata_repeat_secs = seconds;
+            let generated: syn::ExprStruct = syn::parse2(destination.expr()).unwrap();
+            let member: syn::Member = syn::parse_quote!(metadata_repeat_secs);
+            let interval = generated
+                .fields
+                .iter()
+                .find(|field| field.member == member)
+                .expect("static destination must emit metadata_repeat_secs");
+            let literal: syn::LitInt = syn::parse2(interval.expr.to_token_stream()).unwrap();
+            assert_eq!(literal.base10_parse::<u32>().unwrap(), seconds);
+        }
+    }
+}
