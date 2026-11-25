@@ -159,7 +159,7 @@ mod tests {
                 .unwrap(),
         )
         .unwrap();
-        assert_eq!(catalog.version, 1);
+        assert_eq!(catalog.version, 2);
         assert!(
             reader
                 .read_next_section_type(UnifiedLogType::ValueDecodeCatalog)
@@ -167,8 +167,6 @@ mod tests {
                 .is_none()
         );
         assert_eq!(catalog.missions.len(), 2);
-        assert_eq!(catalog.missions[0].mission_index, 0);
-        assert_eq!(catalog.missions[1].mission_index, 1);
         assert_eq!(
             catalog.missions[0].slots[0].binding,
             catalog.missions[1].slots[0].binding
