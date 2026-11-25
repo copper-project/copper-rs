@@ -3,7 +3,7 @@
 and returns the value as a trait object.
 Because of this, <strong>it can only be used on <a href="https://doc.rust-lang.org/reference/items/traits.html#object-safety">object-safe</a> traits.</strong></p>
 <p>For a trait named <code>MyTrait</code>, this will generate the struct <code>ReflectMyTrait</code>.
-The generated struct can be created using <code>FromType</code> with any type that implements the trait.
+The generated struct can be created using <code>CreateTypeData</code> with any type that implements the trait.
 The creation and registration of this generated struct as type data can be automatically handled
 by <a href="derive.Reflect.html" title="derive cu29_runtime::reflect::Reflect"><code>#[derive(Reflect)]</code></a>.</p>
 <h2 id="example"><a class="doc-anchor" href="#example">§</a>Example</h2>
@@ -23,7 +23,7 @@ by <a href="derive.Reflect.html" title="derive cu29_runtime::reflect::Reflect"><
 }
 
 <span class="comment">// We can create the type data manually if we wanted:
-</span><span class="kw">let </span>my_trait: ReflectMyTrait = FromType::&lt;SomeStruct&gt;::from_type();
+</span><span class="kw">let </span>my_trait: ReflectMyTrait = CreateTypeData::&lt;SomeStruct&gt;::create_type_data(());
 
 <span class="comment">// Or we can simply get it from the registry:
 </span><span class="kw">let </span><span class="kw-2">mut </span>registry = TypeRegistry::default();

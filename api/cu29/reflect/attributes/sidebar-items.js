@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["CustomAttributes"]};
+window.SIDEBAR_ITEMS = {"struct":["CustomAttributes","CustomAttributesBuilder"]};

@@ -821,11 +821,11 @@
 <a href=#821 id=821 data-nosnippet>821</a>}
 <a href=#822 id=822 data-nosnippet>822</a>
 <a href=#823 id=823 data-nosnippet>823</a><span class="attr">#[cfg(feature = <span class="string">"reflect"</span>)]
-<a href=#824 id=824 data-nosnippet>824</a></span><span class="kw">impl</span>&lt;T&gt; bevy_reflect::FromType&lt;T&gt; <span class="kw">for </span>ReflectSerializedPayloadSchema
+<a href=#824 id=824 data-nosnippet>824</a></span><span class="kw">impl</span>&lt;T&gt; bevy_reflect::CreateTypeData&lt;T&gt; <span class="kw">for </span>ReflectSerializedPayloadSchema
 <a href=#825 id=825 data-nosnippet>825</a><span class="kw">where
 <a href=#826 id=826 data-nosnippet>826</a>    </span>T: SerializedPayloadSchema,
 <a href=#827 id=827 data-nosnippet>827</a>{
-<a href=#828 id=828 data-nosnippet>828</a>    <span class="kw">fn </span>from_type() -&gt; <span class="self">Self </span>{
+<a href=#828 id=828 data-nosnippet>828</a>    <span class="kw">fn </span>create_type_data((): ()) -&gt; <span class="self">Self </span>{
 <a href=#829 id=829 data-nosnippet>829</a>        <span class="self">Self </span>{
 <a href=#830 id=830 data-nosnippet>830</a>            schema_fn: T::serialized_payload_schema,
 <a href=#831 id=831 data-nosnippet>831</a>        }

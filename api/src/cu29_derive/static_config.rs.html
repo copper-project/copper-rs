@@ -166,154 +166,203 @@
 <a href=#166 id=166 data-nosnippet>166</a>    link,
 <a href=#167 id=167 data-nosnippet>167</a>    fec,
 <a href=#168 id=168 data-nosnippet>168</a>    recovery_interval,
-<a href=#169 id=169 data-nosnippet>169</a>    max_record_bytes,
-<a href=#170 id=170 data-nosnippet>170</a>});
-<a href=#171 id=171 data-nosnippet>171</a><span class="macro">config_struct!</span>(LogStreamTransportConfig { type_, resource });
-<a href=#172 id=172 data-nosnippet>172</a><span class="macro">config_struct!</span>(LogStreamFeedbackConfig {
-<a href=#173 id=173 data-nosnippet>173</a>    transport,
-<a href=#174 id=174 data-nosnippet>174</a>    report_interval_ms,
-<a href=#175 id=175 data-nosnippet>175</a>    timeout_ms,
-<a href=#176 id=176 data-nosnippet>176</a>    adaptation
-<a href=#177 id=177 data-nosnippet>177</a>});
-<a href=#178 id=178 data-nosnippet>178</a><span class="macro">config_struct!</span>(LogStreamAdaptationConfig {
-<a href=#179 id=179 data-nosnippet>179</a>    min_repair_every_source_symbols,
-<a href=#180 id=180 data-nosnippet>180</a>    max_repair_every_source_symbols
-<a href=#181 id=181 data-nosnippet>181</a>});
-<a href=#182 id=182 data-nosnippet>182</a><span class="macro">config_struct!</span>(LogStreamLinkConfig {
-<a href=#183 id=183 data-nosnippet>183</a>    mtu_bytes,
-<a href=#184 id=184 data-nosnippet>184</a>    bitrate_bps,
-<a href=#185 id=185 data-nosnippet>185</a>    memory_budget_kib,
-<a href=#186 id=186 data-nosnippet>186</a>    max_latency_ms,
-<a href=#187 id=187 data-nosnippet>187</a>    burst_packets
-<a href=#188 id=188 data-nosnippet>188</a>});
-<a href=#189 id=189 data-nosnippet>189</a><span class="macro">config_struct!</span>(LogStreamFecConfig {
-<a href=#190 id=190 data-nosnippet>190</a>    continuous,
-<a href=#191 id=191 data-nosnippet>191</a>    objects
-<a href=#192 id=192 data-nosnippet>192</a>});
-<a href=#193 id=193 data-nosnippet>193</a><span class="macro">config_struct!</span>(LogStreamContinuousFecConfig {
-<a href=#194 id=194 data-nosnippet>194</a>    field,
-<a href=#195 id=195 data-nosnippet>195</a>    window_symbols,
-<a href=#196 id=196 data-nosnippet>196</a>    repair_every_source_symbols,
-<a href=#197 id=197 data-nosnippet>197</a>    repair_density
-<a href=#198 id=198 data-nosnippet>198</a>});
-<a href=#199 id=199 data-nosnippet>199</a><span class="macro">config_struct!</span>(LogStreamObjectFecConfig {
-<a href=#200 id=200 data-nosnippet>200</a>    max_object_bytes,
-<a href=#201 id=201 data-nosnippet>201</a>    repair_symbols_per_block
-<a href=#202 id=202 data-nosnippet>202</a>});
-<a href=#203 id=203 data-nosnippet>203</a>
-<a href=#204 id=204 data-nosnippet>204</a><span class="macro">macro_rules!</span> unit_enum {
-<a href=#205 id=205 data-nosnippet>205</a>    (<span class="macro-nonterminal">$name</span>:ident { $(<span class="macro-nonterminal">$variant</span>:ident),* }) =&gt; {
-<a href=#206 id=206 data-nosnippet>206</a>        <span class="kw">impl </span>StaticExpr <span class="kw">for </span><span class="macro-nonterminal">$name </span>{
-<a href=#207 id=207 data-nosnippet>207</a>            <span class="kw">fn </span>expr(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; TokenStream {
-<a href=#208 id=208 data-nosnippet>208</a>                <span class="kw">match </span><span class="self">self </span>{ $(<span class="self">Self</span>::<span class="macro-nonterminal">$variant </span>=&gt; <span class="macro">quote!</span>(::cu29::config::<span class="macro-nonterminal">$name</span>::<span class="macro-nonterminal">$variant</span>)),* }
-<a href=#209 id=209 data-nosnippet>209</a>            }
-<a href=#210 id=210 data-nosnippet>210</a>        }
-<a href=#211 id=211 data-nosnippet>211</a>    };
-<a href=#212 id=212 data-nosnippet>212</a>}
-<a href=#213 id=213 data-nosnippet>213</a>
-<a href=#214 id=214 data-nosnippet>214</a><span class="macro">unit_enum!</span>(LogStreamRlcField { Gf2, Gf256 });
-<a href=#215 id=215 data-nosnippet>215</a><span class="macro">unit_enum!</span>(PlannerKind {
-<a href=#216 id=216 data-nosnippet>216</a>    Serial,
-<a href=#217 id=217 data-nosnippet>217</a>    TaskOrder,
-<a href=#218 id=218 data-nosnippet>218</a>    ExplicitSchedule,
-<a href=#219 id=219 data-nosnippet>219</a>    Pipeline
-<a href=#220 id=220 data-nosnippet>220</a>});
-<a href=#221 id=221 data-nosnippet>221</a><span class="kw">impl </span>StaticExpr <span class="kw">for </span>LogStreamRepairDensity {
-<a href=#222 id=222 data-nosnippet>222</a>    <span class="kw">fn </span>expr(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; TokenStream {
-<a href=#223 id=223 data-nosnippet>223</a>        <span class="kw">match </span><span class="self">self </span>{
-<a href=#224 id=224 data-nosnippet>224</a>            <span class="self">Self</span>::Full =&gt; <span class="macro">quote!</span>(::cu29::config::LogStreamRepairDensity::Full),
-<a href=#225 id=225 data-nosnippet>225</a>            <span class="self">Self</span>::Threshold(n) =&gt; <span class="macro">quote!</span>(::cu29::config::LogStreamRepairDensity::Threshold(#n)),
-<a href=#226 id=226 data-nosnippet>226</a>        }
-<a href=#227 id=227 data-nosnippet>227</a>    }
-<a href=#228 id=228 data-nosnippet>228</a>}
-<a href=#229 id=229 data-nosnippet>229</a>
-<a href=#230 id=230 data-nosnippet>230</a><span class="kw">impl </span>StaticExpr <span class="kw">for </span>PlannerConfig {
-<a href=#231 id=231 data-nosnippet>231</a>    <span class="kw">fn </span>expr(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; TokenStream {
-<a href=#232 id=232 data-nosnippet>232</a>        <span class="kw">let </span>kind = <span class="self">self</span>.kind().expr();
-<a href=#233 id=233 data-nosnippet>233</a>        <span class="kw">let </span>config = component(<span class="self">self</span>.get_config());
-<a href=#234 id=234 data-nosnippet>234</a>        <span class="macro">quote!</span>(::cu29::config::PlannerConfig::from_static(#kind, #config))
-<a href=#235 id=235 data-nosnippet>235</a>    }
-<a href=#236 id=236 data-nosnippet>236</a>}
-<a href=#237 id=237 data-nosnippet>237</a>
-<a href=#238 id=238 data-nosnippet>238</a><span class="macro">unit_enum!</span>(OnError { Warn, Strict });
-<a href=#239 id=239 data-nosnippet>239</a><span class="kw">impl </span>StaticExpr <span class="kw">for </span>SchedulingPolicy {
-<a href=#240 id=240 data-nosnippet>240</a>    <span class="kw">fn </span>expr(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; TokenStream {
-<a href=#241 id=241 data-nosnippet>241</a>        <span class="kw">super</span>::scheduling_policy_tokens(<span class="kw-2">*</span><span class="self">self</span>)
-<a href=#242 id=242 data-nosnippet>242</a>    }
-<a href=#243 id=243 data-nosnippet>243</a>}
-<a href=#244 id=244 data-nosnippet>244</a><span class="macro">config_struct!</span>(ThreadPoolConfig {
-<a href=#245 id=245 data-nosnippet>245</a>    id,
-<a href=#246 id=246 data-nosnippet>246</a>    threads,
-<a href=#247 id=247 data-nosnippet>247</a>    affinity,
-<a href=#248 id=248 data-nosnippet>248</a>    policy,
-<a href=#249 id=249 data-nosnippet>249</a>    on_error
-<a href=#250 id=250 data-nosnippet>250</a>});
-<a href=#251 id=251 data-nosnippet>251</a><span class="attr">#[cfg(feature = <span class="string">"clock-sync"</span>)]
-<a href=#252 id=252 data-nosnippet>252</a></span><span class="macro">config_struct!</span>(ClockSyncConfig {
-<a href=#253 id=253 data-nosnippet>253</a>    parent,
-<a href=#254 id=254 data-nosnippet>254</a>    max_error_ns,
-<a href=#255 id=255 data-nosnippet>255</a>    acquisition_timeout_ns,
-<a href=#256 id=256 data-nosnippet>256</a>    sample_interval_ns,
-<a href=#257 id=257 data-nosnippet>257</a>    max_age_ns,
-<a href=#258 id=258 data-nosnippet>258</a>    drift_bound_ppb,
-<a href=#259 id=259 data-nosnippet>259</a>    max_slew_ppb
-<a href=#260 id=260 data-nosnippet>260</a>});
-<a href=#261 id=261 data-nosnippet>261</a>
-<a href=#262 id=262 data-nosnippet>262</a><span class="kw">impl </span>StaticExpr <span class="kw">for </span>RuntimeConfig {
-<a href=#263 id=263 data-nosnippet>263</a>    <span class="kw">fn </span>expr(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; TokenStream {
-<a href=#264 id=264 data-nosnippet>264</a>        <span class="kw">let </span>rate_target_hz = <span class="self">self</span>.rate_target_hz.expr();
-<a href=#265 id=265 data-nosnippet>265</a>        <span class="kw">let </span>planner = <span class="self">self</span>.planner.expr();
-<a href=#266 id=266 data-nosnippet>266</a>        <span class="comment">// The macro reads config with std, even when generating bare-metal code.
-<a href=#267 id=267 data-nosnippet>267</a>        </span><span class="kw">let </span>thread_pools = <span class="macro">cfg!</span>(feature = <span class="string">"std"</span>).then(|| {
-<a href=#268 id=268 data-nosnippet>268</a>            <span class="kw">let </span>pools = <span class="self">self</span>.thread_pools.expr();
-<a href=#269 id=269 data-nosnippet>269</a>            <span class="macro">quote!</span>(thread_pools: #pools,)
-<a href=#270 id=270 data-nosnippet>270</a>        });
-<a href=#271 id=271 data-nosnippet>271</a>        <span class="attr">#[cfg(feature = <span class="string">"clock-sync"</span>)]
-<a href=#272 id=272 data-nosnippet>272</a>        </span><span class="kw">let </span>clock = {
-<a href=#273 id=273 data-nosnippet>273</a>            <span class="kw">let </span>clock = <span class="self">self</span>.clock.expr();
-<a href=#274 id=274 data-nosnippet>274</a>            <span class="macro">quote!</span>(clock: #clock,)
-<a href=#275 id=275 data-nosnippet>275</a>        };
-<a href=#276 id=276 data-nosnippet>276</a>        <span class="attr">#[cfg(not(feature = <span class="string">"clock-sync"</span>))]
-<a href=#277 id=277 data-nosnippet>277</a>        </span><span class="kw">let </span>clock = <span class="macro">quote!</span>();
-<a href=#278 id=278 data-nosnippet>278</a>        <span class="comment">// A downstream dependency can independently enable another runtime feature.
-<a href=#279 id=279 data-nosnippet>279</a>        </span><span class="macro">quote!</span>({
-<a href=#280 id=280 data-nosnippet>280</a>            <span class="attr">#[allow(clippy::needless_update)]
-<a href=#281 id=281 data-nosnippet>281</a>            </span><span class="kw">let </span>runtime = ::cu29::config::RuntimeConfig {
-<a href=#282 id=282 data-nosnippet>282</a>                rate_target_hz: #rate_target_hz,
-<a href=#283 id=283 data-nosnippet>283</a>                planner: #planner,
-<a href=#284 id=284 data-nosnippet>284</a>                #thread_pools
-<a href=#285 id=285 data-nosnippet>285</a>                #clock
-<a href=#286 id=286 data-nosnippet>286</a>                ..Default::default()
-<a href=#287 id=287 data-nosnippet>287</a>            };
-<a href=#288 id=288 data-nosnippet>288</a>            runtime
-<a href=#289 id=289 data-nosnippet>289</a>        })
-<a href=#290 id=290 data-nosnippet>290</a>    }
-<a href=#291 id=291 data-nosnippet>291</a>}
-<a href=#292 id=292 data-nosnippet>292</a>
-<a href=#293 id=293 data-nosnippet>293</a><span class="kw">impl </span>StaticExpr <span class="kw">for </span>LoggingConfig {
-<a href=#294 id=294 data-nosnippet>294</a>    <span class="kw">fn </span>expr(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; TokenStream {
-<a href=#295 id=295 data-nosnippet>295</a>        <span class="kw">let </span><span class="self">Self </span>{
-<a href=#296 id=296 data-nosnippet>296</a>            enable_task_logging,
-<a href=#297 id=297 data-nosnippet>297</a>            enable_keyframe_logging,
-<a href=#298 id=298 data-nosnippet>298</a>            copperlist_count,
-<a href=#299 id=299 data-nosnippet>299</a>            slab_size_mib,
-<a href=#300 id=300 data-nosnippet>300</a>            section_size_mib,
-<a href=#301 id=301 data-nosnippet>301</a>            keyframe_interval,
-<a href=#302 id=302 data-nosnippet>302</a>            keyframe_capacity,
-<a href=#303 id=303 data-nosnippet>303</a>            codecs: <span class="kw">_</span>,
-<a href=#304 id=304 data-nosnippet>304</a>        } = <span class="self">self</span>;
-<a href=#305 id=305 data-nosnippet>305</a>        <span class="kw">let </span>copperlist_count = copperlist_count.expr();
-<a href=#306 id=306 data-nosnippet>306</a>        <span class="kw">let </span>slab_size_mib = slab_size_mib.expr();
-<a href=#307 id=307 data-nosnippet>307</a>        <span class="kw">let </span>section_size_mib = section_size_mib.expr();
-<a href=#308 id=308 data-nosnippet>308</a>        <span class="kw">let </span>keyframe_capacity = keyframe_capacity.expr();
-<a href=#309 id=309 data-nosnippet>309</a>        <span class="comment">// Preserve the static loader's default for an explicitly absent interval.
-<a href=#310 id=310 data-nosnippet>310</a>        </span><span class="kw">let </span>interval = keyframe_interval.unwrap_or(DEFAULT_KEYFRAME_INTERVAL);
-<a href=#311 id=311 data-nosnippet>311</a>        <span class="comment">// The macro emits codec registrations separately.
-<a href=#312 id=312 data-nosnippet>312</a>        </span><span class="macro">quote!</span>(::cu29::config::LoggingConfig {
-<a href=#313 id=313 data-nosnippet>313</a>            enable_task_logging: #enable_task_logging, enable_keyframe_logging: #enable_keyframe_logging,
-<a href=#314 id=314 data-nosnippet>314</a>            copperlist_count: #copperlist_count, slab_size_mib: #slab_size_mib, section_size_mib: #section_size_mib,
-<a href=#315 id=315 data-nosnippet>315</a>            keyframe_interval: <span class="prelude-val">Some</span>(#interval), keyframe_capacity: #keyframe_capacity, codecs: <span class="macro">vec!</span>[],
-<a href=#316 id=316 data-nosnippet>316</a>        })
-<a href=#317 id=317 data-nosnippet>317</a>    }
-<a href=#318 id=318 data-nosnippet>318</a>}
+<a href=#169 id=169 data-nosnippet>169</a>    metadata_repeat_secs,
+<a href=#170 id=170 data-nosnippet>170</a>    max_record_bytes,
+<a href=#171 id=171 data-nosnippet>171</a>});
+<a href=#172 id=172 data-nosnippet>172</a><span class="macro">config_struct!</span>(LogStreamTransportConfig { type_, resource });
+<a href=#173 id=173 data-nosnippet>173</a><span class="macro">config_struct!</span>(LogStreamFeedbackConfig {
+<a href=#174 id=174 data-nosnippet>174</a>    transport,
+<a href=#175 id=175 data-nosnippet>175</a>    report_interval_ms,
+<a href=#176 id=176 data-nosnippet>176</a>    timeout_ms,
+<a href=#177 id=177 data-nosnippet>177</a>    adaptation
+<a href=#178 id=178 data-nosnippet>178</a>});
+<a href=#179 id=179 data-nosnippet>179</a><span class="macro">config_struct!</span>(LogStreamAdaptationConfig {
+<a href=#180 id=180 data-nosnippet>180</a>    min_repair_every_source_symbols,
+<a href=#181 id=181 data-nosnippet>181</a>    max_repair_every_source_symbols
+<a href=#182 id=182 data-nosnippet>182</a>});
+<a href=#183 id=183 data-nosnippet>183</a><span class="macro">config_struct!</span>(LogStreamLinkConfig {
+<a href=#184 id=184 data-nosnippet>184</a>    mtu_bytes,
+<a href=#185 id=185 data-nosnippet>185</a>    bitrate_bps,
+<a href=#186 id=186 data-nosnippet>186</a>    memory_budget_kib,
+<a href=#187 id=187 data-nosnippet>187</a>    max_latency_ms,
+<a href=#188 id=188 data-nosnippet>188</a>    burst_packets
+<a href=#189 id=189 data-nosnippet>189</a>});
+<a href=#190 id=190 data-nosnippet>190</a><span class="macro">config_struct!</span>(LogStreamFecConfig {
+<a href=#191 id=191 data-nosnippet>191</a>    continuous,
+<a href=#192 id=192 data-nosnippet>192</a>    objects
+<a href=#193 id=193 data-nosnippet>193</a>});
+<a href=#194 id=194 data-nosnippet>194</a><span class="macro">config_struct!</span>(LogStreamContinuousFecConfig {
+<a href=#195 id=195 data-nosnippet>195</a>    field,
+<a href=#196 id=196 data-nosnippet>196</a>    window_symbols,
+<a href=#197 id=197 data-nosnippet>197</a>    repair_every_source_symbols,
+<a href=#198 id=198 data-nosnippet>198</a>    repair_density
+<a href=#199 id=199 data-nosnippet>199</a>});
+<a href=#200 id=200 data-nosnippet>200</a><span class="macro">config_struct!</span>(LogStreamObjectFecConfig {
+<a href=#201 id=201 data-nosnippet>201</a>    max_object_bytes,
+<a href=#202 id=202 data-nosnippet>202</a>    repair_symbols_per_block
+<a href=#203 id=203 data-nosnippet>203</a>});
+<a href=#204 id=204 data-nosnippet>204</a>
+<a href=#205 id=205 data-nosnippet>205</a><span class="macro">macro_rules!</span> unit_enum {
+<a href=#206 id=206 data-nosnippet>206</a>    (<span class="macro-nonterminal">$name</span>:ident { $(<span class="macro-nonterminal">$variant</span>:ident),* }) =&gt; {
+<a href=#207 id=207 data-nosnippet>207</a>        <span class="kw">impl </span>StaticExpr <span class="kw">for </span><span class="macro-nonterminal">$name </span>{
+<a href=#208 id=208 data-nosnippet>208</a>            <span class="kw">fn </span>expr(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; TokenStream {
+<a href=#209 id=209 data-nosnippet>209</a>                <span class="kw">match </span><span class="self">self </span>{ $(<span class="self">Self</span>::<span class="macro-nonterminal">$variant </span>=&gt; <span class="macro">quote!</span>(::cu29::config::<span class="macro-nonterminal">$name</span>::<span class="macro-nonterminal">$variant</span>)),* }
+<a href=#210 id=210 data-nosnippet>210</a>            }
+<a href=#211 id=211 data-nosnippet>211</a>        }
+<a href=#212 id=212 data-nosnippet>212</a>    };
+<a href=#213 id=213 data-nosnippet>213</a>}
+<a href=#214 id=214 data-nosnippet>214</a>
+<a href=#215 id=215 data-nosnippet>215</a><span class="macro">unit_enum!</span>(LogStreamRlcField { Gf2, Gf256 });
+<a href=#216 id=216 data-nosnippet>216</a><span class="macro">unit_enum!</span>(PlannerKind {
+<a href=#217 id=217 data-nosnippet>217</a>    Serial,
+<a href=#218 id=218 data-nosnippet>218</a>    TaskOrder,
+<a href=#219 id=219 data-nosnippet>219</a>    ExplicitSchedule,
+<a href=#220 id=220 data-nosnippet>220</a>    Pipeline
+<a href=#221 id=221 data-nosnippet>221</a>});
+<a href=#222 id=222 data-nosnippet>222</a><span class="kw">impl </span>StaticExpr <span class="kw">for </span>LogStreamRepairDensity {
+<a href=#223 id=223 data-nosnippet>223</a>    <span class="kw">fn </span>expr(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; TokenStream {
+<a href=#224 id=224 data-nosnippet>224</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#225 id=225 data-nosnippet>225</a>            <span class="self">Self</span>::Full =&gt; <span class="macro">quote!</span>(::cu29::config::LogStreamRepairDensity::Full),
+<a href=#226 id=226 data-nosnippet>226</a>            <span class="self">Self</span>::Threshold(n) =&gt; <span class="macro">quote!</span>(::cu29::config::LogStreamRepairDensity::Threshold(#n)),
+<a href=#227 id=227 data-nosnippet>227</a>        }
+<a href=#228 id=228 data-nosnippet>228</a>    }
+<a href=#229 id=229 data-nosnippet>229</a>}
+<a href=#230 id=230 data-nosnippet>230</a>
+<a href=#231 id=231 data-nosnippet>231</a><span class="kw">impl </span>StaticExpr <span class="kw">for </span>PlannerConfig {
+<a href=#232 id=232 data-nosnippet>232</a>    <span class="kw">fn </span>expr(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; TokenStream {
+<a href=#233 id=233 data-nosnippet>233</a>        <span class="kw">let </span>kind = <span class="self">self</span>.kind().expr();
+<a href=#234 id=234 data-nosnippet>234</a>        <span class="kw">let </span>config = component(<span class="self">self</span>.get_config());
+<a href=#235 id=235 data-nosnippet>235</a>        <span class="macro">quote!</span>(::cu29::config::PlannerConfig::from_static(#kind, #config))
+<a href=#236 id=236 data-nosnippet>236</a>    }
+<a href=#237 id=237 data-nosnippet>237</a>}
+<a href=#238 id=238 data-nosnippet>238</a>
+<a href=#239 id=239 data-nosnippet>239</a><span class="macro">unit_enum!</span>(OnError { Warn, Strict });
+<a href=#240 id=240 data-nosnippet>240</a><span class="kw">impl </span>StaticExpr <span class="kw">for </span>SchedulingPolicy {
+<a href=#241 id=241 data-nosnippet>241</a>    <span class="kw">fn </span>expr(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; TokenStream {
+<a href=#242 id=242 data-nosnippet>242</a>        <span class="kw">super</span>::scheduling_policy_tokens(<span class="kw-2">*</span><span class="self">self</span>)
+<a href=#243 id=243 data-nosnippet>243</a>    }
+<a href=#244 id=244 data-nosnippet>244</a>}
+<a href=#245 id=245 data-nosnippet>245</a><span class="macro">config_struct!</span>(ThreadPoolConfig {
+<a href=#246 id=246 data-nosnippet>246</a>    id,
+<a href=#247 id=247 data-nosnippet>247</a>    threads,
+<a href=#248 id=248 data-nosnippet>248</a>    affinity,
+<a href=#249 id=249 data-nosnippet>249</a>    policy,
+<a href=#250 id=250 data-nosnippet>250</a>    on_error
+<a href=#251 id=251 data-nosnippet>251</a>});
+<a href=#252 id=252 data-nosnippet>252</a><span class="attr">#[cfg(feature = <span class="string">"clock-sync"</span>)]
+<a href=#253 id=253 data-nosnippet>253</a></span><span class="macro">config_struct!</span>(ClockSyncConfig {
+<a href=#254 id=254 data-nosnippet>254</a>    parent,
+<a href=#255 id=255 data-nosnippet>255</a>    max_error_ns,
+<a href=#256 id=256 data-nosnippet>256</a>    acquisition_timeout_ns,
+<a href=#257 id=257 data-nosnippet>257</a>    sample_interval_ns,
+<a href=#258 id=258 data-nosnippet>258</a>    max_age_ns,
+<a href=#259 id=259 data-nosnippet>259</a>    drift_bound_ppb,
+<a href=#260 id=260 data-nosnippet>260</a>    max_slew_ppb
+<a href=#261 id=261 data-nosnippet>261</a>});
+<a href=#262 id=262 data-nosnippet>262</a>
+<a href=#263 id=263 data-nosnippet>263</a><span class="kw">impl </span>StaticExpr <span class="kw">for </span>RuntimeConfig {
+<a href=#264 id=264 data-nosnippet>264</a>    <span class="kw">fn </span>expr(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; TokenStream {
+<a href=#265 id=265 data-nosnippet>265</a>        <span class="kw">let </span>rate_target_hz = <span class="self">self</span>.rate_target_hz.expr();
+<a href=#266 id=266 data-nosnippet>266</a>        <span class="kw">let </span>planner = <span class="self">self</span>.planner.expr();
+<a href=#267 id=267 data-nosnippet>267</a>        <span class="comment">// The macro reads config with std, even when generating bare-metal code.
+<a href=#268 id=268 data-nosnippet>268</a>        </span><span class="kw">let </span>thread_pools = <span class="macro">cfg!</span>(feature = <span class="string">"std"</span>).then(|| {
+<a href=#269 id=269 data-nosnippet>269</a>            <span class="kw">let </span>pools = <span class="self">self</span>.thread_pools.expr();
+<a href=#270 id=270 data-nosnippet>270</a>            <span class="macro">quote!</span>(thread_pools: #pools,)
+<a href=#271 id=271 data-nosnippet>271</a>        });
+<a href=#272 id=272 data-nosnippet>272</a>        <span class="attr">#[cfg(feature = <span class="string">"clock-sync"</span>)]
+<a href=#273 id=273 data-nosnippet>273</a>        </span><span class="kw">let </span>clock = {
+<a href=#274 id=274 data-nosnippet>274</a>            <span class="kw">let </span>clock = <span class="self">self</span>.clock.expr();
+<a href=#275 id=275 data-nosnippet>275</a>            <span class="macro">quote!</span>(clock: #clock,)
+<a href=#276 id=276 data-nosnippet>276</a>        };
+<a href=#277 id=277 data-nosnippet>277</a>        <span class="attr">#[cfg(not(feature = <span class="string">"clock-sync"</span>))]
+<a href=#278 id=278 data-nosnippet>278</a>        </span><span class="kw">let </span>clock = <span class="macro">quote!</span>();
+<a href=#279 id=279 data-nosnippet>279</a>        <span class="comment">// A downstream dependency can independently enable another runtime feature.
+<a href=#280 id=280 data-nosnippet>280</a>        </span><span class="macro">quote!</span>({
+<a href=#281 id=281 data-nosnippet>281</a>            <span class="attr">#[allow(clippy::needless_update)]
+<a href=#282 id=282 data-nosnippet>282</a>            </span><span class="kw">let </span>runtime = ::cu29::config::RuntimeConfig {
+<a href=#283 id=283 data-nosnippet>283</a>                rate_target_hz: #rate_target_hz,
+<a href=#284 id=284 data-nosnippet>284</a>                planner: #planner,
+<a href=#285 id=285 data-nosnippet>285</a>                #thread_pools
+<a href=#286 id=286 data-nosnippet>286</a>                #clock
+<a href=#287 id=287 data-nosnippet>287</a>                ..Default::default()
+<a href=#288 id=288 data-nosnippet>288</a>            };
+<a href=#289 id=289 data-nosnippet>289</a>            runtime
+<a href=#290 id=290 data-nosnippet>290</a>        })
+<a href=#291 id=291 data-nosnippet>291</a>    }
+<a href=#292 id=292 data-nosnippet>292</a>}
+<a href=#293 id=293 data-nosnippet>293</a>
+<a href=#294 id=294 data-nosnippet>294</a><span class="kw">impl </span>StaticExpr <span class="kw">for </span>LoggingConfig {
+<a href=#295 id=295 data-nosnippet>295</a>    <span class="kw">fn </span>expr(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; TokenStream {
+<a href=#296 id=296 data-nosnippet>296</a>        <span class="kw">let </span><span class="self">Self </span>{
+<a href=#297 id=297 data-nosnippet>297</a>            enable_task_logging,
+<a href=#298 id=298 data-nosnippet>298</a>            enable_keyframe_logging,
+<a href=#299 id=299 data-nosnippet>299</a>            copperlist_count,
+<a href=#300 id=300 data-nosnippet>300</a>            slab_size_mib,
+<a href=#301 id=301 data-nosnippet>301</a>            section_size_mib,
+<a href=#302 id=302 data-nosnippet>302</a>            keyframe_interval,
+<a href=#303 id=303 data-nosnippet>303</a>            keyframe_capacity,
+<a href=#304 id=304 data-nosnippet>304</a>            codecs: <span class="kw">_</span>,
+<a href=#305 id=305 data-nosnippet>305</a>        } = <span class="self">self</span>;
+<a href=#306 id=306 data-nosnippet>306</a>        <span class="kw">let </span>copperlist_count = copperlist_count.expr();
+<a href=#307 id=307 data-nosnippet>307</a>        <span class="kw">let </span>slab_size_mib = slab_size_mib.expr();
+<a href=#308 id=308 data-nosnippet>308</a>        <span class="kw">let </span>section_size_mib = section_size_mib.expr();
+<a href=#309 id=309 data-nosnippet>309</a>        <span class="kw">let </span>keyframe_capacity = keyframe_capacity.expr();
+<a href=#310 id=310 data-nosnippet>310</a>        <span class="comment">// Preserve the static loader's default for an explicitly absent interval.
+<a href=#311 id=311 data-nosnippet>311</a>        </span><span class="kw">let </span>interval = keyframe_interval.unwrap_or(DEFAULT_KEYFRAME_INTERVAL);
+<a href=#312 id=312 data-nosnippet>312</a>        <span class="comment">// The macro emits codec registrations separately.
+<a href=#313 id=313 data-nosnippet>313</a>        </span><span class="macro">quote!</span>(::cu29::config::LoggingConfig {
+<a href=#314 id=314 data-nosnippet>314</a>            enable_task_logging: #enable_task_logging, enable_keyframe_logging: #enable_keyframe_logging,
+<a href=#315 id=315 data-nosnippet>315</a>            copperlist_count: #copperlist_count, slab_size_mib: #slab_size_mib, section_size_mib: #section_size_mib,
+<a href=#316 id=316 data-nosnippet>316</a>            keyframe_interval: <span class="prelude-val">Some</span>(#interval), keyframe_capacity: #keyframe_capacity, codecs: <span class="macro">vec!</span>[],
+<a href=#317 id=317 data-nosnippet>317</a>        })
+<a href=#318 id=318 data-nosnippet>318</a>    }
+<a href=#319 id=319 data-nosnippet>319</a>}
+<a href=#320 id=320 data-nosnippet>320</a>
+<a href=#321 id=321 data-nosnippet>321</a><span class="attr">#[cfg(test)]
+<a href=#322 id=322 data-nosnippet>322</a></span><span class="kw">mod </span>tests {
+<a href=#323 id=323 data-nosnippet>323</a>    <span class="kw">use </span>std::collections::{BTreeMap, BTreeSet};
+<a href=#324 id=324 data-nosnippet>324</a>    <span class="kw">use </span>syn::{ExprStruct, Item};
+<a href=#325 id=325 data-nosnippet>325</a>
+<a href=#326 id=326 data-nosnippet>326</a>    <span class="attr">#[test]
+<a href=#327 id=327 data-nosnippet>327</a>    </span><span class="kw">fn </span>config_struct_mirrors_every_declared_field() {
+<a href=#328 id=328 data-nosnippet>328</a>        <span class="kw">let </span>schema = syn::parse_file(<span class="macro">include_str!</span>(<span class="string">"../../cu29_runtime/src/config.rs"</span>)).unwrap();
+<a href=#329 id=329 data-nosnippet>329</a>        <span class="kw">let </span>structs: BTreeMap&lt;<span class="kw">_</span>, <span class="kw">_</span>&gt; = schema
+<a href=#330 id=330 data-nosnippet>330</a>            .items
+<a href=#331 id=331 data-nosnippet>331</a>            .into_iter()
+<a href=#332 id=332 data-nosnippet>332</a>            .filter_map(|item| {
+<a href=#333 id=333 data-nosnippet>333</a>                <span class="kw">let </span>Item::Struct(definition) = item <span class="kw">else </span>{
+<a href=#334 id=334 data-nosnippet>334</a>                    <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#335 id=335 data-nosnippet>335</a>                };
+<a href=#336 id=336 data-nosnippet>336</a>                <span class="prelude-val">Some</span>((definition.ident.to_string(), definition.fields))
+<a href=#337 id=337 data-nosnippet>337</a>            })
+<a href=#338 id=338 data-nosnippet>338</a>            .collect();
+<a href=#339 id=339 data-nosnippet>339</a>
+<a href=#340 id=340 data-nosnippet>340</a>        <span class="comment">// Read the declarations before cfg expansion so optional mirrors are checked too.
+<a href=#341 id=341 data-nosnippet>341</a>        </span><span class="kw">let </span>emitter = syn::parse_file(<span class="macro">include_str!</span>(<span class="string">"static_config.rs"</span>)).unwrap();
+<a href=#342 id=342 data-nosnippet>342</a>        <span class="kw">let </span><span class="kw-2">mut </span>checked = <span class="number">0</span>;
+<a href=#343 id=343 data-nosnippet>343</a>        <span class="kw">for </span>item <span class="kw">in </span>emitter.items {
+<a href=#344 id=344 data-nosnippet>344</a>            <span class="kw">let </span>Item::Macro(item) = item <span class="kw">else </span>{ <span class="kw">continue </span>};
+<a href=#345 id=345 data-nosnippet>345</a>            <span class="kw">if </span>!item.mac.path.is_ident(<span class="string">"config_struct"</span>) {
+<a href=#346 id=346 data-nosnippet>346</a>                <span class="kw">continue</span>;
+<a href=#347 id=347 data-nosnippet>347</a>            }
+<a href=#348 id=348 data-nosnippet>348</a>            <span class="kw">let </span>mirror: ExprStruct = item.mac.parse_body().unwrap();
+<a href=#349 id=349 data-nosnippet>349</a>            <span class="kw">let </span>name = mirror.path.get_ident().unwrap().to_string();
+<a href=#350 id=350 data-nosnippet>350</a>            <span class="kw">let </span>expected: BTreeSet&lt;<span class="kw">_</span>&gt; = structs[<span class="kw-2">&amp;</span>name]
+<a href=#351 id=351 data-nosnippet>351</a>                .iter()
+<a href=#352 id=352 data-nosnippet>352</a>                .map(|field| field.ident.as_ref().unwrap().to_string())
+<a href=#353 id=353 data-nosnippet>353</a>                .collect();
+<a href=#354 id=354 data-nosnippet>354</a>            <span class="kw">let </span>actual: BTreeSet&lt;<span class="kw">_</span>&gt; = mirror
+<a href=#355 id=355 data-nosnippet>355</a>                .fields
+<a href=#356 id=356 data-nosnippet>356</a>                .iter()
+<a href=#357 id=357 data-nosnippet>357</a>                .map(|field| <span class="kw">match </span><span class="kw-2">&amp;</span>field.member {
+<a href=#358 id=358 data-nosnippet>358</a>                    syn::Member::Named(ident) =&gt; ident.to_string(),
+<a href=#359 id=359 data-nosnippet>359</a>                    syn::Member::Unnamed(<span class="kw">_</span>) =&gt; <span class="macro">panic!</span>(<span class="string">"expected named fields in {name}"</span>),
+<a href=#360 id=360 data-nosnippet>360</a>                })
+<a href=#361 id=361 data-nosnippet>361</a>                .collect();
+<a href=#362 id=362 data-nosnippet>362</a>            <span class="macro">assert_eq!</span>(actual, expected, <span class="string">"static config fields for {name}"</span>);
+<a href=#363 id=363 data-nosnippet>363</a>            checked += <span class="number">1</span>;
+<a href=#364 id=364 data-nosnippet>364</a>        }
+<a href=#365 id=365 data-nosnippet>365</a>        <span class="macro">assert!</span>(checked &gt; <span class="number">0</span>, <span class="string">"no config_struct! mirrors found"</span>);
+<a href=#366 id=366 data-nosnippet>366</a>    }
+<a href=#367 id=367 data-nosnippet>367</a>}
 </code></pre></div></section></main></body></html>
