@@ -137,7 +137,6 @@ fn packets(max_record_bytes: u64, count: u64) -> VecDeque<Vec<u8>> {
             subsystem_code: 0,
             effective_config_ron: String::new(),
             missions: vec![],
-            catalog_offset: 0,
         })
         .unwrap();
     let mut packets = Vec::new();
