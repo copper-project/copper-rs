@@ -65,11 +65,14 @@ pub(super) fn dataset_support(
             });
         }
     }
-    let schema = hybrid.then(|| quote! { schema.reconstruction = Self::RECONSTRUCTION.to_vec(); });
+    let selective_capture = hybrid && !reconstruction.is_empty();
+    let schema = selective_capture
+        .then(|| quote! { schema.reconstruction = Self::RECONSTRUCTION.to_vec(); });
     quote! {
         #encode
         impl ::cu29::logstream::capture::CaptureDataSet for CuStampedDataSet {
             const RECONSTRUCTION: &'static [bool] = &[#(#reconstruction),*];
+            const SELECTIVE_CAPTURE: Option<bool> = Some(#selective_capture);
             fn stream_schema() -> ::cu29::logstream::ApplicationSchema {
                 #[allow(unused_mut)]
                 let mut schema = ::cu29::logstream::ApplicationSchema::from_output_specs(
