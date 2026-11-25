@@ -2707,18 +2707,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         };
 
         let config_load_stmt = if static_config {
-            let mut logging = copper_config.logging.clone();
-            if let Some(l) = &mut logging {
-                l.codecs.clear();
-            }
-            let (runtime, logging, streaming) = match (
-                static_config::settings(&copper_config.runtime),
-                static_config::settings(&logging),
-                static_config::settings(&copper_config.log_streaming),
-            ) {
-                (Ok(r), Ok(l), Ok(s)) => (r, l, s),
-                _ => return return_error("Could not lower static runtime settings".into()),
-            };
+            use static_config::StaticExpr;
+            let runtime = copper_config.runtime.expr();
+            let logging = copper_config.logging.expr();
+            let streaming = copper_config.log_streaming.expr();
             let reject_override = std.then(|| quote!{if config_override.is_some() {return Err("Runtime overrides are disabled by static-config".into());}});
             quote! {
                 #reject_override
