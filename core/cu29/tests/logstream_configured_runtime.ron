@@ -1,5 +1,4 @@
 (
-    runtime: (),
     logging: (enable_task_logging: false, enable_keyframe_logging: false, copperlist_count: 8),
     resources: [(id: "network", provider: "ConfiguredStreamResources")],
     log_streaming: (
