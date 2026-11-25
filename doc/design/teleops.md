@@ -1,129 +1,86 @@
 # Teleoperation over the telemetry return link
 
-**Proposal.** Give the console a typed sender and the robot an ordinary
-`CuSrcTask` for each operator input. A resource connects the source to the
-telemetry endpoint. The source is where an asynchronous command becomes an
-input to a particular CopperList. A customer task decides what that input may do.
+**Proposal.** Enable `cu29/teleops` on the robot and console. Each operator input enters the robot graph through an ordinary `CuSrcTask`. Customer tasks own safety policy.
 
-## What the application writes
-
-Enable `cu29/teleops` on both builds and wire a return endpoint for the
-application's telemetry driver. FEC feedback is optional. These APIs are proposed.
+## Application API
 
 ```rust
-// Shared application crate. The 4 is the robot's event queue capacity.
 #[derive(Teleops)]
 pub struct OperatorInputs {
     pub stick: Latest<Pilot>,               // Pilot { held: bool, axes: Axes }
     pub mode: Latched<Mode>,
-    pub take_photo: Event<PhotoRequest, 4>, // PhotoRequest { request_id: u64 }
+    pub take_photo: Event<PhotoRequest, 4>, // Four pending clicks
 }
-
-pub type ModeUpdate = CuLatchedStateUpdate<Mode>;
 ```
 
-Each field generates a typed console accessor, a named inbox resource and a
-source alias in `operator_inputs`. Declaration order supplies private wire
-tags. Both endpoints assume matching application metadata and the same
-declaration. Checking metadata compatibility is a separate change.
+Fields generate console accessors, inbox resources, source aliases and private wire tags in declaration order. Both builds assume matching application metadata. Compatibility validation is a separate change.
 
 ```rust
-// Works with Twin::builder or Twin::from_telemetry.
 let (builder, mut operator) = Twin::from_telemetry(PlainUdpRx::new(rx))
     .with_teleops::<OperatorInputs>(return_tx)?;
 let (twin, frames) = builder.spawn()?;
 
-// Fresh UI input. Sample the enable switch and axes together.
-operator.stick().try_send(&Pilot { held: pad.enable(), axes: pad.axes() })?;
-operator.mode().set(&Mode::Inspection)?;
-operator.take_photo().try_send(&PhotoRequest { request_id: click_id })?;
-// On a later transition:
-operator.mode().clear()?;
-```
+// In a UI callback, bind the frame actually on screen before sampling.
+let mut input = operator.observing(displayed_copperlist_id);
+input.stick().try_send(&Pilot { held: pad.enable(), axes: pad.axes() })?;
+input.take_photo().try_send(&PhotoRequest { request_id: click_id })?; // on click
+input.mode().set(&Mode::Inspection)?; // or input.mode().clear()
 
-### Time of validity belongs to the sample
-
-Each submission produces one ordinary graph message. Stick axes and the enable
-switch share a `CuMsg<Pilot>` and a deadline. A click has its own
-`CuMsg<PhotoRequest>`. A mode update's ToV dates its `Set` or `Clear`
-transition. The consumer retains the resulting mode across idle cycles.
-
-```rust
-// Alternative input path for a console running its own Copper graph.
-// gamepad_msg: &CuMsg<Pilot>, with the ToV assigned by the gamepad source.
+// A headless Copper console can forward a stamped CuMsg<Pilot> directly.
 operator.stick().try_send_msg(gamepad_msg)?;
 ```
 
-- `try_send(&payload)`, `set` and `clear` submit fresh samples. Bind their
-  time at acquisition, before queueing. With unsynchronized clocks, use a
-  robot tick already observed before sampling as a conservative validity start.
-- `try_send_msg(&msg)` forwards the payload and its supplied ToV. A time or
-  range in a console clock domain requires a known mapping to robot time.
-  Reject an unmappable timestamp. Preserve `Tov::None` as unknown and skip
-  empty messages. Only the robot runtime supplies execution metadata.
-- A full local sender returns `WouldBlock`. Local admission, retransmission
-  and robot dequeue never renew a sample's ToV. The control task requires a
-  fresh, timed observation to grant manual control.
-
 ```rust
-// Robot setup, sketched for the threadless plain UDP example.
-// app_resources binds the named consumer slots from the graph below.
 let (publish, inboxes) = OperatorInputs::inboxes()?;
 let robot = Robot::builder()
     .with_resources(move |cfg| app_resources(cfg, inboxes))
     .with_telemetry_tx(boot_session_id, move |clock| {
-        let sender = PlainUdpTx::new(data_tx);
-        Ok(sender.with_teleops(return_rx, publish, clock))
+        PlainUdpTx::builder(data_tx)
+            .with_teleops(return_rx, publish, clock)
+            .build()
     }, buffers)
     .build()?;
 ```
 
 ```ron
-// Robot graph excerpt. The app's resource bundle publishes the three inboxes.
+// One generated source and its application consumer, excerpted from the graph.
 tasks: [
     (id: "stick", type: "app::operator_inputs::StickSource", resources: {"inbox": "ops.stick"}),
-    (id: "mode",  type: "app::operator_inputs::ModeSource",  resources: {"inbox": "ops.mode"}),
-    (id: "photo", type: "app::operator_inputs::TakePhotoSource", resources: {"inbox": "ops.take_photo"}),
-    (id: "tick", type: "app::RobotTick"),
     (id: "control", type: "app::Control"),
-    (id: "camera", type: "app::Camera"),
 ],
-cnx: [
-    (src: "stick", dst: "control", msg: "app::Pilot"),
-    (src: "tick",  dst: "control", msg: "app::Tick"),
-    (src: "mode",  dst: "control", msg: "app::ModeUpdate"),
-    (src: "photo", dst: "camera",  msg: "app::PhotoRequest"),
-],
+cnx: [(src: "stick", dst: "control", msg: "app::Pilot")],
 ```
 
-| Channel | Between robot iterations | Source output on an idle cycle |
-| --- | --- | --- |
-| Stick | Keep the newest complete sample, including an explicit release | Empty `CuMsg<Pilot>` |
-| Mode | Keep the newest `Set` or `Clear`. Skip `NoChange` at submission so it cannot erase a pending transition | Empty message. The consumer retains its `CuLatchedState<Mode>` |
-| Photo | Accept newer events in arrival order into a four-entry FIFO. Drop incoming events when full. Consume at most one per cycle | Empty message. A camera fires only on a fresh request |
+| Channel | Graph behavior |
+| --- | --- |
+| `Latest<Pilot>` | Newest sample wins. Axes and enable switch share one ToV. |
+| `Latched<Mode>` | Latest `Set` or `Clear` wins. Its ToV dates the transition. Consumers retain `CuLatchedState<Mode>`. |
+| `Event<PhotoRequest, 4>` | FIFO, one event per iteration. Drop incoming events when full. For confirmed actions, deduplicate by request ID and publish the result. |
 
-On a lossy link the console periodically republishes its **desired** mode
-(including `Clear`) until the twin shows the applied mode. For a photo that
-must be confirmed, expose `PhotoResult { request_id, outcome }` on the robot
-graph. Retry with the same application ID and deduplicate at the camera task
-over the advertised retry window. A packet sequence only suppresses transport
-duplicates. The twin can display the actual decision through existing telemetry.
+Idle sources emit empty messages. A full console sender returns `WouldBlock`. Success means local submission.
 
-## Operator presence belongs in the graph
+## Which CopperList did the operator see?
 
-Example customer policy: sample the pad every 40 ms. The robot starts in safe
-mode and requires a positive sample less than 150 ms old on **every** iteration.
-Release revokes control immediately when observed. Keep the axes and their
-expiry together so an unrelated heartbeat cannot authorize a stale setpoint.
+| Evidence | Meaning |
+| --- | --- |
+| `observed_copperlist_id: Option<u64>` | Robot frame displayed **when the input was sampled**. Scoped to the robot session. Omit when unavailable. |
+| `CuMsg.tov` | Sample validity in robot time. Queueing and retries preserve it. |
+| Accepting CopperList ID | Robot iteration in which the source emitted the command. Available from the enclosing CopperList. |
+
+Carry the observed ID in the command envelope. Correlate it with source admission by session, control epoch, channel and sequence. For a rejected command, record the available identity, observed ID and rejection reason. Seeing list 812 and acting in list 829 identifies two frames to inspect. The gap alone cannot distinguish display lag from return-link or queue delay.
+
+For unsynchronized clocks, a fresh sample can use the **same observed ID** as its freshness reference. Send it once. The robot resolves it against a bounded history of robot ticks and rejects unknown or expired references. For `try_send_msg`, preserve the supplied ToV, mapping clock domains when needed. Reject unmappable times and retain `Tov::None` as unknown. A newer display frame cannot renew an older sample.
+
+## Deadman and replay
+
+Example policy in `Control::process`. Start with `self.manual = None`. Read `now` from a captured robot tick every iteration, including during silence.
 
 ```rust
-// Inside Control::process. 'now' is a robot-time tick supplied by a captured
-// graph input, including on idle cycles. All times use the same clock domain.
-if let Some(update) = mode.payload() {
-    self.mode.update(update);
-}
-if let (Some(pilot), Tov::Time(valid_from)) = (stick.payload(), stick.tov) {
-    self.manual = pilot.held.then(|| (pilot.axes, valid_from + self.hold_time));
+if let Some(pilot) = stick.payload() {
+    self.manual = match (pilot.held, stick.tov) {
+        (true, Tov::Time(t)) if t <= now => Some((pilot.axes, t + self.hold_time)),
+        _ => None,
+    };
 }
 match self.manual {
     Some((axes, until)) if now < until => out.set_payload(self.command(axes)),
@@ -131,83 +88,17 @@ match self.manual {
 }
 ```
 
-`hold_time` and re-engagement are application policy. This example permits
-re-engagement on the next fresh held sample. An application that requires an
-explicit re-arm should carry a separate arm request and retain the trip state.
-Freeze the control task's latch, manual command, deadline and any application
-deduplication state needed after a keyframe. Capture source payloads **and
-their ToVs**. During twin reconstruction or offline replay the recorded source
-outputs and tick drive the same timeout, even across a silent interval.
+With a 150 ms hold time, a sample already 120 ms old grants at most 30 ms of control. Capture source outputs and ToVs. Keyframe the customer's latch, command, deadline and action deduplication state so replay takes the same branch.
 
-## Where the packets go
-
-Today the FEC worker reads `CUFB` datagrams into a 320-byte report buffer.
-The plain UDP example sends native telemetry through `CuTelemetryTx` and
-receives it through `CuTelemetryRx`. Its packet codec already runs on
-`no_std`. [FEC worker](../../core/cu29_logstream/src/worker.rs) ·
-[Transport contracts](../../core/cu29_logstream/src/stream.rs) ·
-[Plain UDP](../../examples/cu_udp_telemetry/src/lib.rs)
+## Transport and verification
 
 ```text
-console UI ── typed command ─┐                       ┌─ CUFB → FeedbackController
-twin receiver ─ FEC report ──┴─ return TX → robot RX ┤
-                                                    └─ teleops → typed inbox → source → graph
+CUOP | version | robot session | control epoch | field tag | sequence
+     | observed_copperlist_id? | validity (ToV or use observed tick) | payload
 ```
 
-One owner reads each physical endpoint and dispatches complete packets before
-either decoder runs. Keep the existing report encoding. Give commands a distinct
-packet tag and a bounded codec, for example:
+One reader per endpoint routes `CUFB` to FEC and `CUOP` to typed inboxes. Custom transports can publish into the same inboxes. Use a trusted or authenticated carrier. Validate framing, epoch and sequence before publication. On takeover, flush pending inputs and deliver the application's revocation before the new operator's samples.
 
-```text
-CUOP | framing version | robot session | control epoch | generated field tag
-     | per-channel sequence | sample validity (robot-time ToV or tick reference) | payload
-```
+Use preallocated inboxes, bounded polling on host even during telemetry silence, and a fixed packet budget in the threadless `CuTelemetryTx::poll`. [FEC worker](../../core/cu29_logstream/src/worker.rs) · [Plain UDP example](../../examples/cu_udp_telemetry/src/lib.rs)
 
-- Bind to one authorized console and robot session. Issue a new control epoch
-  on takeover or reconnect. Reject older epochs, unknown field tags,
-  old or repeated sequences, oversized frames and trailing bytes before publishing.
-  Check the full payload before advancing the sequence. UDP checksums and session
-  IDs provide no sender authentication. The deployment supplies an authenticated
-  carrier or establishes a trusted point-to-point link.
-- For fresh samples using unsynchronized clocks, echo a recent robot-issued freshness reference from
-  telemetry, e.g. a captured robot tick identified by CopperList ID. The console
-  samples the controls *after* observing that reference. The robot resolves it in
-  a bounded history of issued ticks, drops expired or unknown references, and
-  puts that tick's robot time in `CuMsg.tov`. Queueing and delayed delivery then
-  consume the 150 ms lease. Starting a fresh lease at dequeue would let an old
-  held-stick packet revive control. On epoch change flush inboxes and deliver
-  revocation to the control graph before admitting the new operator. For this
-  example, the application supplies a release sample (`Pilot::default()` with
-  `held == false`) and a mode `Clear`. Reserve their delivery for one graph
-  iteration before publishing new samples. A disconnected console also expires
-  through the ordinary deadline when no explicit disconnect arrives.
-- Size the return receive buffer at setup for the largest enabled packet,
-  within the carrier MTU. Decode once into bounded typed storage. The source
-  takes at most one value into its runtime-owned output slot per iteration.
-  On host, use preallocated single-producer/single-consumer handoffs and schedule
-  return polling even during telemetry silence. On firmware, service a fixed
-  packet budget in the existing between-iteration poll. The next iteration
-  observes admitted inputs. Budget traffic and measure worst-case service time
-  with maximum packets on the target.
-- In the plain UDP example, compose the return reader with the existing sender
-  through `CuTelemetryTx::poll`. A custom protocol can decode its own framing
-  and publish to the same typed inboxes. For FEC, extend the existing worker's
-  receive loop to route both tags with independent processing budgets. Configure
-  one return carrier even when only teleops is enabled.
-
-## First implementation slice
-
-1. Generate accessors, source aliases and field tags from `#[derive(Teleops)]`.
-   Reject zero event capacities. In `cu29_logstream`, add the paired inbox
-   endpoints and bounded return codec. In `cu_udp_telemetry`, exercise one stick channel
-   through both host and threadless senders. Compile the protocol for
-   `thumbv8m.main-none-eabihf`.
-2. Bind the consumer half via task resources and implement `TeleopSource`.
-   Check that forwarding a queued `CuMsg` preserves its validity and a click
-   cannot refresh the stick. Test loss, duplicate delivery, expiry and re-engagement.
-   Replay from a keyframe mid-hold with the live endpoint disconnected. Compare
-   the exact CopperList where control returns to safe mode.
-3. Add the twin builder handle and shared FEC dispatch. Exercise teleops alone,
-   feedback alone, and interleaved commands and reports. Verify event overflow,
-   a dropped mode clear followed by retransmission, and old-epoch traffic after
-   reconnect. Build the legacy one-way example with the feature disabled.
+Verify host and embedded UDP, mixed feedback and commands, and event overflow. Freeze the displayed frame while newer telemetry arrives and check the recorded observed ID. Delay a held sample past expiry, then replay from a mid-hold keyframe and compare the exact safe-mode iteration.
