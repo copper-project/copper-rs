@@ -1,7 +1,7 @@
 use crate::pacing::STRUCTURED_RECORD_BYTES;
 use cu29_traits::{CuError, CuResult};
 /// Preallocated native records shared by all destinations on one telemetry worker.
-/// A full pool drops the incoming record of that kind. Counts and byte limits must be positive.
+/// A full pool drops the incoming record of that kind. Only the keyframe count may be zero.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TelemetryBufferConfig {
     /// Maximum encoded payload per CopperList capture.
@@ -10,7 +10,7 @@ pub struct TelemetryBufferConfig {
     pub max_keyframe_bytes: usize,
     /// Number of capture buffers.
     pub capture_count: u16,
-    /// Number of keyframe buffers.
+    /// Number of keyframe buffers. Zero disables native telemetry keyframes.
     pub keyframe_count: u16,
     /// Number of structured-log buffers.
     pub structured_log_count: u16,
@@ -36,8 +36,8 @@ impl TelemetryBufferConfig {
         if self.max_capture_bytes == 0 || self.max_keyframe_bytes == 0 {
             return Err("telemetry record limits must be positive".into());
         }
-        if self.capture_count == 0 || self.keyframe_count == 0 || self.structured_log_count == 0 {
-            return Err("telemetry buffer counts must be positive".into());
+        if self.capture_count == 0 || self.structured_log_count == 0 {
+            return Err("telemetry capture and structured-log counts must be positive".into());
         }
         let pools = [
             (self.max_capture_bytes, self.capture_count),

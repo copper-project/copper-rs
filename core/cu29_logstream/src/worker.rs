@@ -286,15 +286,25 @@ impl<P: CopperListTuple + Send + Sync> WriteStream<CopperList<P>> for ScheduledC
 /// Bounded keyframe encoding; capture objects are released before pacing begins.
 #[derive(Debug)]
 pub struct ScheduledKeyFrameSink {
-    inbox: Inbox,
+    inbox: Option<Inbox>,
     interval: u32,
 }
+impl ScheduledKeyFrameSink {
+    /// Whether this destination requests runtime keyframe capture.
+    pub fn enabled(&self) -> bool {
+        self.inbox.is_some()
+    }
+}
+
 impl WriteStream<KeyFrame> for ScheduledKeyFrameSink {
     fn log(&mut self, keyframe: &KeyFrame) -> CuResult<()> {
+        let Some(inbox) = &mut self.inbox else {
+            return Ok(());
+        };
         if !keyframe.culistid.is_multiple_of(u64::from(self.interval)) {
             return Ok(());
         }
-        self.inbox.submit(true, keyframe.culistid, |bytes| {
+        inbox.submit(true, keyframe.culistid, |bytes| {
             bincode::encode_into_slice(keyframe, bytes, bincode::config::standard())
                 .map_err(|error| CuError::from(error.to_string()))
         })
@@ -980,12 +990,12 @@ fn spawn_worker<P: CopperListTuple + Send + Sync>(
             _payload: PhantomData,
         },
         ScheduledKeyFrameSink {
-            inbox: Inbox {
+            inbox: (keyframe_count > 0).then_some(Inbox {
                 worker,
                 pending,
                 free: Mutex::new(kf_free),
                 recycled: kf_recycled,
-            },
+            }),
             interval,
         },
         SenderMonitor(shared),
@@ -1138,13 +1148,18 @@ mod tests {
             TelemetryBufferConfig::new(1, 8192).payload_bytes().unwrap(),
             4 + 2 * 8192 + 4 * 4096
         );
+        assert_eq!(
+            TelemetryBufferConfig {
+                keyframe_count: 0,
+                ..small
+            }
+            .payload_bytes()
+            .unwrap(),
+            2342
+        );
         for invalid in [
             TelemetryBufferConfig {
                 capture_count: 0,
-                ..small
-            },
-            TelemetryBufferConfig {
-                keyframe_count: 0,
                 ..small
             },
             TelemetryBufferConfig {

@@ -44,8 +44,10 @@ capture, keyframe and structured-log payloads on the robot's sender worker.
 Install it with `Robot::builder().with_telemetry_tx(move |_| Ok(tx), buffers)`.
 `TelemetryBufferConfig::new(max_capture_bytes, max_keyframe_bytes)` reserves
 four captures, two keyframes and four structured logs. Set `capture_count`,
-`keyframe_count` and `structured_log_count` to reduce memory use. Each must be
-at least one. A full pool drops the incoming record and counts the drop.
+`keyframe_count` and `structured_log_count` to reduce memory use. Set `keyframe_count: 0` to disable native telemetry keyframes.
+Local keyframe logging is controlled independently by `logging.enable_keyframe_logging`.
+Capture and structured-log counts and both byte limits must remain positive because
+structured logs use up to `min(max_keyframe_bytes, 4096)` bytes each. A full pool drops the incoming record and counts the drop.
 Fan-out destinations share these buffers. Disk logging uses separate storage.
 
 A sender that needs time between records implements `poll(mode)` and

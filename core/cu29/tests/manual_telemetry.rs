@@ -212,6 +212,26 @@ fn generated_iteration_services_telemetry_and_twin_recovers_from_loss() -> CuRes
     replay.stop_twin()?;
     drop(replay);
     drop(s);
+    let seen = Arc::new(StdMutex::new(Observations::default()));
+    let tx = Probe(seen.clone());
+    let mut app = ManualApp::builder()
+        .with_telemetry_tx(
+            [9; 16],
+            move |_| Ok(tx),
+            TelemetryBufferConfig {
+                keyframe_count: 0,
+                ..TelemetryBufferConfig::new(1024, 1024)
+            },
+        )
+        .build()?
+        .start()?;
+    app.run_one_iteration()?;
+    drop(app.stop()?);
+    let observations = seen.lock().unwrap();
+    assert_eq!(observations.lists, [0]);
+    assert!(observations.frames.is_empty());
+    drop(observations);
+
     missions::check_managed_loop()?;
     #[cfg(not(feature = "static-config"))]
     check_local_payload_accounting()?;

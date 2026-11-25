@@ -15,6 +15,7 @@ pub(crate) struct ManualOutput<P: CopperListTuple> {
     pub active: CuListsManager<P, 1>,
     free: Vec<CuListsManager<P, 1>>,
     frames: Vec<KeyFrame>,
+    frames_enabled: bool,
     pending: VecDeque<(CuListsManager<P, 1>, Option<KeyFrame>)>,
     pub drops: u64,
     pub frame_drops: u64,
@@ -22,7 +23,7 @@ pub(crate) struct ManualOutput<P: CopperListTuple> {
 
 impl<P: CuListZeroedInit> ManualOutput<P> {
     pub fn new(count: u16, frame_count: u16) -> CuResult<Self> {
-        if count == 0 || frame_count == 0 {
+        if count == 0 {
             return Err("manual telemetry requires output slots".into());
         }
         let frames = (0..frame_count)
@@ -33,6 +34,7 @@ impl<P: CuListZeroedInit> ManualOutput<P> {
             free: (0..count).map(|_| CuListsManager::new()).collect(),
             pending: VecDeque::with_capacity(usize::from(count)),
             frames,
+            frames_enabled: frame_count != 0,
             drops: 0,
             frame_drops: 0,
         })
@@ -51,6 +53,7 @@ impl<P: CopperListTuple> ManualOutput<P> {
         Ok(())
     }
     pub fn complete(&mut self, frame: Option<&mut KeyFrame>) {
+        let frame = frame.filter(|_| self.frames_enabled);
         let Some(mut next) = self.free.pop() else {
             self.active.pop();
             self.frame_drops = self.frame_drops.saturating_add(u64::from(frame.is_some()));
