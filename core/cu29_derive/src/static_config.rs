@@ -166,6 +166,7 @@ config_struct!(LogStreamDestinationConfig {
     link,
     fec,
     recovery_interval,
+    metadata_repeat_secs,
     max_record_bytes,
 });
 config_struct!(LogStreamTransportConfig { type_, resource });
