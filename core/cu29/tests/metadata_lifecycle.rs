@@ -2,6 +2,7 @@
 use cu29::prelude::*;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
+static TEST_LOGGER: Mutex<()> = Mutex::new(());
 static FAILURE: AtomicU8 = AtomicU8::new(0);
 fn fail(operation: u8) -> CuResult<()> {
     if FAILURE.load(Ordering::Relaxed) == operation {
@@ -112,6 +113,7 @@ fn events(path: &std::path::Path) -> Vec<(SectionContext, RuntimeLifecycleEvent)
 }
 #[test]
 fn successful_restart_and_failed_transitions_record_exact_lifecycle() {
+    let _guard = TEST_LOGGER.lock().unwrap();
     let root =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/lifecycle-tests");
     std::fs::create_dir_all(&root).unwrap();
@@ -315,4 +317,70 @@ fn successful_restart_and_failed_transitions_record_exact_lifecycle() {
         ));
     }
     FAILURE.store(0, Ordering::Relaxed);
+}
+
+#[cfg(feature = "async-cl-io")]
+#[test]
+fn structured_rollover_returns_while_the_output_allocator_is_locked() {
+    use std::sync::mpsc::channel;
+    use std::time::Duration;
+
+    let _guard = TEST_LOGGER.lock().unwrap();
+    FAILURE.store(0, Ordering::Relaxed);
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("structured.copper");
+    let logger = logger(&path);
+    let app = App::builder()
+        .with_logger::<memmap::MmapSectionStorage, UnifiedLoggerWrite>(logger.clone())
+        .build()
+        .unwrap()
+        .start()
+        .unwrap();
+
+    // The output worker holds this mutex during a section seal and header
+    // publication. Three records force the generated 40 KiB text stream to rotate.
+    let allocator = logger.lock().unwrap();
+    let (started, ready) = channel();
+    let (completed, received) = channel();
+    let payload = "x".repeat(16_000);
+    std::thread::scope(|scope| {
+        let payload = &payload;
+        scope.spawn(move || {
+            started.send(()).unwrap();
+            for id in 9001..=9003 {
+                let mut entry = CuLogEntry::new(id, CuLogLevel::Info);
+                entry.params.push(to_value(payload).unwrap());
+                log(&mut entry).unwrap();
+            }
+            let _ = completed.send(());
+        });
+        ready.recv().unwrap();
+        let admitted = received.recv_timeout(Duration::from_secs(2));
+        drop(allocator);
+        assert!(
+            admitted.is_ok(),
+            "structured producer waited for the output allocator"
+        );
+    });
+    drop(app.stop().unwrap());
+    drop(logger);
+
+    let mut reader = UnifiedLoggerRead::new(&path).unwrap();
+    let mut saved = Vec::new();
+    while let Some(bytes) = reader
+        .read_next_section_type(UnifiedLogType::StructuredLogLine)
+        .unwrap()
+    {
+        let mut remaining = bytes.as_slice();
+        while !remaining.is_empty() {
+            let (entry, used): (CuLogEntry, _) =
+                bincode::decode_from_slice(remaining, bincode::config::standard()).unwrap();
+            if (9001..=9003).contains(&entry.msg_index) {
+                assert_eq!(entry.params.as_slice(), &[to_value(&payload).unwrap()]);
+                saved.push(entry.msg_index);
+            }
+            remaining = &remaining[used..];
+        }
+    }
+    assert_eq!(saved, [9001, 9002, 9003]);
 }
