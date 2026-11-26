@@ -5,7 +5,7 @@ use cu29::logstream::{FecTelemetryRx, TelemetryBufferConfig};
 use cu29::prelude::*;
 use cu29::teleops::ReturnTx;
 
-pub use policy::{Deadman, Tick};
+pub use policy::{Deadman, Safety, Tick};
 use std::error::Error;
 use std::time::{Duration, Instant};
 
@@ -74,7 +74,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         )
         .build()?;
     let mut robot = robot.start()?;
-    let mut previous = None;
     let (key_tx, key_rx) = std::sync::mpsc::channel();
     let mut key_tx = Some(key_tx);
     let mut pressed: Option<(CuTime, Instant)> = None;
@@ -85,22 +84,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             let frame = &read.frame;
             let list = &frame.copperlist;
             let safe = list.msgs.get_safety_output();
-            let was_armed = list
-                .id
-                .checked_sub(1)
-                .is_some_and(|id| previous == Some((id, false)));
-            previous = safe.payload().map(|safe| (list.id, *safe));
             if let Some((start, instant)) = pressed {
-                if list.msgs.get_button_output().payload() == Some(&true)
-                    && safe.payload() == Some(&true)
+                if let Some(Safety::ButtonTrip { pressed, flipped }) = safe.payload()
+                    && *pressed == start
                 {
-                    if !was_armed {
-                        return Err(
-                            "missing preceding armed frame or watchdog already expired".into()
-                        );
-                    }
-                    let flipped = safe.metadata.process_time.end.unwrap();
-                    let outbound = (flipped - start).as_nanos();
+                    let outbound = (*flipped - start).as_nanos();
                     let total = frame.received_at.duration_since(instant).as_nanos();
                     let inbound = total
                         .checked_sub(u128::from(outbound))
@@ -115,7 +103,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
                 continue;
             }
-            if safe.payload() == Some(&false)
+            if safe.payload() == Some(&Safety::Armed)
                 && let Some(tx) = key_tx.take()
             {
                 if automatic {

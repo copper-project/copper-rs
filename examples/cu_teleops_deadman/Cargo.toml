@@ -7,9 +7,10 @@ license.workspace = true
 publish = false
 
 [features]
-demo = ["cu29/teleops", "cu29/logstream", "dep:cu29-logstream-udp"]
+demo = ["cu29/teleops", "cu29/logstream", "dep:cu29-logstream-udp", "dep:serde"]
 
 [dependencies]
+serde = { workspace = true, optional = true }
 cu29 = { workspace = true, optional = true }
 cu29-logstream-udp = { workspace = true, optional = true }
 
