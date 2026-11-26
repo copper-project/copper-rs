@@ -19,15 +19,15 @@ can explicitly send `Clear`, and an event field holds up to its declared capacit
 
 ```rust
 let (builder, mut operator) = Twin::from_telemetry(PlainUdpRx::new(rx))
-    .with_teleops::<OperatorInputs>(return_tx)?;
+    .with_teleops::<OperatorInputs>(synced_clock, return_tx)?;
 let (twin, frames) = builder.spawn()?;
 
 let mut update = operator_inputs::Update {
-    stick: Some(Pilot { held: pad.enable(), axes: pad.axes() }.into()),
+    stick: Some(operator.sampler.sample(Pilot { held: pad.enable(), axes: pad.axes() })),
     ..Default::default()
 };
 if let Some(click) = ui.next_photo_request() {
-    assert!(update.take_photo.try_push(click.into()).is_ok());
+    assert!(update.take_photo.try_push(operator.sampler.sample(click)).is_ok());
 }
 operator.submit(displayed_copperlist_id, &mut update)?;
 ```
@@ -71,7 +71,7 @@ Idle sources emit empty messages. A full console sender returns `WouldBlock`. Su
 
 The source checks the original observed CL against its actual iteration immediately before emission. Its RON setting `max_lag_cl` is the largest allowed difference (default 1). Future and expired samples are dropped. A newer observed CL supersedes an older pending joystick position. Multiple events and latch transitions within one CL retain their own transport ordering.
 
-For an input sampled on displayed CL 812, submit the newest available reading once, using the last reading as the update’s optional stick sample. An empty batch emits nothing. A stamped input retains its original validity independently of this CL-based admission check.
+For an input sampled on displayed CL 812, submit the newest available reading once, using the last reading as the update’s optional stick sample. An empty batch emits nothing. Pass `Some(clock)` at console setup when that clock reads robot time. The sampler reads it at the input event, so queueing and retries preserve the original stamp. For a forwarded message it keeps the existing ToV. Pass `None` for an unsynchronized station. Its samples carry `Tov::None`, which the robot resolves to the observed CopperList’s tick. The observed ID is required in both modes.
 
 ## Deadman and replay
 
