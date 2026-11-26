@@ -27,7 +27,7 @@ input.take_photo().try_send(&PhotoRequest { request_id: click_id })?; // on clic
 input.mode().set(&Mode::Inspection)?; // or input.mode().clear()
 
 // A headless Copper console can forward a stamped CuMsg<Pilot> directly.
-operator.stick().try_send_msg(gamepad_msg)?;
+operator.observing(displayed_copperlist_id).stick().try_send_msg(gamepad_msg)?;
 ```
 
 ```rust
@@ -53,7 +53,7 @@ cnx: [(src: "stick", dst: "control", msg: "app::Pilot")],
 
 | Channel | Graph behavior |
 | --- | --- |
-| `Latest<Pilot>` | Newest sample wins. Axes and enable switch share one ToV. |
+| `Latest<Pilot>` | Select the newest sample in the batch for each observed robot CL. Send at most once per field per CL. Axes and enable switch share one ToV. |
 | `Latched<Mode>` | Latest `Set` or `Clear` wins. Its ToV dates the transition. Consumers retain `CuLatchedState<Mode>`. |
 | `Event<PhotoRequest, 4>` | FIFO, one event per iteration. Drop incoming events when full. For confirmed actions, deduplicate by request ID and publish the result. |
 
@@ -63,13 +63,13 @@ Idle sources emit empty messages. A full console sender returns `WouldBlock`. Su
 
 | Evidence | Meaning |
 | --- | --- |
-| `observed_copperlist_id: Option<u64>` | Robot frame displayed **when the input was sampled**. Scoped to the robot session. Omit when unavailable. |
+| `observed_copperlist_id: u64` | Robot frame displayed **when the input was sampled**. Scoped to the robot session. Wait for a frame before sending. |
 | `CuMsg.tov` | Sample validity in robot time. Queueing and retries preserve it. |
 | Accepting CopperList ID | Robot iteration in which the source emitted the command. Available from the enclosing CopperList. |
 
-Carry the observed ID in the command envelope. Correlate it with source admission by session, control epoch, channel and sequence. For a rejected command, record the available identity, observed ID and rejection reason. Seeing list 812 and acting in list 829 identifies two frames to inspect. The gap alone cannot distinguish display lag from return-link or queue delay.
+The source checks the original observed CL against its actual iteration immediately before emission. Its RON setting `max_lag_cl` is the largest allowed difference (default 1). Future and expired samples are dropped. A newer observed CL supersedes an older pending joystick position. Multiple events and latch transitions within one CL retain their own transport ordering.
 
-For unsynchronized clocks, a fresh sample can use the **same observed ID** as its freshness reference. Send it once. The robot resolves it against a bounded history of robot ticks and rejects unknown or expired references. For `try_send_msg`, preserve the supplied ToV, mapping clock domains when needed. Reject unmappable times and retain `Tov::None` as unknown. A newer display frame cannot renew an older sample.
+For an input sampled on displayed CL 812, submit the newest available reading once, for example with `operator.observing(812).stick().try_send_latest(samples.iter())`. An empty batch emits nothing. A stamped input retains its original validity independently of this CL-based admission check.
 
 ## Deadman and replay
 
@@ -93,11 +93,11 @@ With a 150 ms hold time, a sample already 120 ms old grants at most 30 ms of con
 ## Transport and verification
 
 ```text
-CUOP | version | robot session | control epoch | field tag | sequence
-     | observed_copperlist_id? | validity (ToV or use observed tick) | payload
+CUOP | version | robot session | field tag | observed_copperlist_id
+     | sequence (events and latch transitions only) | validity (ToV or use observed tick) | payload
 ```
 
-One reader per endpoint routes `CUFB` to FEC and `CUOP` to typed inboxes. Custom transports can publish into the same inboxes. Use a trusted or authenticated carrier. Validate framing, epoch and sequence before publication. On takeover, flush pending inputs and deliver the application's revocation before the new operator's samples.
+One reader per endpoint routes `CUFB` to FEC and `CUOP` to typed inboxes. Custom transports can publish into the same inboxes. Use a trusted or authenticated carrier. Validate framing, robot session and channel ordering before publication.
 
 Use preallocated inboxes, bounded polling on host even during telemetry silence, and a fixed packet budget in the threadless `CuTelemetryTx::poll`. [FEC worker](../../core/cu29_logstream/src/worker.rs) · [Plain UDP example](../../examples/cu_udp_telemetry/src/lib.rs)
 

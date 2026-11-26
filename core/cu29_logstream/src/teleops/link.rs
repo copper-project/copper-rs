@@ -6,13 +6,12 @@ use crate::{CuStreamRxError, CuStreamTx};
 use cu29_clock::RobotClock;
 use cu29_clock::{CuDuration, CuTime};
 
-const PREFIX: &[u8; 5] = b"CUOP\x01";
+const PREFIX: &[u8; 5] = b"CUOP\x02";
 const MTU: usize = 1200;
-/// Console sender for a single robot session and authorized control epoch.
+/// Console sender for a single robot session.
 pub struct ReturnTx<T> {
     tx: T,
     session: [u8; 16],
-    epoch: u64,
     sequence: u64,
 }
 impl<T: CuStreamTx> ReturnTx<T> {
@@ -23,44 +22,38 @@ impl<T: CuStreamTx> ReturnTx<T> {
     pub fn transport(&self) -> &T {
         &self.tx
     }
-    pub fn new(tx: T, session: [u8; 16], epoch: u64) -> Self {
+    pub fn new(tx: T, session: [u8; 16]) -> Self {
         Self {
             tx,
             session,
-            epoch,
             sequence: 0,
         }
     }
 }
 impl<T: CuStreamTx> Submit for ReturnTx<T> {
-    fn submit<V: Encode>(
+    fn submit<C: Channel>(
         &mut self,
         field: u16,
-        observed: Option<u64>,
+        observed: u64,
         validity: Validity,
-        value: &V,
+        value: &C::Payload,
     ) -> Result<(), CuStreamTxError> {
-        let sequence = self
-            .sequence
-            .checked_add(1)
-            .ok_or(CuStreamTxError::Failed("control sequence exhausted"))?;
-        let id = CommandId {
-            session: self.session,
-            epoch: self.epoch,
-            field,
-            sequence,
-            observed_copperlist_id: observed,
-        };
         let mut packet = [0; MTU];
         packet[..PREFIX.len()].copy_from_slice(PREFIX);
-        let len = bincode::encode_into_slice(
-            (id, validity, value),
-            &mut packet[PREFIX.len()..],
-            bincode::config::standard(),
-        )
+        let dst = &mut packet[PREFIX.len()..];
+        let config = bincode::config::standard();
+        let header = (self.session, field, observed, validity);
+        let len = if C::ONE_PER_CL {
+            bincode::encode_into_slice((header, value), dst, config)
+        } else {
+            self.sequence = self
+                .sequence
+                .checked_add(1)
+                .ok_or(CuStreamTxError::Failed("event sequence exhausted"))?;
+            bincode::encode_into_slice((header, self.sequence, value), dst, config)
+        }
         .map_err(|_| CuStreamTxError::Failed("teleops encoding failed"))?;
         self.tx.try_send(&packet[..len + PREFIX.len()])?;
-        self.sequence = sequence;
         Ok(())
     }
 }
@@ -92,65 +85,36 @@ impl<const N: usize> TickHistory<N> {
 pub struct Admissions<P> {
     publish: P,
     session: [u8; 16],
-    epoch: u64,
-    max_age: CuDuration,
 }
 impl<P: Dispatch> Admissions<P> {
-    pub fn new(publish: P, session: [u8; 16], epoch: u64, max_age: CuDuration) -> Self {
-        Self {
-            publish,
-            session,
-            epoch,
-            max_age,
-        }
-    }
-    /// Call while graph admissions are quiescent. Apply revocation before accepting the new epoch.
-    pub fn takeover(&mut self, epoch: u64, revoke: impl FnOnce()) -> CuResult<()> {
-        if epoch <= self.epoch {
-            return Err("control epoch must increase".into());
-        }
-        self.publish.reset();
-        revoke();
-        self.epoch = epoch;
-        Ok(())
+    pub fn new(publish: P, session: [u8; 16]) -> Self {
+        Self { publish, session }
     }
     pub fn receive(
         &mut self,
         packet: &[u8],
-        now: CuTime,
         lookup: impl FnOnce(u64) -> Option<CuTime>,
-    ) -> Result<CommandId, (Option<CommandId>, Rejected)> {
+    ) -> Result<u64, (Option<u64>, Rejected)> {
         let bytes = packet
             .strip_prefix(PREFIX)
             .filter(|_| packet.len() <= MTU)
             .ok_or((None, Rejected::Framing))?;
-        let ((id, validity), len): ((CommandId, Validity), _) =
+        let ((session, field, cl, validity), len): (([u8; 16], u16, u64, Validity), _) =
             bincode::decode_from_slice(bytes, bincode::config::standard())
                 .map_err(|_| (None, Rejected::Framing))?;
-        let reject = |why| (Some(id), why);
-        if id.session != self.session {
+        let reject = |why| (Some(cl), why);
+        if session != self.session {
             return Err(reject(Rejected::Session));
         }
-        if id.epoch != self.epoch {
-            return Err(reject(Rejected::Epoch));
-        }
+        let tick = lookup(cl).ok_or(reject(Rejected::UnknownFrame))?;
         let tov = match validity {
             Validity::Robot(tov) => tov,
-            Validity::Observed => match id.observed_copperlist_id {
-                None => Tov::None,
-                Some(frame) => {
-                    let tick = lookup(frame).ok_or(reject(Rejected::Freshness))?;
-                    if tick > now || now - tick > self.max_age {
-                        return Err(reject(Rejected::Freshness));
-                    }
-                    Tov::Time(tick)
-                }
-            },
+            Validity::Observed => Tov::Time(tick),
         };
         self.publish
-            .dispatch(id, tov, &bytes[len..])
+            .dispatch(field, cl, tov, &bytes[len..])
             .map_err(reject)?;
-        Ok(id)
+        Ok(cl)
     }
 }
 
@@ -170,7 +134,7 @@ where
     R: CuStreamRx,
     P: Dispatch + Send,
     H: FnMut(&[u8]) -> Option<CuTime> + Send,
-    A: FnMut(Result<CommandId, (Option<CommandId>, Rejected)>) + Send,
+    A: FnMut(Result<u64, (Option<u64>, Rejected)>) + Send,
 {
     ReturnLink {
         inner,
@@ -178,19 +142,15 @@ where
         clock,
         policy,
         history: TickHistory::<256>::default(),
-        admissions: Admissions::new(publish, [0; 16], 0, CuDuration::default()),
+        admissions: Admissions::new(publish, [0; 16]),
         bound: false,
         tick,
         audit,
     }
 }
 
-/// Parameters for a trusted control epoch and its shared feedback endpoint.
+/// Optional shared feedback endpoint.
 pub struct ReturnPolicy {
-    /// Clock in which captured ticks are expressed, including simulated robot time.
-    pub robot_clock: RobotClock,
-    pub epoch: u64,
-    pub max_age: CuDuration,
     pub feedback: Option<FeedbackInbox>,
 }
 
@@ -207,27 +167,13 @@ pub struct ReturnLink<T, R, P, H, A> {
     audit: A,
 }
 
-impl<T, R, P: Dispatch, H, A> ReturnLink<T, R, P, H, A> {
-    /// Change the authorized epoch at a quiescent graph boundary. The caller's
-    /// revocation must take effect before it returns. Subsequent packets from
-    /// the previous epoch are rejected.
-    pub fn takeover(&mut self, epoch: u64, revoke: impl FnOnce()) -> CuResult<()> {
-        if !self.bound {
-            return Err("teleops session is not bound".into());
-        }
-        self.admissions.takeover(epoch, revoke)?;
-        self.policy.epoch = epoch;
-        Ok(())
-    }
-}
-
 impl<T, R, P, H, A> CuTelemetryTx for ReturnLink<T, R, P, H, A>
 where
     T: CuTelemetryTx,
     R: CuStreamRx,
     P: Dispatch + Send,
     H: FnMut(&[u8]) -> Option<CuTime> + Send,
-    A: FnMut(Result<CommandId, (Option<CommandId>, Rejected)>) + Send,
+    A: FnMut(Result<u64, (Option<u64>, Rejected)>) + Send,
 {
     fn send(&mut self, record: CuTelemetryRecord<'_>) -> CuResult<()> {
         match record {
@@ -236,8 +182,6 @@ where
                     return Err("return reader already bound to another session".into());
                 }
                 self.admissions.session = s.identity.session_id;
-                self.admissions.epoch = self.policy.epoch;
-                self.admissions.max_age = self.policy.max_age;
                 self.bound = true;
             }
             CuTelemetryRecord::CopperList { id, capture } => {
@@ -267,11 +211,7 @@ where
                         continue;
                     }
                     if self.bound {
-                        (self.audit)(self.admissions.receive(
-                            packet,
-                            self.policy.robot_clock.now(),
-                            |id| self.history.get(id),
-                        ))
+                        (self.audit)(self.admissions.receive(packet, |id| self.history.get(id)))
                     }
                 }
                 Ok(None) => break,
