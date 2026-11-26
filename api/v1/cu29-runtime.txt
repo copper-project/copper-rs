@@ -1924,8 +1924,10 @@ pub fn cu29_runtime::payload::CuArray<T, N>::fill_from_iter<I>(&mut self, iter: 
 pub fn cu29_runtime::payload::CuArray<T, N>::is_empty(&self) -> bool
 pub fn cu29_runtime::payload::CuArray<T, N>::len(&self) -> usize
 pub fn cu29_runtime::payload::CuArray<T, N>::new() -> Self
-impl<T, const N: usize> cu_bincode::de::Decode<()> for cu29_runtime::payload::CuArray<T, N> where T: cu_bincode::de::Decode<()> + core::clone::Clone
-pub fn cu29_runtime::payload::CuArray<T, N>::decode<D: cu_bincode::de::Decoder<Context = ()>>(decoder: &mut D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
+impl<'de, Context, T, const N: usize> cu_bincode::de::BorrowDecode<'de, Context> for cu29_runtime::payload::CuArray<T, N> where T: cu_bincode::de::BorrowDecode<'de, Context> + core::clone::Clone
+pub fn cu29_runtime::payload::CuArray<T, N>::borrow_decode<D: cu_bincode::de::BorrowDecoder<'de, Context = Context>>(decoder: &mut D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
+impl<Context, T, const N: usize> cu_bincode::de::Decode<Context> for cu29_runtime::payload::CuArray<T, N> where T: cu_bincode::de::Decode<Context> + core::clone::Clone
+pub fn cu29_runtime::payload::CuArray<T, N>::decode<D: cu_bincode::de::Decoder<Context = Context>>(decoder: &mut D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
 impl<T, const N: usize> cu_bincode::enc::Encode for cu29_runtime::payload::CuArray<T, N> where T: cu_bincode::enc::Encode + core::clone::Clone
 pub fn cu29_runtime::payload::CuArray<T, N>::encode<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
 impl<T: core::clone::Clone + cu_bincode::value_decode::ValueDecode, const N: usize> cu_bincode::value_decode::ValueDecode for cu29_runtime::payload::CuArray<T, N>
@@ -1937,10 +1939,13 @@ pub fn cu29_runtime::payload::CuArray<T, N>::short_type_path() -> &'static str
 pub fn cu29_runtime::payload::CuArray<T, N>::type_ident() -> core::option::Option<&'static str>
 pub fn cu29_runtime::payload::CuArray<T, N>::type_path() -> &'static str
 pub struct cu29_runtime::payload::CuArrayVec<T: core::clone::Clone, const N: usize>(pub arrayvec::arrayvec::ArrayVec<T, N>)
-impl<'de, T, const N: usize> cu_bincode::de::BorrowDecode<'de, ()> for cu29_runtime::payload::CuArrayVec<T, N> where T: core::clone::Clone + cu_bincode::de::BorrowDecode<'de, ()> + 'static
-pub fn cu29_runtime::payload::CuArrayVec<T, N>::borrow_decode<D: cu_bincode::de::BorrowDecoder<'de, Context = ()>>(decoder: &mut D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
-impl<T, const N: usize> cu_bincode::de::Decode<()> for cu29_runtime::payload::CuArrayVec<T, N> where T: core::clone::Clone + cu_bincode::de::Decode<()> + 'static
-pub fn cu29_runtime::payload::CuArrayVec<T, N>::decode<D: cu_bincode::de::Decoder<Context = ()>>(decoder: &mut D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
+impl<T: core::clone::Clone, const N: usize> cu29_runtime::payload::CuArrayVec<T, N>
+pub fn cu29_runtime::payload::CuArrayVec<T, N>::is_empty(&self) -> bool
+pub fn cu29_runtime::payload::CuArrayVec<T, N>::len(&self) -> usize
+impl<'de, Context, T, const N: usize> cu_bincode::de::BorrowDecode<'de, Context> for cu29_runtime::payload::CuArrayVec<T, N> where T: core::clone::Clone + cu_bincode::de::BorrowDecode<'de, Context> + 'static
+pub fn cu29_runtime::payload::CuArrayVec<T, N>::borrow_decode<D: cu_bincode::de::BorrowDecoder<'de, Context = Context>>(decoder: &mut D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
+impl<Context, T, const N: usize> cu_bincode::de::Decode<Context> for cu29_runtime::payload::CuArrayVec<T, N> where T: core::clone::Clone + cu_bincode::de::Decode<Context> + 'static
+pub fn cu29_runtime::payload::CuArrayVec<T, N>::decode<D: cu_bincode::de::Decoder<Context = Context>>(decoder: &mut D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
 impl<T, const N: usize> cu_bincode::enc::Encode for cu29_runtime::payload::CuArrayVec<T, N> where T: core::clone::Clone + cu_bincode::enc::Encode + 'static
 pub fn cu29_runtime::payload::CuArrayVec<T, N>::encode<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
 impl<T: core::clone::Clone + cu_bincode::value_decode::ValueDecode, const N: usize> cu_bincode::value_decode::ValueDecode for cu29_runtime::payload::CuArrayVec<T, N>

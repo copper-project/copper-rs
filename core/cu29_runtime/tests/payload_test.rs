@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use bincode::{Decode, Encode, config};
-    use cu29_runtime::payload::{CuArrayVec, CuLatchedState, CuLatchedStateUpdate};
+    use cu29_runtime::payload::{CuArray, CuArrayVec, CuLatchedState, CuLatchedStateUpdate};
 
     // Test default initialization
     #[test]
@@ -120,6 +120,34 @@ mod tests {
         assert_eq!(decoded.0.len(), 2);
         assert_eq!(decoded.0[0], "hello");
         assert_eq!(decoded.0[1], "world");
+    }
+
+    // `#[derive(Decode)]` requires every field to decode under any context.
+    #[derive(Debug, Default, Encode, Decode)]
+    struct ArrayPayload {
+        array: CuArray<u32, 4>,
+        array_vec: CuArrayVec<u32, 4>,
+    }
+
+    #[test]
+    fn test_payload_holding_arrays_derives_decode() {
+        let mut payload = ArrayPayload::default();
+        assert!(payload.array_vec.is_empty());
+        payload.array.fill_from_iter([1, 2]);
+        payload.array_vec.0.extend([3, 4, 5]);
+        assert_eq!(payload.array_vec.len(), 3);
+
+        let config = config::standard();
+        let encoded = bincode::encode_to_vec(&payload, config).unwrap();
+
+        let (decoded, _): (ArrayPayload, _) = bincode::decode_from_slice(&encoded, config).unwrap();
+        assert_eq!(decoded.array.as_slice(), &[1, 2]);
+        assert_eq!(decoded.array_vec.0.as_slice(), &[3, 4, 5]);
+
+        let (borrowed, _): (ArrayPayload, _) =
+            bincode::borrow_decode_from_slice(&encoded, config).unwrap();
+        assert_eq!(borrowed.array.as_slice(), &[1, 2]);
+        assert_eq!(borrowed.array_vec.0.as_slice(), &[3, 4, 5]);
     }
 
     #[test]
