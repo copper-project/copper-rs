@@ -7,14 +7,14 @@ use cu29_clock::RobotClock;
 use cu29_clock::{CuDuration, CuTime};
 
 const PREFIX: &[u8; 5] = b"CUOP\x05";
-const MTU: usize = 1200;
 /// Console sender for a single robot session.
-pub struct ReturnTx<T> {
+pub struct ReturnTx<T, const MAX_PACKET_BYTES: usize> {
     tx: T,
+    packet: [u8; MAX_PACKET_BYTES],
     session: [u8; 16],
     sequence: u64,
 }
-impl<T: CuStreamTx> ReturnTx<T> {
+impl<T: CuStreamTx, const MAX_PACKET_BYTES: usize> ReturnTx<T, MAX_PACKET_BYTES> {
     /// Drive carriers that retain bytes after accepting a complete packet.
     pub fn poll_pending(&mut self) -> Result<bool, CuStreamTxError> {
         self.tx.poll_pending()
@@ -25,28 +25,34 @@ impl<T: CuStreamTx> ReturnTx<T> {
     pub fn new(tx: T, session: [u8; 16]) -> Self {
         Self {
             tx,
+            packet: [0; MAX_PACKET_BYTES],
             session,
             sequence: 0,
         }
     }
 }
-impl<T: CuStreamTx> Submit for ReturnTx<T> {
+impl<T: CuStreamTx, const MAX_PACKET_BYTES: usize> Submit for ReturnTx<T, MAX_PACKET_BYTES> {
     fn submit<U: Encode>(&mut self, observed: u64, update: &U) -> Result<(), CuStreamTxError> {
         let sequence = self
             .sequence
             .checked_add(1)
             .ok_or(CuStreamTxError::Failed("teleops sequence exhausted"))?;
-        let mut packet = [0; MTU];
-        packet[..PREFIX.len()].copy_from_slice(PREFIX);
+        let (prefix, payload) =
+            self.packet
+                .split_at_mut_checked(PREFIX.len())
+                .ok_or(CuStreamTxError::Failed(
+                    "teleops packet budget is smaller than its prefix",
+                ))?;
+        prefix.copy_from_slice(PREFIX);
         let len = bincode::encode_into_slice(
             (self.session, observed, sequence, update),
-            &mut packet[PREFIX.len()..],
+            payload,
             bincode::config::standard(),
         )
         .map_err(|_| {
             CuStreamTxError::Failed("teleops update exceeds packet budget or cannot be encoded")
         })?;
-        self.tx.try_send(&packet[..PREFIX.len() + len])?;
+        self.tx.try_send(&self.packet[..PREFIX.len() + len])?;
         self.sequence = sequence;
         Ok(())
     }
@@ -76,11 +82,17 @@ impl<const N: usize> TickHistory<N> {
     }
 }
 /// Decoder owned by the robot's sole return reader.
-pub struct Admissions<P> {
+pub struct Admissions<
+    P,
+    const MAX_PACKET_BYTES: usize,
+    const DECODE_BYTES: usize = MAX_PACKET_BYTES,
+> {
     publish: P,
     session: [u8; 16],
 }
-impl<P: Dispatch> Admissions<P> {
+impl<P: Dispatch, const MAX_PACKET_BYTES: usize, const DECODE_BYTES: usize>
+    Admissions<P, MAX_PACKET_BYTES, DECODE_BYTES>
+{
     pub fn new(publish: P, session: [u8; 16]) -> Self {
         Self { publish, session }
     }
@@ -91,7 +103,7 @@ impl<P: Dispatch> Admissions<P> {
     ) -> Result<u64, (Option<u64>, Rejected)> {
         let bytes = packet
             .strip_prefix(PREFIX)
-            .filter(|_| packet.len() <= MTU)
+            .filter(|_| packet.len() <= MAX_PACKET_BYTES)
             .ok_or((None, Rejected::Framing))?;
         let ((session, cl, sequence), len): (([u8; 16], u64, u64), _) =
             bincode::decode_from_slice(bytes, bincode::config::standard())
@@ -102,7 +114,7 @@ impl<P: Dispatch> Admissions<P> {
         }
         let tick = lookup(cl).ok_or(reject(Rejected::UnknownFrame))?;
         self.publish
-            .dispatch(cl, tick, sequence, &bytes[len..])
+            .dispatch::<DECODE_BYTES>(cl, tick, sequence, &bytes[len..])
             .map_err(reject)?;
         Ok(cl)
     }
@@ -110,15 +122,15 @@ impl<P: Dispatch> Admissions<P> {
 
 /// Attach the sole return reader to the bounded telemetry service. The session header binds
 /// admissions to the robot boot. Extract ticks from captured application data in robot time.
-pub fn with_teleops<T, R, P, H, A>(
+pub fn with_teleops<T, R, P, H, A, const MAX_PACKET_BYTES: usize, const DECODE_BYTES: usize>(
     inner: T,
     rx: R,
     publish: P,
     clock: RobotClock,
-    policy: ReturnPolicy,
+    policy: ReturnPolicy<MAX_PACKET_BYTES, DECODE_BYTES>,
     tick: H,
     audit: A,
-) -> ReturnLink<T, R, P, H, A>
+) -> ReturnLink<T, R, P, H, A, MAX_PACKET_BYTES, DECODE_BYTES>
 where
     T: CuTelemetryTx,
     R: CuStreamRx,
@@ -131,6 +143,7 @@ where
         rx,
         clock,
         policy,
+        packet: [0; MAX_PACKET_BYTES],
         history: TickHistory::<256>::default(),
         admissions: Admissions::new(publish, [0; 16]),
         bound: false,
@@ -139,25 +152,31 @@ where
     }
 }
 
-/// Optional shared feedback endpoint.
-pub struct ReturnPolicy {
+/// Maximum complete return packet size for this carrier, including the CUOP header.
+/// When feedback shares the endpoint, reserve room for its reports as well.
+/// The optional second bound limits bincode decoding, including space claimed for
+/// collections. Increase it for payloads whose decoded representation is larger.
+pub struct ReturnPolicy<const MAX_PACKET_BYTES: usize, const DECODE_BYTES: usize = MAX_PACKET_BYTES>
+{
     pub feedback: Option<FeedbackInbox>,
 }
 
 /// Robot return-link service, shared by host and threadless telemetry drivers.
-pub struct ReturnLink<T, R, P, H, A> {
+pub struct ReturnLink<T, R, P, H, A, const MAX_PACKET_BYTES: usize, const DECODE_BYTES: usize> {
     inner: T,
     rx: R,
     clock: RobotClock,
-    policy: ReturnPolicy,
+    policy: ReturnPolicy<MAX_PACKET_BYTES, DECODE_BYTES>,
+    packet: [u8; MAX_PACKET_BYTES],
     history: TickHistory<256>,
-    admissions: Admissions<P>,
+    admissions: Admissions<P, MAX_PACKET_BYTES, DECODE_BYTES>,
     bound: bool,
     tick: H,
     audit: A,
 }
 
-impl<T, R, P, H, A> CuTelemetryTx for ReturnLink<T, R, P, H, A>
+impl<T, R, P, H, A, const MAX_PACKET_BYTES: usize, const DECODE_BYTES: usize> CuTelemetryTx
+    for ReturnLink<T, R, P, H, A, MAX_PACKET_BYTES, DECODE_BYTES>
 where
     T: CuTelemetryTx,
     R: CuStreamRx,
@@ -187,11 +206,10 @@ where
         if mode == TxMode::Draining {
             return self.inner.poll(mode);
         }
-        let mut bytes = [0; MTU];
         for _ in 0..8 {
-            match self.rx.try_recv(&mut bytes) {
-                Ok(Some(n)) if n <= MTU => {
-                    let packet = &bytes[..n];
+            match self.rx.try_recv(&mut self.packet) {
+                Ok(Some(n)) if n <= MAX_PACKET_BYTES => {
+                    let packet = &self.packet[..n];
                     if self
                         .policy
                         .feedback

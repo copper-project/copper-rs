@@ -163,6 +163,13 @@ fn generated_capacity_and_memory_budget_are_enforced() {
         1128
     );
 
+    larger_mtu.link.mtu_bytes = 2048;
+    let plan = LogStreamPlan::resolve_with_symbol_capacity::<2048>(&larger_mtu).unwrap();
+    assert_eq!(
+        usize::from(plan.symbol_size) + cu29_logstream::PACKET_HEADER_LEN,
+        2048
+    );
+
     let mut too_small = destination();
     too_small.link.memory_budget_kib = 64;
     assert!(LogStreamPlan::resolve(&too_small).is_err());
@@ -271,10 +278,6 @@ fn malformed_requirements_are_rejected_after_record_verification() {
         },
         cu29_logstream::ReceiverRequirements {
             symbol_size: 20,
-            ..valid
-        },
-        cu29_logstream::ReceiverRequirements {
-            symbol_size: 1129,
             ..valid
         },
         cu29_logstream::ReceiverRequirements {

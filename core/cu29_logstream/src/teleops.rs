@@ -275,7 +275,7 @@ pub enum Rejected {
 
 #[doc(hidden)]
 pub trait Dispatch {
-    fn dispatch(
+    fn dispatch<const DECODE_LIMIT: usize>(
         &mut self,
         observed: u64,
         tick: cu29_clock::CuTime,

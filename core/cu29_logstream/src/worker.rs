@@ -469,7 +469,7 @@ where
     }
     let interval = config.recovery.recovery_interval;
     let drain_time = config.pacing.max_latency;
-    let state = FecState::new(
+    let state = FecState::<{ crate::DEFAULT_MAX_SYMBOL_SIZE }>::new(
         config,
         manifest.as_ref().ok(),
         feedback_enabled,
@@ -524,15 +524,15 @@ impl Driver for CustomerDriver {}
 
 /// Record-level FEC sender driven by the telemetry worker. The opening session
 /// supplies the shared identity, schema and mission for the repeated FEC manifest.
-pub struct FecTelemetryTx<T> {
+pub struct FecTelemetryTx<T, const SYMBOL_BYTES: usize = { crate::DEFAULT_MAX_SYMBOL_SIZE }> {
     clock: RobotClock,
     transport: T,
-    session: FecSession,
+    session: FecSession<SYMBOL_BYTES>,
 }
 
-enum FecSession {
+enum FecSession<const SYMBOL_BYTES: usize> {
     Waiting(crate::LogStreamPlan),
-    Active(Box<FecState>),
+    Active(Box<FecState<SYMBOL_BYTES>>),
 }
 
 impl<T: CuStreamTx> FecTelemetryTx<OneWay<T>> {
@@ -552,6 +552,28 @@ impl<T: CuStreamTx + CuFeedbackRx> FecTelemetryTx<T> {
     ) -> CuResult<Self> {
         Self::waiting(transport, plan, clock, true)
     }
+}
+
+impl<T: CuStreamTx, const SYMBOL_BYTES: usize> FecTelemetryTx<OneWay<T>, SYMBOL_BYTES> {
+    /// Open a one-way sender with statically sized FEC storage for this link.
+    pub fn with_symbol_capacity(
+        transport: T,
+        plan: crate::LogStreamPlan,
+        clock: RobotClock,
+    ) -> CuResult<Self> {
+        Self::waiting(OneWay::new(transport), plan, clock, false)
+    }
+}
+
+impl<T: CuStreamTx + CuFeedbackRx, const SYMBOL_BYTES: usize> FecTelemetryTx<T, SYMBOL_BYTES> {
+    /// Open a feedback-enabled sender with statically sized FEC storage for this link.
+    pub fn with_feedback_and_symbol_capacity(
+        transport: T,
+        plan: crate::LogStreamPlan,
+        clock: RobotClock,
+    ) -> CuResult<Self> {
+        Self::waiting(transport, plan, clock, true)
+    }
 
     fn waiting(
         transport: T,
@@ -560,6 +582,9 @@ impl<T: CuStreamTx + CuFeedbackRx> FecTelemetryTx<T> {
         feedback: bool,
     ) -> CuResult<Self> {
         plan.validate().map_err(|e| CuError::from(e.to_string()))?;
+        if usize::from(plan.symbol_size) > SYMBOL_BYTES {
+            return Err("FEC symbol exceeds sender storage".into());
+        }
         if plan.feedback.is_some() != feedback {
             return Err("feedback policy must match the transport wiring".into());
         }
@@ -571,7 +596,9 @@ impl<T: CuStreamTx + CuFeedbackRx> FecTelemetryTx<T> {
     }
 }
 
-impl<T: CuStreamTx + CuFeedbackRx> CuTelemetryTx for FecTelemetryTx<T> {
+impl<T: CuStreamTx + CuFeedbackRx, const SYMBOL_BYTES: usize> CuTelemetryTx
+    for FecTelemetryTx<T, SYMBOL_BYTES>
+{
     fn send(&mut self, record: CuTelemetryRecord<'_>) -> CuResult<()> {
         let now = self.clock.now();
         match &mut self.session {
@@ -607,13 +634,13 @@ impl<T: CuStreamTx + CuFeedbackRx> CuTelemetryTx for FecTelemetryTx<T> {
     }
 }
 
-struct FecState {
+struct FecState<const SYMBOL_BYTES: usize> {
     feedback: Option<FeedbackController>,
     feedback_failed: bool,
-    core: SenderCore,
+    core: SenderCore<SYMBOL_BYTES>,
     staging: Vec<u8>,
 }
-impl FecState {
+impl<const SYMBOL_BYTES: usize> FecState<SYMBOL_BYTES> {
     fn new(
         config: LogStreamSenderConfig,
         manifest: Option<&crate::SessionManifest>,
@@ -659,8 +686,8 @@ impl FecState {
         let reserved = reserved
             .checked_add(staging)
             .ok_or_else(|| CuError::from("sender pool size overflow"))?;
-        let core =
-            SenderCore::new(config, now, reserved).map_err(|e| CuError::from(e.to_string()))?;
+        let core = SenderCore::with_symbol_capacity(config, now, reserved)
+            .map_err(|e| CuError::from(e.to_string()))?;
         Ok(Self {
             feedback,
             core,
@@ -748,7 +775,9 @@ impl FecState {
             .map_err(|e| CuError::from(e.to_string()))
     }
 }
-impl<T: CuStreamTx + CuFeedbackRx> Driver for FecTelemetryTx<T> {
+impl<T: CuStreamTx + CuFeedbackRx, const SYMBOL_BYTES: usize> Driver
+    for FecTelemetryTx<T, SYMBOL_BYTES>
+{
     fn discard_pending(&mut self) {
         if let FecSession::Active(state) = &mut self.session {
             state.core.discard_pending();

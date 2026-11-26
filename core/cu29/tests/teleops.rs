@@ -132,8 +132,8 @@ impl cu29::logstream::CuStreamTx for Packet {
 fn duplicated_or_reordered_frames_cannot_renew_control() {
     use cu29::teleops::{Admissions, Rejected, ReturnTx, Teleops};
     let (publish, inboxes) = Controls::inboxes().unwrap();
-    let mut rx = Admissions::new(publish, [77; 16]);
-    let mut tx = ReturnTx::new(Packet::default(), [77; 16]);
+    let mut rx = Admissions::<_, 256>::new(publish, [77; 16]);
+    let mut tx = ReturnTx::<_, 256>::new(Packet::default(), [77; 16]);
     for (cl, accept) in [(12, true), (12, false), (11, false), (13, true)] {
         let mut op = Controls::operator(&mut tx, None);
         op.submit(
@@ -182,7 +182,7 @@ fn shared_reader_services_eight_packets_even_without_outbound_captures() {
     }
     let (publish, inboxes) = Controls::inboxes().unwrap();
     let session = [9; 16];
-    let mut sender = ReturnTx::new(Packet::default(), session);
+    let mut sender = ReturnTx::<_, 256>::new(Packet::default(), session);
     let mut packets = VecDeque::from([b"CUFBtest".to_vec()]);
     for value in 1..=8 {
         let mut msg = CuMsg::default();
@@ -206,7 +206,7 @@ fn shared_reader_services_eight_packets_even_without_outbound_captures() {
         Packets(packets),
         publish,
         clock.clone(),
-        ReturnPolicy {
+        ReturnPolicy::<256> {
             feedback: Some(feedback.clone()),
         },
         |_| Some(CuTime(2)),
@@ -245,8 +245,8 @@ fn event_overflow_rejects_the_whole_update_and_allows_retry() {
     use cu29::teleops::{Admissions, Rejected, ReturnTx, Teleops};
     let (mut publish, inboxes) = Controls::inboxes().unwrap();
     assert!(publish.click.publish(3, Tov::None, 1));
-    let mut rx = Admissions::new(publish, [1; 16]);
-    let mut tx = ReturnTx::new(Packet::default(), [1; 16]);
+    let mut rx = Admissions::<_, 256>::new(publish, [1; 16]);
+    let mut tx = ReturnTx::<_, 256>::new(Packet::default(), [1; 16]);
     let mut op = Controls::operator(&mut tx, None);
     let mut update = controls::Update {
         stick: Some(op.sampler.sample(5)),
@@ -266,4 +266,41 @@ fn event_overflow_rejects_the_whole_update_and_allows_retry() {
     assert_eq!(inboxes.stick.take(4, 0).unwrap().2, 5);
     assert_eq!(inboxes.click.take(4, 0).unwrap().2, 2);
     assert_eq!(inboxes.click.take(4, 0).unwrap().2, 3);
+}
+
+#[derive(Teleops)]
+#[allow(dead_code)]
+struct WideControls {
+    data: Latest<Vec<u8>>,
+}
+
+#[test]
+fn return_packet_budget_controls_encoding_and_admission() {
+    use cu29::teleops::{Admissions, Rejected, ReturnTx, Teleops};
+    let payload = vec![5; 1500];
+    let mut sender = ReturnTx::<_, 2048>::new(Packet::default(), [9; 16]);
+    let mut operator = WideControls::operator(&mut sender, None);
+    let mut update = wide_controls::Update {
+        data: Some(operator.sampler.sample(payload.clone())),
+    };
+    operator.submit(1, &mut update).unwrap();
+    let packet = &sender.transport().0;
+    assert!(packet.len() > 1200 && packet.len() <= 2048);
+    let (publish, inboxes) = WideControls::inboxes().unwrap();
+    let mut receiver = Admissions::<_, 2048>::new(publish, [9; 16]);
+    assert_eq!(receiver.receive(packet, |_| Some(CuTime(0))), Ok(1));
+    assert_eq!(inboxes.data.take(1, 0).unwrap().2, payload);
+    let (publish, _) = WideControls::inboxes().unwrap();
+    assert_eq!(
+        Admissions::<_, 1024>::new(publish, [9; 16]).receive(packet, |_| Some(CuTime(0))),
+        Err((None, Rejected::Framing))
+    );
+    let (publish, _) = WideControls::inboxes().unwrap();
+    assert_eq!(
+        Admissions::<_, 2048, 256>::new(publish, [9; 16]).receive(packet, |_| Some(CuTime(0))),
+        Err((Some(1), Rejected::Framing))
+    );
+    let mut small = ReturnTx::<_, 1024>::new(Packet::default(), [9; 16]);
+    assert!(small.submit(1, &update).is_err());
+    assert!(small.transport().0.is_empty());
 }

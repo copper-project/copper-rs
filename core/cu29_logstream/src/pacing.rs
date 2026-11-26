@@ -111,9 +111,9 @@ struct RecoveryPackets {
 /// and wakeups; this core neither reads a global clock nor sleeps. Runtime objects
 /// are never retained here. Optional feedback can later request the same retained
 /// jobs through `request_recovery`, without bypassing this scheduler's budget.
-pub struct SenderCore {
+pub struct SenderCore<const SYMBOL_BYTES: usize = { crate::DEFAULT_MAX_SYMBOL_SIZE }> {
     config: LogStreamSenderConfig,
-    continuous: Box<ContinuousEncoder<1128, 64>>,
+    continuous: Box<ContinuousEncoder<SYMBOL_BYTES, 64>>,
     finite: FiniteObjectEncoder,
     structured_encoder: FiniteObjectEncoder,
     repairs: RepairSchedule,
@@ -141,6 +141,12 @@ pub struct SenderCore {
 }
 
 impl SenderCore {
+    pub fn new(config: LogStreamSenderConfig, now: CuTime, reserved_bytes: usize) -> Result<Self> {
+        Self::with_symbol_capacity(config, now, reserved_bytes)
+    }
+}
+
+impl<const SYMBOL_BYTES: usize> SenderCore<SYMBOL_BYTES> {
     #[cfg(feature = "std")]
     pub(crate) fn check_session(
         &self,
@@ -171,7 +177,11 @@ impl SenderCore {
 
     /// Validate all storage arithmetic before allocating. `reserved_bytes` covers
     /// the driver's owned-record pool, which shares the destination budget.
-    pub fn new(config: LogStreamSenderConfig, now: CuTime, reserved_bytes: usize) -> Result<Self> {
+    pub fn with_symbol_capacity(
+        config: LogStreamSenderConfig,
+        now: CuTime,
+        reserved_bytes: usize,
+    ) -> Result<Self> {
         config.validate()?;
         let policy = config.pacing;
         let interval = config.recovery.metadata_repeat_secs;
@@ -235,7 +245,7 @@ impl SenderCore {
             .ok_or(Error::InvalidConfig("retained packet bound overflow"))?;
         let fixed = retained_packets
             .checked_mul(packet_bytes)
-            .and_then(|v| v.checked_add(size_of::<ContinuousEncoder<1128, 64>>()))
+            .and_then(|v| v.checked_add(size_of::<ContinuousEncoder<SYMBOL_BYTES, 64>>()))
             .and_then(|v| v.checked_add(size_of::<Self>()))
             .and_then(|v| {
                 v.checked_add(
