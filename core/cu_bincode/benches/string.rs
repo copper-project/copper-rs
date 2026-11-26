@@ -3,10 +3,9 @@
 extern crate cu_bincode as bincode;
 use bincode::{Decode, Encode};
 use criterion::{Criterion, criterion_group, criterion_main};
-use serde::{Deserialize, Serialize};
 use std::hint::black_box;
 
-#[derive(Serialize, Deserialize, Default, Encode, Decode)]
+#[derive(Default, Encode, Decode)]
 pub struct MyStruct {
     pub v: Vec<String>,
     pub string: String,
@@ -32,12 +31,6 @@ fn build_data(size: usize) -> Vec<MyStruct> {
 fn index_item_decode(c: &mut Criterion) {
     let data = build_data(100);
 
-    c.bench_function("bench v1", |b| {
-        b.iter(|| {
-            let _ = black_box(bincode_1::serialize(black_box(&data))).unwrap();
-        });
-    });
-
     let config = bincode::config::standard();
     c.bench_function("bench v2 (standard)", |b| {
         b.iter(|| {
@@ -52,21 +45,12 @@ fn index_item_decode(c: &mut Criterion) {
         });
     });
 
-    let encodedv1 = bincode_1::serialize(&data).unwrap();
     let encodedv2 = bincode::encode_to_vec(&data, config).unwrap();
-    assert_eq!(encodedv1, encodedv2);
-
-    c.bench_function("bench v1 decode", |b| {
-        b.iter(|| {
-            let _: Vec<MyStruct> =
-                black_box(bincode_1::deserialize(black_box(&encodedv1))).unwrap();
-        });
-    });
 
     c.bench_function("bench v2 decode (legacy)", |b| {
         b.iter(|| {
             let _: (Vec<MyStruct>, _) =
-                black_box(bincode::decode_from_slice(black_box(&encodedv1), config)).unwrap();
+                black_box(bincode::decode_from_slice(black_box(&encodedv2), config)).unwrap();
         });
     });
 }

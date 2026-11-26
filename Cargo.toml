@@ -445,7 +445,7 @@ linux-embedded-hal = "0.5.0"
 log = { version = "0.4", default-features = false }
 minicbor = { version = "2.2.1", default-features = false }
 minicbor-serde = { version = "0.7.0", default-features = false }
-nix = { version = "0.31", default-features = false }
+nix = { version = "0.32", default-features = false }
 panic-probe = "1.0"
 petgraph = { version = "0.8", default-features = false }
 rp235x-hal = "0.4"
