@@ -43,12 +43,24 @@ impl<T: CuMsgPayload + Send + Sync + 'static, const N: usize> Channel for Event<
 /// How to interpret the sample's original validity.
 #[derive(Clone, Copy, Encode, Decode)]
 pub enum Validity {
+    /// Use the robot time of the observed CopperList for an unstamped input.
     Observed,
+    /// Preserve a forwarded message's time of validity in robot time, including [`Tov::None`].
     Robot(Tov),
 }
 
 /// Console submission contract. The caller binds each selection to its observed CopperList.
 pub trait Submit {
+    /// Submit a value for one named channel in the teleops schema.
+    ///
+    /// `field` is the channel's zero-based index in declaration order. The
+    /// generated accessor supplies it so the receiver can distinguish channels
+    /// even when they share a payload type.
+    ///
+    /// `observed` is the ID of the robot CopperList the operator was viewing
+    /// when selecting the input. The robot uses it to check how many iterations
+    /// have elapsed. `validity` tells it whether to use that frame's time for
+    /// the sample or preserve the validity of a forwarded message.
     fn submit<C: Channel>(
         &mut self,
         field: u16,
