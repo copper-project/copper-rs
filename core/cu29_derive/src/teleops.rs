@@ -47,12 +47,7 @@ pub fn expand(item: ItemStruct) -> syn::Result<TokenStream> {
                     Ok(Self { #(#ids: ::cu29::bincode::Decode::decode(d)?,)* })
                 }
             }
-            pub(super) fn schema_id()-> ::cu29::CuResult<[u8;32]> {
-                #ops::schema_id(&[#ops::CatalogMission { slots:&[#(#ops::CatalogSlot {
-                    task_id:stringify!(#ids), msg_type:stringify!(#types), payload:Some(<#types as #ops::Channel>::WIRE_TYPE)
-                }),*] }], &[#((core::any::type_name::<#types>(), <#types as #ops::Channel>::CAPACITY)),*])
-            }
-            pub struct Operator<S>{pub(super) sender:S,pub(super) schema:[u8;32],pub(super) last_sent:[Option<u64>;#count]}
+            pub struct Operator<S>{pub(super) sender:S,pub(super) last_sent:[Option<u64>;#count]}
             impl<S:#ops::Submit> Operator<S>{
                 /// Send fresh samples together, suppressing repeated continuous inputs for this frame.
                 pub fn submit(&mut self,observed:u64,update:&mut Update)->Result<(),::cu29::logstream::CuStreamTxError>{
@@ -66,7 +61,7 @@ pub fn expand(item: ItemStruct) -> syn::Result<TokenStream> {
 
                     })*
                     if !empty {
-                        self.sender.submit(&self.schema,observed,update)?;
+                        self.sender.submit(observed,update)?;
                         #(if <#types as #ops::Channel>::ONE_PER_CL
                             && <#types as #ops::Channel>::sample_count(&update.#ids) != 0 {
                             self.last_sent[#indices] = Some(observed);
@@ -81,7 +76,7 @@ pub fn expand(item: ItemStruct) -> syn::Result<TokenStream> {
         }
         impl #ops::Teleops for #name{
             type Operator<S:#ops::Submit>=#module::Operator<S>;
-            fn operator<S:#ops::Submit>(sender:S)->::cu29::CuResult<Self::Operator<S>>{Ok(#module::Operator{sender,schema:#module::schema_id()?,last_sent:[None;#count]})}
+            fn operator<S:#ops::Submit>(sender:S)->Self::Operator<S>{#module::Operator{sender,last_sent:[None;#count]}}
         }
         impl #name {
             pub fn inboxes()->::cu29::CuResult<(#module::Publishers,#module::Inboxes)>{

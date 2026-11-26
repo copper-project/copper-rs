@@ -17,7 +17,6 @@ struct Recorder(Vec<(u64, Vec<u8>)>);
 impl Submit for Recorder {
     fn submit<U: bincode::Encode>(
         &mut self,
-        _: &[u8; 32],
         observed: u64,
         update: &U,
     ) -> Result<(), CuStreamTxError> {
@@ -33,7 +32,7 @@ impl Submit for Recorder {
 fn displayed_frame_and_channel_policies() {
     use cu29::teleops::Teleops;
     let mut recorder = Recorder::default();
-    let mut operator = Controls::operator(&mut recorder).unwrap();
+    let mut operator = Controls::operator(&mut recorder);
     let mut update = controls::Update {
         mode: Some(CuLatchedStateUpdate::Clear.into()),
         ..Default::default()
@@ -74,7 +73,7 @@ fn displayed_frame_and_channel_policies() {
 fn select_latest_once_per_frame_and_drop_expired_samples() {
     use cu29::teleops::Teleops;
     let mut recorder = Recorder::default();
-    let mut op = Controls::operator(&mut recorder).unwrap();
+    let mut op = Controls::operator(&mut recorder);
     for (cl, value) in [(20, 3), (20, 4), (19, 5), (21, 6)] {
         op.submit(
             cl,
