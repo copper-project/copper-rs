@@ -60,18 +60,21 @@ pub fn expand(item: ItemStruct) -> syn::Result<TokenStream> {
             impl<S:#ops::Submit> Operator<S>{
                 /// Send fresh samples together, suppressing repeated continuous inputs for this frame.
                 pub fn submit(&mut self,observed:u64,update:&mut Update)->Result<(),::cu29::logstream::CuStreamTxError>{
-                    let mut next = self.last_sent;
+
                     let mut empty = true;
-                    #(if <#types as #ops::Channel>::ONE_PER_CL && next[#indices].is_some_and(|last| observed <= last) {
+                    #(if <#types as #ops::Channel>::ONE_PER_CL && self.last_sent[#indices].is_some_and(|last| observed <= last) {
                         update.#ids = Default::default();
                     }
                     if <#types as #ops::Channel>::sample_count(&update.#ids) != 0 {
                         empty = false;
-                        next[#indices] = Some(observed);
+
                     })*
                     if !empty {
                         self.sender.submit(&self.schema,observed,update)?;
-                        self.last_sent = next;
+                        #(if <#types as #ops::Channel>::ONE_PER_CL
+                            && <#types as #ops::Channel>::sample_count(&update.#ids) != 0 {
+                            self.last_sent[#indices] = Some(observed);
+                        })*
                     }
                     Ok(())
                 }
