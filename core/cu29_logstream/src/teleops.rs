@@ -1,6 +1,7 @@
 //! Typed operator channels shared by a console and a robot.
 use crate::CuStreamTxError;
 use alloc::sync::Arc;
+use bincode::value_decode::ValueDecodeRef;
 use bincode::{Decode, Encode};
 use core::marker::PhantomData;
 use crossbeam_queue::ArrayQueue;
@@ -18,23 +19,43 @@ pub struct Event<T, const N: usize>(PhantomData<T>);
 
 /// Declared delivery semantics for a schema field.
 pub trait Channel {
+    type Batch: Default + Encode + Decode<()> + IntoIterator<Item = Sample<Self::Payload>>;
+    fn sample_count(batch: &Self::Batch) -> usize;
+    const WIRE_TYPE: ValueDecodeRef;
     type Payload: CuMsgPayload + Send + Sync + 'static;
     const ONE_PER_CL: bool = false;
     const CAPACITY: usize;
     const REPLACE: bool;
 }
-impl<T: CuMsgPayload + Send + Sync + 'static> Channel for Latest<T> {
+impl<T: bincode::ValueDecode + CuMsgPayload + Send + Sync + 'static> Channel for Latest<T> {
     const ONE_PER_CL: bool = true;
+    type Batch = Option<Sample<T>>;
+    fn sample_count(batch: &Self::Batch) -> usize {
+        usize::from(batch.is_some())
+    }
+    const WIRE_TYPE: ValueDecodeRef = ValueDecodeRef::of::<T>();
     type Payload = T;
     const CAPACITY: usize = 1;
     const REPLACE: bool = true;
 }
-impl<T: CuMsgPayload + Send + Sync + 'static> Channel for Latched<T> {
+impl<T: bincode::ValueDecode + CuMsgPayload + Send + Sync + 'static> Channel for Latched<T> {
+    type Batch = Option<Sample<CuLatchedStateUpdate<T>>>;
+    fn sample_count(batch: &Self::Batch) -> usize {
+        usize::from(batch.is_some())
+    }
+    const WIRE_TYPE: ValueDecodeRef = ValueDecodeRef::of::<T>();
     type Payload = CuLatchedStateUpdate<T>;
     const CAPACITY: usize = 1;
     const REPLACE: bool = true;
 }
-impl<T: CuMsgPayload + Send + Sync + 'static, const N: usize> Channel for Event<T, N> {
+impl<T: bincode::ValueDecode + CuMsgPayload + Send + Sync + 'static, const N: usize> Channel
+    for Event<T, N>
+{
+    type Batch = Events<T, N>;
+    fn sample_count(batch: &Self::Batch) -> usize {
+        batch.0.len()
+    }
+    const WIRE_TYPE: ValueDecodeRef = ValueDecodeRef::of::<T>();
     type Payload = T;
     const CAPACITY: usize = N;
     const REPLACE: bool = false;
@@ -49,75 +70,29 @@ pub enum Validity {
     Robot(Tov),
 }
 
-/// Console submission contract. The caller binds each selection to its observed CopperList.
-pub trait Submit {
-    /// Submit a value for one named channel in the teleops schema.
-    ///
-    /// `field` is the channel's zero-based index in declaration order. The
-    /// generated accessor supplies it so the receiver can distinguish channels
-    /// even when they share a payload type.
-    ///
-    /// `observed` is the ID of the robot CopperList the operator was viewing
-    /// when selecting the input. The robot uses it to check how many iterations
-    /// have elapsed. `validity` tells it whether to use that frame's time for
-    /// the sample or preserve the validity of a forwarded message.
-    fn submit<C: Channel>(
-        &mut self,
-        field: u16,
-        observed: u64,
-        validity: Validity,
-        value: &C::Payload,
-    ) -> Result<(), CuStreamTxError>;
+/// An input and its original time of validity. Plain values use the displayed frame's time.
+#[derive(Encode, Decode)]
+pub struct Sample<T> {
+    pub value: T,
+    pub validity: Validity,
 }
-/// Typed console handle borrowed for one channel.
-pub struct Input<'a, S, C> {
-    sender: &'a mut S,
-    field: u16,
-    observed: u64,
-    last_sent: &'a mut Option<u64>,
-    marker: PhantomData<C>,
-}
-impl<'a, S: Submit, C: Channel> Input<'a, S, C> {
-    #[doc(hidden)]
-    pub fn new(
-        sender: &'a mut S,
-        field: u16,
-        observed: u64,
-        last_sent: &'a mut Option<u64>,
-    ) -> Self {
+impl<T> From<T> for Sample<T> {
+    fn from(value: T) -> Self {
         Self {
-            sender,
-            field,
-            observed,
-            last_sent,
-            marker: PhantomData,
+            value,
+            validity: Validity::Observed,
         }
     }
-    pub fn try_send(&mut self, value: &C::Payload) -> Result<(), CuStreamTxError> {
-        self.send(Validity::Observed, value)
-    }
-    fn send(&mut self, validity: Validity, value: &C::Payload) -> Result<(), CuStreamTxError> {
-        if C::ONE_PER_CL && self.last_sent.is_some_and(|cl| cl >= self.observed) {
-            return Ok(());
-        }
-        self.sender
-            .submit::<C>(self.field, self.observed, validity, value)?;
-        *self.last_sent = Some(self.observed);
-        Ok(())
-    }
-    /// Forward a message whose validity is already in robot time.
-    pub fn try_send_msg(&mut self, msg: &CuMsg<C::Payload>) -> Result<(), CuStreamTxError> {
-        self.try_send_mapped_msg(msg, Some)
-    }
-    /// Map stamped validity into robot time before submission. Unknown validity
-    /// stays unknown. A failed mapping rejects the sample locally.
-    pub fn try_send_mapped_msg(
-        &mut self,
-        msg: &CuMsg<C::Payload>,
+}
+
+impl<T: CuMsgPayload> Sample<T> {
+    /// Move a stamped message into an update after mapping its validity to robot time.
+    pub fn from_mapped_msg(
+        mut msg: CuMsg<T>,
         map: impl FnOnce(Tov) -> Option<Tov>,
-    ) -> Result<(), CuStreamTxError> {
-        let Some(value) = msg.payload() else {
-            return Ok(());
+    ) -> Result<Option<Self>, CuStreamTxError> {
+        let Some(value) = msg.payload_mut().take() else {
+            return Ok(None);
         };
         let tov = match msg.tov {
             Tov::None => Tov::None,
@@ -125,29 +100,98 @@ impl<'a, S: Submit, C: Channel> Input<'a, S, C> {
                 .filter(|t| *t != Tov::None)
                 .ok_or(CuStreamTxError::Failed("unmappable teleops timestamp"))?,
         };
-        self.send(Validity::Robot(tov), value)
+        Ok(Some(Self {
+            value,
+            validity: Validity::Robot(tov),
+        }))
     }
 }
-impl<S: Submit, T: CuMsgPayload + Send + Sync + 'static> Input<'_, S, Latest<T>> {
-    /// Select the newest sample collected for this observed frame. Submit once
-    /// at the sampling boundary. An empty batch emits nothing.
-    pub fn try_send_latest<'v>(
+
+/// Events selected for this update, in arrival order.
+#[derive(Default)]
+pub struct Events<T, const N: usize>(arrayvec::ArrayVec<Sample<T>, N>);
+impl<T, const N: usize> Events<T, N> {
+    /// Append a sample, returning it if this update is already full.
+    pub fn try_push(&mut self, sample: Sample<T>) -> Result<(), Sample<T>> {
+        self.0.try_push(sample).map_err(|e| e.element())
+    }
+}
+impl<T, const N: usize> IntoIterator for Events<T, N> {
+    type Item = Sample<T>;
+    type IntoIter = arrayvec::IntoIter<Sample<T>, N>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+impl<T: Encode, const N: usize> Encode for Events<T, N> {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        self.0.as_slice().encode(encoder)
+    }
+}
+impl<T: Decode<()>, const N: usize> Decode<()> for Events<T, N> {
+    fn decode<D: bincode::de::Decoder<Context = ()>>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        let count = usize::decode(decoder)?;
+        if count > N {
+            return Err(bincode::error::DecodeError::Other(
+                "teleops event capacity exceeded",
+            ));
+        }
+        let mut items = arrayvec::ArrayVec::new();
+        for _ in 0..count {
+            items.push(Sample::decode(decoder)?);
+        }
+        Ok(Self(items))
+    }
+}
+
+/// Submit all selected inputs together. `observed` identifies the displayed robot CopperList.
+pub trait Submit {
+    fn submit<U: Encode>(
         &mut self,
-        samples: impl DoubleEndedIterator<Item = &'v T>,
-    ) -> Result<(), CuStreamTxError> {
-        match samples.last() {
-            Some(value) => self.try_send(value),
-            None => Ok(()),
+        schema: &[u8; 32],
+        observed: u64,
+        update: &U,
+    ) -> Result<(), CuStreamTxError>;
+}
+
+#[doc(hidden)]
+pub use cu29_value::catalog_stream::{CatalogMission, CatalogSlot};
+/// Hash the complete ordered payload descriptions once during setup.
+#[doc(hidden)]
+pub fn schema_id(
+    missions: &'static [CatalogMission],
+    channels: &[(&str, usize)],
+) -> CuResult<[u8; 32]> {
+    use cu29_value::{
+        catalog_format::ValueDecodeCatalogLayout,
+        catalog_stream::{CatalogDescription, write_catalog},
+    };
+    struct Digest(blake3::Hasher);
+    impl bincode::enc::write::Writer for Digest {
+        fn write(&mut self, bytes: &[u8]) -> Result<(), bincode::error::EncodeError> {
+            self.0.update(bytes);
+            Ok(())
         }
     }
-}
-impl<S: Submit, T: CuMsgPayload + Send + Sync + 'static> Input<'_, S, Latched<T>> {
-    pub fn set(&mut self, value: &T) -> Result<(), CuStreamTxError> {
-        self.try_send(&CuLatchedStateUpdate::Set(value.clone()))
+    let mut digest = Digest(blake3::Hasher::new());
+    for (kind, capacity) in channels {
+        digest.0.update(kind.as_bytes());
+        digest.0.update(&(*capacity as u64).to_le_bytes());
     }
-    pub fn clear(&mut self) -> Result<(), CuStreamTxError> {
-        self.try_send(&CuLatchedStateUpdate::Clear)
-    }
+    write_catalog(
+        &mut digest,
+        &CatalogDescription {
+            layout: ValueDecodeCatalogLayout::Flat,
+            missions,
+        },
+    )
+    .map_err(|_| CuError::from("could not describe teleops schema"))?;
+    Ok(*digest.0.finalize().as_bytes())
 }
 
 /// Bounded source-side resource. A source moves one admitted value into the graph per iteration.
@@ -215,17 +259,16 @@ impl<C: Channel> Publisher<C> {
 /// Application schema implemented by derive(Teleops).
 pub trait Teleops {
     type Operator<S: Submit>;
-    fn operator<S: Submit>(sender: S) -> Self::Operator<S>;
+    fn operator<S: Submit>(sender: S) -> CuResult<Self::Operator<S>>;
 }
 impl<S: Submit> Submit for &mut S {
-    fn submit<C: Channel>(
+    fn submit<U: Encode>(
         &mut self,
-        field: u16,
+        schema: &[u8; 32],
         observed: u64,
-        validity: Validity,
-        value: &C::Payload,
+        update: &U,
     ) -> Result<(), CuStreamTxError> {
-        (**self).submit::<C>(field, observed, validity, value)
+        (**self).submit(schema, observed, update)
     }
 }
 
@@ -260,12 +303,11 @@ impl<C: Connect> TwinSubmit<C> {
 }
 #[cfg(feature = "std")]
 impl<F: Connect> Submit for TwinSubmit<F> {
-    fn submit<C: Channel>(
+    fn submit<U: Encode>(
         &mut self,
-        field: u16,
+        schema: &[u8; 32],
         observed: u64,
-        validity: Validity,
-        value: &C::Payload,
+        update: &U,
     ) -> Result<(), CuStreamTxError> {
         let session = self.session.get().ok_or(CuStreamTxError::WouldBlock)?;
         if let Some(connect) = self.connect.take() {
@@ -274,6 +316,6 @@ impl<F: Connect> Submit for TwinSubmit<F> {
         self.sender
             .as_mut()
             .ok_or(CuStreamTxError::Failed("missing operator sender"))?
-            .submit::<C>(field, observed, validity, value)
+            .submit(schema, observed, update)
     }
 }

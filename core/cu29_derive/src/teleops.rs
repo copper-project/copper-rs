@@ -10,10 +10,10 @@ pub fn expand(item: ItemStruct) -> syn::Result<TokenStream> {
             "Teleops requires named channels",
         ));
     };
-    if !item.generics.params.is_empty() || fields.named.len() > u16::MAX as usize {
+    if !item.generics.params.is_empty() {
         return Err(syn::Error::new_spanned(
             item,
-            "expected a concrete teleops schema with at most 65535 channels",
+            "expected a concrete teleops schema",
         ));
     }
     let name = &item.ident;
@@ -25,23 +25,52 @@ pub fn expand(item: ItemStruct) -> syn::Result<TokenStream> {
         .map(|f| f.ident.as_ref().unwrap())
         .collect();
     let types: Vec<_> = fields.named.iter().map(|f| &f.ty).collect();
-    let tags: Vec<_> = (0..ids.len() as u16).collect();
     let aliases = ids
         .iter()
         .map(|i| format_ident!("{}Source", i.to_string().to_case(Case::Pascal)));
     let count = ids.len();
-    let indices = 0..count;
+    let indices: Vec<_> = (0..count).collect();
     let ops = quote!(::cu29::teleops);
     Ok(quote! {
         #vis mod #module {
             use super::*;
-            pub struct Operator<S>{pub(super) sender:S,pub(super) last_sent:[Option<u64>;#count]}
-            pub struct Observing<'a,S>{operator:&'a mut Operator<S>,cl_id:u64}
-            impl<S:#ops::Submit> Operator<S>{
-                pub fn observing(&mut self,cl_id:u64)->Observing<'_,S>{Observing{operator:self,cl_id}}
+            /// One submission for the displayed robot CopperList. Omitted fields have no new input.
+            #[derive(Default)]
+            pub struct Update { #(pub #ids: <#types as #ops::Channel>::Batch,)* }
+            impl ::cu29::bincode::Encode for Update {
+                fn encode<E: ::cu29::bincode::enc::Encoder>(&self,e:&mut E)->Result<(),::cu29::bincode::error::EncodeError>{
+                    #(self.#ids.encode(e)?;)* Ok(())
+                }
             }
-            impl<S:#ops::Submit> Observing<'_,S>{
-                #(pub fn #ids(&mut self)->#ops::Input<'_,S,#types>{#ops::Input::new(&mut self.operator.sender,#tags,self.cl_id,&mut self.operator.last_sent[#indices])})*
+            impl ::cu29::bincode::Decode<()> for Update {
+                fn decode<D: ::cu29::bincode::de::Decoder<Context=()>>(d:&mut D)->Result<Self,::cu29::bincode::error::DecodeError>{
+                    Ok(Self { #(#ids: ::cu29::bincode::Decode::decode(d)?,)* })
+                }
+            }
+            pub(super) fn schema_id()-> ::cu29::CuResult<[u8;32]> {
+                #ops::schema_id(&[#ops::CatalogMission { slots:&[#(#ops::CatalogSlot {
+                    task_id:stringify!(#ids), msg_type:stringify!(#types), payload:Some(<#types as #ops::Channel>::WIRE_TYPE)
+                }),*] }], &[#((core::any::type_name::<#types>(), <#types as #ops::Channel>::CAPACITY)),*])
+            }
+            pub struct Operator<S>{pub(super) sender:S,pub(super) schema:[u8;32],pub(super) last_sent:[Option<u64>;#count]}
+            impl<S:#ops::Submit> Operator<S>{
+                /// Send fresh samples together, suppressing repeated continuous inputs for this frame.
+                pub fn submit(&mut self,observed:u64,update:&mut Update)->Result<(),::cu29::logstream::CuStreamTxError>{
+                    let mut next = self.last_sent;
+                    let mut empty = true;
+                    #(if <#types as #ops::Channel>::ONE_PER_CL && next[#indices].is_some_and(|last| observed <= last) {
+                        update.#ids = Default::default();
+                    }
+                    if <#types as #ops::Channel>::sample_count(&update.#ids) != 0 {
+                        empty = false;
+                        next[#indices] = Some(observed);
+                    })*
+                    if !empty {
+                        self.sender.submit(&self.schema,observed,update)?;
+                        self.last_sent = next;
+                    }
+                    Ok(())
+                }
             }
             pub struct Publishers {#(pub #ids:#ops::Publisher<#types>),*}
             pub struct Inboxes {#(pub #ids:#ops::Inbox<<#types as #ops::Channel>::Payload>),*}
@@ -49,7 +78,7 @@ pub fn expand(item: ItemStruct) -> syn::Result<TokenStream> {
         }
         impl #ops::Teleops for #name{
             type Operator<S:#ops::Submit>=#module::Operator<S>;
-            fn operator<S:#ops::Submit>(sender:S)->Self::Operator<S>{#module::Operator{sender,last_sent:[None;#count]}}
+            fn operator<S:#ops::Submit>(sender:S)->::cu29::CuResult<Self::Operator<S>>{Ok(#module::Operator{sender,schema:#module::schema_id()?,last_sent:[None;#count]})}
         }
         impl #name {
             pub fn inboxes()->::cu29::CuResult<(#module::Publishers,#module::Inboxes)>{

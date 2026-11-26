@@ -2,7 +2,7 @@
 #![cfg(feature = "teleops")]
 use cu29::logstream::CuStreamTxError;
 use cu29::prelude::*;
-use cu29::teleops::{Channel, Submit};
+use cu29::teleops::Submit;
 
 #[derive(Teleops)]
 #[allow(dead_code)]
@@ -13,18 +13,18 @@ struct Controls {
 }
 
 #[derive(Default)]
-struct Recorder(Vec<(u16, u64)>, Vec<Vec<u8>>);
+struct Recorder(Vec<(u64, Vec<u8>)>);
 impl Submit for Recorder {
-    fn submit<C: Channel>(
+    fn submit<U: bincode::Encode>(
         &mut self,
-        tag: u16,
-        frame: u64,
-        _: cu29::teleops::Validity,
-        value: &C::Payload,
+        _: &[u8; 32],
+        observed: u64,
+        update: &U,
     ) -> Result<(), CuStreamTxError> {
-        self.1
-            .push(bincode::encode_to_vec(value, bincode::config::standard()).unwrap());
-        self.0.push((tag, frame));
+        self.0.push((
+            observed,
+            bincode::encode_to_vec(update, bincode::config::standard()).unwrap(),
+        ));
         Ok(())
     }
 }
@@ -33,10 +33,29 @@ impl Submit for Recorder {
 fn displayed_frame_and_channel_policies() {
     use cu29::teleops::Teleops;
     let mut recorder = Recorder::default();
-    let mut operator = Controls::operator(&mut recorder);
-    operator.observing(14).mode().clear().unwrap();
-    operator.observing(14).click().try_send(&7).unwrap();
-    assert_eq!(recorder.0, [(1, 14), (2, 14)]);
+    let mut operator = Controls::operator(&mut recorder).unwrap();
+    let mut update = controls::Update {
+        mode: Some(CuLatchedStateUpdate::Clear.into()),
+        ..Default::default()
+    };
+    assert!(update.click.try_push(7.into()).is_ok());
+    assert!(update.click.try_push(8.into()).is_ok());
+    operator.submit(14, &mut update).unwrap();
+    assert_eq!(recorder.0.len(), 1);
+    let (frame, bytes) = &recorder.0[0];
+    let (update, _): (controls::Update, _) =
+        bincode::decode_from_slice(bytes, bincode::config::standard()).unwrap();
+    assert_eq!(*frame, 14);
+    assert!(update.stick.is_none());
+    assert_eq!(update.mode.unwrap().value, CuLatchedStateUpdate::Clear);
+    assert_eq!(
+        update
+            .click
+            .into_iter()
+            .map(|s| s.value)
+            .collect::<Vec<_>>(),
+        [7, 8]
+    );
     let (mut pubs, inboxes) = Controls::inboxes().unwrap();
     for value in 0..3 {
         assert_eq!(
@@ -55,16 +74,21 @@ fn displayed_frame_and_channel_policies() {
 fn select_latest_once_per_frame_and_drop_expired_samples() {
     use cu29::teleops::Teleops;
     let mut recorder = Recorder::default();
-    let mut op = Controls::operator(&mut recorder);
-    op.observing(20)
-        .stick()
-        .try_send_latest([1, 2, 3].iter())
+    let mut op = Controls::operator(&mut recorder).unwrap();
+    for (cl, value) in [(20, 3), (20, 4), (19, 5), (21, 6)] {
+        op.submit(
+            cl,
+            &mut controls::Update {
+                stick: Some(value.into()),
+                ..Default::default()
+            },
+        )
         .unwrap();
-    op.observing(20).stick().try_send(&4).unwrap();
-    op.observing(19).stick().try_send(&5).unwrap();
-    op.observing(21).stick().try_send(&6).unwrap();
-    assert_eq!(recorder.0, [(0, 20), (0, 21)]);
-    assert_eq!(recorder.1, [vec![3], vec![6]]);
+    }
+    assert_eq!(
+        recorder.0.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
+        [20, 21]
+    );
     let (mut pubs, ins) = Controls::inboxes().unwrap();
     assert!(pubs.stick.publish(20, Tov::None, 3));
     assert!(!pubs.stick.publish(20, Tov::None, 4));
