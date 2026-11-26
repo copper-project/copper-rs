@@ -51,6 +51,7 @@ rayon = { workspace = true, optional = true }
 ctrlc = { workspace = true, optional = true }
 
 [features]
+teleops = ["telemetry", "cu29-logstream/teleops"]
 telemetry = ["cu29-logstream/telemetry", "cu29-derive/telemetry"]
 # Compile component parameters and monitor topology into the app. Runtime overrides and
 # embedded RON are disabled. Replay requires the config matching the recorded Git revision.

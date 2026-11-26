@@ -44,6 +44,7 @@ tempfile = { workspace = true }
 serde = { workspace = true }
 
 [features]
+teleops = ["telemetry"]
 telemetry = ["cu29-runtime/telemetry", "dep:cu29-log", "dep:crossbeam-queue"]
 # Developer-only per-output divergence checks; all hashing stays off the RT path.
 verify-reconstruction = []

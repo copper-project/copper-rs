@@ -109,6 +109,15 @@ impl<A: LiveReplay, R: CuStreamRx + 'static> CuTwinBuilder<A, FecTelemetryRx<R>>
 }
 
 impl<A: LiveReplay, R: CuTelemetryRx + 'static> CuTwinBuilder<A, R> {
+    /// Attach a session-bound operator return transport to this twin.
+    #[cfg(feature = "teleops")]
+    pub fn with_teleops<C: crate::teleops::Teleops>(
+        self,
+        sender: impl crate::teleops::Submit,
+    ) -> CuResult<(Self, C::Operator<impl crate::teleops::Submit>)> {
+        Ok((self, C::operator(sender)))
+    }
+
     pub fn with_log_path(mut self, path: impl AsRef<Path>) -> Self {
         self.log_base = Some(path.as_ref().to_path_buf());
         self

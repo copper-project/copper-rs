@@ -6465,3 +6465,12 @@ enum ExecutionEntityKind {
 
 #[cfg(test)]
 mod tests;
+
+/// Declare typed operator inputs for both ends of a telemetry link.
+#[proc_macro_derive(Teleops)]
+pub fn derive_teleops(input: TokenStream) -> TokenStream {
+    teleops::expand(syn::parse_macro_input!(input as syn::ItemStruct))
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
+}
+mod teleops;
