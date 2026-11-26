@@ -47,7 +47,7 @@ pub fn expand(item: ItemStruct) -> syn::Result<TokenStream> {
                     Ok(Self { #(#ids: ::cu29::bincode::Decode::decode(d)?,)* })
                 }
             }
-            pub struct Operator<S>{pub(super) sender:S,pub(super) last_sent:[Option<u64>;#count]}
+            pub struct Operator<S>{pub sampler:#ops::InputSampler,pub(super) sender:S,pub(super) last_sent:[Option<u64>;#count]}
             impl<S:#ops::Submit> Operator<S>{
                 /// Send fresh samples together, suppressing repeated continuous inputs for this frame.
                 pub fn submit(&mut self,observed:u64,update:&mut Update)->Result<(),::cu29::logstream::CuStreamTxError>{
@@ -86,7 +86,7 @@ pub fn expand(item: ItemStruct) -> syn::Result<TokenStream> {
         }
         impl #ops::Teleops for #name{
             type Operator<S:#ops::Submit>=#module::Operator<S>;
-            fn operator<S:#ops::Submit>(sender:S)->Self::Operator<S>{#module::Operator{sender,last_sent:[None;#count]}}
+            fn operator<S:#ops::Submit>(sender:S,synced_clock:Option<::cu29::clock::RobotClock>)->Self::Operator<S>{#module::Operator{sender,sampler:#ops::InputSampler::new(synced_clock),last_sent:[None;#count]}}
         }
         impl #name {
             pub fn inboxes()->::cu29::CuResult<(#module::Publishers,#module::Inboxes)>{

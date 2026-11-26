@@ -32,13 +32,13 @@ impl Submit for Recorder {
 fn displayed_frame_and_channel_policies() {
     use cu29::teleops::Teleops;
     let mut recorder = Recorder::default();
-    let mut operator = Controls::operator(&mut recorder);
+    let mut operator = Controls::operator(&mut recorder, None);
     let mut update = controls::Update {
-        mode: Some(CuLatchedStateUpdate::Clear.into()),
+        mode: Some(operator.sampler.sample(CuLatchedStateUpdate::Clear)),
         ..Default::default()
     };
-    assert!(update.click.try_push(7.into()).is_ok());
-    assert!(update.click.try_push(8.into()).is_ok());
+    assert!(update.click.try_push(operator.sampler.sample(7)).is_ok());
+    assert!(update.click.try_push(operator.sampler.sample(8)).is_ok());
     operator.submit(14, &mut update).unwrap();
     assert_eq!(recorder.0.len(), 1);
     let (frame, bytes) = &recorder.0[0];
@@ -46,6 +46,7 @@ fn displayed_frame_and_channel_policies() {
         bincode::decode_from_slice(bytes, bincode::config::standard()).unwrap();
     assert_eq!(*frame, 14);
     assert!(update.stick.is_none());
+    assert_eq!(update.mode.as_ref().unwrap().tov(), Tov::None);
     assert_eq!(update.mode.unwrap().value, CuLatchedStateUpdate::Clear);
     assert_eq!(
         update
@@ -70,15 +71,38 @@ fn displayed_frame_and_channel_policies() {
 }
 
 #[test]
+fn forwarded_input_uses_its_original_tov_only_with_synchronized_clocks() {
+    use cu29::teleops::Teleops;
+    let mut recorder = Recorder::default();
+    let mut msg = CuMsg::new(Some(7u8));
+    msg.tov = Tov::Time(CuTime(12));
+    let unsynced = Controls::operator(&mut recorder, None);
+    assert_eq!(
+        unsynced.sampler.from_msg(msg.clone()).unwrap().tov(),
+        Tov::None
+    );
+    let synced = Controls::operator(&mut recorder, Some(RobotClock::mock().0));
+    assert_eq!(
+        synced.sampler.from_msg(msg).unwrap().tov(),
+        Tov::Time(CuTime(12))
+    );
+}
+
+#[test]
 fn select_latest_once_per_frame_and_drop_expired_samples() {
     use cu29::teleops::Teleops;
     let mut recorder = Recorder::default();
-    let mut op = Controls::operator(&mut recorder);
+    let (clock, mock) = RobotClock::mock();
+    let mut op = Controls::operator(&mut recorder, Some(clock));
     for (cl, value) in [(20, 3), (20, 4), (19, 5), (21, 6)] {
+        mock.set_value(42);
+        let sample = op.sampler.sample(value);
+        mock.set_value(72);
+        assert_eq!(sample.tov(), Tov::Time(CuTime(42)));
         op.submit(
             cl,
             &mut controls::Update {
-                stick: Some(value.into()),
+                stick: Some(sample),
                 ..Default::default()
             },
         )
@@ -111,15 +135,15 @@ fn duplicated_or_reordered_frames_cannot_renew_control() {
     let mut rx = Admissions::new(publish, [77; 16]);
     let mut tx = ReturnTx::new(Packet::default(), [77; 16]);
     for (cl, accept) in [(12, true), (12, false), (11, false), (13, true)] {
-        Controls::operator(&mut tx)
-            .submit(
-                cl,
-                &mut controls::Update {
-                    stick: Some(3.into()),
-                    ..Default::default()
-                },
-            )
-            .unwrap();
+        let mut op = Controls::operator(&mut tx, None);
+        op.submit(
+            cl,
+            &mut controls::Update {
+                stick: Some(op.sampler.sample(3)),
+                ..Default::default()
+            },
+        )
+        .unwrap();
         let result = rx.receive(&tx.transport().0, |_| Some(CuTime(7)));
         if accept {
             assert_eq!(result, Ok(cl));
@@ -163,16 +187,16 @@ fn shared_reader_services_eight_packets_even_without_outbound_captures() {
     for value in 1..=8 {
         let mut msg = CuMsg::default();
         msg.set_payload(value);
-        msg.tov = Tov::Time(CuTime(2));
-        Controls::operator(&mut sender)
-            .submit(
-                u64::from(value),
-                &mut controls::Update {
-                    stick: cu29::teleops::Sample::from_mapped_msg(msg, Some).unwrap(),
-                    ..Default::default()
-                },
-            )
-            .unwrap();
+        msg.tov = Tov::Time(CuTime(1));
+        let mut op = Controls::operator(&mut sender, Some(RobotClock::mock().0));
+        op.submit(
+            u64::from(value),
+            &mut controls::Update {
+                stick: op.sampler.from_msg(msg),
+                ..Default::default()
+            },
+        )
+        .unwrap();
         packets.push_back(sender.transport().0.clone());
     }
     let mut feedback = FeedbackInbox::default();
@@ -208,7 +232,7 @@ fn shared_reader_services_eight_packets_even_without_outbound_captures() {
             .unwrap();
     }
     assert!(link.poll(TxMode::Running).unwrap().is_some());
-    assert_eq!(inboxes.stick.take(8, 2).unwrap().2, 7);
+    assert_eq!(inboxes.stick.take(8, 2), Some((7, Tov::Time(CuTime(1)), 7)));
     let mut bytes = [0; 8];
     assert_eq!(feedback.try_recv_feedback(&mut bytes).unwrap(), Some(8));
     assert_eq!(&bytes, b"CUFBtest");
@@ -223,13 +247,14 @@ fn event_overflow_rejects_the_whole_update_and_allows_retry() {
     assert!(publish.click.publish(3, Tov::None, 1));
     let mut rx = Admissions::new(publish, [1; 16]);
     let mut tx = ReturnTx::new(Packet::default(), [1; 16]);
+    let mut op = Controls::operator(&mut tx, None);
     let mut update = controls::Update {
-        stick: Some(5.into()),
+        stick: Some(op.sampler.sample(5)),
         ..Default::default()
     };
-    assert!(update.click.try_push(2.into()).is_ok());
-    assert!(update.click.try_push(3.into()).is_ok());
-    Controls::operator(&mut tx).submit(4, &mut update).unwrap();
+    assert!(update.click.try_push(op.sampler.sample(2)).is_ok());
+    assert!(update.click.try_push(op.sampler.sample(3)).is_ok());
+    op.submit(4, &mut update).unwrap();
     let packet = &tx.transport().0;
     assert_eq!(
         rx.receive(packet, |_| Some(CuTime(5))),
