@@ -95,11 +95,11 @@ With a 150 ms hold time, a sample already 120 ms old grants at most 30 ms of con
 ## Transport and verification
 
 ```text
-CUOP | version | robot session | schema digest | observed CopperList | sequence
+CUOP | version | robot session | observed CopperList | sequence
      | typed update (optional samples and bounded event lists, each sample carrying its validity)
 ```
 
-One reader per endpoint routes `CUFB` to FEC and `CUOP` to typed inboxes. Custom transports can publish into the same inboxes. Use a trusted or authenticated carrier. Both peers compute the schema digest at setup from the ordered channel declarations and payload wire descriptions. Validate framing, session, schema, ordering and queue capacity before publishing any part of the update.
+One reader per endpoint routes `CUFB` to FEC and `CUOP` to typed inboxes. Custom transports can publish into the same inboxes. Use a trusted or authenticated carrier. Build the robot and console from the same channel and payload definitions. Validate framing, session, ordering and queue capacity before publishing any part of the update.
 
 Use preallocated inboxes, bounded polling on host even during telemetry silence, and a fixed packet budget in the threadless `CuTelemetryTx::poll`. [FEC worker](../../core/cu29_logstream/src/worker.rs) · [Plain UDP example](../../examples/cu_udp_telemetry/src/lib.rs)
 
