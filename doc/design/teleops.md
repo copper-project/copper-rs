@@ -13,21 +13,23 @@ pub struct OperatorInputs {
 }
 ```
 
-Fields generate console accessors, inbox resources, source aliases and private wire tags in declaration order. Both builds assume matching application metadata. Compatibility validation is a separate change.
+The derive generates one typed update and one robot inbox per field. Submit the update
+against the CopperList on screen. An absent sample leaves that input alone. A latch
+can explicitly send `Clear`, and an event field holds up to its declared capacity.
 
 ```rust
 let (builder, mut operator) = Twin::from_telemetry(PlainUdpRx::new(rx))
     .with_teleops::<OperatorInputs>(return_tx)?;
 let (twin, frames) = builder.spawn()?;
 
-// In a UI callback, bind the frame actually on screen before sampling.
-let mut input = operator.observing(displayed_copperlist_id);
-input.stick().try_send(&Pilot { held: pad.enable(), axes: pad.axes() })?;
-input.take_photo().try_send(&PhotoRequest { request_id: click_id })?; // on click
-input.mode().set(&Mode::Inspection)?; // or input.mode().clear()
-
-// A headless Copper console can forward a stamped CuMsg<Pilot> directly.
-operator.stick().try_send_msg(gamepad_msg)?;
+let mut update = operator_inputs::Update {
+    stick: Some(Pilot { held: pad.enable(), axes: pad.axes() }.into()),
+    ..Default::default()
+};
+if let Some(click) = ui.next_photo_request() {
+    assert!(update.take_photo.try_push(click.into()).is_ok());
+}
+operator.submit(displayed_copperlist_id, &mut update)?;
 ```
 
 ```rust
@@ -53,7 +55,7 @@ cnx: [(src: "stick", dst: "control", msg: "app::Pilot")],
 
 | Channel | Graph behavior |
 | --- | --- |
-| `Latest<Pilot>` | Newest sample wins. Axes and enable switch share one ToV. |
+| `Latest<Pilot>` | Select the newest sample in the batch for each observed robot CL. Send at most once per field per CL. Axes and enable switch share one ToV. |
 | `Latched<Mode>` | Latest `Set` or `Clear` wins. Its ToV dates the transition. Consumers retain `CuLatchedState<Mode>`. |
 | `Event<PhotoRequest, 4>` | FIFO, one event per iteration. Drop incoming events when full. For confirmed actions, deduplicate by request ID and publish the result. |
 
@@ -63,13 +65,13 @@ Idle sources emit empty messages. A full console sender returns `WouldBlock`. Su
 
 | Evidence | Meaning |
 | --- | --- |
-| `observed_copperlist_id: Option<u64>` | Robot frame displayed **when the input was sampled**. Scoped to the robot session. Omit when unavailable. |
+| `observed_copperlist_id: u64` | Robot frame displayed **when the input was sampled**. Scoped to the robot session. Wait for a frame before sending. |
 | `CuMsg.tov` | Sample validity in robot time. Queueing and retries preserve it. |
 | Accepting CopperList ID | Robot iteration in which the source emitted the command. Available from the enclosing CopperList. |
 
-Carry the observed ID in the command envelope. Correlate it with source admission by session, control epoch, channel and sequence. For a rejected command, record the available identity, observed ID and rejection reason. Seeing list 812 and acting in list 829 identifies two frames to inspect. The gap alone cannot distinguish display lag from return-link or queue delay.
+The source checks the original observed CL against its actual iteration immediately before emission. Its RON setting `max_lag_cl` is the largest allowed difference (default 1). Future and expired samples are dropped. A newer observed CL supersedes an older pending joystick position. Multiple events and latch transitions within one CL retain their own transport ordering.
 
-For unsynchronized clocks, a fresh sample can use the **same observed ID** as its freshness reference. Send it once. The robot resolves it against a bounded history of robot ticks and rejects unknown or expired references. For `try_send_msg`, preserve the supplied ToV, mapping clock domains when needed. Reject unmappable times and retain `Tov::None` as unknown. A newer display frame cannot renew an older sample.
+For an input sampled on displayed CL 812, submit the newest available reading once, using the last reading as the update’s optional stick sample. An empty batch emits nothing. A stamped input retains its original validity independently of this CL-based admission check.
 
 ## Deadman and replay
 
@@ -93,11 +95,11 @@ With a 150 ms hold time, a sample already 120 ms old grants at most 30 ms of con
 ## Transport and verification
 
 ```text
-CUOP | version | robot session | control epoch | field tag | sequence
-     | observed_copperlist_id? | validity (ToV or use observed tick) | payload
+CUOP | version | robot session | schema digest | observed CopperList | sequence
+     | typed update (optional samples and bounded event lists, each sample carrying its validity)
 ```
 
-One reader per endpoint routes `CUFB` to FEC and `CUOP` to typed inboxes. Custom transports can publish into the same inboxes. Use a trusted or authenticated carrier. Validate framing, epoch and sequence before publication. On takeover, flush pending inputs and deliver the application's revocation before the new operator's samples.
+One reader per endpoint routes `CUFB` to FEC and `CUOP` to typed inboxes. Custom transports can publish into the same inboxes. Use a trusted or authenticated carrier. Both peers compute the schema digest at setup from the ordered channel declarations and payload wire descriptions. Validate framing, session, schema, ordering and queue capacity before publishing any part of the update.
 
 Use preallocated inboxes, bounded polling on host even during telemetry silence, and a fixed packet budget in the threadless `CuTelemetryTx::poll`. [FEC worker](../../core/cu29_logstream/src/worker.rs) · [Plain UDP example](../../examples/cu_udp_telemetry/src/lib.rs)
 
