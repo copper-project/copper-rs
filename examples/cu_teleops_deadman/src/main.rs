@@ -3,7 +3,7 @@ mod link;
 mod policy;
 use cu29::logstream::{FecTelemetryRx, TelemetryBufferConfig};
 use cu29::prelude::*;
-use cu29::teleops::ReturnTx;
+use cu29::teleops::{ReturnTx, Sample, Validity};
 
 pub use policy::{Deadman, Safety, Tick};
 use std::error::Error;
@@ -119,17 +119,24 @@ fn main() -> Result<(), Box<dyn Error>> {
                     deadline = Instant::now() + Duration::from_secs(300);
                 }
             }
-            let submission = if let Ok(sample) = key_rx.try_recv() {
+            let button = if let Ok(sample) = key_rx.try_recv() {
                 pressed = Some(sample);
                 deadline = Instant::now() + Duration::from_secs(5);
-                let mut msg = CuMsg::default();
-                msg.set_payload(true);
-                msg.tov = Tov::Time(sample.0);
-                control.observing(list.id).button().try_send_msg(&msg)
+                Sample {
+                    value: true,
+                    validity: Validity::Robot(Tov::Time(sample.0)),
+                }
             } else {
-                control.observing(list.id).button().try_send(&false)
+                false.into()
             };
-            submission.map_err(|err| format!("button submit: {err:?}"))?;
+            control
+                .submit(
+                    list.id,
+                    &mut controls::Update {
+                        button: Some(button),
+                    },
+                )
+                .map_err(|err| format!("button submit: {err:?}"))?;
         }
         if Instant::now() >= deadline {
             return Err(format!(
