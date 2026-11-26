@@ -3,7 +3,7 @@ mod link;
 mod policy;
 use cu29::logstream::{FecTelemetryRx, TelemetryBufferConfig};
 use cu29::prelude::*;
-use cu29::teleops::{ReturnTx, Sample, Validity};
+use cu29::teleops::ReturnTx;
 
 pub use policy::{Deadman, Safety, Tick};
 use std::error::Error;
@@ -47,10 +47,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let (data_tx, data_rx) = link::loopback()?;
     let (return_tx, return_rx) = link::loopback()?;
     let fec = FecTelemetryRx::new(data_rx, Default::default(), None)?;
-    let (twin, mut control) = ground::Twin::from_telemetry(fec)
-        .with_teleops::<Controls>(move |session| ReturnTx::new(return_tx, session))?;
-    let (mut twin, mut frames) = twin.with_log_path(dir.join("twin.copper")).spawn()?;
     let clock = RobotClock::new();
+    let (twin, mut control) = ground::Twin::from_telemetry(fec)
+        .with_teleops::<Controls>(Some(clock.clone()), move |session| {
+            ReturnTx::new(return_tx, session)
+        })?;
+    let (mut twin, mut frames) = twin.with_log_path(dir.join("twin.copper")).spawn()?;
     let (publish, inboxes) = Controls::inboxes()?;
     let robot = Robot::builder()
         .with_clock(clock.clone())
@@ -106,28 +108,28 @@ fn main() -> Result<(), Box<dyn Error>> {
                 && let Some(tx) = key_tx.take()
             {
                 if automatic {
-                    tx.send((clock.now(), Instant::now()))?
+                    tx.send((control.sampler.sample(true), Instant::now()))?
                 } else {
                     println!("Robot armed. 🔴 Press Enter to trip the deadman.");
-                    let key_clock = clock.clone();
+                    let sampler = control.sampler.clone();
                     std::thread::spawn(move || {
                         let mut line = String::new();
                         if matches!(std::io::stdin().read_line(&mut line),Ok(n) if n>0) {
-                            let _ = tx.send((key_clock.now(), Instant::now()));
+                            let _ = tx.send((sampler.sample(true), Instant::now()));
                         }
                     });
                     deadline = Instant::now() + Duration::from_secs(300);
                 }
             }
-            let button = if let Ok(sample) = key_rx.try_recv() {
-                pressed = Some(sample);
+            let button = if let Ok((sample, instant)) = key_rx.try_recv() {
+                let Tov::Time(time) = sample.tov() else {
+                    return Err("shared clock must timestamp the button".into());
+                };
+                pressed = Some((time, instant));
                 deadline = Instant::now() + Duration::from_secs(5);
-                Sample {
-                    value: true,
-                    validity: Validity::Robot(Tov::Time(sample.0)),
-                }
+                sample
             } else {
-                false.into()
+                control.sampler.sample(false)
             };
             control
                 .submit(
