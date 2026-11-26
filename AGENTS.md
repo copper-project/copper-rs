@@ -30,8 +30,10 @@ do not silently install skills.
 - Source authority: code > rustdoc/API > wiki/book. Start with `README.md`,
   `justfile`, and `CONTRIBUTING.md`; narrative docs live in `../copper-rs.wiki`
   and `../copper-rs-book/book/src`.
-- Before changing a feature, ask whether backward compatibility is required and
-  which released APIs, formats, or user data must be supported.
+- For APIs and formats introduced only on an unreleased branch or PR, proceed
+  with breaking changes and call them out in the handoff. If a change affects
+  a released version or a known deployment, confirm which APIs, formats, and
+  existing user data must remain compatible.
 - Preserve static typed wiring, deterministic replay, and `no_std`. Require
   explicit user approval for added hot-path copies, allocation, serialization,
   or latency; keep offline/debug costs outside the real-time path.
