@@ -1,0 +1,21 @@
+[package]
+name = "cu-teleops-deadman"
+description = "Measure a deadman trip over loopback FEC telemetry"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[features]
+demo = ["cu29/teleops", "cu29/logstream", "dep:cu29-logstream-udp"]
+
+[dependencies]
+cu29 = { workspace = true, optional = true }
+cu29-logstream-udp = { workspace = true, optional = true }
+
+[[bin]]
+name = "cu-teleops-deadman"
+required-features = ["demo"]
+
+[build-dependencies]
+cu29-build.workspace = true

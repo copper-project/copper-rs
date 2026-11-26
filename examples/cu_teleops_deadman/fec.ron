@@ -1,0 +1,30 @@
+(
+    tasks: [],
+    cnx: [],
+    log_streaming: (
+        destinations: [
+            (
+                id: "ground",
+                transport: (type: "cu29_logstream_udp::CuUdpLogStreamTx", resource: "network.tx"),
+                link: (
+                    mtu_bytes: 384,
+                    bitrate_bps: 20000000,
+                    memory_budget_kib: 640,
+                    max_latency_ms: 50,
+                    burst_packets: 8,
+                ),
+                fec: (
+                    continuous: (
+                        field: Gf256,
+                        window_symbols: 8,
+                        repair_every_source_symbols: 4,
+                        repair_density: Full,
+                    ),
+                    objects: (max_object_bytes: 4096, repair_symbols_per_block: 2),
+                ),
+                recovery_interval: 64,
+                max_record_bytes: 4096,
+            ),
+        ],
+    ),
+)
