@@ -19,10 +19,12 @@ pub struct Event<T, const N: usize>(PhantomData<T>);
 /// Declared delivery semantics for a schema field.
 pub trait Channel {
     type Payload: CuMsgPayload + Send + Sync + 'static;
+    const ONE_PER_CL: bool = false;
     const CAPACITY: usize;
     const REPLACE: bool;
 }
 impl<T: CuMsgPayload + Send + Sync + 'static> Channel for Latest<T> {
+    const ONE_PER_CL: bool = true;
     type Payload = T;
     const CAPACITY: usize = 1;
     const REPLACE: bool = true;
@@ -45,46 +47,51 @@ pub enum Validity {
     Robot(Tov),
 }
 
-/// Identity retained across admission and diagnostics.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode)]
-pub struct CommandId {
-    pub session: [u8; 16],
-    pub epoch: u64,
-    pub field: u16,
-    pub sequence: u64,
-    pub observed_copperlist_id: Option<u64>,
-}
-
-/// Console submission contract. Implementations bind a robot session and epoch.
+/// Console submission contract. The caller binds each selection to its observed CopperList.
 pub trait Submit {
-    fn submit<T: Encode>(
+    fn submit<C: Channel>(
         &mut self,
         field: u16,
-        observed: Option<u64>,
+        observed: u64,
         validity: Validity,
-        value: &T,
+        value: &C::Payload,
     ) -> Result<(), CuStreamTxError>;
 }
 /// Typed console handle borrowed for one channel.
 pub struct Input<'a, S, C> {
     sender: &'a mut S,
     field: u16,
-    observed: Option<u64>,
+    observed: u64,
+    last_sent: &'a mut Option<u64>,
     marker: PhantomData<C>,
 }
 impl<'a, S: Submit, C: Channel> Input<'a, S, C> {
     #[doc(hidden)]
-    pub fn new(sender: &'a mut S, field: u16, observed: Option<u64>) -> Self {
+    pub fn new(
+        sender: &'a mut S,
+        field: u16,
+        observed: u64,
+        last_sent: &'a mut Option<u64>,
+    ) -> Self {
         Self {
             sender,
             field,
             observed,
+            last_sent,
             marker: PhantomData,
         }
     }
     pub fn try_send(&mut self, value: &C::Payload) -> Result<(), CuStreamTxError> {
+        self.send(Validity::Observed, value)
+    }
+    fn send(&mut self, validity: Validity, value: &C::Payload) -> Result<(), CuStreamTxError> {
+        if C::ONE_PER_CL && self.last_sent.is_some_and(|cl| cl >= self.observed) {
+            return Ok(());
+        }
         self.sender
-            .submit(self.field, self.observed, Validity::Observed, value)
+            .submit::<C>(self.field, self.observed, validity, value)?;
+        *self.last_sent = Some(self.observed);
+        Ok(())
     }
     /// Forward a message whose validity is already in robot time.
     pub fn try_send_msg(&mut self, msg: &CuMsg<C::Payload>) -> Result<(), CuStreamTxError> {
@@ -106,8 +113,20 @@ impl<'a, S: Submit, C: Channel> Input<'a, S, C> {
                 .filter(|t| *t != Tov::None)
                 .ok_or(CuStreamTxError::Failed("unmappable teleops timestamp"))?,
         };
-        self.sender
-            .submit(self.field, self.observed, Validity::Robot(tov), value)
+        self.send(Validity::Robot(tov), value)
+    }
+}
+impl<S: Submit, T: CuMsgPayload + Send + Sync + 'static> Input<'_, S, Latest<T>> {
+    /// Select the newest sample collected for this observed frame. Submit once
+    /// at the sampling boundary. An empty batch emits nothing.
+    pub fn try_send_latest<'v>(
+        &mut self,
+        samples: impl DoubleEndedIterator<Item = &'v T>,
+    ) -> Result<(), CuStreamTxError> {
+        match samples.last() {
+            Some(value) => self.try_send(value),
+            None => Ok(()),
+        }
     }
 }
 impl<S: Submit, T: CuMsgPayload + Send + Sync + 'static> Input<'_, S, Latched<T>> {
@@ -120,10 +139,7 @@ impl<S: Submit, T: CuMsgPayload + Send + Sync + 'static> Input<'_, S, Latched<T>
 }
 
 /// Bounded source-side resource. A source moves one admitted value into the graph per iteration.
-pub struct Inbox<T>(
-    Arc<ArrayQueue<(CommandId, Tov, T)>>,
-    Option<fn(CommandId, u64)>,
-);
+pub struct Inbox<T>(Arc<ArrayQueue<(u64, Tov, T)>>, Option<fn(u64, u64)>);
 impl<T> Clone for Inbox<T> {
     fn clone(&self) -> Self {
         Self(self.0.clone(), self.1)
@@ -131,23 +147,28 @@ impl<T> Clone for Inbox<T> {
 }
 impl<T> Inbox<T> {
     /// Install a bounded, nonblocking recorder before moving this resource to its source.
-    pub fn on_emit(mut self, record: fn(CommandId, u64)) -> Self {
+    pub fn on_emit(mut self, record: fn(u64, u64)) -> Self {
         self.1 = Some(record);
         self
     }
     #[doc(hidden)]
-    pub fn record_emission(&self, id: CommandId, list: u64) {
+    pub fn record_emission(&self, id: u64, list: u64) {
         if let Some(record) = self.1 {
             record(id, list)
         }
     }
 
-    pub fn take(&self) -> Option<(CommandId, Tov, T)> {
-        self.0.pop()
+    pub fn take(&self, current_cl: u64, max_lag_cl: u64) -> Option<(u64, Tov, T)> {
+        self.0.pop().filter(|(observed, _, _)| {
+            current_cl
+                .checked_sub(*observed)
+                .is_some_and(|age| age <= max_lag_cl)
+        })
     }
 }
 /// Single producer for a typed inbox.
 pub struct Publisher<C: Channel> {
+    last_cl: Option<u64>,
     inbox: Inbox<C::Payload>,
 }
 impl<C: Channel> Publisher<C> {
@@ -158,12 +179,17 @@ impl<C: Channel> Publisher<C> {
         let inbox = Inbox(Arc::new(ArrayQueue::new(C::CAPACITY)), None);
         Ok((
             Self {
+                last_cl: None,
                 inbox: inbox.clone(),
             },
             inbox,
         ))
     }
-    pub fn publish(&mut self, id: CommandId, tov: Tov, value: C::Payload) -> bool {
+    pub fn publish(&mut self, id: u64, tov: Tov, value: C::Payload) -> bool {
+        if C::ONE_PER_CL && self.last_cl.is_some_and(|previous| id <= previous) {
+            return false;
+        }
+        self.last_cl = Some(id);
         let sample = (id, tov, value);
         if C::REPLACE {
             self.inbox.0.force_push(sample);
@@ -180,14 +206,14 @@ pub trait Teleops {
     fn operator<S: Submit>(sender: S) -> Self::Operator<S>;
 }
 impl<S: Submit> Submit for &mut S {
-    fn submit<T: Encode>(
+    fn submit<C: Channel>(
         &mut self,
         field: u16,
-        observed: Option<u64>,
+        observed: u64,
         validity: Validity,
-        value: &T,
+        value: &C::Payload,
     ) -> Result<(), CuStreamTxError> {
-        (**self).submit(field, observed, validity, value)
+        (**self).submit::<C>(field, observed, validity, value)
     }
 }
 
@@ -221,13 +247,13 @@ impl<C: Connect> TwinSubmit<C> {
     }
 }
 #[cfg(feature = "std")]
-impl<C: Connect> Submit for TwinSubmit<C> {
-    fn submit<T: Encode>(
+impl<F: Connect> Submit for TwinSubmit<F> {
+    fn submit<C: Channel>(
         &mut self,
         field: u16,
-        observed: Option<u64>,
+        observed: u64,
         validity: Validity,
-        value: &T,
+        value: &C::Payload,
     ) -> Result<(), CuStreamTxError> {
         let session = self.session.get().ok_or(CuStreamTxError::WouldBlock)?;
         if let Some(connect) = self.connect.take() {
@@ -236,6 +262,6 @@ impl<C: Connect> Submit for TwinSubmit<C> {
         self.sender
             .as_mut()
             .ok_or(CuStreamTxError::Failed("missing operator sender"))?
-            .submit(field, observed, validity, value)
+            .submit::<C>(field, observed, validity, value)
     }
 }
