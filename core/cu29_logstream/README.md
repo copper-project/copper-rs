@@ -420,11 +420,17 @@ recovery points reference that digest. Sender-only policy changes with identical
 requirements, identity, and schema now produce identical manifest records.
 Savings inside record and fragment headers free symbol payload capacity and can
 reduce fragment counts. Packet-header savings directly shorten each datagram.
-Existing symbol storage capacity is unchanged: a 1200-byte MTU uses at most 1128-byte symbols,
+With the default codec storage, a 1200-byte MTU uses at most 1128-byte symbols,
 producing RLC source packets up to 1160 bytes, RLC repair packets up to 1164 bytes,
 and RaptorQ packets up to 1179 bytes. `PACKET_HEADER_LEN` is the maximum header
 length for buffer sizing; encoding returns the exact length for each packet.
-Shared symbol sizing still reserves room for the largest (RaptorQ) header.
+For another carrier, set the forward packet budget in `link.mtu_bytes`. To use larger
+symbols, select the same const capacity in `LogStreamPlan::resolve_with_symbol_capacity`,
+`FecTelemetryTx::with_symbol_capacity`, and `CuTwin::builder_with_symbol_capacity`
+(or `FecTelemetryRx::with_symbol_capacity` for a standalone receiver). The sender
+reserves room for the largest (RaptorQ) header before selecting its symbol size.
+The teleops return direction has its own complete-packet budget. Choose it on
+`ReturnTx` at the console and `ReturnPolicy` on the robot.
 Packet payload length is derived from the complete packet extent supplied by
 `CuStreamRx`; serial/transparent-radio adapters must frame the byte stream into
 complete packets before decoding. The packet header carries no payload length.

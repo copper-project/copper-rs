@@ -12,9 +12,10 @@ use cu29_runtime::continuity::SourceGapReason;
 use cu29_traits::{CuError, CuResult};
 
 /// Resolves packet loss and verifies recovery references before emitting native records.
-pub struct FecTelemetryRx<R> {
+pub struct FecTelemetryRx<R, const SYMBOL_BYTES: usize = { crate::DEFAULT_MAX_SYMBOL_SIZE }> {
     rx: R,
-    router: SessionRouter<1128, 64, 64>,
+    packet: Box<[u8]>,
+    router: SessionRouter<SYMBOL_BYTES, 64, 64>,
     feedback: Option<Box<dyn CuFeedbackTx>>,
     reporter: Option<FeedbackReporter>,
     clock: RobotClock,
@@ -30,11 +31,27 @@ impl<R> FecTelemetryRx<R> {
         limits: SessionRouterLimits,
         feedback: Option<Box<dyn CuFeedbackTx>>,
     ) -> CuResult<Self> {
+        Self::with_symbol_capacity(rx, limits, feedback)
+    }
+}
+
+impl<R, const SYMBOL_BYTES: usize> FecTelemetryRx<R, SYMBOL_BYTES> {
+    /// Reserve one receive packet for the selected codec capacity and its wire header.
+    pub fn with_symbol_capacity(
+        rx: R,
+        limits: SessionRouterLimits,
+        feedback: Option<Box<dyn CuFeedbackTx>>,
+    ) -> CuResult<Self> {
+        if usize::from(limits.finite_objects.max_symbol_size) > SYMBOL_BYTES {
+            return Err("FEC receive symbol bound exceeds decoder storage".into());
+        }
         if limits.max_sessions != 1 {
             return Err("a telemetry receiver serves one sender session".into());
         }
         Ok(Self {
             rx,
+            packet: vec![0; crate::PACKET_HEADER_LEN + SYMBOL_BYTES.min(u16::MAX as usize)]
+                .into_boxed_slice(),
             router: SessionRouter::new(limits).map_err(|e| CuError::from(e.to_string()))?,
             feedback,
             reporter: None,
@@ -47,19 +64,19 @@ impl<R> FecTelemetryRx<R> {
         })
     }
 }
-impl<R: CuStreamRx> CuTelemetryRx for FecTelemetryRx<R> {
+impl<R: CuStreamRx, const SYMBOL_BYTES: usize> CuTelemetryRx for FecTelemetryRx<R, SYMBOL_BYTES> {
     fn try_recv(
         &mut self,
         mut deliver: impl FnMut(CuTelemetryEvent<'_>) -> CuResult<()>,
     ) -> CuResult<CuTelemetryPoll> {
         use CuTelemetryRecord as Record;
-        let mut packet = [0; 1200];
         let len = self
             .rx
-            .try_recv(&mut packet)
+            .try_recv(&mut self.packet)
             .map_err(|e| CuError::from(format!("FEC receive: {e:?}")))?;
         if let Some(len) = len {
-            let bytes = packet
+            let bytes = self
+                .packet
                 .get(..len)
                 .ok_or_else(|| CuError::from("invalid packet length"))?;
             self.router

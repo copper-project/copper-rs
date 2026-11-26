@@ -437,6 +437,7 @@ fn structured_pressure_preserves_replay_recovery_and_shared_budget() {
 #[cfg(feature = "std")]
 #[test]
 fn fec_expiry_starts_at_send_on_the_injected_clock() {
+    const SYMBOL_BYTES: usize = 1536;
     use cu29_logstream::protocol::{CuTelemetryRecord, CuTelemetrySession, CuTelemetryTx, TxMode};
     use std::sync::{
         Arc,
@@ -450,6 +451,7 @@ fn fec_expiry_starts_at_send_on_the_injected_clock() {
             if WirePacketRef::decode(packet).unwrap().header.record_kind
                 == RecordKind::StructuredLog
             {
+                assert_eq!(packet.len(), SYMBOL_BYTES + PACKET_HEADER_LEN);
                 self.0.store(true, Ordering::Relaxed);
             }
             Ok(())
@@ -466,7 +468,15 @@ fn fec_expiry_starts_at_send_on_the_injected_clock() {
     for (age_ms, expected) in [(249, true), (250, false)] {
         let (clock, mock) = RobotClock::mock();
         let seen = Arc::new(AtomicBool::new(false));
-        let mut tx = FecTelemetryTx::new(ObserveLog(seen.clone()), plan(), clock).unwrap();
+        let mut plan = plan();
+        plan.symbol_size = SYMBOL_BYTES as u16;
+        plan.mtu_bytes = (SYMBOL_BYTES + PACKET_HEADER_LEN) as u16;
+        let mut tx = FecTelemetryTx::<_, SYMBOL_BYTES>::with_symbol_capacity(
+            ObserveLog(seen.clone()),
+            plan,
+            clock,
+        )
+        .unwrap();
         tx.send(CuTelemetryRecord::Session(&session)).unwrap();
         // Time before the backend accepts this record does not consume its 250 ms budget.
         mock.set_value(1_000_000_000);

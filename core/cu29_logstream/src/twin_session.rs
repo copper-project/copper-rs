@@ -63,7 +63,6 @@ type OpenTelemetryReceiver<R> = Box<
 
 /// Builder for a generated application's live twin. Copper owns all worker,
 /// routing, archive, and recovery plumbing; callers supply a packet transport.
-/// Receiver bounds match the default 1200-byte-MTU, 64-symbol streaming profile.
 /// One handle accepts one sender session, with a fresh archive path.
 pub struct CuTwinBuilder<A, R> {
     #[cfg(feature = "teleops")]
@@ -83,7 +82,9 @@ pub struct CuTwinBuilder<A, R> {
     app: PhantomData<fn() -> A>,
 }
 
-impl<A: LiveReplay, R: CuStreamRx + 'static> CuTwinBuilder<A, FecTelemetryRx<R>> {
+impl<A: LiveReplay, R: CuStreamRx + 'static, const SYMBOL_BYTES: usize>
+    CuTwinBuilder<A, FecTelemetryRx<R, SYMBOL_BYTES>>
+{
     /// Enable feedback only when the sender advertises support. The caller owns endpoint selection.
     pub fn with_feedback<T: crate::CuFeedbackTx + 'static>(mut self, tx: T) -> Self {
         self.feedback_tx = Some(Box::new(tx));
@@ -102,8 +103,7 @@ impl<A: LiveReplay, R: CuStreamRx + 'static> CuTwinBuilder<A, FecTelemetryRx<R>>
     /// The remaining limits bound records, packets, recovery data, and objects
     /// buffered during decoding. Larger sizes and concurrency limits increase
     /// receiver memory use; they are not a total process memory budget.
-    /// `max_sessions` must be 1. The packet profile remains a 1200-byte MTU with
-    /// at most 1128-byte symbols and 64 FEC equations.
+    /// `max_sessions` must be 1. The symbol bound must fit the selected decoder capacity.
     pub fn with_receiver_limits(mut self, limits: SessionRouterLimits) -> Self {
         self.receiver_limits = Some(limits);
         self
@@ -509,9 +509,9 @@ fn validate_sizes(
             "Twin receiver limits must allow exactly one sender session",
         ));
     }
-    if limits.equation_capacity > 64 || usize::from(limits.finite_objects.max_symbol_size) > 1128 {
+    if limits.equation_capacity > 64 {
         return Err(CuError::from(
-            "Twin receiver limits exceed the 1128-byte-symbol, 64-equation FEC profile",
+            "Twin receiver limits exceed the 64-equation FEC profile",
         ));
     }
     crate::object::validate_limits(limits.finite_objects).map_err(stream_error)?;
@@ -547,9 +547,19 @@ pub struct CuTwin<A: LiveReplay> {
 
 impl<A: LiveReplay> CuTwin<A> {
     pub fn builder<R: CuStreamRx + 'static>(rx: R) -> CuTwinBuilder<A, FecTelemetryRx<R>> {
-        let mut builder =
-            Self::make_builder(move |limits, feedback| FecTelemetryRx::new(rx, limits, feedback));
-        builder.receiver_limits = Some(SessionRouterLimits::default());
+        Self::builder_with_symbol_capacity(rx)
+    }
+
+    /// Select FEC storage for a carrier whose packet budget differs from the default profile.
+    pub fn builder_with_symbol_capacity<const SYMBOL_BYTES: usize, R: CuStreamRx + 'static>(
+        rx: R,
+    ) -> CuTwinBuilder<A, FecTelemetryRx<R, SYMBOL_BYTES>> {
+        let mut builder = Self::make_builder(move |limits, feedback| {
+            FecTelemetryRx::with_symbol_capacity(rx, limits, feedback)
+        });
+        let mut limits = SessionRouterLimits::default();
+        limits.finite_objects.max_symbol_size = u16::try_from(SYMBOL_BYTES).unwrap_or(u16::MAX);
+        builder.receiver_limits = Some(limits);
         builder.feedback_status = |rx, status| {
             status.feedback_reports_sent = rx.sent;
             status.feedback_reports_dropped = rx.dropped;
