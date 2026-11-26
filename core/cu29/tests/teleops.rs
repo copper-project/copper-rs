@@ -2,7 +2,7 @@
 #![cfg(feature = "teleops")]
 use cu29::logstream::CuStreamTxError;
 use cu29::prelude::*;
-use cu29::teleops::{CommandId, Submit};
+use cu29::teleops::{Channel, Submit};
 
 #[derive(Teleops)]
 #[allow(dead_code)]
@@ -13,15 +13,17 @@ struct Controls {
 }
 
 #[derive(Default)]
-struct Recorder(Vec<(u16, Option<u64>)>);
+struct Recorder(Vec<(u16, u64)>, Vec<Vec<u8>>);
 impl Submit for Recorder {
-    fn submit<T: bincode::Encode>(
+    fn submit<C: Channel>(
         &mut self,
         tag: u16,
-        frame: Option<u64>,
+        frame: u64,
         _: cu29::teleops::Validity,
-        _: &T,
+        value: &C::Payload,
     ) -> Result<(), CuStreamTxError> {
+        self.1
+            .push(bincode::encode_to_vec(value, bincode::config::standard()).unwrap());
         self.0.push((tag, frame));
         Ok(())
     }
@@ -33,24 +35,41 @@ fn displayed_frame_and_channel_policies() {
     let mut recorder = Recorder::default();
     let mut operator = Controls::operator(&mut recorder);
     operator.observing(14).mode().clear().unwrap();
-    operator.click().try_send(&7).unwrap();
-    assert_eq!(recorder.0, [(1, Some(14)), (2, None)]);
+    operator.observing(14).click().try_send(&7).unwrap();
+    assert_eq!(recorder.0, [(1, 14), (2, 14)]);
     let (mut pubs, inboxes) = Controls::inboxes().unwrap();
-    let id = CommandId {
-        session: [0; 16],
-        epoch: 1,
-        field: 2,
-        sequence: 1,
-        observed_copperlist_id: None,
-    };
     for value in 0..3 {
-        assert_eq!(pubs.click.publish(id, Tov::None, value), value < 2);
-        assert!(pubs.stick.publish(id, Tov::None, value));
+        assert_eq!(
+            pubs.click.publish(u64::from(value), Tov::None, value),
+            value < 2
+        );
+        assert!(pubs.stick.publish(u64::from(value), Tov::None, value));
     }
-    assert_eq!(inboxes.click.take().unwrap().2, 0);
-    assert_eq!(inboxes.click.take().unwrap().2, 1);
-    assert!(inboxes.click.take().is_none());
-    assert_eq!(inboxes.stick.take().unwrap().2, 2);
+    assert_eq!(inboxes.click.take(2, 2).unwrap().2, 0);
+    assert_eq!(inboxes.click.take(2, 2).unwrap().2, 1);
+    assert!(inboxes.click.take(2, 2).is_none());
+    assert_eq!(inboxes.stick.take(2, 2).unwrap().2, 2);
+}
+
+#[test]
+fn select_latest_once_per_frame_and_drop_expired_samples() {
+    use cu29::teleops::Teleops;
+    let mut recorder = Recorder::default();
+    let mut op = Controls::operator(&mut recorder);
+    op.observing(20)
+        .stick()
+        .try_send_latest([1, 2, 3].iter())
+        .unwrap();
+    op.observing(20).stick().try_send(&4).unwrap();
+    op.observing(19).stick().try_send(&5).unwrap();
+    op.observing(21).stick().try_send(&6).unwrap();
+    assert_eq!(recorder.0, [(0, 20), (0, 21)]);
+    assert_eq!(recorder.1, [vec![3], vec![6]]);
+    let (mut pubs, ins) = Controls::inboxes().unwrap();
+    assert!(pubs.stick.publish(20, Tov::None, 3));
+    assert!(!pubs.stick.publish(20, Tov::None, 4));
+    assert!(ins.stick.take(24, 3).is_none());
+    assert!(!pubs.stick.publish(19, Tov::None, 1));
 }
 
 #[derive(Default, Debug)]
@@ -63,52 +82,29 @@ impl cu29::logstream::CuStreamTx for Packet {
 }
 
 #[test]
-fn delayed_or_duplicate_commands_cannot_renew_control() {
-    use cu29::teleops::{Admissions, Rejected, ReturnTx, Teleops, TickHistory};
+fn duplicated_or_reordered_frames_cannot_renew_control() {
+    use cu29::teleops::{Admissions, Rejected, ReturnTx, Teleops};
     let (publish, inboxes) = Controls::inboxes().unwrap();
-    let session = [77; 16];
-    let mut admissions = Admissions::new(publish, session, 1, CuDuration::from_millis(150));
-    let mut tx = ReturnTx::new(Packet::default(), session, 1);
-    let packet = |tx: &mut ReturnTx<Packet>| {
-        Controls::operator(&mut *tx)
-            .observing(12)
+    let mut rx = Admissions::new(publish, [77; 16]);
+    let mut tx = ReturnTx::new(Packet::default(), [77; 16]);
+    for (cl, accept) in [(12, true), (12, false), (11, false), (13, true)] {
+        Controls::operator(&mut tx)
+            .observing(cl)
             .stick()
-            .try_send(&1)
+            .try_send(&3)
             .unwrap();
-        tx.transport().0.clone()
-    };
-    let mut ticks = TickHistory::<8>::default();
-    ticks.record(12, CuTime::from_millis(100));
-    ticks.record(13, CuTime::from_millis(200));
-    let first = packet(&mut tx);
-    let now = CuTime::from_millis(220);
-    let id = admissions.receive(&first, now, |id| ticks.get(id)).unwrap();
-    assert_eq!(id.observed_copperlist_id, Some(12));
+        let result = rx.receive(&tx.transport().0, |_| Some(CuTime(7)));
+        if accept {
+            assert_eq!(result, Ok(cl));
+        } else {
+            assert_eq!(result, Err((Some(cl), Rejected::OutOfOrder)));
+        }
+    }
     assert_eq!(
-        admissions.receive(&first, now, |id| ticks.get(id)),
-        Err((Some(id), Rejected::Sequence))
+        inboxes.stick.take(14, 1),
+        Some((13, Tov::Time(CuTime(7)), 3))
     );
-    assert_eq!(
-        inboxes.stick.take().unwrap().1,
-        Tov::Time(CuTime::from_millis(100))
-    );
-    let late = packet(&mut tx);
-    assert_eq!(
-        admissions
-            .receive(&late, CuTime::from_millis(260), |id| ticks.get(id))
-            .unwrap_err()
-            .1,
-        Rejected::Freshness
-    );
-    admissions.takeover(2, || {}).unwrap();
-    assert_eq!(
-        admissions
-            .receive(&first, now, |id| ticks.get(id))
-            .unwrap_err()
-            .1,
-        Rejected::Epoch
-    );
-    assert!(inboxes.stick.take().is_none());
+    assert!(inboxes.stick.take(14, 1).is_none());
 }
 
 #[test]
@@ -135,13 +131,14 @@ fn shared_reader_services_eight_packets_even_without_outbound_captures() {
     }
     let (publish, inboxes) = Controls::inboxes().unwrap();
     let session = [9; 16];
-    let mut sender = ReturnTx::new(Packet::default(), session, 1);
+    let mut sender = ReturnTx::new(Packet::default(), session);
     let mut packets = VecDeque::from([b"CUFBtest".to_vec()]);
     for value in 1..=8 {
         let mut msg = CuMsg::default();
         msg.set_payload(value);
         msg.tov = Tov::Time(CuTime(2));
         Controls::operator(&mut sender)
+            .observing(u64::from(value))
             .stick()
             .try_send_msg(&msg)
             .unwrap();
@@ -155,12 +152,9 @@ fn shared_reader_services_eight_packets_even_without_outbound_captures() {
         publish,
         clock.clone(),
         ReturnPolicy {
-            robot_clock: clock,
-            epoch: 1,
-            max_age: CuDuration::from_millis(20),
             feedback: Some(feedback.clone()),
         },
-        |_| None,
+        |_| Some(CuTime(2)),
         |r| {
             r.unwrap();
         },
@@ -178,11 +172,15 @@ fn shared_reader_services_eight_packets_even_without_outbound_captures() {
         },
     }))
     .unwrap();
+    for id in 1..=8 {
+        link.send(CuTelemetryRecord::CopperList { id, capture: &[] })
+            .unwrap();
+    }
     assert!(link.poll(TxMode::Running).unwrap().is_some());
-    assert_eq!(inboxes.stick.take().unwrap().2, 7);
+    assert_eq!(inboxes.stick.take(8, 2).unwrap().2, 7);
     let mut bytes = [0; 8];
     assert_eq!(feedback.try_recv_feedback(&mut bytes).unwrap(), Some(8));
     assert_eq!(&bytes, b"CUFBtest");
     link.poll(TxMode::Running).unwrap();
-    assert_eq!(inboxes.stick.take().unwrap().2, 8);
+    assert_eq!(inboxes.stick.take(8, 2).unwrap().2, 8);
 }

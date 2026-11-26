@@ -29,31 +29,35 @@ pub fn expand(item: ItemStruct) -> syn::Result<TokenStream> {
     let aliases = ids
         .iter()
         .map(|i| format_ident!("{}Source", i.to_string().to_case(Case::Pascal)));
+    let count = ids.len();
+    let indices = 0..count;
     let ops = quote!(::cu29::teleops);
     Ok(quote! {
         #vis mod #module {
             use super::*;
-            pub struct Operator<S>{pub(super) sender:S,pub(super) observed:Option<u64>}
+            pub struct Operator<S>{pub(super) sender:S,pub(super) last_sent:[Option<u64>;#count]}
+            pub struct Observing<'a,S>{operator:&'a mut Operator<S>,cl_id:u64}
             impl<S:#ops::Submit> Operator<S>{
-                pub fn observing(&mut self,id:u64)->Operator<&mut S>{Operator{sender:&mut self.sender,observed:Some(id)}}
-                #(pub fn #ids(&mut self)->#ops::Input<'_,S,#types>{#ops::Input::new(&mut self.sender,#tags,self.observed)})*
+                pub fn observing(&mut self,cl_id:u64)->Observing<'_,S>{Observing{operator:self,cl_id}}
+            }
+            impl<S:#ops::Submit> Observing<'_,S>{
+                #(pub fn #ids(&mut self)->#ops::Input<'_,S,#types>{#ops::Input::new(&mut self.operator.sender,#tags,self.cl_id,&mut self.operator.last_sent[#indices])})*
             }
             pub struct Publishers {#(pub #ids:#ops::Publisher<#types>),*}
             impl #ops::Dispatch for Publishers {
-                fn dispatch(&mut self,id:#ops::CommandId,tov: ::cu29::clock::Tov,bytes:&[u8])->Result<(),#ops::Rejected>{
-                    match id.field {
-                        #(#tags=>self.#ids.decode(id,tov,bytes),)*
+                fn dispatch(&mut self,field:u16,cl:u64,tov: ::cu29::clock::Tov,bytes:&[u8])->Result<(),#ops::Rejected>{
+                    match field {
+                        #(#tags=>self.#ids.decode(cl,tov,bytes),)*
                         _=>Err(#ops::Rejected::Channel)
                     }
                 }
-                fn reset(&mut self){#(self.#ids.reset();)*}
             }
             pub struct Inboxes {#(pub #ids:#ops::Inbox<<#types as #ops::Channel>::Payload>),*}
             #(pub type #aliases=#ops::Source<<#types as #ops::Channel>::Payload>;)*
         }
         impl #ops::Teleops for #name{
             type Operator<S:#ops::Submit>=#module::Operator<S>;
-            fn operator<S:#ops::Submit>(sender:S)->Self::Operator<S>{#module::Operator{sender,observed:None}}
+            fn operator<S:#ops::Submit>(sender:S)->Self::Operator<S>{#module::Operator{sender,last_sent:[None;#count]}}
         }
         impl #name {
             pub fn inboxes()->::cu29::CuResult<(#module::Publishers,#module::Inboxes)>{

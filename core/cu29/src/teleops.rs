@@ -17,6 +17,7 @@ crate::resources!(for <T> where T: Send + Sync + 'static {
 #[derive(Reflect)]
 #[reflect(no_field_bounds, from_reflect = false)]
 pub struct Source<T: Send + Sync + 'static> {
+    max_lag_cl: u64,
     #[reflect(ignore)]
     inbox: Inbox<T>,
 }
@@ -24,13 +25,18 @@ impl<T: Send + Sync + 'static> Freezable for Source<T> {}
 impl<T: CuMsgPayload + Send + Sync + 'static> CuSrcTask for Source<T> {
     type Output<'m> = CuMsg<T>;
     type Resources<'r> = Resources<T>;
-    fn new(_: Option<&ComponentConfig>, resources: Resources<T>) -> CuResult<Self> {
+    fn new(config: Option<&ComponentConfig>, resources: Resources<T>) -> CuResult<Self> {
         Ok(Self {
+            max_lag_cl: config
+                .map(|c| c.get::<u64>("max_lag_cl"))
+                .transpose()?
+                .flatten()
+                .unwrap_or(1),
             inbox: resources.inbox.0,
         })
     }
     fn process<'o>(&mut self, ctx: &CuContext, out: &mut Self::Output<'o>) -> CuResult<()> {
-        if let Some((id, tov, value)) = self.inbox.take() {
+        if let Some((id, tov, value)) = self.inbox.take(ctx.cl_id(), self.max_lag_cl) {
             self.inbox.record_emission(id, ctx.cl_id());
             out.set_payload(value);
             out.tov = tov;
