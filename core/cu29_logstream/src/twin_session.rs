@@ -112,9 +112,12 @@ impl<A: LiveReplay, R: CuStreamRx + 'static> CuTwinBuilder<A, FecTelemetryRx<R>>
 
 impl<A: LiveReplay, R: CuTelemetryRx + 'static> CuTwinBuilder<A, R> {
     /// Connect the operator on first submission after receiving the matching session header.
+    /// Pass a synchronized station clock to timestamp inputs as they occur, or `None` to
+    /// let the robot use the tick of the displayed CopperList.
     #[cfg(feature = "teleops")]
     pub fn with_teleops<C: crate::teleops::Teleops>(
         mut self,
+        synced_clock: Option<cu29_clock::RobotClock>,
         connect: impl crate::teleops::Connect,
     ) -> CuResult<(Self, C::Operator<impl crate::teleops::Submit>)> {
         if self.control_session.is_some() {
@@ -123,7 +126,7 @@ impl<A: LiveReplay, R: CuTelemetryRx + 'static> CuTwinBuilder<A, R> {
         let session = Arc::default();
         let sender = crate::teleops::TwinSubmit::new(connect, Arc::clone(&session));
         self.control_session = Some(session);
-        Ok((self, C::operator(sender)))
+        Ok((self, C::operator(sender, synced_clock)))
     }
 
     pub fn with_log_path(mut self, path: impl AsRef<Path>) -> Self {

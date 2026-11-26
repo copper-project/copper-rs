@@ -4,7 +4,7 @@ use alloc::sync::Arc;
 use bincode::{Decode, Encode};
 use core::marker::PhantomData;
 use crossbeam_queue::ArrayQueue;
-use cu29_clock::Tov;
+use cu29_clock::{RobotClock, Tov};
 use cu29_runtime::cutask::{CuMsg, CuMsgPayload};
 use cu29_runtime::payload::CuLatchedStateUpdate;
 use cu29_traits::{CuError, CuResult};
@@ -54,49 +54,44 @@ impl<T: CuMsgPayload + Send + Sync + 'static, const N: usize> Channel for Event<
     const REPLACE: bool = false;
 }
 
-/// How to interpret the sample's original validity.
-#[derive(Clone, Copy, Encode, Decode)]
-pub enum Validity {
-    /// Use the robot time of the observed CopperList for an unstamped input.
-    Observed,
-    /// Preserve a forwarded message's time of validity in robot time, including [`Tov::None`].
-    Robot(Tov),
-}
+/// Captures the time of operator input before queueing or transport retries.
+#[derive(Clone)]
+pub struct InputSampler(Option<RobotClock>);
 
-/// An input and its original time of validity. Plain values use the displayed frame's time.
-#[derive(Encode, Decode)]
-pub struct Sample<T> {
-    pub value: T,
-    pub validity: Validity,
-}
-impl<T> From<T> for Sample<T> {
-    fn from(value: T) -> Self {
-        Self {
+impl InputSampler {
+    /// Supply a clock synchronized to robot time, or `None` to use the displayed CopperList's tick.
+    pub fn new(synced_clock: Option<RobotClock>) -> Self {
+        Self(synced_clock)
+    }
+
+    /// Sample a fresh input, such as a button press, at the point it occurs.
+    pub fn sample<T>(&self, value: T) -> Sample<T> {
+        Sample {
             value,
-            validity: Validity::Observed,
+            tov: self
+                .0
+                .as_ref()
+                .map_or(Tov::None, |clock| Tov::Time(clock.now())),
         }
+    }
+
+    /// Forward an existing message. Its original ToV is usable when the clocks are synchronized.
+    pub fn from_msg<T: CuMsgPayload>(&self, mut msg: CuMsg<T>) -> Option<Sample<T>> {
+        let value = msg.payload_mut().take()?;
+        let tov = if self.0.is_some() { msg.tov } else { Tov::None };
+        Some(Sample { value, tov })
     }
 }
 
-impl<T: CuMsgPayload> Sample<T> {
-    /// Move a stamped message into an update after mapping its validity to robot time.
-    pub fn from_mapped_msg(
-        mut msg: CuMsg<T>,
-        map: impl FnOnce(Tov) -> Option<Tov>,
-    ) -> Result<Option<Self>, CuStreamTxError> {
-        let Some(value) = msg.payload_mut().take() else {
-            return Ok(None);
-        };
-        let tov = match msg.tov {
-            Tov::None => Tov::None,
-            stamp => map(stamp)
-                .filter(|t| *t != Tov::None)
-                .ok_or(CuStreamTxError::Failed("unmappable teleops timestamp"))?,
-        };
-        Ok(Some(Self {
-            value,
-            validity: Validity::Robot(tov),
-        }))
+/// One captured input. An absent ToV tells the robot to use the observed CopperList's tick.
+#[derive(Encode, Decode)]
+pub struct Sample<T> {
+    pub value: T,
+    tov: Tov,
+}
+impl<T> Sample<T> {
+    pub fn tov(&self) -> Tov {
+        self.tov
     }
 }
 
@@ -214,7 +209,7 @@ impl<C: Channel> Publisher<C> {
 /// Application schema implemented by derive(Teleops).
 pub trait Teleops {
     type Operator<S: Submit>;
-    fn operator<S: Submit>(sender: S) -> Self::Operator<S>;
+    fn operator<S: Submit>(sender: S, synced_clock: Option<RobotClock>) -> Self::Operator<S>;
 }
 impl<S: Submit> Submit for &mut S {
     fn submit<U: Encode>(&mut self, observed: u64, update: &U) -> Result<(), CuStreamTxError> {
@@ -321,9 +316,9 @@ impl<C: Channel> Publisher<C> {
         batch: C::Batch,
     ) {
         for sample in batch {
-            let tov = match sample.validity {
-                Validity::Observed => Tov::Time(tick),
-                Validity::Robot(tov) => tov,
+            let tov = match sample.tov {
+                Tov::None => Tov::Time(tick),
+                tov => tov,
             };
             let published = self.publish(observed, tov, sample.value);
             debug_assert!(published);

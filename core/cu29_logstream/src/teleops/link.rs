@@ -6,7 +6,7 @@ use crate::{CuStreamRxError, CuStreamTx};
 use cu29_clock::RobotClock;
 use cu29_clock::{CuDuration, CuTime};
 
-const PREFIX: &[u8; 5] = b"CUOP\x04";
+const PREFIX: &[u8; 5] = b"CUOP\x05";
 const MTU: usize = 1200;
 /// Console sender for a single robot session.
 pub struct ReturnTx<T> {
