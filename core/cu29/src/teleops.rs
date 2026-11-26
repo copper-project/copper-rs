@@ -1,4 +1,11 @@
 //! Operator channel declarations and the source task used by generated aliases.
+//!
+//! Enable `cu29/teleops` in both applications. Select `cu29/logstream` for a
+//! host telemetry worker or `cu29/telemetry` for threadless telemetry service.
+//! A custom carrier can use the typed inboxes directly.
+//!
+//! Use an authenticated or trusted return carrier and matching channel schemas.
+//! A successful submission only means that the local carrier accepted the packet.
 use crate::prelude::*;
 pub use cu29_logstream::teleops::*;
 
@@ -22,8 +29,9 @@ impl<T: CuMsgPayload + Send + Sync + 'static> CuSrcTask for Source<T> {
             inbox: resources.inbox.0,
         })
     }
-    fn process<'o>(&mut self, _: &CuContext, out: &mut Self::Output<'o>) -> CuResult<()> {
-        if let Some((_, tov, value)) = self.inbox.take() {
+    fn process<'o>(&mut self, ctx: &CuContext, out: &mut Self::Output<'o>) -> CuResult<()> {
+        if let Some((id, tov, value)) = self.inbox.take() {
+            self.inbox.record_emission(id, ctx.cl_id());
             out.set_payload(value);
             out.tov = tov;
         } else {
