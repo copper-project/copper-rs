@@ -52,3 +52,61 @@ fn displayed_frame_and_channel_policies() {
     assert!(inboxes.click.take().is_none());
     assert_eq!(inboxes.stick.take().unwrap().2, 2);
 }
+
+#[derive(Default, Debug)]
+struct Packet(Vec<u8>);
+impl cu29::logstream::CuStreamTx for Packet {
+    fn try_send(&mut self, packet: &[u8]) -> Result<(), CuStreamTxError> {
+        self.0 = packet.to_vec();
+        Ok(())
+    }
+}
+
+#[test]
+fn delayed_or_duplicate_commands_cannot_renew_control() {
+    use cu29::teleops::{Admissions, Rejected, ReturnTx, Teleops, TickHistory};
+    let (publish, inboxes) = Controls::inboxes().unwrap();
+    let session = [77; 16];
+    let mut admissions = Admissions::new(publish, session, 1, CuDuration::from_millis(150));
+    let mut tx = ReturnTx::new(Packet::default(), session, 1);
+    let packet = |tx: &mut ReturnTx<Packet>| {
+        Controls::operator(&mut *tx)
+            .observing(12)
+            .stick()
+            .try_send(&1)
+            .unwrap();
+        tx.transport().0.clone()
+    };
+    let mut ticks = TickHistory::<8>::default();
+    ticks.record(12, CuTime::from_millis(100));
+    ticks.record(13, CuTime::from_millis(200));
+    let first = packet(&mut tx);
+    let now = CuTime::from_millis(220);
+    let id = admissions.receive(&first, now, |id| ticks.get(id)).unwrap();
+    assert_eq!(id.observed_copperlist_id, Some(12));
+    assert_eq!(
+        admissions.receive(&first, now, |id| ticks.get(id)),
+        Err((Some(id), Rejected::Sequence))
+    );
+    assert_eq!(
+        inboxes.stick.take().unwrap().1,
+        Tov::Time(CuTime::from_millis(100))
+    );
+    let late = packet(&mut tx);
+    assert_eq!(
+        admissions
+            .receive(&late, CuTime::from_millis(260), |id| ticks.get(id))
+            .unwrap_err()
+            .1,
+        Rejected::Freshness
+    );
+    admissions.takeover(2, || {}).unwrap();
+    assert_eq!(
+        admissions
+            .receive(&first, now, |id| ticks.get(id))
+            .unwrap_err()
+            .1,
+        Rejected::Epoch
+    );
+    assert!(inboxes.stick.take().is_none());
+}

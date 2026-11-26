@@ -118,6 +118,7 @@ impl<T> Inbox<T> {
 }
 /// Single producer for a typed inbox.
 pub struct Publisher<C: Channel> {
+    last_sequence: Option<u64>,
     inbox: Inbox<C::Payload>,
 }
 impl<C: Channel> Publisher<C> {
@@ -128,6 +129,7 @@ impl<C: Channel> Publisher<C> {
         let inbox = Inbox(Arc::new(ArrayQueue::new(C::CAPACITY)));
         Ok((
             Self {
+                last_sequence: None,
                 inbox: inbox.clone(),
             },
             inbox,
@@ -158,5 +160,49 @@ impl<S: Submit> Submit for &mut S {
         value: &T,
     ) -> Result<(), CuStreamTxError> {
         (**self).submit(field, observed, validity, value)
+    }
+}
+
+mod link;
+pub use link::*;
+
+/// Robot-side admission failure for one command.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Rejected {
+    Framing,
+    Session,
+    Epoch,
+    Channel,
+    Sequence,
+    Freshness,
+    Overflow,
+}
+
+/// Generated routing from private wire tags to typed publishers.
+pub trait Dispatch {
+    fn dispatch(&mut self, id: CommandId, tov: Tov, bytes: &[u8]) -> Result<(), Rejected>;
+    fn reset(&mut self);
+}
+impl<C: Channel> Publisher<C> {
+    #[doc(hidden)]
+    pub fn decode(&mut self, id: CommandId, tov: Tov, bytes: &[u8]) -> Result<(), Rejected> {
+        if self.last_sequence.is_some_and(|last| id.sequence <= last) {
+            return Err(Rejected::Sequence);
+        }
+        let (value, len) =
+            bincode::decode_from_slice(bytes, bincode::config::standard().with_limit::<1200>())
+                .map_err(|_| Rejected::Framing)?;
+        if len != bytes.len() {
+            return Err(Rejected::Framing);
+        }
+        self.last_sequence = Some(id.sequence);
+        self.publish(id, tov, value)
+            .then_some(())
+            .ok_or(Rejected::Overflow)
+    }
+    #[doc(hidden)]
+    pub fn reset(&mut self) {
+        while self.inbox.take().is_some() {}
+        self.last_sequence = None;
     }
 }

@@ -39,6 +39,15 @@ pub fn expand(item: ItemStruct) -> syn::Result<TokenStream> {
                 #(pub fn #ids(&mut self)->#ops::Input<'_,S,#types>{#ops::Input::new(&mut self.sender,#tags,self.observed)})*
             }
             pub struct Publishers {#(pub #ids:#ops::Publisher<#types>),*}
+            impl #ops::Dispatch for Publishers {
+                fn dispatch(&mut self,id:#ops::CommandId,tov: ::cu29::clock::Tov,bytes:&[u8])->Result<(),#ops::Rejected>{
+                    match id.field {
+                        #(#tags=>self.#ids.decode(id,tov,bytes),)*
+                        _=>Err(#ops::Rejected::Channel)
+                    }
+                }
+                fn reset(&mut self){#(self.#ids.reset();)*}
+            }
             pub struct Inboxes {#(pub #ids:#ops::Inbox<<#types as #ops::Channel>::Payload>),*}
             #(pub type #aliases=#ops::Source<<#types as #ops::Channel>::Payload>;)*
         }
