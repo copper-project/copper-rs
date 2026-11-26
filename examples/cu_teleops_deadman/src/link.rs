@@ -6,6 +6,9 @@ use cu29::teleops::{ReturnPolicy, with_teleops};
 use cu29_logstream_udp::{CuUdpLogStreamConfig, CuUdpLogStreamRx, CuUdpLogStreamTx};
 use std::error::Error;
 
+/// Complete UDP return datagram budget shared by this demo’s console and robot.
+pub(super) const RETURN_PACKET_BYTES: usize = 256;
+
 pub(super) fn loopback() -> Result<(CuUdpLogStreamTx, CuUdpLogStreamRx), Box<dyn Error>> {
     let loopback = "127.0.0.1:0".parse()?;
     let (_, rx) = CuUdpLogStreamConfig::new(loopback).open()?;
@@ -24,7 +27,7 @@ pub(super) fn robot_tx(
     let plan = LogStreamPlan::resolve(&config.log_streaming.unwrap().destinations[0])
         .map_err(|err| CuError::new_with_cause("invalid loopback FEC plan", err))?;
     let fec = FecTelemetryTx::new(data_tx, plan, clock.clone())?;
-    let policy = ReturnPolicy { feedback: None };
+    let policy = ReturnPolicy::<RETURN_PACKET_BYTES> { feedback: None };
     Ok(with_teleops(
         fec,
         return_rx,

@@ -50,7 +50,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let clock = RobotClock::new();
     let (twin, mut control) = ground::Twin::from_telemetry(fec)
         .with_teleops::<Controls>(Some(clock.clone()), move |session| {
-            ReturnTx::new(return_tx, session)
+            ReturnTx::<_, { link::RETURN_PACKET_BYTES }>::new(return_tx, session)
         })?;
     let (mut twin, mut frames) = twin.with_log_path(dir.join("twin.copper")).spawn()?;
     let (publish, inboxes) = Controls::inboxes()?;
