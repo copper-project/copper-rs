@@ -9,7 +9,12 @@
     ),
     resources: [(id: "ops", provider: "crate::Ops")],
     tasks: [
-        (id: "button", type: "crate::controls::ButtonSource", resources: {"inbox": "ops.button"}),
+        (
+            id: "button",
+            type: "crate::controls::ButtonSource",
+            config: {"max_lag_cl": 32},
+            resources: {"inbox": "ops.button"},
+        ),
         (id: "tick", type: "crate::Tick"),
         (id: "safety", type: "crate::Deadman"),
     ],

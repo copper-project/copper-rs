@@ -19,18 +19,12 @@ pub(super) fn robot_tx(
     return_rx: CuUdpLogStreamRx,
     publish: controls::Publishers,
     clock: RobotClock,
-    robot_clock: RobotClock,
 ) -> CuResult<impl CuTelemetryTx> {
     let config = CuConfig::deserialize_ron(include_str!("../fec.ron"))?;
     let plan = LogStreamPlan::resolve(&config.log_streaming.unwrap().destinations[0])
         .map_err(|err| CuError::new_with_cause("invalid loopback FEC plan", err))?;
     let fec = FecTelemetryTx::new(data_tx, plan, clock.clone())?;
-    let policy = ReturnPolicy {
-        robot_clock,
-        epoch: 1,
-        max_age: CuDuration::from_millis(150),
-        feedback: None,
-    };
+    let policy = ReturnPolicy { feedback: None };
     Ok(with_teleops(
         fec,
         return_rx,

@@ -48,11 +48,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let (return_tx, return_rx) = link::loopback()?;
     let fec = FecTelemetryRx::new(data_rx, Default::default(), None)?;
     let (twin, mut control) = ground::Twin::from_telemetry(fec)
-        .with_teleops::<Controls>(move |session| ReturnTx::new(return_tx, session, 1))?;
+        .with_teleops::<Controls>(move |session| ReturnTx::new(return_tx, session))?;
     let (mut twin, mut frames) = twin.with_log_path(dir.join("twin.copper")).spawn()?;
     let clock = RobotClock::new();
     let (publish, inboxes) = Controls::inboxes()?;
-    let robot_clock = clock.clone();
     let robot = Robot::builder()
         .with_clock(clock.clone())
         .with_log_path(dir.join("robot.copper"), None)?
@@ -65,7 +64,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             Ok(manager)
         })
         .with_telemetry_tx(
-            move |clock| link::robot_tx(data_tx, return_rx, publish, clock, robot_clock),
+            move |clock| link::robot_tx(data_tx, return_rx, publish, clock),
             TelemetryBufferConfig {
                 capture_count: 64,
                 keyframe_count: 8,
@@ -126,7 +125,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let mut msg = CuMsg::default();
                 msg.set_payload(true);
                 msg.tov = Tov::Time(sample.0);
-                control.button().try_send_msg(&msg)
+                control.observing(list.id).button().try_send_msg(&msg)
             } else {
                 control.observing(list.id).button().try_send(&false)
             };

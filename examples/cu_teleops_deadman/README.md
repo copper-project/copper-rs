@@ -8,7 +8,7 @@ cargo run -p cu-teleops-deadman --features demo
 
 Add `-- --auto` to press once as soon as the twin sees the robot armed.
 
-1. The twin sends a fresh permit while the button is released. The robot starts safe and arms only until 150 ms after the permit's observed robot tick. Silence lets the permit expire.
+1. The twin samples the button state once per observed robot CopperList and sends a permit while it is released. The robot source drops input more than 32 iterations old. The robot starts safe and arms only until 150 ms after the permit's observed robot tick. Silence lets the permit expire.
 2. Pressing Enter sends a stamped stop on the UDP return link. The robot switches to safe in its next iteration after admission.
 3. The twin waits for the first FEC frame that confirms this press. The robot records the press timestamp and its armed-to-safe transition time, then repeats that state in subsequent frames. A watchdog expiry cannot satisfy the measurement.
 
