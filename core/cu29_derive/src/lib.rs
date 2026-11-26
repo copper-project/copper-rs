@@ -286,6 +286,7 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
 
             quote! {
                 mod cumsgs {
+                    use super::*;  // resolve message paths like #[copper_runtime] does.
                     #common_imports
                     #support
                 }
@@ -315,6 +316,7 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
 
                 mission_modules.push(quote! {
                     pub mod #mission_mod {
+                        use super::super::*;  // resolve message paths like #[copper_runtime] does.
                         #common_imports
                         #support
                     }
