@@ -164,7 +164,7 @@ pub fn with_teleops<T, R, P, H, A>(
     policy: ReturnPolicy,
     tick: H,
     audit: A,
-) -> impl CuTelemetryTx
+) -> ReturnLink<T, R, P, H, A>
 where
     T: CuTelemetryTx,
     R: CuStreamRx,
@@ -194,7 +194,8 @@ pub struct ReturnPolicy {
     pub feedback: Option<FeedbackInbox>,
 }
 
-struct ReturnLink<T, R, P, H, A> {
+/// Robot return-link service, shared by host and threadless telemetry drivers.
+pub struct ReturnLink<T, R, P, H, A> {
     inner: T,
     rx: R,
     clock: RobotClock,
@@ -204,6 +205,20 @@ struct ReturnLink<T, R, P, H, A> {
     bound: bool,
     tick: H,
     audit: A,
+}
+
+impl<T, R, P: Dispatch, H, A> ReturnLink<T, R, P, H, A> {
+    /// Change the authorized epoch at a quiescent graph boundary. The caller's
+    /// revocation must take effect before it returns. Subsequent packets from
+    /// the previous epoch are rejected.
+    pub fn takeover(&mut self, epoch: u64, revoke: impl FnOnce()) -> CuResult<()> {
+        if !self.bound {
+            return Err("teleops session is not bound".into());
+        }
+        self.admissions.takeover(epoch, revoke)?;
+        self.policy.epoch = epoch;
+        Ok(())
+    }
 }
 
 impl<T, R, P, H, A> CuTelemetryTx for ReturnLink<T, R, P, H, A>
