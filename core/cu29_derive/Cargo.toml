@@ -34,6 +34,7 @@ ui_test = { version = "0.30.7", default-features = false, features = ["rustc"] }
 cu29 = { workspace = true }
 
 [features]
+teleops = []
 static-config = []
 clock-sync = ["cu29-runtime/clock-sync"]
 self-describing-logs = []
