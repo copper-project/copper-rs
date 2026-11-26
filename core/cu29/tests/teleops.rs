@@ -32,13 +32,13 @@ impl Submit for Recorder {
 fn displayed_frame_and_channel_policies() {
     use cu29::teleops::Teleops;
     let mut recorder = Recorder::default();
-    let mut operator = Controls::operator(&mut recorder);
+    let mut operator = Controls::operator(&mut recorder, None);
     let mut update = controls::Update {
-        mode: Some(CuLatchedStateUpdate::Clear.into()),
+        mode: Some(operator.sampler.sample(CuLatchedStateUpdate::Clear)),
         ..Default::default()
     };
-    assert!(update.click.try_push(7.into()).is_ok());
-    assert!(update.click.try_push(8.into()).is_ok());
+    assert!(update.click.try_push(operator.sampler.sample(7)).is_ok());
+    assert!(update.click.try_push(operator.sampler.sample(8)).is_ok());
     operator.submit(14, &mut update).unwrap();
     assert_eq!(recorder.0.len(), 1);
     let (frame, bytes) = &recorder.0[0];
@@ -46,6 +46,7 @@ fn displayed_frame_and_channel_policies() {
         bincode::decode_from_slice(bytes, bincode::config::standard()).unwrap();
     assert_eq!(*frame, 14);
     assert!(update.stick.is_none());
+    assert_eq!(update.mode.as_ref().unwrap().tov(), Tov::None);
     assert_eq!(update.mode.unwrap().value, CuLatchedStateUpdate::Clear);
     assert_eq!(
         update
@@ -70,15 +71,38 @@ fn displayed_frame_and_channel_policies() {
 }
 
 #[test]
+fn forwarded_input_uses_its_original_tov_only_with_synchronized_clocks() {
+    use cu29::teleops::Teleops;
+    let mut recorder = Recorder::default();
+    let mut msg = CuMsg::new(Some(7u8));
+    msg.tov = Tov::Time(CuTime(12));
+    let unsynced = Controls::operator(&mut recorder, None);
+    assert_eq!(
+        unsynced.sampler.from_msg(msg.clone()).unwrap().tov(),
+        Tov::None
+    );
+    let synced = Controls::operator(&mut recorder, Some(RobotClock::mock().0));
+    assert_eq!(
+        synced.sampler.from_msg(msg).unwrap().tov(),
+        Tov::Time(CuTime(12))
+    );
+}
+
+#[test]
 fn select_latest_once_per_frame_and_drop_expired_samples() {
     use cu29::teleops::Teleops;
     let mut recorder = Recorder::default();
-    let mut op = Controls::operator(&mut recorder);
+    let (clock, mock) = RobotClock::mock();
+    let mut op = Controls::operator(&mut recorder, Some(clock));
     for (cl, value) in [(20, 3), (20, 4), (19, 5), (21, 6)] {
+        mock.set_value(42);
+        let sample = op.sampler.sample(value);
+        mock.set_value(72);
+        assert_eq!(sample.tov(), Tov::Time(CuTime(42)));
         op.submit(
             cl,
             &mut controls::Update {
-                stick: Some(value.into()),
+                stick: Some(sample),
                 ..Default::default()
             },
         )
