@@ -85,11 +85,11 @@ where
     }
 }
 
-impl<T, const N: usize> Decode<()> for CuArray<T, N>
+impl<Context, T, const N: usize> Decode<Context> for CuArray<T, N>
 where
-    T: Decode<()> + Clone,
+    T: Decode<Context> + Clone,
 {
-    fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
+    fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
         // Decode the length first
         let len = u32::decode(decoder)? as usize;
         if len > N {
@@ -102,6 +102,29 @@ where
         let mut inner = ArrayVec::new();
         for _ in 0..len {
             inner.push(T::decode(decoder)?);
+        }
+
+        Ok(Self { inner })
+    }
+}
+
+impl<'de, Context, T, const N: usize> BorrowDecode<'de, Context> for CuArray<T, N>
+where
+    T: BorrowDecode<'de, Context> + Clone,
+{
+    fn borrow_decode<D: BorrowDecoder<'de, Context = Context>>(
+        decoder: &mut D,
+    ) -> Result<Self, DecodeError> {
+        let len = u32::decode(decoder)? as usize;
+        if len > N {
+            return Err(DecodeError::OtherString(format!(
+                "Decoded length {len} exceeds maximum capacity {N}"
+            )));
+        }
+
+        let mut inner = ArrayVec::new();
+        for _ in 0..len {
+            inner.push(T::borrow_decode(decoder)?);
         }
 
         Ok(Self { inner })
@@ -125,6 +148,16 @@ impl<T: Clone, const N: usize> Default for CuArrayVec<T, N> {
     }
 }
 
+impl<T: Clone, const N: usize> CuArrayVec<T, N> {
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
 impl<T, const N: usize> Encode for CuArrayVec<T, N>
 where
     T: Clone + Encode + 'static,
@@ -135,11 +168,11 @@ where
     }
 }
 
-impl<T, const N: usize> Decode<()> for CuArrayVec<T, N>
+impl<Context, T, const N: usize> Decode<Context> for CuArrayVec<T, N>
 where
-    T: Clone + Decode<()> + 'static,
+    T: Clone + Decode<Context> + 'static,
 {
-    fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
+    fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let inner = Vec::<T>::decode(decoder)?;
         let actual_len = inner.len();
         if actual_len > N {
@@ -157,11 +190,11 @@ where
     }
 }
 
-impl<'de, T, const N: usize> BorrowDecode<'de, ()> for CuArrayVec<T, N>
+impl<'de, Context, T, const N: usize> BorrowDecode<'de, Context> for CuArrayVec<T, N>
 where
-    T: Clone + BorrowDecode<'de, ()> + 'static,
+    T: Clone + BorrowDecode<'de, Context> + 'static,
 {
-    fn borrow_decode<D: BorrowDecoder<'de, Context = ()>>(
+    fn borrow_decode<D: BorrowDecoder<'de, Context = Context>>(
         decoder: &mut D,
     ) -> Result<Self, DecodeError> {
         let inner = Vec::<T>::borrow_decode(decoder)?;
