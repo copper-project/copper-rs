@@ -1,4 +1,11 @@
 //! Operator channel declarations and the source task used by generated aliases.
+//!
+//! Enable `cu29/teleops` in both applications. Select `cu29/logstream` for a
+//! host telemetry worker or `cu29/telemetry` for threadless telemetry service.
+//! A custom carrier can use the typed inboxes directly.
+//!
+//! Use an authenticated or trusted return carrier and matching channel schemas.
+//! A successful submission only means that the local carrier accepted the packet.
 use crate::prelude::*;
 pub use cu29_logstream::teleops::*;
 

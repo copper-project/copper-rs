@@ -86,13 +86,28 @@ impl<'a, S: Submit, C: Channel> Input<'a, S, C> {
         self.sender
             .submit(self.field, self.observed, Validity::Observed, value)
     }
-    /// The caller supplies a ToV already mapped into this robot's clock.
+    /// Forward a message whose validity is already in robot time.
     pub fn try_send_msg(&mut self, msg: &CuMsg<C::Payload>) -> Result<(), CuStreamTxError> {
+        self.try_send_mapped_msg(msg, Some)
+    }
+    /// Map stamped validity into robot time before submission. Unknown validity
+    /// stays unknown. A failed mapping rejects the sample locally.
+    pub fn try_send_mapped_msg(
+        &mut self,
+        msg: &CuMsg<C::Payload>,
+        map: impl FnOnce(Tov) -> Option<Tov>,
+    ) -> Result<(), CuStreamTxError> {
         let Some(value) = msg.payload() else {
             return Ok(());
         };
+        let tov = match msg.tov {
+            Tov::None => Tov::None,
+            stamp => map(stamp)
+                .filter(|t| *t != Tov::None)
+                .ok_or(CuStreamTxError::Failed("unmappable teleops timestamp"))?,
+        };
         self.sender
-            .submit(self.field, self.observed, Validity::Robot(msg.tov), value)
+            .submit(self.field, self.observed, Validity::Robot(tov), value)
     }
 }
 impl<S: Submit, T: CuMsgPayload + Send + Sync + 'static> Input<'_, S, Latched<T>> {
