@@ -104,3 +104,5 @@ One reader per endpoint routes `CUFB` to FEC and `CUOP` to typed inboxes. Custom
 Use preallocated inboxes, bounded polling on host even during telemetry silence, and a fixed packet budget in the threadless `CuTelemetryTx::poll`. [FEC worker](../../core/cu29_logstream/src/worker.rs) · [Plain UDP example](../../examples/cu_udp_telemetry/src/lib.rs)
 
 Verify host and embedded UDP, mixed feedback and commands, and event overflow. Freeze the displayed frame while newer telemetry arrives and check the recorded observed ID. Delay a held sample past expiry, then replay from a mid-hold keyframe and compare the exact safe-mode iteration.
+
+A proposed [telemetry clock-sync protocol](telemetry-clock-sync.md) would let the console acquire robot time over this link and fall back to the observed tick when sync expires.
