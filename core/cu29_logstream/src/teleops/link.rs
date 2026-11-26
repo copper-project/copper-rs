@@ -6,7 +6,7 @@ use crate::{CuStreamRxError, CuStreamTx};
 use cu29_clock::RobotClock;
 use cu29_clock::{CuDuration, CuTime};
 
-const PREFIX: &[u8; 5] = b"CUOP\x02";
+const PREFIX: &[u8; 5] = b"CUOP\x03";
 const MTU: usize = 1200;
 /// Console sender for a single robot session.
 pub struct ReturnTx<T> {
@@ -31,29 +31,28 @@ impl<T: CuStreamTx> ReturnTx<T> {
     }
 }
 impl<T: CuStreamTx> Submit for ReturnTx<T> {
-    fn submit<C: Channel>(
+    fn submit<U: Encode>(
         &mut self,
-        field: u16,
+        schema: &[u8; 32],
         observed: u64,
-        validity: Validity,
-        value: &C::Payload,
+        update: &U,
     ) -> Result<(), CuStreamTxError> {
+        let sequence = self
+            .sequence
+            .checked_add(1)
+            .ok_or(CuStreamTxError::Failed("teleops sequence exhausted"))?;
         let mut packet = [0; MTU];
         packet[..PREFIX.len()].copy_from_slice(PREFIX);
-        let dst = &mut packet[PREFIX.len()..];
-        let config = bincode::config::standard();
-        let header = (self.session, field, observed, validity);
-        let len = if C::ONE_PER_CL {
-            bincode::encode_into_slice((header, value), dst, config)
-        } else {
-            self.sequence = self
-                .sequence
-                .checked_add(1)
-                .ok_or(CuStreamTxError::Failed("event sequence exhausted"))?;
-            bincode::encode_into_slice((header, self.sequence, value), dst, config)
-        }
-        .map_err(|_| CuStreamTxError::Failed("teleops encoding failed"))?;
-        self.tx.try_send(&packet[..len + PREFIX.len()])?;
+        let len = bincode::encode_into_slice(
+            (self.session, schema, observed, sequence, update),
+            &mut packet[PREFIX.len()..],
+            bincode::config::standard(),
+        )
+        .map_err(|_| {
+            CuStreamTxError::Failed("teleops update exceeds packet budget or cannot be encoded")
+        })?;
+        self.tx.try_send(&packet[..PREFIX.len() + len])?;
+        self.sequence = sequence;
         Ok(())
     }
 }
@@ -99,20 +98,19 @@ impl<P: Dispatch> Admissions<P> {
             .strip_prefix(PREFIX)
             .filter(|_| packet.len() <= MTU)
             .ok_or((None, Rejected::Framing))?;
-        let ((session, field, cl, validity), len): (([u8; 16], u16, u64, Validity), _) =
+        let ((session, schema, cl, sequence), len): (([u8; 16], [u8; 32], u64, u64), _) =
             bincode::decode_from_slice(bytes, bincode::config::standard())
                 .map_err(|_| (None, Rejected::Framing))?;
         let reject = |why| (Some(cl), why);
         if session != self.session {
             return Err(reject(Rejected::Session));
         }
+        if &schema != self.publish.schema() {
+            return Err(reject(Rejected::Schema));
+        }
         let tick = lookup(cl).ok_or(reject(Rejected::UnknownFrame))?;
-        let tov = match validity {
-            Validity::Robot(tov) => tov,
-            Validity::Observed => Tov::Time(tick),
-        };
         self.publish
-            .dispatch(field, cl, tov, &bytes[len..])
+            .dispatch(cl, tick, sequence, &bytes[len..])
             .map_err(reject)?;
         Ok(cl)
     }
