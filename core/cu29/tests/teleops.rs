@@ -17,7 +17,6 @@ struct Recorder(Vec<(u64, Vec<u8>)>);
 impl Submit for Recorder {
     fn submit<U: bincode::Encode>(
         &mut self,
-        _: &[u8; 32],
         observed: u64,
         update: &U,
     ) -> Result<(), CuStreamTxError> {
@@ -33,7 +32,7 @@ impl Submit for Recorder {
 fn displayed_frame_and_channel_policies() {
     use cu29::teleops::Teleops;
     let mut recorder = Recorder::default();
-    let mut operator = Controls::operator(&mut recorder).unwrap();
+    let mut operator = Controls::operator(&mut recorder);
     let mut update = controls::Update {
         mode: Some(CuLatchedStateUpdate::Clear.into()),
         ..Default::default()
@@ -74,7 +73,7 @@ fn displayed_frame_and_channel_policies() {
 fn select_latest_once_per_frame_and_drop_expired_samples() {
     use cu29::teleops::Teleops;
     let mut recorder = Recorder::default();
-    let mut op = Controls::operator(&mut recorder).unwrap();
+    let mut op = Controls::operator(&mut recorder);
     for (cl, value) in [(20, 3), (20, 4), (19, 5), (21, 6)] {
         op.submit(
             cl,
@@ -113,7 +112,6 @@ fn duplicated_or_reordered_frames_cannot_renew_control() {
     let mut tx = ReturnTx::new(Packet::default(), [77; 16]);
     for (cl, accept) in [(12, true), (12, false), (11, false), (13, true)] {
         Controls::operator(&mut tx)
-            .unwrap()
             .submit(
                 cl,
                 &mut controls::Update {
@@ -167,7 +165,6 @@ fn shared_reader_services_eight_packets_even_without_outbound_captures() {
         msg.set_payload(value);
         msg.tov = Tov::Time(CuTime(2));
         Controls::operator(&mut sender)
-            .unwrap()
             .submit(
                 u64::from(value),
                 &mut controls::Update {
@@ -220,37 +217,6 @@ fn shared_reader_services_eight_packets_even_without_outbound_captures() {
 }
 
 #[test]
-fn reordered_schema_is_rejected_before_any_field_is_applied() {
-    use cu29::teleops::{Admissions, Rejected, ReturnTx, Teleops};
-    #[derive(Teleops)]
-    #[allow(dead_code)]
-    struct Reordered {
-        mode: Latched<bool>,
-        stick: Latest<u8>,
-        click: Event<u8, 2>,
-    }
-
-    let (publish, inboxes) = Controls::inboxes().unwrap();
-    let mut rx = Admissions::new(publish, [1; 16]);
-    let mut tx = ReturnTx::new(Packet::default(), [1; 16]);
-    Reordered::operator(&mut tx)
-        .unwrap()
-        .submit(
-            4,
-            &mut reordered::Update {
-                stick: Some(9.into()),
-                ..Default::default()
-            },
-        )
-        .unwrap();
-    assert_eq!(
-        rx.receive(&tx.transport().0, |_| Some(CuTime(5))),
-        Err((Some(4), Rejected::Schema))
-    );
-    assert!(inboxes.stick.take(4, 0).is_none());
-}
-
-#[test]
 fn event_overflow_rejects_the_whole_update_and_allows_retry() {
     use cu29::teleops::{Admissions, Rejected, ReturnTx, Teleops};
     let (mut publish, inboxes) = Controls::inboxes().unwrap();
@@ -263,10 +229,7 @@ fn event_overflow_rejects_the_whole_update_and_allows_retry() {
     };
     assert!(update.click.try_push(2.into()).is_ok());
     assert!(update.click.try_push(3.into()).is_ok());
-    Controls::operator(&mut tx)
-        .unwrap()
-        .submit(4, &mut update)
-        .unwrap();
+    Controls::operator(&mut tx).submit(4, &mut update).unwrap();
     let packet = &tx.transport().0;
     assert_eq!(
         rx.receive(packet, |_| Some(CuTime(5))),

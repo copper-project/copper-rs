@@ -123,7 +123,7 @@ impl<A: LiveReplay, R: CuTelemetryRx + 'static> CuTwinBuilder<A, R> {
         let session = Arc::default();
         let sender = crate::teleops::TwinSubmit::new(connect, Arc::clone(&session));
         self.control_session = Some(session);
-        Ok((self, C::operator(sender)?))
+        Ok((self, C::operator(sender)))
     }
 
     pub fn with_log_path(mut self, path: impl AsRef<Path>) -> Self {
