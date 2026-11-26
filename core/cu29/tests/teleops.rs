@@ -110,3 +110,79 @@ fn delayed_or_duplicate_commands_cannot_renew_control() {
     );
     assert!(inboxes.stick.take().is_none());
 }
+
+#[test]
+fn shared_reader_services_eight_packets_even_without_outbound_captures() {
+    use cu29::logstream::protocol::{CuTelemetryRecord, CuTelemetrySession, CuTelemetryTx, TxMode};
+    use cu29::logstream::{CuFeedbackRx, CuStreamRx, CuStreamRxError, StreamIdentity};
+    use cu29::teleops::{FeedbackInbox, ReturnPolicy, ReturnTx, Teleops, with_teleops};
+    use std::collections::VecDeque;
+    #[derive(Debug)]
+    struct Packets(VecDeque<Vec<u8>>);
+    impl CuStreamRx for Packets {
+        fn try_recv(&mut self, bytes: &mut [u8]) -> Result<Option<usize>, CuStreamRxError> {
+            Ok(self.0.pop_front().map(|pkt| {
+                bytes[..pkt.len()].copy_from_slice(&pkt);
+                pkt.len()
+            }))
+        }
+    }
+    struct Idle;
+    impl CuTelemetryTx for Idle {
+        fn send(&mut self, _: CuTelemetryRecord<'_>) -> CuResult<()> {
+            Ok(())
+        }
+    }
+    let (publish, inboxes) = Controls::inboxes().unwrap();
+    let session = [9; 16];
+    let mut sender = ReturnTx::new(Packet::default(), session, 1);
+    let mut packets = VecDeque::from([b"CUFBtest".to_vec()]);
+    for value in 1..=8 {
+        let mut msg = CuMsg::default();
+        msg.set_payload(value);
+        msg.tov = Tov::Time(CuTime(2));
+        Controls::operator(&mut sender)
+            .stick()
+            .try_send_msg(&msg)
+            .unwrap();
+        packets.push_back(sender.transport().0.clone());
+    }
+    let mut feedback = FeedbackInbox::default();
+    let (clock, _) = RobotClock::mock();
+    let mut link = with_teleops(
+        Idle,
+        Packets(packets),
+        publish,
+        clock.clone(),
+        ReturnPolicy {
+            robot_clock: clock,
+            epoch: 1,
+            max_age: CuDuration::from_millis(20),
+            feedback: Some(feedback.clone()),
+        },
+        |_| None,
+        |r| {
+            r.unwrap();
+        },
+    );
+    link.send(CuTelemetryRecord::Session(&CuTelemetrySession {
+        metadata: None,
+        identity: StreamIdentity {
+            session_id: session,
+            sender_id: 0,
+        },
+        context: Default::default(),
+        schema: cu29::logstream::ApplicationSchema {
+            outputs: vec![],
+            reconstruction: vec![],
+        },
+    }))
+    .unwrap();
+    assert!(link.poll(TxMode::Running).unwrap().is_some());
+    assert_eq!(inboxes.stick.take().unwrap().2, 7);
+    let mut bytes = [0; 8];
+    assert_eq!(feedback.try_recv_feedback(&mut bytes).unwrap(), Some(8));
+    assert_eq!(&bytes, b"CUFBtest");
+    link.poll(TxMode::Running).unwrap();
+    assert_eq!(inboxes.stick.take().unwrap().2, 8);
+}

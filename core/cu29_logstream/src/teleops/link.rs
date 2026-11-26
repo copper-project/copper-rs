@@ -16,6 +16,10 @@ pub struct ReturnTx<T> {
     sequence: u64,
 }
 impl<T: CuStreamTx> ReturnTx<T> {
+    /// Drive carriers that retain bytes after accepting a complete packet.
+    pub fn poll_pending(&mut self) -> Result<bool, CuStreamTxError> {
+        self.tx.poll_pending()
+    }
     pub fn transport(&self) -> &T {
         &self.tx
     }
@@ -183,6 +187,8 @@ where
 
 /// Parameters for a trusted control epoch and its shared feedback endpoint.
 pub struct ReturnPolicy {
+    /// Clock in which captured ticks are expressed, including simulated robot time.
+    pub robot_clock: RobotClock,
     pub epoch: u64,
     pub max_age: CuDuration,
     pub feedback: Option<FeedbackInbox>,
@@ -246,10 +252,11 @@ where
                         continue;
                     }
                     if self.bound {
-                        (self.audit)(
-                            self.admissions
-                                .receive(packet, self.clock.now(), |id| self.history.get(id)),
-                        )
+                        (self.audit)(self.admissions.receive(
+                            packet,
+                            self.policy.robot_clock.now(),
+                            |id| self.history.get(id),
+                        ))
                     }
                 }
                 Ok(None) => break,

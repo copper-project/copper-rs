@@ -22,8 +22,9 @@ impl<T: CuMsgPayload + Send + Sync + 'static> CuSrcTask for Source<T> {
             inbox: resources.inbox.0,
         })
     }
-    fn process<'o>(&mut self, _: &CuContext, out: &mut Self::Output<'o>) -> CuResult<()> {
-        if let Some((_, tov, value)) = self.inbox.take() {
+    fn process<'o>(&mut self, ctx: &CuContext, out: &mut Self::Output<'o>) -> CuResult<()> {
+        if let Some((id, tov, value)) = self.inbox.take() {
+            self.inbox.record_emission(id, ctx.cl_id());
             out.set_payload(value);
             out.tov = tov;
         } else {

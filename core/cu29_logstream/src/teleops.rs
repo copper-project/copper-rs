@@ -105,13 +105,28 @@ impl<S: Submit, T: CuMsgPayload + Send + Sync + 'static> Input<'_, S, Latched<T>
 }
 
 /// Bounded source-side resource. A source moves one admitted value into the graph per iteration.
-pub struct Inbox<T>(Arc<ArrayQueue<(CommandId, Tov, T)>>);
+pub struct Inbox<T>(
+    Arc<ArrayQueue<(CommandId, Tov, T)>>,
+    Option<fn(CommandId, u64)>,
+);
 impl<T> Clone for Inbox<T> {
     fn clone(&self) -> Self {
-        Self(self.0.clone())
+        Self(self.0.clone(), self.1)
     }
 }
 impl<T> Inbox<T> {
+    /// Install a bounded, nonblocking recorder before moving this resource to its source.
+    pub fn on_emit(mut self, record: fn(CommandId, u64)) -> Self {
+        self.1 = Some(record);
+        self
+    }
+    #[doc(hidden)]
+    pub fn record_emission(&self, id: CommandId, list: u64) {
+        if let Some(record) = self.1 {
+            record(id, list)
+        }
+    }
+
     pub fn take(&self) -> Option<(CommandId, Tov, T)> {
         self.0.pop()
     }
@@ -126,7 +141,7 @@ impl<C: Channel> Publisher<C> {
         if C::CAPACITY == 0 {
             return Err(CuError::from("teleops event capacity must be positive"));
         }
-        let inbox = Inbox(Arc::new(ArrayQueue::new(C::CAPACITY)));
+        let inbox = Inbox(Arc::new(ArrayQueue::new(C::CAPACITY)), None);
         Ok((
             Self {
                 last_sequence: None,
@@ -204,5 +219,54 @@ impl<C: Channel> Publisher<C> {
     pub fn reset(&mut self) {
         while self.inbox.take().is_some() {}
         self.last_sequence = None;
+    }
+}
+
+/// Construct a console sender after the twin validates the session header.
+#[cfg(feature = "std")]
+pub trait Connect {
+    type Sender: Submit;
+    fn connect(self, session: [u8; 16]) -> Self::Sender;
+}
+#[cfg(feature = "std")]
+impl<F: FnOnce([u8; 16]) -> S, S: Submit> Connect for F {
+    type Sender = S;
+    fn connect(self, session: [u8; 16]) -> S {
+        self(session)
+    }
+}
+#[cfg(feature = "std")]
+pub(crate) struct TwinSubmit<C: Connect> {
+    connect: Option<C>,
+    sender: Option<C::Sender>,
+    session: Arc<std::sync::OnceLock<[u8; 16]>>,
+}
+#[cfg(feature = "std")]
+impl<C: Connect> TwinSubmit<C> {
+    pub(crate) fn new(connect: C, session: Arc<std::sync::OnceLock<[u8; 16]>>) -> Self {
+        Self {
+            connect: Some(connect),
+            session,
+            sender: None,
+        }
+    }
+}
+#[cfg(feature = "std")]
+impl<C: Connect> Submit for TwinSubmit<C> {
+    fn submit<T: Encode>(
+        &mut self,
+        field: u16,
+        observed: Option<u64>,
+        validity: Validity,
+        value: &T,
+    ) -> Result<(), CuStreamTxError> {
+        let session = self.session.get().ok_or(CuStreamTxError::WouldBlock)?;
+        if let Some(connect) = self.connect.take() {
+            self.sender = Some(connect.connect(*session))
+        }
+        self.sender
+            .as_mut()
+            .ok_or(CuStreamTxError::Failed("missing operator sender"))?
+            .submit(field, observed, validity, value)
     }
 }
