@@ -24,6 +24,10 @@ pub fn expand(item: ItemStruct) -> syn::Result<TokenStream> {
         .iter()
         .map(|f| f.ident.as_ref().unwrap())
         .collect();
+    let mut digest_member = format_ident!("schema_digest");
+    while ids.iter().any(|id| **id == digest_member) {
+        digest_member = format_ident!("{digest_member}_");
+    }
     let types: Vec<_> = fields.named.iter().map(|f| &f.ty).collect();
     let aliases = ids
         .iter()
@@ -72,9 +76,9 @@ pub fn expand(item: ItemStruct) -> syn::Result<TokenStream> {
                     Ok(())
                 }
             }
-            pub struct Publishers {pub(super) schema:[u8;32],#(pub #ids:#ops::Publisher<#types>),*}
+            pub struct Publishers {pub(super) #digest_member:[u8;32],#(pub #ids:#ops::Publisher<#types>),*}
             impl #ops::Dispatch for Publishers {
-                fn schema(&self)-> &[u8;32] { &self.schema }
+                fn schema(&self)-> &[u8;32] { &self.#digest_member }
                 fn dispatch(&mut self, observed:u64,tick: ::cu29::clock::CuTime,sequence:u64,bytes:&[u8])->Result<(),#ops::Rejected> {
                     let (update,len):(Update,_) = ::cu29::bincode::decode_from_slice(bytes, ::cu29::bincode::config::standard().with_limit::<1200>())
                         .map_err(|_| #ops::Rejected::Framing)?;
@@ -94,7 +98,7 @@ pub fn expand(item: ItemStruct) -> syn::Result<TokenStream> {
         impl #name {
             pub fn inboxes()->::cu29::CuResult<(#module::Publishers,#module::Inboxes)>{
                 #(let #ids=#ops::Publisher::<#types>::pair()?;)*
-                Ok((#module::Publishers{schema:#module::schema_id()?,#(#ids:#ids.0),*},#module::Inboxes{#(#ids:#ids.1),*}))
+                Ok((#module::Publishers{#digest_member:#module::schema_id()?,#(#ids:#ids.0),*},#module::Inboxes{#(#ids:#ids.1),*}))
             }
         }
     })
