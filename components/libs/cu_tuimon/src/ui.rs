@@ -1943,12 +1943,29 @@ fn initial_graph_scroll_offset(area: Rect, content_size: Size, graph_bounds: Siz
     let max_y = content_size
         .height
         .saturating_sub(area.height.saturating_sub(1));
-    let focus_x = (((graph_bounds.width as u32) * INITIAL_GRAPH_FOCUS_X_NUMERATOR)
-        / INITIAL_GRAPH_FOCUS_X_DENOMINATOR) as u16;
+    // NodeGraph places sinks at x=0, then mirrors the nodes for display.
+    // The spare routing columns therefore appear to the left of the graph.
+    let graph_left = content_size.width.saturating_sub(graph_bounds.width);
+    let visible_width = area.width.saturating_sub(1);
+    let x = if graph_bounds.width <= visible_width {
+        graph_left.saturating_sub((visible_width - graph_bounds.width) / 2)
+    } else {
+        let focus = (u32::from(graph_bounds.width) * INITIAL_GRAPH_FOCUS_X_NUMERATOR
+            / INITIAL_GRAPH_FOCUS_X_DENOMINATOR) as u16;
+        let offset = graph_left
+            .saturating_add(focus)
+            .saturating_sub(visible_width / 2);
+        // If only part of the final node would be clipped, bring it fully into view.
+        if max_x.saturating_sub(offset) < NODE_WIDTH {
+            max_x
+        } else {
+            offset
+        }
+    };
     let focus_y = graph_bounds.height / 2;
 
     Position::new(
-        focus_x.saturating_sub(area.width / 2).min(max_x),
+        x.min(max_x),
         focus_y.saturating_sub(area.height / 2).min(max_y),
     )
 }
@@ -1985,7 +2002,7 @@ impl StatefulWidget for NodesScrollableWidget<'_> {
                     .unwrap_or_default();
                 let node = &state.display_nodes[idx];
                 let status_line = if status.is_error {
-                    format!("❌ {}", status.error)
+                    format!("❌ {}", status.error.lines().next().unwrap_or_default())
                 } else {
                     format!("✓ {}", status.status_txt)
                 };
