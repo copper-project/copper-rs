@@ -112,7 +112,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         .with_teleops::<Controls>(Some(clock.clone()), move |session| {
             ReturnTx::<_, RETURN_PACKET_BYTES>::new(return_tx, session)
         })?;
-    let (mut twin, mut frames) = builder.with_log_path(log_path("twin")?).spawn()?;
+    let (path, _lock) = lock_log("twin")?;
+    // The twin requires a fresh archive. Its writer removes surplus slabs on creation.
+    for entry in [cu29::replay::first_slab_path(&path)?, path.clone()] {
+        match std::fs::remove_file(entry) {
+            Err(err) if err.kind() != std::io::ErrorKind::NotFound => return Err(err.into()),
+            _ => {}
+        }
+    }
+    let (mut twin, mut frames) = builder.with_log_path(path).spawn()?;
     let mut screen = if auto {
         None
     } else {

@@ -4,7 +4,7 @@ mod policy;
 use cu29::prelude::*;
 use cu29_logstream_udp::{CuUdpLogStreamConfig, CuUdpLogStreamRx, CuUdpLogStreamTx};
 pub use policy::{ActuationGate, Command, Deadman, Safety, Tick};
-use std::{error::Error, path::PathBuf};
+use std::{error::Error, fs::File, path::PathBuf};
 
 #[allow(dead_code)]
 #[derive(cu29::prelude::Teleops)]
@@ -38,16 +38,15 @@ pub fn endpoints(
     Ok((tx.ok_or("missing UDP peer")?, rx))
 }
 
-pub fn log_path(role: &str) -> Result<PathBuf, Box<dyn Error>> {
+pub fn lock_log(role: &str) -> Result<(PathBuf, File), Box<dyn Error>> {
     let root = PathBuf::from("logs");
     std::fs::create_dir_all(&root)?;
-    for run in 1.. {
-        let dir = root.join(format!("{role}-{}-{run}", std::process::id()));
-        match std::fs::create_dir(&dir) {
-            Ok(()) => return Ok(dir.join(format!("{role}.copper"))),
-            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(err) => return Err(err.into()),
-        }
-    }
-    Err("log directory sequence exhausted".into())
+    let lock = File::options()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(root.join(format!("{role}.lock")))?;
+    lock.try_lock()
+        .map_err(|err| format!("Cannot lock {role} recording: {err}"))?;
+    Ok((root.join(format!("{role}.copper")), lock))
 }

@@ -20,8 +20,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let (data_tx, return_rx) = endpoints(&bind, &peer)?;
     let (publish, inboxes) = Controls::inboxes()?;
+    let (path, _lock) = lock_log("robot")?;
     let robot = Robot::builder()
-        .with_log_path(log_path("robot")?, None)?
+        .with_log_path(path, None)?
         .with_resources(move |cfg| {
             let mut manager = default::resources_instanciator(cfg)?;
             manager.add_owned(

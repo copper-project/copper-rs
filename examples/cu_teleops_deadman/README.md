@@ -37,8 +37,8 @@ just twin 192.168.1.20:7442 192.168.1.10:7441
 Use a trusted network that permits UDP on these ports. Build both binaries with
 `cargo build --profile screaming --bins`, or build `--bin robot` and `--bin twin`
 separately for their respective platforms. Deploy both from the same revision
-and pass the same two addresses shown above to each executable. Both processes
-write Copper logs under `logs/` in their working directory. For a headless
+and pass the same two addresses shown above to each executable. Each launch replaces the previous recording for that role at
+`logs/robot.copper` or `logs/twin.copper` in its working directory. For a headless
 measurement, append `--auto` to the twin executable’s arguments.
 
 ## What the latency measures
