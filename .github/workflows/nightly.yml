@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - name: Install audit
-        uses: taiki-e/install-action@v2.90.5
+        uses: taiki-e/install-action@v2.90.8
         with:
           tool: cargo-deny
       - name: Run deny bans
