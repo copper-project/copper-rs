@@ -103,6 +103,7 @@ impl Screen {
         &mut self,
         now: CuInstant,
         twinned_cl: Option<u64>,
+        link: crate::latency::LinkStatus,
         status: &str,
         resume: bool,
         result: Option<crate::latency::Latency>,
@@ -118,7 +119,7 @@ impl Screen {
         self.terminal.draw(|frame| {
             let area = frame.area();
             let height = area.height.min(16);
-            let width = area.width.min(44);
+            let width = area.width.min(56);
             let panel = Rect::new(
                 (area.width - width) / 2,
                 (area.height - height) / 2,
@@ -146,9 +147,28 @@ impl Screen {
                 Some(id) => format!("Twin CL {id}"),
                 None => "Twin CL —".into(),
             };
-            let header = Line::from(vec!["DEADMAN".bold(), "  ·  ".into(), cl.into()]);
+            let header = Line::from(vec![
+                "DEADMAN".bold(),
+                "  ·  ".into(),
+                cl.into(),
+                "  ·  ".into(),
+                match link.rtt {
+                    Some(rtt) => format!("RTT {rtt}"),
+                    None => "RTT —".into(),
+                }
+                .into(),
+            ]);
+            let state_line = Line::from(vec![
+                status.into(),
+                " · ".into(),
+                if link.synced {
+                    "Clock synced".green()
+                } else {
+                    "Clock acquiring".yellow()
+                },
+            ]);
             frame.render_widget(Paragraph::new(header).centered(), title);
-            frame.render_widget(Paragraph::new(status).centered(), state);
+            frame.render_widget(Paragraph::new(state_line).centered(), state);
             draw_button(frame, self.button, resume);
             if let Some(elapsed) = result {
                 frame.render_widget(

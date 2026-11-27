@@ -1,18 +1,24 @@
-//! Discipline the station's operator clock to the robot using ordinary permit echoes.
+//! Synchronize the operator clock with timestamped probes over the teleops link.
 use cu_teleops_deadman::Command;
 use cu29::prelude::*;
 use cu29_clock::sync::{
     ClockDomain, ClockObservation, ClockSync, SyncConfig, SyncError, SyncState,
 };
-use std::collections::VecDeque;
 use std::fmt;
+
+#[derive(Default)]
+pub struct LinkStatus {
+    pub synced: bool,
+    pub rtt: Option<CuDuration>,
+}
 
 pub struct OperatorClock {
     clock: RobotClock,
     sync: ClockSync,
     domain: ClockDomain,
-    preceding_permit: Option<CuInstant>,
-    permits: VecDeque<(CuTime, CuInstant)>,
+    last_probe: Option<CuInstant>,
+    last_reply: Option<(CuInstant, CuDuration)>,
+    pending: Option<CuInstant>,
 }
 
 impl OperatorClock {
@@ -28,63 +34,85 @@ impl OperatorClock {
             clock,
             sync,
             domain,
-            preceding_permit: None,
-            permits: VecDeque::new(),
+            last_probe: None,
+            last_reply: None,
+            pending: None,
         })
     }
 
-    pub fn sent_permit(&mut self, tick: CuTime) {
-        if self.permits.len() == 64 {
-            self.permits.pop_front();
+    pub fn probe(&mut self, permit: bool) -> Option<Command> {
+        let sent = self.clock.raw_now();
+        if self
+            .last_probe
+            .is_some_and(|last| sent - last < CuDuration::from_millis(100))
+        {
+            return None;
         }
-        self.permits.push_back((tick, self.clock.raw_now()));
+        if self
+            .pending
+            .is_some_and(|last| sent - last < CuDuration::from_secs(1))
+        {
+            return None;
+        }
+        self.last_probe = Some(sent);
+        self.pending = Some(sent);
+        Some(Command::ClockProbe { sent, permit })
     }
 
-    pub fn observe(&mut self, tick: CuTime, button: &CuMsg<Command>) -> Result<(), SyncError> {
-        // This tick follows the CopperList that consumed the matched permit.
-        // Its actual station time lies between that permit's send and this read.
-        if let Some(sent) = self.preceding_permit.take() {
-            let span = self.clock.raw_now() - sent;
-            let half = CuDuration::from_nanos(span.as_nanos().div_ceil(2));
-            let observation = ClockObservation {
-                raw_local: sent + half,
-                parent_ns: tick.as_nanos(),
-                uncertainty: half,
-                origin: ClockOrigin {
-                    source: ClockSource::LocalMonotonic,
-                    epoch: ClockEpoch::Local,
-                },
-                domain: self.domain,
-            };
-            match self.sync.observe(observation) {
-                Ok(()) => {
-                    self.sync.update()?;
-                }
-                Err(SyncError::InvalidSample) => {}
-                Err(SyncError::Expired | SyncError::Discontinuity) => {
-                    self.sync.resync(self.domain)?
-                }
-                Err(err) => return Err(err),
-            }
+    pub fn observe(
+        &mut self,
+        command: Option<&Command>,
+        reply: Tov,
+        received: CuInstant,
+    ) -> Result<(), SyncError> {
+        let (Some(Command::ClockProbe { sent, .. }), Tov::Range(robot)) = (command, reply) else {
+            return Ok(());
+        };
+        if self.pending != Some(*sent) || *sent > received || robot.end < robot.start {
+            return Ok(());
         }
-        if let (Some(Command::Permit), Tov::Time(reference)) = (button.payload(), button.tov) {
-            while let Some(&(observed, sent)) = self.permits.front() {
-                if observed > reference {
-                    break;
-                }
-                self.permits.pop_front();
-                if observed == reference {
-                    self.preceding_permit = Some(sent);
-                    break;
-                }
+        self.pending = None;
+        let round_trip = received - *sent;
+        let processing = robot.end - robot.start;
+        if processing > round_trip {
+            return Ok(());
+        }
+        let rtt = round_trip - processing;
+        self.last_reply = Some((received, rtt));
+        // Symmetric paths put the robot's midpoint at the twin's midpoint.
+        let sample = ClockObservation {
+            raw_local: *sent + CuDuration::from_nanos(round_trip.as_nanos() / 2),
+            parent_ns: (robot.start + CuDuration::from_nanos(processing.as_nanos() / 2)).as_nanos(),
+            uncertainty: CuDuration::from_nanos(rtt.as_nanos().div_ceil(2)),
+            origin: ClockOrigin {
+                source: ClockSource::LocalMonotonic,
+                epoch: ClockEpoch::Local,
+            },
+            domain: self.domain,
+        };
+        match self.sync.observe(sample) {
+            Ok(()) => {
+                self.sync.update()?;
             }
+            Err(SyncError::InvalidSample) => {}
+            Err(SyncError::Expired | SyncError::Discontinuity) => self.sync.resync(self.domain)?,
+            Err(err) => return Err(err),
         }
         Ok(())
     }
 
-    pub fn uncertainty(&self) -> Option<CuDuration> {
-        let status = self.sync.status();
-        (status.state == SyncState::Locked).then_some(status.estimated_error)
+    pub fn link_status(&self, now: CuInstant) -> LinkStatus {
+        LinkStatus {
+            synced: self.synced(),
+            rtt: self
+                .last_reply
+                .filter(|(at, _)| now - *at < CuDuration::from_secs(1))
+                .map(|(_, rtt)| rtt),
+        }
+    }
+
+    pub fn synced(&self) -> bool {
+        self.sync.status().state == SyncState::Locked
     }
 }
 
@@ -92,35 +120,23 @@ impl OperatorClock {
 pub struct Latency {
     pub pressed: CuTime,
     pub flipped: CuTime,
-    pub uncertainty: Option<CuDuration>,
+    pub synced: bool,
     pub confirmation: CuDuration,
+    pub before_send: CuDuration,
 }
 
 impl fmt::Display for Latency {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.uncertainty {
-            Some(error) => {
-                let end = self.pressed + self.confirmation;
-                let first = (self.flipped - error).max(self.pressed);
-                let last = (self.flipped + error).min(end);
-                if first > last {
-                    writeln!(f, "Press to action    Clock mismatch")?;
-                } else if self.flipped < self.pressed || self.flipped > end {
-                    writeln!(
-                        f,
-                        "Press to action    {}–{}",
-                        first - self.pressed,
-                        last - self.pressed
-                    )?;
-                } else {
-                    writeln!(
-                        f,
-                        "Press to action    {} ± {error}",
-                        self.flipped - self.pressed
-                    )?;
-                }
-            }
-            None => writeln!(f, "Press to action    Clock acquiring")?,
+        if !self.synced {
+            writeln!(f, "Press to action    Clock unsynced at press")?;
+        } else if self.flipped < self.pressed + self.before_send
+            || self.flipped > self.pressed + self.confirmation
+        {
+            let transit = self.confirmation - self.before_send;
+            let estimate = self.before_send + CuDuration::from_nanos(transit.as_nanos() / 2);
+            writeln!(f, "Press to action    ≈ {estimate} (RTT estimate)")?;
+        } else {
+            writeln!(f, "Press to action    ≈ {}", self.flipped - self.pressed)?;
         }
         write!(f, "Press to confirmation    {}", self.confirmation)
     }
@@ -135,26 +151,30 @@ mod tests {
     fn operator_sampler_stamps_in_the_remote_robots_epoch() {
         let (clock, raw) = RobotClock::mock();
         let sampler = InputSampler::new(Some(clock.clone()));
-        let mut operator = OperatorClock::new(clock, [7; 16]).unwrap();
-        let mut button = CuMsg::default();
+        let mut operator = OperatorClock::new(clock.clone(), [7; 16]).unwrap();
         for i in 1..=3 {
-            let local = 10 * i;
-            let tick = CuTime::from_millis(50_000 + local);
+            let local = 100 * i;
             raw.set_value(local * 1_000_000);
-            operator.sent_permit(tick);
-            button.set_payload(Command::Permit);
-            button.tov = Tov::Time(tick);
-            operator.observe(tick, &button).unwrap();
-            raw.set_value((local + 4) * 1_000_000);
-            button.clear_payload();
+            let probe = operator.probe(false).unwrap();
+            let reply = Tov::Range(CuTimeRange {
+                start: CuTime::from_millis(50_000 + local + 2),
+                end: CuTime::from_millis(50_000 + local + 5),
+            });
+            raw.set_value((local + 7) * 1_000_000);
             operator
-                .observe(tick + CuDuration::from_millis(2), &button)
+                .observe(Some(&probe), reply, clock.raw_now())
                 .unwrap();
         }
-        assert!(operator.uncertainty().is_some());
+        assert!(operator.synced());
+        assert_eq!(
+            operator.link_status(clock.raw_now()).rtt,
+            Some(CuDuration::from_millis(4))
+        );
         assert_eq!(
             sampler.sample(true).tov(),
-            Tov::Time(CuTime::from_millis(50_034))
+            Tov::Time(CuTime::from_millis(50_307))
         );
+        raw.set_value(1_307_000_000);
+        assert!(operator.link_status(clock.raw_now()).rtt.is_none());
     }
 }

@@ -20,19 +20,15 @@ enum Measurement {
     Pressed {
         start: CuInstant,
         stamp: CuTime,
-        uncertainty: Option<CuDuration>,
+        before_send: CuDuration,
+        synced: bool,
         pending: Option<Sample<Command>>,
     },
     Confirmed(Latency),
 }
 
 impl Measurement {
-    fn press(
-        &mut self,
-        clock: &RobotClock,
-        sampler: &InputSampler,
-        uncertainty: Option<CuDuration>,
-    ) -> CuResult<()> {
+    fn press(&mut self, clock: &RobotClock, sampler: &InputSampler, synced: bool) -> CuResult<()> {
         if matches!(self, Self::Ready) {
             let start = clock.raw_now();
             let sample = sampler.sample(Command::Stop);
@@ -42,7 +38,8 @@ impl Measurement {
             *self = Self::Pressed {
                 start,
                 stamp,
-                uncertainty,
+                synced,
+                before_send: CuDuration::MIN,
                 pending: Some(sample),
             };
         }
@@ -76,7 +73,8 @@ impl Measurement {
         if let Self::Pressed {
             start,
             stamp,
-            uncertainty,
+            synced,
+            before_send,
             pending: None,
         } = self
             && let Some(Safety::ButtonTrip { pressed, flipped }) = state
@@ -86,8 +84,9 @@ impl Measurement {
             *self = Self::Confirmed(Latency {
                 pressed: *pressed,
                 flipped: *flipped,
-                uncertainty: *uncertainty,
+                synced: *synced,
                 confirmation: observed - *start,
+                before_send: *before_send,
             });
         }
     }
@@ -141,6 +140,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             screen.draw(
                 now,
                 twinned_cl,
+                timing
+                    .as_ref()
+                    .map(|t| t.link_status(now))
+                    .unwrap_or_default(),
                 if latch.is_some() && last_frame.is_some_and(|at| now - at < PERMIT_LIFETIME) {
                     "SAFEMODE · actuation off"
                 } else {
@@ -157,7 +160,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 ui::Action::Trip if armed => measurement.press(
                     &clock,
                     &control.sampler,
-                    timing.as_ref().and_then(OperatorClock::uncertainty),
+                    timing.as_ref().is_some_and(OperatorClock::synced),
                 )?,
                 _ => {}
             }
@@ -181,36 +184,43 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .get_tick_output()
                 .payload()
                 .ok_or("missing robot tick")?;
-            timing.observe(tick, list.msgs.get_button_output())?;
+            timing.observe(
+                list.msgs.get_button_output().payload(),
+                list.msgs.get_watchdog_output().tov,
+                observed,
+            )?;
             armed = state == Some(&Safety::Armed)
-                && (timing.uncertainty().is_none() || clock.now() - tick < PERMIT_LIFETIME);
+                && (!timing.synced() || clock.now() - tick < PERMIT_LIFETIME);
             let previous_latch = latch;
             latch = state.copied().and_then(Safety::latch);
             if previous_latch.is_some() && armed {
                 measurement = Measurement::Ready;
             }
-            if auto
-                && armed
-                && matches!(measurement, Measurement::Ready)
-                && timing.uncertainty().is_some()
-            {
-                measurement.press(&clock, &control.sampler, timing.uncertainty())?;
+            if auto && armed && matches!(measurement, Measurement::Ready) && timing.synced() {
+                measurement.press(&clock, &control.sampler, timing.synced())?;
                 deadline = clock.raw_now() + CONFIRM_TIMEOUT;
             }
             measurement.confirm(state, observed);
             let button = if let Some(id) = resume.take().filter(|id| Some(*id) == latch) {
                 permits.sample(Command::Resume(id))
+            } else if let Measurement::Pressed {
+                pending,
+                start,
+                before_send,
+                ..
+            } = &mut measurement
+                && let Some(stop) = pending.take()
+            {
+                *before_send = clock.raw_now() - *start;
+                stop
+            } else if latch.is_none() && matches!(measurement, Measurement::Pressed { .. }) {
+                continue;
             } else {
-                match &mut measurement {
-                    Measurement::Ready => {
-                        timing.sent_permit(tick);
-                        permits.sample(Command::Permit)
-                    }
-                    Measurement::Pressed { pending, .. } => match pending.take() {
-                        Some(stop) => stop,
-                        None => continue,
-                    },
-                    Measurement::Confirmed(_) => continue,
+                let permit = latch.is_none() && matches!(measurement, Measurement::Ready);
+                match timing.probe(permit) {
+                    Some(probe) => permits.sample(probe),
+                    None if permit => permits.sample(Command::Permit),
+                    None => continue,
                 }
             };
             control

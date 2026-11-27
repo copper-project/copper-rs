@@ -1,7 +1,8 @@
 # Teleops deadman
 
 In this directory, run `just robot` and `just twin` in separate terminals.
-The twin header shows the latest reconstructed robot CopperList ID.
+The twin header shows the latest reconstructed robot CopperList ID and live
+application round-trip latency (RTT). A dash means no probe reply in the last second.
 When the twin shows **Robot armed**, click the red **STOP** button or press
 Enter. The twin holds **Press to action** and **Press to confirmation** on
 screen while stopped. Click the green **RESUME** button to rearm and run
@@ -45,14 +46,16 @@ measurement, append `--auto` to the twin executable’s arguments.
 
 **Press to action** subtracts the twin’s button timestamp from the robot’s
 recorded watchdog transition timestamp. The twin supplies a `RobotClock` to
-the teleops sampler and stamps STOP when it reads the click. Copper’s
-`ClockSync` aligns this clock to the robot using the existing permit traffic.
-The robot tick following a permit echo occurred between sending that permit
-and reading the tick on the station. The twin uses the midpoint as a clock
-observation and half the interval as its uncertainty. The displayed ± value
-is the clock’s estimated error at the press. If the point estimate falls outside the measured round trip, the twin shows
-the physically possible range within its error bound. An early press still sends STOP
-while the clock is acquiring and shows only the confirmation latency.
+the teleops sampler and stamps STOP when it reads the click. Every 100 ms the
+twin sends its raw send timestamp in a probe. The robot echoes it in the
+CopperList alongside the watchdog's receive and reply timestamps. The twin
+records receipt on its own clock, subtracts robot processing time from the
+round trip, and assumes symmetric path delays to align the two clock midpoints.
+The header shows **Clock synced** while the estimated error is within 10 ms.
+Clock probes continue while stopped without renewing the actuation permit.
+A confirmed press shows one approximate action latency, using the synchronized robot timestamp. If it falls outside the local send-to-confirmation
+window, **RTT estimate** adds the click-to-send delay to half the remaining round trip. STOP also works before
+clock acquisition and still reports confirmation latency.
 
 **Press to confirmation** measures the time from reading the button to
 reading the first reconstructed frame confirming that specific trip in the twin.

@@ -56,6 +56,10 @@ pub enum Command {
     #[default]
     Stop,
     Resume(CuTime),
+    ClockProbe {
+        sent: CuInstant,
+        permit: bool,
+    },
 }
 
 /// Captured robot state. A trip retains the input and transition timestamps
@@ -117,6 +121,10 @@ impl CuTask for Deadman {
         let now = *tick
             .payload()
             .ok_or_else(|| CuError::from("missing robot tick"))?;
+        let received = match button.payload() {
+            Some(Command::ClockProbe { .. }) => Some(ctx.now()),
+            _ => None,
+        };
         let was_armed = self.state == Safety::Armed;
         if self.until.is_some_and(|end| now >= end) {
             self.until = None;
@@ -131,11 +139,12 @@ impl CuTask for Deadman {
                     flipped: ctx.now(),
                 };
             }
+            (Some(Command::ClockProbe { permit: false, .. }), _) => {}
             (Some(command), Tov::Time(t)) if t <= now && now - t < crate::PERMIT_LIFETIME => {
                 let enable = match command {
-                    Command::Permit => latch.is_none(),
+                    Command::Permit | Command::ClockProbe { permit: true, .. } => latch.is_none(),
                     Command::Resume(id) => latch == Some(*id) && t >= *id,
-                    Command::Stop => false,
+                    Command::Stop | Command::ClockProbe { permit: false, .. } => false,
                 };
                 if enable {
                     self.until = Some(t + crate::PERMIT_LIFETIME);
@@ -152,6 +161,14 @@ impl CuTask for Deadman {
             error!(ctx, "Deadman safety trip: {}", self.state.status());
         }
         safe.set_payload(self.state);
+        if let Some(start) = received {
+            safe.tov = Tov::Range(CuTimeRange {
+                start,
+                end: ctx.now(),
+            });
+        } else {
+            safe.tov = Tov::None;
+        }
         Ok(())
     }
 }
@@ -256,7 +273,18 @@ mod tests {
         assert_eq!(out.payload(), Some(&expected));
         assert!(ActuationGate.process(&ctx, &out, &mut permit).is_err());
         // Neither a fresh heartbeat nor a resume for an earlier trip releases the latch.
-        for command in [Command::Permit, Command::Resume(CuTime::from_millis(100))] {
+        for command in [
+            Command::ClockProbe {
+                sent: CuInstant::from_nanos(123),
+                permit: false,
+            },
+            Command::ClockProbe {
+                sent: CuInstant::from_nanos(124),
+                permit: true,
+            },
+            Command::Permit,
+            Command::Resume(CuTime::from_millis(100)),
+        ] {
             button.set_payload(command);
             button.tov = Tov::Time(CuTime::from_millis(400));
             policy.process(&ctx, &(&button, &tick), &mut out).unwrap();
