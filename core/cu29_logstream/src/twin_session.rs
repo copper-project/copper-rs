@@ -66,6 +66,8 @@ type OpenTelemetryReceiver<R> = Box<
 /// Receiver bounds match the default 1200-byte-MTU, 64-symbol streaming profile.
 /// One handle accepts one sender session, with a fresh archive path.
 pub struct CuTwinBuilder<A, R> {
+    #[cfg(feature = "teleops")]
+    control_session: Option<Arc<std::sync::OnceLock<[u8; 16]>>>,
     open: OpenTelemetryReceiver<R>,
     feedback_status: fn(&R, &mut CuTwinStatus),
     feedback_tx: Option<Box<dyn crate::CuFeedbackTx>>,
@@ -109,6 +111,24 @@ impl<A: LiveReplay, R: CuStreamRx + 'static> CuTwinBuilder<A, FecTelemetryRx<R>>
 }
 
 impl<A: LiveReplay, R: CuTelemetryRx + 'static> CuTwinBuilder<A, R> {
+    /// Connect the operator on first submission after receiving the matching session header.
+    /// Pass a synchronized station clock to timestamp inputs as they occur, or `None` to
+    /// let the robot use the tick of the displayed CopperList.
+    #[cfg(feature = "teleops")]
+    pub fn with_teleops<C: crate::teleops::Teleops>(
+        mut self,
+        synced_clock: Option<cu29_clock::RobotClock>,
+        connect: impl crate::teleops::Connect,
+    ) -> CuResult<(Self, C::Operator<impl crate::teleops::Submit>)> {
+        if self.control_session.is_some() {
+            return Err("teleops already configured".into());
+        }
+        let session = Arc::default();
+        let sender = crate::teleops::TwinSubmit::new(connect, Arc::clone(&session));
+        self.control_session = Some(session);
+        Ok((self, C::operator(sender, synced_clock)))
+    }
+
     pub fn with_log_path(mut self, path: impl AsRef<Path>) -> Self {
         self.log_base = Some(path.as_ref().to_path_buf());
         self
@@ -297,6 +317,10 @@ impl<A: LiveReplay, R: CuTelemetryRx + 'static> CuTwinBuilder<A, R> {
                                     )
                                     .map_err(stream_error)?,
                                 );
+                                #[cfg(feature = "teleops")]
+                                if let Some(binding) = &self.control_session {
+                                    let _ = binding.set(session.identity.session_id);
+                                }
                                 if let Some(replay) = &replay {
                                     replay.recover();
                                 }
@@ -545,6 +569,8 @@ impl<A: LiveReplay> CuTwin<A> {
         + 'static,
     ) -> CuTwinBuilder<A, R> {
         CuTwinBuilder {
+            #[cfg(feature = "teleops")]
+            control_session: None,
             open: Box::new(open),
             feedback_status: |_, _| {},
             feedback_tx: None,

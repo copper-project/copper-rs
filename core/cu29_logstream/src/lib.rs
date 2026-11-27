@@ -54,6 +54,8 @@ mod sender;
 mod stream;
 #[cfg(any(feature = "std", feature = "telemetry"))]
 pub mod structured;
+#[cfg(feature = "teleops")]
+pub mod teleops;
 mod wire;
 #[cfg(feature = "std")]
 mod worker;

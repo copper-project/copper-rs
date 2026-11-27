@@ -18,6 +18,7 @@ domains = ["logging/streaming"]
 environments = ["host", "embedded"]
 
 [dependencies]
+arrayvec = { workspace = true, optional = true }
 atomic-waker = { version = "1.1", optional = true }
 crossbeam-queue = { version = "0.3", default-features = false, features = [
   "alloc",
@@ -44,6 +45,7 @@ tempfile = { workspace = true }
 serde = { workspace = true }
 
 [features]
+teleops = ["dep:crossbeam-queue", "dep:arrayvec"]
 telemetry = ["cu29-runtime/telemetry", "dep:cu29-log", "dep:crossbeam-queue"]
 # Developer-only per-output divergence checks; all hashing stays off the RT path.
 verify-reconstruction = []

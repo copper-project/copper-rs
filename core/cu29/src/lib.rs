@@ -74,10 +74,12 @@ extern crate alloc;
 extern crate self as cu29;
 
 pub use cu29_derive::{bundle_resources, resources, safety_case};
-#[cfg(any(feature = "logstream", feature = "telemetry"))]
+#[cfg(any(feature = "logstream", feature = "telemetry", feature = "teleops"))]
 pub use cu29_logstream as logstream;
 pub use cu29_runtime::app;
 pub mod supervisor;
+#[cfg(feature = "teleops")]
+pub mod teleops;
 #[cfg(feature = "std")]
 #[doc(hidden)]
 pub use cu29_runtime::arena;
@@ -336,6 +338,8 @@ pub mod prelude {
     pub use cu29_log::*;
     pub use cu29_log_derive::*;
     pub use cu29_log_runtime::*;
+    #[cfg(feature = "teleops")]
+    pub use cu29_logstream::teleops::{Event, Latched, Latest};
     #[cfg(not(feature = "reflect"))]
     pub use cu29_reflect_derive::Reflect;
     pub use cu29_runtime::app;
