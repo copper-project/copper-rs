@@ -88,12 +88,12 @@ impl CuStreamRx for Rx {
     }
 }
 
-fn packets(max_record_bytes: u64, count: u64) -> VecDeque<Vec<u8>> {
+fn packets<const SYMBOL_BYTES: usize>(max_record_bytes: u64, count: u64) -> VecDeque<Vec<u8>> {
     let plan = LogStreamPlan {
         feedback: None,
         destination_id: "ground".into(),
-        mtu_bytes: 1200,
-        symbol_size: 1128,
+        mtu_bytes: (SYMBOL_BYTES + cu29_logstream::PACKET_HEADER_LEN) as u16,
+        symbol_size: SYMBOL_BYTES as u16,
         bitrate_bps: 1_000_000,
         memory_budget_kib: 1024,
         max_latency_ms: 250,
@@ -173,7 +173,7 @@ fn packets(max_record_bytes: u64, count: u64) -> VecDeque<Vec<u8>> {
         .unwrap();
         structured.push_record(&record, &mut packets).unwrap();
     }
-    let mut encoder = ContinuousEncoder::<1128, 64>::new(
+    let mut encoder = ContinuousEncoder::<SYMBOL_BYTES, 64>::new(
         sender.continuous.identity,
         sender.continuous.lane,
         sender.continuous.fec,
@@ -196,19 +196,22 @@ fn configured_twin_archives_large_camera_records_and_keyframes_across_slabs() {
     let path = dir.path().join("capture.copper");
     let limits = SessionRouterLimits {
         max_record_bytes: 128 * 1024,
-        finite_objects: FiniteObjectLimits::new(128 * 1024, 1128, 2),
+        finite_objects: FiniteObjectLimits::new(128 * 1024, 1536, 2),
         ..Default::default()
     };
-    let (mut twin, mut reader) = CuTwin::<App>::builder(Rx(packets(128 * 1024, 8)))
-        .with_log_path(&path)
-        .with_slab_size(1024 * 1024)
-        .with_section_size(256 * 1024)
-        .with_receiver_limits(limits)
-        .with_replay_capacity(NonZeroUsize::new(16).unwrap())
-        .with_log_capacity(NonZeroUsize::new(3).unwrap())
-        .with_frame_capacity(NonZeroUsize::new(1).unwrap())
-        .spawn()
-        .unwrap();
+    let packets = packets::<1536>(128 * 1024, 8);
+    assert!(packets.iter().any(|p| p.len() > 1200));
+    let (mut twin, mut reader) =
+        CuTwin::<App>::builder_with_symbol_capacity::<1536, _>(Rx(packets))
+            .with_log_path(&path)
+            .with_slab_size(1024 * 1024)
+            .with_section_size(256 * 1024)
+            .with_receiver_limits(limits)
+            .with_replay_capacity(NonZeroUsize::new(16).unwrap())
+            .with_log_capacity(NonZeroUsize::new(3).unwrap())
+            .with_frame_capacity(NonZeroUsize::new(1).unwrap())
+            .spawn()
+            .unwrap();
     let deadline = Instant::now() + Duration::from_secs(10);
     while reader.status().archived != 8 || reader.status().twin.reconstructed != 8 {
         assert!(!reader.is_closed(), "{:?}", reader.status());
@@ -324,7 +327,7 @@ fn invalid_configuration_fails_before_transport_or_filesystem_side_effects() {
 fn sender_exceeding_configured_record_budget_is_rejected() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("rejected.copper");
-    let (mut twin, mut reader) = CuTwin::<App>::builder(Rx(packets(128 * 1024, 0)))
+    let (mut twin, mut reader) = CuTwin::<App>::builder(Rx(packets::<1128>(128 * 1024, 0)))
         .with_log_path(&path)
         .archive_only()
         .spawn()

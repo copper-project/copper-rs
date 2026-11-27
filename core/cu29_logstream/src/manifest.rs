@@ -117,9 +117,7 @@ impl ReceiverRequirements {
                 "symbol leaves no room for continuous record bytes",
             ));
         }
-        if usize::from(self.symbol_size) > crate::DEFAULT_MAX_SYMBOL_SIZE
-            || usize::from(self.window_symbols) > crate::DEFAULT_MAX_WINDOW_SYMBOLS
-        {
+        if usize::from(self.window_symbols) > crate::DEFAULT_MAX_WINDOW_SYMBOLS {
             return Err(Error::InvalidConfig(
                 "receiver requirements exceed supported FEC capacities",
             ));
@@ -236,12 +234,19 @@ impl LogStreamPlan {
     /// Symbol size is bounded by both the link MTU and preallocated sender storage;
     /// a larger MTU does not increase the runtime's memory footprint.
     pub fn resolve(config: &LogStreamDestinationConfig) -> Result<Self> {
+        Self::resolve_with_symbol_capacity::<{ crate::DEFAULT_MAX_SYMBOL_SIZE }>(config)
+    }
+
+    /// Fit symbols to the configured transport packet budget and the selected codec storage.
+    pub fn resolve_with_symbol_capacity<const SYMBOL_BYTES: usize>(
+        config: &LogStreamDestinationConfig,
+    ) -> Result<Self> {
         let symbol_size = config
             .link
             .mtu_bytes
             .checked_sub(PACKET_HEADER_LEN as u16)
             .ok_or(Error::InvalidConfig("MTU does not fit the packet header"))?
-            .min(crate::DEFAULT_MAX_SYMBOL_SIZE as u16);
+            .min(u16::try_from(SYMBOL_BYTES).unwrap_or(u16::MAX));
         if usize::from(config.fec.continuous.window_symbols) > crate::DEFAULT_MAX_WINDOW_SYMBOLS {
             return Err(Error::InvalidConfig(
                 "RLC window exceeds the generated sender capacity",
@@ -302,9 +307,7 @@ impl LogStreamPlan {
                 "MTU leaves no room for continuous record bytes",
             ));
         }
-        if usize::from(self.symbol_size) > crate::DEFAULT_MAX_SYMBOL_SIZE
-            || usize::from(self.continuous.window_symbols) > crate::DEFAULT_MAX_WINDOW_SYMBOLS
-        {
+        if usize::from(self.continuous.window_symbols) > crate::DEFAULT_MAX_WINDOW_SYMBOLS {
             return Err(Error::InvalidConfig(
                 "resolved FEC values exceed generated sender capacities",
             ));

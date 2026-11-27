@@ -71,6 +71,16 @@ pub fn expand(item: ItemStruct) -> syn::Result<TokenStream> {
                 }
             }
             pub struct Publishers {#(pub #ids:#ops::Publisher<#types>),*}
+            impl #ops::Dispatch for Publishers {
+                fn dispatch<const DECODE_LIMIT: usize>(&mut self, observed:u64,tick: ::cu29::clock::CuTime,sequence:u64,bytes:&[u8])->Result<(),#ops::Rejected> {
+                    let (update,len):(Update,_) = ::cu29::bincode::decode_from_slice(bytes, ::cu29::bincode::config::standard().with_limit::<DECODE_LIMIT>())
+                        .map_err(|_| #ops::Rejected::Framing)?;
+                    if len != bytes.len() { return Err(#ops::Rejected::Framing); }
+                    #(self.#ids.check_batch(observed, sequence, &update.#ids)?;)*
+                    #(self.#ids.apply_batch(observed, tick, sequence, update.#ids);)*
+                    Ok(())
+                }
+            }
             pub struct Inboxes {#(pub #ids:#ops::Inbox<<#types as #ops::Channel>::Payload>),*}
             #(pub type #aliases=#ops::Source<<#types as #ops::Channel>::Payload>;)*
         }

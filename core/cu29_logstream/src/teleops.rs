@@ -172,6 +172,7 @@ impl<T> Inbox<T> {
 }
 /// Single producer for a typed inbox.
 pub struct Publisher<C: Channel> {
+    last_sequence: Option<u64>,
     last_cl: Option<u64>,
     inbox: Inbox<C::Payload>,
 }
@@ -183,6 +184,7 @@ impl<C: Channel> Publisher<C> {
         let inbox = Inbox(Arc::new(ArrayQueue::new(C::CAPACITY)), None);
         Ok((
             Self {
+                last_sequence: None,
                 last_cl: None,
                 inbox: inbox.clone(),
             },
@@ -255,5 +257,72 @@ impl<F: Connect> Submit for TwinSubmit<F> {
             .as_mut()
             .ok_or(CuStreamTxError::Failed("missing operator sender"))?
             .submit(observed, update)
+    }
+}
+
+mod link;
+pub use link::*;
+
+/// Reason an update was dropped before publication.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Rejected {
+    Framing,
+    Session,
+    OutOfOrder,
+    UnknownFrame,
+    Overflow,
+}
+
+#[doc(hidden)]
+pub trait Dispatch {
+    fn dispatch<const DECODE_LIMIT: usize>(
+        &mut self,
+        observed: u64,
+        tick: cu29_clock::CuTime,
+        sequence: u64,
+        bytes: &[u8],
+    ) -> Result<(), Rejected>;
+}
+
+impl<C: Channel> Publisher<C> {
+    /// Preflight all fields while the receiver owns the only producer.
+    #[doc(hidden)]
+    pub fn check_batch(
+        &self,
+        observed: u64,
+        sequence: u64,
+        batch: &C::Batch,
+    ) -> Result<(), Rejected> {
+        let count = C::sample_count(batch);
+        if count == 0 {
+            return Ok(());
+        }
+        if (C::ONE_PER_CL && self.last_cl.is_some_and(|last| observed <= last))
+            || (!C::ONE_PER_CL && self.last_sequence.is_some_and(|last| sequence <= last))
+        {
+            return Err(Rejected::OutOfOrder);
+        }
+        if !C::REPLACE && count > self.inbox.0.capacity() - self.inbox.0.len() {
+            return Err(Rejected::Overflow);
+        }
+        Ok(())
+    }
+    #[doc(hidden)]
+    pub fn apply_batch(
+        &mut self,
+        observed: u64,
+        tick: cu29_clock::CuTime,
+        sequence: u64,
+        batch: C::Batch,
+    ) {
+        for sample in batch {
+            let tov = match sample.tov {
+                Tov::None => Tov::Time(tick),
+                tov => tov,
+            };
+            let published = self.publish(observed, tov, sample.value);
+            debug_assert!(published);
+            self.last_sequence = Some(sequence);
+        }
     }
 }
