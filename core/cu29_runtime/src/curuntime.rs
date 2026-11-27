@@ -2,6 +2,12 @@
 //! It is exposed to the user via the `copper_runtime` macro injecting it as a field in their application struct.
 //!
 
+#[cfg(feature = "async-cl-io")]
+mod structured_log;
+#[cfg(feature = "async-cl-io")]
+#[doc(hidden)]
+pub use structured_log::BufferedStructuredLog;
+
 use crate::app::Subsystem;
 #[cfg(feature = "std")]
 use crate::arena::{CuSlotLease, allocate_slots};
@@ -160,6 +166,8 @@ pub struct CuRuntimeBuilder<
     copperlist_sink: CLS,
     keyframe_sink: KFS,
     output_requirements: OutputRequirements,
+    #[cfg(feature = "async-cl-io")]
+    structured_log: Option<BufferedStructuredLog>,
 }
 
 impl<'cfg, CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, MI, CLS, KFS>
@@ -187,7 +195,15 @@ impl<'cfg, CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, 
             copperlist_sink,
             keyframe_sink,
             output_requirements,
+            #[cfg(feature = "async-cl-io")]
+            structured_log: None,
         }
+    }
+
+    #[cfg(feature = "async-cl-io")]
+    pub fn with_structured_log(mut self, log: BufferedStructuredLog) -> Self {
+        self.structured_log = Some(log);
+        self
     }
 
     pub fn with_subsystem(mut self, subsystem: Subsystem) -> Self {
@@ -864,7 +880,7 @@ pub struct AsyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usi
     next_cl_id: u64,
     pending_producer: Option<Producer<CuSlotLease<P>>>,
     completion_consumer: Option<Consumer<AsyncCopperListCompletion<P>>>,
-    worker_handle: Option<JoinHandle<()>>,
+    worker_handle: Option<JoinHandle<CuResult<()>>>,
     worker_thread: Option<Thread>,
     worker_shutdown: Option<Arc<AtomicBool>>,
     worker_running: Option<Arc<AtomicBool>>,
@@ -898,6 +914,17 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
     where
         P: CuListZeroedInit + AsyncCopperListPayload + 'static,
     {
+        Self::with_outputs(sink, keyframe_sink, None)
+    }
+
+    fn with_outputs(
+        sink: Option<Box<CompletedCopperListSink<P>>>,
+        keyframe_sink: Option<Box<CompletedKeyFrameSink>>,
+        structured_log: Option<BufferedStructuredLog>,
+    ) -> CuResult<Self>
+    where
+        P: CuListZeroedInit + AsyncCopperListPayload + 'static,
+    {
         let free_pool = allocate_slots::<P>(NBCL);
 
         if sink.is_some() && !P::DISTRIBUTED && NBCL < 2 {
@@ -913,7 +940,9 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
             worker_thread,
             worker_shutdown,
             worker_running,
-        ) = if sink.is_some() || keyframe_sink.is_some() {
+        ) = if sink.is_some() || keyframe_sink.is_some() || structured_log.is_some() {
+            let slot_output = sink.is_some() || keyframe_sink.is_some();
+            let worker_log = structured_log.clone();
             let mut sink = sink;
             let mut keyframe_sink = keyframe_sink;
             let handoff_capacity = NBCL.max(1);
@@ -930,13 +959,18 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
                 .spawn(move || {
                     let _running_guard = AsyncOutputWorkerRunningGuard(running);
                     loop {
+                        let drained_text = worker_log
+                            .as_ref()
+                            .is_some_and(BufferedStructuredLog::drain_pending);
                         let mut culist = match pending_consumer.pop() {
                             Ok(culist) => culist,
                             Err(PopError::Empty) => {
                                 if shutdown.load(Ordering::Acquire) {
                                     break;
                                 }
-                                std::thread::park();
+                                if !drained_text {
+                                    std::thread::park();
+                                }
                                 continue;
                             }
                         };
@@ -990,14 +1024,23 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
                             break;
                         }
                     }
+                    if let Some(mut log) = worker_log {
+                        log.set_worker(None);
+                        log.flush()
+                    } else {
+                        Ok(())
+                    }
                 })
                 .map_err(|e| {
                     CuError::from("Failed to spawn async CopperList serializer thread")
                         .add_cause(e.to_string().as_str())
                 })?;
             let worker_thread = worker_handle.thread().clone();
+            if let Some(log) = structured_log {
+                log.set_worker(Some(worker_thread.clone()));
+            }
             (
-                Some(pending_producer),
+                slot_output.then_some(pending_producer),
                 Some(completion_consumer),
                 Some(worker_handle),
                 Some(worker_thread),
@@ -1346,7 +1389,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
         if let Some(worker_handle) = self.worker_handle.take() {
             worker_handle.join().map_err(|_| {
                 CuError::from("Async CopperList output worker panicked while joining")
-            })?;
+            })??;
         }
         self.pending_producer.take();
         self.worker_thread.take();
@@ -2088,6 +2131,8 @@ where
             copperlist_sink,
             keyframe_sink,
             output_requirements,
+            #[cfg(feature = "async-cl-io")]
+            structured_log,
         } = self;
         let mut resources =
             resources.ok_or_else(|| CuError::from("Resources missing from CuRuntimeBuilder"))?;
@@ -2137,19 +2182,23 @@ where
             .and_then(|logging| logging.keyframe_interval)
             .unwrap_or(DEFAULT_KEYFRAME_INTERVAL);
 
-        let (copperlists_manager, keyframes_manager) = if P::DISTRIBUTED {
-            let keyframes_manager =
-                KeyFramesManager::distributed(keyframe_sink.is_some(), keyframe_interval)?;
+        let (keyframes_manager, worker_keyframes) = if P::DISTRIBUTED {
             (
-                CopperListsManager::new_with_keyframes(copperlist_sink, keyframe_sink)?,
-                keyframes_manager,
+                KeyFramesManager::distributed(keyframe_sink.is_some(), keyframe_interval)?,
+                keyframe_sink,
             )
         } else {
             (
-                CopperListsManager::new(copperlist_sink)?,
                 KeyFramesManager::new(keyframe_sink, keyframe_interval)?,
+                None,
             )
         };
+        #[cfg(feature = "async-cl-io")]
+        let copperlists_manager =
+            CopperListsManager::with_outputs(copperlist_sink, worker_keyframes, structured_log)?;
+        #[cfg(not(feature = "async-cl-io"))]
+        let copperlists_manager =
+            CopperListsManager::new_with_keyframes(copperlist_sink, worker_keyframes)?;
         #[cfg(target_os = "none")]
         {
             let cl_size = core::mem::size_of::<CopperList<P>>();
@@ -4296,6 +4345,42 @@ mod tests {
         assert_eq!(recycled.index(), index);
         assert_eq!(recycled.generation(), generation);
         assert_eq!(recycled.get_state(), CopperListState::Free);
+    }
+
+    #[cfg(feature = "async-cl-io")]
+    #[test]
+    fn idle_output_worker_drains_structured_records_without_a_copperlist() {
+        use cu29_log::{CuLogEntry, CuLogLevel};
+        use cu29_traits::UnifiedLogType;
+        use cu29_unifiedlog::{LogStream, NoopLogger};
+        let local = LogStream::new(
+            UnifiedLogType::StructuredLogLine,
+            Arc::new(Mutex::new(NoopLogger::new())),
+            2048,
+        )
+        .unwrap();
+        let (sent, received) = sync_channel(2);
+        let mut text = BufferedStructuredLog::new(local, move |bytes| {
+            sent.send((
+                std::thread::current().name().map(str::to_owned),
+                bytes.to_vec(),
+            ))
+            .unwrap();
+        });
+        let mut manager =
+            AsyncCopperListsManager::<Msgs, 2>::with_outputs(None, None, Some(text.clone()))
+                .unwrap();
+        let entry = CuLogEntry::new(77, CuLogLevel::Info);
+        let expected = bincode::encode_to_vec(&entry, bincode::config::standard()).unwrap();
+        for _ in 0..2 {
+            text.log(&entry).unwrap();
+            let (thread, bytes) = received
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .unwrap();
+            assert_eq!(thread.as_deref(), Some("cu-async-cl-io"));
+            assert_eq!(bytes, expected);
+        }
+        manager.close_output().unwrap();
     }
 
     #[cfg(all(feature = "std", feature = "async-cl-io"))]
