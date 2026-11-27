@@ -4236,7 +4236,37 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 unified_logger.clone(), 4096 * 10, log_context,
             )?;
         };
-        let (early_structured_logger_init, late_structured_logger_init) = if manual {
+        let buffered_structured = std && cfg!(feature = "async-cl-io");
+        let buffered_builder = buffered_structured.then(|| quote!(.with_structured_log(structured_worker)));
+        let (early_structured_logger_init, late_structured_logger_init) = if buffered_structured {
+            let observe_record = if logstream_enabled {
+                quote! {
+                    {
+                        use ::cu29::logstream::structured::StructuredLogOutput;
+                        let mut outputs = structured_outputs;
+                        move |bytes: &[u8]| {
+                            if logstream_output_required {
+                                outputs.begin();
+                                outputs.write(bytes);
+                                outputs.finish(true);
+                            }
+                        }
+                    }
+                }
+            } else {
+                quote!(|_: &[u8]| {})
+            };
+            let init = quote! {
+                #local_structured_logger_init
+                let structured_worker = ::cu29::curuntime::BufferedStructuredLog::new(
+                    local_structured_log_sink, #observe_record,
+                );
+                let logger_runtime = ::cu29::prelude::LoggerRuntime::init(
+                    clock.clone(), structured_worker.clone(), None::<::cu29::prelude::NullLog>,
+                );
+            };
+            if logstream_enabled { (quote! {}, init) } else { (init, quote! {}) }
+        } else if manual {
             (quote!{}, quote!{
                 #local_structured_logger_init
                 let logger_runtime = if let Some(output) = manual_logs {
@@ -4364,6 +4394,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     keyframe_sink,
                     output_requirements,
                 )
+                #buffered_builder
                 .with_subsystem(#application_name::subsystem())
                 .with_instance_id(instance_id)
                 .with_resources(resources)

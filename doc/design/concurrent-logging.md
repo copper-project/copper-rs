@@ -84,8 +84,14 @@ payloads or adding serialization.
 Serial capture keeps two preallocated spare buffers. Queue or keyframe-buffer
 exhaustion rejects the CopperList/keyframe pair; counters and missing CopperList IDs
 expose the gap. This preserves bounded producer memory and nonblocking handoff under
-sustained overload. Structured logs still serialize on their callers' threads;
-runtime async output does not move every logging cost off the producer.
+sustained overload. With an active `cu-output` worker, structured logs encode once on the emitting
+thread into two preallocated 64 KiB batches shared by all emitters for that sink.
+One batch accepts records while the worker writes the other. The worker wakes
+on the first queued record, including between CopperLists, and writes canonical
+records in admission order. A full batch drops the incoming record. Explicit
+flush drains accepted records and reports the number dropped since the previous
+flush. Live listeners still run on the emitting thread. Without an output worker,
+local structured writes run synchronously.
 
 On sink error or unwind, the worker latches the original error and returns pending
 items without more record writes. Explicit close drains completions, signals/wakes,
