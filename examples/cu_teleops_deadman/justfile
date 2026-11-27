@@ -1,0 +1,7 @@
+# Start the robot watchdog and telemetry sender.
+robot bind="127.0.0.1:7441" twin="127.0.0.1:7442":
+    cargo run --profile screaming --bin robot -- {{bind}} {{twin}}
+
+# Open the operator twin and its red stop button.
+twin bind="127.0.0.1:7442" robot="127.0.0.1:7441" *args:
+    cargo run --profile screaming --bin twin -- {{bind}} {{robot}} {{args}}

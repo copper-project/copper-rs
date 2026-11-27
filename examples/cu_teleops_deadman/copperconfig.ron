@@ -1,4 +1,5 @@
 (
+    runtime: (rate_target_hz: 500),
     logging: (
         copperlist_count: 2,
         enable_task_logging: true,
@@ -16,11 +17,13 @@
             resources: {"inbox": "ops.button"},
         ),
         (id: "tick", type: "crate::Tick"),
-        (id: "safety", type: "crate::Deadman"),
+        (id: "watchdog", type: "crate::Deadman"),
+        (id: "safety", type: "crate::ActuationGate"),
     ],
     cnx: [
-        (src: "button", dst: "safety", msg: "bool"),
-        (src: "tick", dst: "safety", msg: "cu29::clock::CuTime"),
-        (src: "safety", dst: "__nc__", msg: "crate::Safety"),
+        (src: "button", dst: "watchdog", msg: "crate::Command"),
+        (src: "tick", dst: "watchdog", msg: "cu29::clock::CuTime"),
+        (src: "watchdog", dst: "safety", msg: "crate::Safety"),
+        (src: "safety", dst: "__nc__", msg: "()"),
     ],
 )
