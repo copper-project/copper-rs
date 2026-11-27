@@ -496,7 +496,23 @@ fn initial_graph_scroll_offset_targets_center_right() {
 
     let offset = initial_graph_scroll_offset(area, content_size, graph_bounds);
 
-    assert_eq!(offset, Position::new(85, 25));
+    assert_eq!(offset, Position::new(126, 25));
+}
+
+#[test]
+#[cfg(feature = "dag")]
+fn startup_frames_the_rendered_nodes_and_keeps_a_nearly_visible_sink_in_view() {
+    // Two sources, a watchdog and a safety gate occupy three columns.
+    let graph = Size::new(111, 10);
+    let canvas = Size::new(169, 30);
+    for width in [80, 112, 136] {
+        let view = Rect::new(0, 0, width, 28);
+        let offset = initial_graph_scroll_offset(view, canvas, graph);
+        assert!(offset.x + width > canvas.width);
+        if width > graph.width {
+            assert!(offset.x <= canvas.width - graph.width);
+        }
+    }
 }
 
 #[test]
