@@ -6465,4 +6465,15 @@
 <a href=#6465 id=6465 data-nosnippet>6465</a>
 <a href=#6466 id=6466 data-nosnippet>6466</a><span class="attr">#[cfg(test)]
 <a href=#6467 id=6467 data-nosnippet>6467</a></span><span class="kw">mod </span>tests;
+<a href=#6468 id=6468 data-nosnippet>6468</a>
+<a href=#6469 id=6469 data-nosnippet>6469</a><span class="doccomment">/// Declare typed operator inputs for both ends of a telemetry link.
+<a href=#6470 id=6470 data-nosnippet>6470</a></span><span class="attr">#[cfg(feature = <span class="string">"teleops"</span>)]
+<a href=#6471 id=6471 data-nosnippet>6471</a>#[proc_macro_derive(Teleops)]
+<a href=#6472 id=6472 data-nosnippet>6472</a></span><span class="kw">pub fn </span>derive_teleops(input: TokenStream) -&gt; TokenStream {
+<a href=#6473 id=6473 data-nosnippet>6473</a>    teleops::expand(<span class="macro">syn::parse_macro_input!</span>(input <span class="kw">as </span>syn::ItemStruct))
+<a href=#6474 id=6474 data-nosnippet>6474</a>        .unwrap_or_else(|err| err.to_compile_error())
+<a href=#6475 id=6475 data-nosnippet>6475</a>        .into()
+<a href=#6476 id=6476 data-nosnippet>6476</a>}
+<a href=#6477 id=6477 data-nosnippet>6477</a><span class="attr">#[cfg(feature = <span class="string">"teleops"</span>)]
+<a href=#6478 id=6478 data-nosnippet>6478</a></span><span class="kw">mod </span>teleops;
 </code></pre></div></section></main></body></html>
