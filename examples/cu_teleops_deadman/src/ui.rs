@@ -143,32 +143,35 @@ impl Screen {
                 width,
                 slot.height,
             );
-            let cl = match twinned_cl {
-                Some(id) => format!("Twin CL {id}"),
-                None => "Twin CL —".into(),
+            let columns = Layout::horizontal([Constraint::Fill(1), Constraint::Length(18)]);
+            let [identity, rtt] = columns.areas(title);
+            let mut header = Vec::new();
+            if identity.width >= 30 {
+                header.extend(["DEADMAN".bold(), "  ·  ".into()]);
+            }
+            header.push("Twin CL ".into());
+            header.push(
+                twinned_cl
+                    .map_or_else(|| "—".into(), |id| id.to_string())
+                    .into(),
+            );
+            let reading = match link.rtt {
+                Some(value) => format!("{:8.3}", value.as_nanos() as f64 / 1_000_000.0),
+                None => format!("{:>8}", "—"),
             };
-            let header = Line::from(vec![
-                "DEADMAN".bold(),
-                "  ·  ".into(),
-                cl.into(),
-                "  ·  ".into(),
-                match link.rtt {
-                    Some(rtt) => format!("RTT {rtt}"),
-                    None => "RTT —".into(),
-                }
-                .into(),
-            ]);
-            let state_line = Line::from(vec![
-                status.into(),
-                " · ".into(),
-                if link.synced {
-                    "Clock synced".green()
-                } else {
-                    "Clock acquiring".yellow()
-                },
-            ]);
-            frame.render_widget(Paragraph::new(header).centered(), title);
-            frame.render_widget(Paragraph::new(state_line).centered(), state);
+            frame.render_widget(Paragraph::new(Line::from(header)), identity);
+            frame.render_widget(Paragraph::new(format!("· RTT {reading} ms")), rtt);
+            let [robot, clock] = columns.areas(state);
+            frame.render_widget(Paragraph::new(status), robot);
+            let clock_status = if link.synced {
+                "Clock synced".green()
+            } else {
+                "Clock acquiring".yellow()
+            };
+            frame.render_widget(
+                Paragraph::new(Line::from(vec!["· ".into(), clock_status])),
+                clock,
+            );
             draw_button(frame, self.button, resume);
             if let Some(elapsed) = result {
                 frame.render_widget(

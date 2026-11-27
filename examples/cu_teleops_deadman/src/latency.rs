@@ -4,7 +4,10 @@ use cu29::prelude::*;
 use cu29_clock::sync::{
     ClockDomain, ClockObservation, ClockSync, SyncConfig, SyncError, SyncState,
 };
-use std::fmt;
+use std::{collections::VecDeque, fmt};
+
+const PROBE_INTERVAL: CuDuration = CuDuration(100_000_000);
+const READING_LIFETIME: CuDuration = CuDuration(1_000_000_000);
 
 #[derive(Default)]
 pub struct LinkStatus {
@@ -18,7 +21,7 @@ pub struct OperatorClock {
     domain: ClockDomain,
     last_probe: Option<CuInstant>,
     last_reply: Option<(CuInstant, CuDuration)>,
-    pending: Option<CuInstant>,
+    pending: VecDeque<CuInstant>,
 }
 
 impl OperatorClock {
@@ -36,7 +39,7 @@ impl OperatorClock {
             domain,
             last_probe: None,
             last_reply: None,
-            pending: None,
+            pending: VecDeque::new(),
         })
     }
 
@@ -44,18 +47,13 @@ impl OperatorClock {
         let sent = self.clock.raw_now();
         if self
             .last_probe
-            .is_some_and(|last| sent - last < CuDuration::from_millis(100))
+            .is_some_and(|last| sent - last < PROBE_INTERVAL)
         {
             return None;
         }
-        if self
-            .pending
-            .is_some_and(|last| sent - last < CuDuration::from_secs(1))
-        {
-            return None;
-        }
+        self.pending.retain(|at| sent - *at < READING_LIFETIME);
         self.last_probe = Some(sent);
-        self.pending = Some(sent);
+        self.pending.push_back(sent);
         Some(Command::ClockProbe { sent, permit })
     }
 
@@ -68,10 +66,13 @@ impl OperatorClock {
         let (Some(Command::ClockProbe { sent, .. }), Tov::Range(robot)) = (command, reply) else {
             return Ok(());
         };
-        if self.pending != Some(*sent) || *sent > received || robot.end < robot.start {
+        if *sent > received || received - *sent >= READING_LIFETIME || robot.end < robot.start {
             return Ok(());
         }
-        self.pending = None;
+        let Some(index) = self.pending.iter().position(|probe| probe == sent) else {
+            return Ok(());
+        };
+        self.pending.drain(..=index);
         let round_trip = received - *sent;
         let processing = robot.end - robot.start;
         if processing > round_trip {
@@ -106,7 +107,7 @@ impl OperatorClock {
             synced: self.synced(),
             rtt: self
                 .last_reply
-                .filter(|(at, _)| now - *at < CuDuration::from_secs(1))
+                .filter(|(at, _)| now - *at < READING_LIFETIME)
                 .map(|(_, rtt)| rtt),
         }
     }
@@ -146,6 +147,27 @@ impl fmt::Display for Latency {
 mod tests {
     use super::*;
     use cu29::teleops::InputSampler;
+
+    #[test]
+    fn a_missed_probe_does_not_delay_the_next_reading() {
+        let (clock, raw) = RobotClock::mock();
+        let mut timing = OperatorClock::new(clock.clone(), [7; 16]).unwrap();
+        let missed = timing.probe(false).unwrap();
+        raw.set_value(PROBE_INTERVAL.as_nanos());
+        let retry = timing.probe(false).unwrap();
+        let reply = Tov::Range(CuTimeRange {
+            start: CuTime(110),
+            end: CuTime(120),
+        });
+        raw.increment(CuDuration::from_millis(2));
+        let received = clock.raw_now();
+        timing.observe(Some(&retry), reply, received).unwrap();
+        timing.observe(Some(&missed), reply, received).unwrap();
+        assert_eq!(
+            timing.link_status(received).rtt,
+            Some(CuDuration::from_nanos(1_999_990))
+        );
+    }
 
     #[test]
     fn operator_sampler_stamps_in_the_remote_robots_epoch() {
