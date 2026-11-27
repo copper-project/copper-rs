@@ -30,7 +30,8 @@
 //! - `sysclock-perf`: use a host/system clock for runtime perf timing while keeping robot time for `tov` and `rate_target_hz`
 //! - `high-precision-limiter`: std-only hybrid sleep/spin loop limiter for tighter `rate_target_hz` cadence
 //! - `async-cl-io`: hand completed CopperLists and keyframes to dedicated std output threads
-//!   without blocking; drops are reported through `CopperListIoStats`
+//!   without blocking; drops are reported through `CopperListIoStats`. Structured logs use two
+//!   preallocated 64 KiB batches on the CopperList worker. Flush reports dropped structured records.
 //! - `flat-copperlist-encoding`: override the default compression for CPU-constrained applications
 //! - `parallel-rt`: compile threaded support for `PlannerKind::Pipeline`; the feature alone does not select it
 //! - `cuda`: enable CUDA-backed Copper pools and handles on supported host platforms
