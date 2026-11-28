@@ -100,6 +100,33 @@ mod tests {
         ));
     }
 
+    // A corrupt length prefix must be rejected before anything is allocated for it.
+    #[test]
+    fn test_cuarrayvec_rejects_oversized_length_prefix() {
+        let config = config::standard();
+        let encoded = bincode::encode_to_vec(1u64 << 62, config).unwrap();
+
+        let result: Result<(CuArrayVec<u32, 4>, _), _> =
+            bincode::decode_from_slice(&encoded, config);
+        assert!(matches!(
+            result,
+            Err(bincode::error::DecodeError::ArrayLengthMismatch {
+                required: 4,
+                found: 0x4000_0000_0000_0000
+            })
+        ));
+
+        let result: Result<(CuArrayVec<u32, 4>, _), _> =
+            bincode::borrow_decode_from_slice(&encoded, config);
+        assert!(matches!(
+            result,
+            Err(bincode::error::DecodeError::ArrayLengthMismatch {
+                required: 4,
+                found: 0x4000_0000_0000_0000
+            })
+        ));
+    }
+
     // Test the borrow decoding functionality with borrowed data
     #[test]
     fn test_cuarrayvec_borrow_decode() {
