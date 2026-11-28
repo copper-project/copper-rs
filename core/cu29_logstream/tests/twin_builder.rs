@@ -199,12 +199,13 @@ fn configured_twin_archives_large_camera_records_and_keyframes_across_slabs() {
         finite_objects: FiniteObjectLimits::new(128 * 1024, 1536, 2),
         ..Default::default()
     };
+    let slab_size = 1024 * 1024;
     let packets = packets::<1536>(128 * 1024, 8);
     assert!(packets.iter().any(|p| p.len() > 1200));
     let (mut twin, mut reader) =
         CuTwin::<App>::builder_with_symbol_capacity::<1536, _>(Rx(packets))
             .with_log_path(&path)
-            .with_slab_size(1024 * 1024)
+            .with_slab_size(slab_size)
             .with_section_size(256 * 1024)
             .with_receiver_limits(limits)
             .with_replay_capacity(NonZeroUsize::new(16).unwrap())
@@ -231,6 +232,7 @@ fn configured_twin_archives_large_camera_records_and_keyframes_across_slabs() {
     }
     assert!(logs.try_read().is_none());
     let logger = cu29_unifiedlog::UnifiedLoggerRead::new(&path).unwrap();
+    let archive_end = logger.raw_main_header().sections_end;
     let mut stream = cu29_unifiedlog::UnifiedLoggerIOReader::new(
         logger,
         cu29_traits::UnifiedLogType::CopperList,
@@ -249,15 +251,20 @@ fn configured_twin_archives_large_camera_records_and_keyframes_across_slabs() {
     let keyframe: KeyFrame =
         bincode::decode_from_std_read(&mut stream, bincode::config::standard()).unwrap();
     assert_eq!(keyframe.serialized_tasks, vec![0x5a; 96 * 1024]);
-    let slabs = std::fs::read_dir(dir.path())
-        .unwrap()
-        .map(|entry| entry.unwrap())
-        .filter(|entry| entry.path() != path)
-        .collect::<Vec<_>>();
-    assert!(slabs.len() >= 2);
-    for slab in slabs {
-        assert_eq!(slab.metadata().unwrap().len(), 1024 * 1024);
+    let stride = slab_size as u64;
+    assert!(archive_end > stride);
+    assert!(!archive_end.is_multiple_of(stride));
+    let slab_count = archive_end.div_ceil(stride);
+    for index in 0..slab_count {
+        let slab = dir.path().join(format!("capture_{index}.copper"));
+        let expected_len = (archive_end - index * stride).min(stride);
+        assert_eq!(std::fs::metadata(slab).unwrap().len(), expected_len);
     }
+    assert!(
+        !dir.path()
+            .join(format!("capture_{slab_count}.copper"))
+            .exists()
+    );
 }
 
 #[test]
