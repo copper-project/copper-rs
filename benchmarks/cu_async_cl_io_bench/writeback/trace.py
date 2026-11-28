@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from xml.sax.saxutils import escape
+
 
 root, out = (pathlib.Path(arg).resolve() for arg in sys.argv[1:])
 out.mkdir(parents=True, exist_ok=True)
@@ -24,7 +24,7 @@ with tempfile.TemporaryDirectory() as tmp:
     p = repo / 'core/cu29_unifiedlog/src/memmap.rs'
     src = p.read_text()
     pos = src.index('            Ok(())', src.index('bytes[done..].as_ptr()'))
-    p.write_text(src[:pos] + '            eprintln!("STORE {:p} {}", map.pointer.wrapping_add(local), count);\n' + src[pos:])
+    p.write_text(src[:pos] + '            std::io::Write::write_all(&mut std::io::stderr(), format!("STORE {:p} {}\\n", map.pointer.wrapping_add(local), count).as_bytes()).unwrap();\n' + src[pos:])
     probe = repo / 'core/cu29_unifiedlog/examples/writeback_probe.rs'
     probe.parent.mkdir(exist_ok=True)
     shutil.copyfile(pathlib.Path(__file__).with_name('probe.rs'), probe)
@@ -58,6 +58,8 @@ for line in (out/'syscalls.txt').read_text().splitlines():
     events.append(event)
     if f:
         events.append([when+float(f[3]),thread,'complete',*event[3:]])
+assert any(event[2] == 'write' for event in events)
+assert any(event[2] == 'request' for event in events)
 with (out/'ranges.csv').open('w') as dest:
     writer=csv.writer(dest)
     writer.writerow(['seconds','tid','event','slab','offset','length'])
