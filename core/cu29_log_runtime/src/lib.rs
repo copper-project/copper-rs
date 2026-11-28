@@ -265,7 +265,7 @@ impl LoggerRuntime {
     #[doc(hidden)]
     pub fn init_buffered(
         clock: RobotClock,
-        sink: impl WriteStream<CuLogEntry> + Clone + Send + Sync + 'static,
+        sink: impl WriteStream<CuLogEntry> + Clone + 'static,
     ) -> Self {
         let drain = sink.clone();
         Self::install(

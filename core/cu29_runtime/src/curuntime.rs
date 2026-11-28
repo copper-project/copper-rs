@@ -1219,16 +1219,13 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
                         let drained_text = worker_log
                             .as_ref()
                             .is_some_and(BufferedStructuredLog::drain_pending);
-                        let timeout =
-                            writeback
-                                .as_ref()
-                                .and_then(|driver| match driver.service() {
-                                    Ok(delay) => Some(delay),
-                                    Err(error) => {
-                                        output_error.get_or_insert(error);
-                                        Some(std::time::Duration::from_millis(100))
-                                    }
-                                });
+                        let timeout = writeback.as_ref().map(|driver| match driver.service() {
+                            Ok(delay) => delay,
+                            Err(error) => {
+                                output_error.get_or_insert(error);
+                                std::time::Duration::from_millis(100)
+                            }
+                        });
                         let mut item = match pending_consumer.pop() {
                             Ok(culist) => culist,
                             Err(PopError::Empty) => {
