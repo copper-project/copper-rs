@@ -1115,7 +1115,7 @@ pub struct AsyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usi
     /// Last handle-backed payload bytes observed while the sink ran.
     pub last_handle_bytes: u64,
     pub last_keyframe_bytes: u64,
-    distributed: bool,
+    max_pending: usize,
     output_error: Option<CuError>,
     #[allow(clippy::vec_box)]
     returned_keyframes: Vec<Box<KeyFrame>>,
@@ -1306,11 +1306,25 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
             last_encoded_bytes: 0,
             last_handle_bytes: 0,
             last_keyframe_bytes: 0,
-            distributed: P::DISTRIBUTED,
+            max_pending: NBCL.saturating_sub(1),
             output_error: None,
             returned_keyframes: Vec::with_capacity(ASYNC_KEYFRAME_HANDOFF_CAPACITY),
             dropped_keyframes_total: 0,
         })
+    }
+
+    /// Reserve the CLs needed for one complete worker schedule cycle. Some lanes
+    /// must process later CLs in the same cycle before the first CL can commit.
+    #[doc(hidden)]
+    pub fn reserve_execution_cycle(&mut self, count: usize) -> CuResult<()> {
+        if self.pending_producer.is_some() && count >= NBCL {
+            return Err(CuError::from(format!(
+                "async pipeline output requires logging.copperlist_count >= {} ({count} execution slots and one output slot)",
+                count + 1
+            )));
+        }
+        self.max_pending = NBCL.saturating_sub(count);
+        Ok(())
     }
 
     pub fn acquire_iteration_slot(&mut self) -> CuResult<CuSlotLease<P>> {
@@ -1584,7 +1598,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
         // Keep one of the preallocated CopperLists available to execute the
         // next iteration. Queue capacity alone cannot enforce this because a
         // record may be in the worker or waiting on the completion channel.
-        if !self.distributed && self.pending_count >= NBCL - 1 {
+        if self.pending_count >= self.max_pending {
             return Ok(self.drop_copperlist(item));
         }
 
@@ -4593,6 +4607,56 @@ mod tests {
                 .recv()
                 .map_err(|_| CuError::from("failed to release blocking writer"))
         }
+    }
+
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    #[test]
+    fn blocked_output_preserves_an_entire_execution_cycle() {
+        let (started, started_rx) = sync_channel(1);
+        let (release, release_rx) = sync_channel(1);
+        let mut manager = AsyncCopperListsManager::<Msgs, 3>::new(Some(Box::new(BlockingWriter {
+            ids: Arc::default(),
+            started,
+            release: Arc::new(Mutex::new(release_rx)),
+        })))
+        .unwrap();
+        assert!(
+            manager
+                .reserve_execution_cycle(3)
+                .unwrap_err()
+                .to_string()
+                .contains(">= 4")
+        );
+        manager.reserve_execution_cycle(2).unwrap();
+        let mut slots = manager.take_execution_slots();
+        let mut first = slots.pop().unwrap();
+        first.reset(0);
+        first.change_state(CopperListState::Processing);
+        assert!(matches!(
+            manager.submit_slot(first).unwrap(),
+            OwnedCopperListSubmission::Pending
+        ));
+        started_rx
+            .recv_timeout(std::time::Duration::from_secs(1))
+            .unwrap();
+        for id in 1..8 {
+            let mut slot = slots.pop().unwrap();
+            slot.reset(id);
+            slot.change_state(CopperListState::Processing);
+            let OwnedCopperListSubmission::Recycled(slot) = manager.submit_slot(slot).unwrap()
+            else {
+                panic!("consumed a required execution slot");
+            };
+            slots.push(slot);
+            assert_eq!(slots.len(), 2);
+        }
+        release.send(()).unwrap();
+        manager
+            .finish_pending_with(|slot| slots.push(slot))
+            .unwrap();
+        assert_eq!(manager.dropped_copperlists_total(), 7);
+        assert_eq!(slots.len(), 3);
+        manager.return_execution_slots(slots);
     }
 
     #[cfg(all(feature = "std", feature = "async-cl-io"))]

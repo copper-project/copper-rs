@@ -368,6 +368,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         }
         let task_specs = task_specs;
+        let reserve_output_slots = lane_plan.filter(|_| distributed_selected && cfg!(feature = "async-cl-io")).map(|plan| {
+            let count = plan.copperlists_per_cycle as usize;
+            quote! { let mut copper_runtime = copper_runtime; copper_runtime.copperlists_manager.reserve_execution_cycle(#count)?; }
+        });
         let schedule_max_in_flight = lane_plan
             .map(|plan| plan.max_in_flight as usize)
             .unwrap_or(1);
@@ -3127,12 +3131,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         );
                     let task_ptrs: #mission_mod::ParallelTaskPtrs = #parallel_task_ptr_values;
                     let bridge_ptrs: #mission_mod::ParallelBridgePtrs = #parallel_bridge_ptr_values;
-                    let mut free_copperlists: Vec<Option<cu29::arena::CuSlotLease<CuStampedDataSet>>> =
-                        (0..#copperlist_count_tokens).map(|_| None).collect();
-                    for token in runtime.copperlists_manager.take_execution_slots() {
-                        let index = token.index();
-                        free_copperlists[index] = Some(token);
-                    }
+                    let mut free_copperlists = runtime.copperlists_manager.take_execution_slots();
                     #parallel_keyframe_runtime
                     let start_clid = runtime.copperlists_manager.next_cl_id();
                     runtime.parallel_rt.reset_cursors(start_clid);
@@ -3151,7 +3150,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     ));
                     let mut in_flight_slots: Vec<Option<cu29::arena::CuSlotLease<CuStampedDataSet>>> =
                         (0..max_in_flight).map(|_| None).collect();
-                    let mut returned_copperlists = Vec::with_capacity(#copperlist_count_tokens);
                     let mut lane_handles = Vec::with_capacity(#lane_workers);
                     #(#lane_worker_spawns)*
 
@@ -3178,8 +3176,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     loop {
                         let observed_progress = lanes.progress_generation();
                         while let Some(recycled) = cl_manager.try_reclaim_slot()? {
-                            let index = recycled.index();
-                            free_copperlists[index] = Some(recycled);
+                            free_copperlists.push(recycled);
                         }
                         if let Some((clid, error)) = lanes.take_failure() {
                             fatal_error = Some(error);
@@ -3227,8 +3224,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             if let cu29::curuntime::OwnedCopperListSubmission::Recycled(culist) =
                                 cl_manager.submit_slot(culist)?
                             {
-                                let index = culist.index();
-                                free_copperlists[index] = Some(culist);
+                                free_copperlists.push(culist);
                             }
                             monitor_result?;
                             if outcome == cu29::curuntime::ProcessStepOutcome::Continue {
@@ -3274,19 +3270,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 .as_ref()
                                 .map(|limiter| limiter.is_ready(clock))
                                 .unwrap_or(true);
-                            let arena_index =
-                                (next_clid % #copperlist_count_tokens as u64) as usize;
                             let execution_slot =
                                 (next_clid % max_in_flight as u64) as usize;
 
                             if in_flight < max_in_flight
                                 && rate_ready
-                                && free_copperlists[arena_index].is_some()
+                                && !free_copperlists.is_empty()
                                 && in_flight_slots[execution_slot].is_none()
                             {
                                 let clid = next_clid;
-                                let mut culist = free_copperlists[arena_index]
-                                    .take()
+                                let mut culist = free_copperlists.pop()
                                     .expect("free CopperList slot disappeared");
                                 culist.reset(clid);
                                 #parallel_keyframe_reset
@@ -3315,17 +3308,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 break;
                             }
                         }
-                        let arena_index =
-                            (next_launch_clid % #copperlist_count_tokens as u64) as usize;
-                        if !stop_launching
-                            && free_copperlists[arena_index].is_none()
-                            && cl_manager.has_pending_slots()
-                        {
-                            let token = cl_manager.wait_reclaim_slot()?;
-                            let index = token.index();
-                            free_copperlists[index] = Some(token);
-                            continue;
-                        }
                         let timeout = if stop_launching {
                             None
                         } else {
@@ -3345,19 +3327,15 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         let _ = handle.join();
                     }
                     for slot in in_flight_slots.into_iter().flatten() {
-                        let index = slot.index();
-                        free_copperlists[index] = Some(slot);
+                        free_copperlists.push(slot);
                     }
                     let cleanup_result = (|| -> CuResult<()> {
                         let cl_manager = &mut self.copper_runtime.copperlists_manager;
                         let drain_result = cl_manager.finish_pending_with(|slot| {
-                            let index = slot.index();
-                            free_copperlists[index] = Some(slot);
+                            free_copperlists.push(slot);
                         });
-                        returned_copperlists.extend(free_copperlists.into_iter().flatten());
-                        returned_copperlists.extend(cl_manager.take_execution_slots());
-                        debug_assert_eq!(returned_copperlists.len(), #copperlist_count_tokens);
-                        cl_manager.return_execution_slots(returned_copperlists);
+                        debug_assert_eq!(free_copperlists.len(), #copperlist_count_tokens);
+                        cl_manager.return_execution_slots(free_copperlists);
                         drain_result
                     })();
                     cu29::curuntime::combine_output_results(execution_result, cleanup_result)
@@ -4400,6 +4378,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 .with_resources(resources)
                 #build_with_resources_thread_pools_call
                 .build()?;
+                #reserve_output_slots
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: runtime built");
 
