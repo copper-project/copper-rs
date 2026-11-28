@@ -1298,6 +1298,14 @@ Call register_copperlist_python_type::<P>() from Rust before using this function
         let task_ids = P::get_all_task_ids();
         let root = PyDict::new(py);
         root.set_item("id", entry.id)?;
+        if let Some(record) = entry.clock_correction() {
+            let snapshot = serde_json::to_string(&record.snapshot)
+                .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+            root.set_item(
+                "clock_snapshot",
+                py.import("json")?.getattr("loads")?.call1((snapshot,))?,
+            )?;
+        }
 
         let mut messages: Vec<Py<PyAny>> = Vec::new();
         for (idx, msg) in entry.cumsgs().into_iter().enumerate() {

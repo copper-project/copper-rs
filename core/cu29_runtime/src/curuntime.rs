@@ -585,9 +585,34 @@ fn flush_completed_output<P: CopperListTuple>(
     combine_output_results(result, keyframe_result)
 }
 
+/// Retain the latest curve until its CL is accepted. Repeat the curve at
+/// keyframes so a retained replay boundary can survive extent reclamation.
+#[cfg(feature = "clock-sync")]
+#[derive(Default)]
+struct ClockCorrections {
+    latest: Option<cu29_clock::sync::ClockSnapshot>,
+    changed: bool,
+}
+
+#[cfg(feature = "clock-sync")]
+impl ClockCorrections {
+    fn update(&mut self, snapshot: cu29_clock::sync::ClockSnapshot) {
+        self.latest = Some(snapshot);
+        self.changed = true;
+    }
+
+    fn attach<P: CopperListTuple>(&self, list: &mut CopperList<P>, keyframe: bool) {
+        if self.changed || keyframe {
+            list.clock_snapshot = self.latest;
+        }
+    }
+}
+
 /// Manages the lifecycle and completed-list sink on the synchronous path.
 #[doc(hidden)]
 pub struct SyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usize> {
+    #[cfg(feature = "clock-sync")]
+    clock_corrections: ClockCorrections,
     #[cfg(feature = "telemetry")]
     manual: Option<crate::manual_output::ManualOutput<P>>,
     inner: Option<CuListsManager<P, NBCL>>,
@@ -608,6 +633,11 @@ pub struct SyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usiz
 }
 
 impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, NBCL> {
+    #[cfg(feature = "clock-sync")]
+    #[doc(hidden)]
+    pub fn record_clock(&mut self, snapshot: cu29_clock::sync::ClockSnapshot) {
+        self.clock_corrections.update(snapshot);
+    }
     #[doc(hidden)]
     pub fn close_output(&mut self) -> CuResult<()> {
         let result = self.finish_pending();
@@ -637,6 +667,8 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         Ok(Self {
             #[cfg(feature = "telemetry")]
             manual: None,
+            #[cfg(feature = "clock-sync")]
+            clock_corrections: ClockCorrections::default(),
             inner: (!P::DISTRIBUTED).then(CuListsManager::new),
             #[cfg(feature = "std")]
             free_pool: if P::DISTRIBUTED {
@@ -827,6 +859,10 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
                 .next()
                 .filter(|list| list.id == culistid)
                 .ok_or_else(|| CuError::from("missing completed capture"))?;
+            #[cfg(feature = "clock-sync")]
+            {
+                self.clock_corrections.attach(list, keyframe.is_some());
+            }
             list.change_state(CopperListState::BeingSerialized);
             #[cfg(feature = "remote-debug")]
             {
@@ -843,6 +879,10 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
                     self.last_encoded_bytes = encoded;
                     self.last_handle_bytes = handles;
                     self.last_keyframe_bytes = frames;
+                    #[cfg(feature = "clock-sync")]
+                    {
+                        self.clock_corrections.changed = false;
+                    }
                     manual.complete(keyframe);
                     return Ok(());
                 }
@@ -865,6 +905,11 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         let last_completed_encoded = &mut self.last_completed_encoded;
         for cl in self.inner.as_mut().expect("serial storage").iter_mut() {
             if cl.id == culistid && cl.get_state() == CopperListState::Processing {
+                #[cfg(feature = "clock-sync")]
+                {
+                    self.clock_corrections
+                        .attach(cl, keyframe.is_some_and(|k| k.culistid == cl.id));
+                }
                 cl.change_state(CopperListState::DoneProcessing);
                 #[cfg(feature = "remote-debug")]
                 {
@@ -882,6 +927,10 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
                 self.last_encoded_bytes = encoded;
                 self.last_handle_bytes = handles;
                 self.last_keyframe_bytes = keyframe_bytes;
+                #[cfg(feature = "clock-sync")]
+                {
+                    self.clock_corrections.changed = false;
+                }
                 cl.change_state(CopperListState::Free);
                 nb_done += 1;
             } else {
@@ -955,6 +1004,11 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         debug_assert_processing_completion_state(culist.as_ref(), "sync slot completion");
 
         self.note_admission(culist.id + 1);
+        #[cfg(feature = "clock-sync")]
+        {
+            let capture = culist.keyframe().is_some_and(KeyFrame::is_active);
+            self.clock_corrections.attach(&mut culist, capture);
+        }
         culist.change_state(CopperListState::DoneProcessing);
         culist.change_state(CopperListState::BeingSerialized);
         let output = write_completed_output(
@@ -974,6 +1028,10 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         self.last_encoded_bytes = encoded;
         self.last_handle_bytes = handles;
         self.last_keyframe_bytes = keyframes;
+        #[cfg(feature = "clock-sync")]
+        {
+            self.clock_corrections.changed = false;
+        }
         culist.change_state(CopperListState::Free);
         Ok(OwnedCopperListSubmission::Recycled(culist))
     }
@@ -1097,6 +1155,8 @@ impl Drop for AsyncOutputWorkerRunningGuard {
 #[cfg(all(feature = "std", feature = "async-cl-io"))]
 #[doc(hidden)]
 pub struct AsyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usize> {
+    #[cfg(feature = "clock-sync")]
+    clock_corrections: ClockCorrections,
     free_pool: Vec<CuSlotLease<P>>,
     current: Option<CuSlotLease<P>>,
     #[cfg(feature = "remote-debug")]
@@ -1124,6 +1184,11 @@ pub struct AsyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usi
 
 #[cfg(all(feature = "std", feature = "async-cl-io"))]
 impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P, NBCL> {
+    #[cfg(feature = "clock-sync")]
+    #[doc(hidden)]
+    pub fn record_clock(&mut self, snapshot: cu29_clock::sync::ClockSnapshot) {
+        self.clock_corrections.update(snapshot);
+    }
     #[doc(hidden)]
     pub fn close_output(&mut self) -> CuResult<()> {
         self.shutdown_worker()
@@ -1290,6 +1355,8 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
         };
 
         Ok(Self {
+            #[cfg(feature = "clock-sync")]
+            clock_corrections: ClockCorrections::default(),
             free_pool,
             current: None,
             #[cfg(feature = "remote-debug")]
@@ -1588,10 +1655,20 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
             return Ok(self.drop_copperlist(item));
         }
 
+        #[cfg(feature = "clock-sync")]
+        {
+            let capture =
+                item.keyframe.is_some() || item.culist.keyframe().is_some_and(KeyFrame::is_active);
+            self.clock_corrections.attach(&mut item.culist, capture);
+        }
         item.culist
             .change_state(CopperListState::QueuedForSerialization);
         match pending_producer.push(item) {
             Ok(()) => {
+                #[cfg(feature = "clock-sync")]
+                {
+                    self.clock_corrections.changed = false;
+                }
                 self.pending_count += 1;
                 if let Some(worker_thread) = self.worker_thread.as_ref() {
                     worker_thread.unpark();
@@ -4658,6 +4735,62 @@ mod tests {
             ["keyframe", "copperlist", "keyframe", "copperlist"]
         );
         manager.close_output().unwrap();
+    }
+
+    #[cfg(all(feature = "std", feature = "async-cl-io", feature = "clock-sync"))]
+    #[test]
+    fn dropped_corrections_follow_the_next_accepted_copperlist() {
+        use cu29_clock::sync::{ClockDomain, ClockSync, SyncConfig};
+
+        let (started_tx, started_rx) = sync_channel(1);
+        let (release_tx, release_rx) = sync_channel(1);
+        let ids = Arc::new(Mutex::new(Vec::new()));
+        let mut manager = AsyncCopperListsManager::<Msgs, 2>::new(Some(Box::new(BlockingWriter {
+            ids: ids.clone(),
+            started: started_tx,
+            release: Arc::new(Mutex::new(release_rx)),
+        })))
+        .unwrap();
+        let domain = ClockDomain {
+            id: 0,
+            identity: *b"testroot",
+            session: 0,
+        };
+        let curve = |epoch| {
+            let clock = RobotClock::from_ref_time(epoch);
+            ClockSync::new(&clock, domain, SyncConfig::new(CuDuration::from_millis(1)))
+                .unwrap()
+                .snapshot()
+        };
+        let previous = curve(1_000_000);
+        let latest = curve(2_000_000);
+        assert_ne!(previous, latest);
+        for (id, correction) in [None, Some(previous), Some(latest), None]
+            .into_iter()
+            .enumerate()
+        {
+            if let Some(snapshot) = correction {
+                manager.record_clock(snapshot);
+            }
+            manager
+                .create()
+                .unwrap()
+                .change_state(CopperListState::Processing);
+            manager.end_of_processing(id as u64).unwrap();
+            if id == 0 || id == 3 {
+                started_rx
+                    .recv_timeout(std::time::Duration::from_secs(5))
+                    .unwrap();
+            }
+            if id >= 2 {
+                release_tx.send(()).unwrap();
+                manager.finish_pending().unwrap();
+            }
+        }
+        assert_eq!(manager.dropped_copperlists_total(), 2);
+        assert_eq!(*ids.lock().unwrap(), [0, 3]);
+        let retained = manager.free_pool.iter().find(|slot| slot.id == 3).unwrap();
+        assert_eq!(retained.clock_correction().unwrap().snapshot, latest);
     }
 
     #[cfg(all(

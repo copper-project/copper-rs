@@ -130,7 +130,7 @@ pub fn encode_capture_into<P: CaptureDataSet>(
     output: &mut [u8],
 ) -> Result<usize> {
     let len = bincode::encode_into_slice(
-        (list.id, CaptureView(&list.msgs)),
+        (list.record_header(), CaptureView(&list.msgs)),
         output,
         bincode::config::standard(),
     )

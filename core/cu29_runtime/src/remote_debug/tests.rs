@@ -109,7 +109,13 @@ fn copperlist_snapshot_omits_runtime_state() {
         super::copperlist_snapshot(&list, &|_| None, true, true, true, false, None).unwrap();
     assert!(snapshot.get("state").is_none());
     assert_eq!(snapshot["cl"], 7);
-    assert_eq!(snapshot["raw_bincode_hex"], "07");
+    // A clock-enabled CL includes the optional snapshot's tag after the ID.
+    let expected = if cfg!(feature = "clock-sync") {
+        "0700"
+    } else {
+        "07"
+    };
+    assert_eq!(snapshot["raw_bincode_hex"], expected);
 }
 
 impl MatchingTasks for AliasPayloadCopperList {

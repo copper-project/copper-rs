@@ -17,7 +17,7 @@ mod maintenance;
 #[cfg(feature = "clock-sync")]
 pub use maintenance::{ClockMaintenance, ClockReference, ClockReferenceBundle, MaintenanceConfig};
 
-/// Reads corrections from a selected run's RuntimeLifecycle stream, offline.
+/// Reads legacy lifecycle-stream corrections. Current applications record corrections in CopperLists.
 #[cfg(all(feature = "std", feature = "clock-sync"))]
 pub fn read_clock_sync_records(
     mut source: impl std::io::Read,
@@ -58,17 +58,6 @@ pub fn read_clock_sync_records(
         }
     }
     Ok(records)
-}
-
-#[cfg(all(feature = "std", feature = "clock-sync"))]
-pub(crate) fn load_clock_sync_records(
-    path: &std::path::Path,
-) -> cu29_traits::CuResult<alloc::vec::Vec<ClockSyncRecord>> {
-    let logger = crate::debug::build_read_logger(path)?;
-    read_clock_sync_records(cu29_unifiedlog::UnifiedLoggerIOReader::new(
-        logger,
-        cu29_traits::UnifiedLogType::RuntimeLifecycle,
-    ))
 }
 
 /// Offline clock restoration used by debugger callbacks with a recorded counter.

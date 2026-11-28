@@ -15,4 +15,8 @@ pub enum ValueDecodeCatalogLayout {
     Compact,
     /// Each message is encoded with its own metadata envelope.
     Flat,
+    /// Compact messages preceded by an optional clock snapshot.
+    CompactClockSync,
+    /// Flat messages preceded by an optional clock snapshot.
+    FlatClockSync,
 }

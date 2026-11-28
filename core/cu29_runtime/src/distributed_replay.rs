@@ -367,6 +367,15 @@ where
         }
         let (sections, keyframes, total_entries) =
             index_log::<P, _>(log_base, &recorded_copperlist_timestamp::<P>)?;
+        #[cfg(feature = "clock-sync")]
+        let (sections, clock_records) = {
+            let mut sections = sections;
+            let records = sections
+                .iter_mut()
+                .flat_map(|s| s.corrections.drain(..))
+                .collect();
+            (sections, records)
+        };
         let log_reader = build_read_logger(log_base)?;
         Ok(Self {
             assignment,
@@ -377,7 +386,7 @@ where
             total_entries,
             keyframes,
             #[cfg(feature = "clock-sync")]
-            clock_records: crate::clock_sync::load_clock_sync_records(log_base)?,
+            clock_records,
             started: false,
             current_idx: None,
             last_keyframe: None,
