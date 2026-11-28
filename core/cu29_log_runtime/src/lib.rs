@@ -197,8 +197,16 @@ pub fn format_message_only(
 }
 
 /// Shared logging state reachable from the macro-generated calls.
+struct ActiveSink {
+    stream: StructuredLogSink,
+    // A buffered destination can fence accepted records without holding the
+    // producer's stream lock through storage I/O.
+    #[cfg(feature = "std")]
+    flush: Option<Arc<dyn Fn() -> CuResult<()> + Send + Sync>>,
+}
+
 struct LoggerState {
-    sink: Mutex<StructuredLogSink>,
+    sink: Mutex<ActiveSink>,
     clock: RobotClock,
     live_listeners: Mutex<LiveLogListeners>,
 }
@@ -242,14 +250,49 @@ impl LoggerRuntime {
         sink: impl WriteStream<CuLogEntry> + 'static,
         #[allow(unused_variables)] extra_text_logger: Option<impl Log + 'static>,
     ) -> Self {
+        Self::install(
+            clock,
+            ActiveSink {
+                stream: Box::new(sink),
+                #[cfg(feature = "std")]
+                flush: None,
+            },
+            extra_text_logger,
+        )
+    }
+
+    #[cfg(feature = "std")]
+    #[doc(hidden)]
+    pub fn init_buffered(
+        clock: RobotClock,
+        sink: impl WriteStream<CuLogEntry> + Clone + 'static,
+    ) -> Self {
+        let drain = sink.clone();
+        Self::install(
+            clock,
+            ActiveSink {
+                stream: Box::new(sink),
+                flush: Some(Arc::new(move || drain.clone().flush())),
+            },
+            None::<NullLog>,
+        )
+    }
+
+    fn install(
+        clock: RobotClock,
+        sink: ActiveSink,
+        #[allow(unused_variables)] extra_text_logger: Option<impl Log + 'static>,
+    ) -> Self {
         STRUCTURED_LOG_BYTES.store(0, Ordering::Relaxed);
 
         if let Some(state) = LOGGER_STATE.get() {
             let mut active_sink = lock_mutex(&state.sink);
-            *active_sink = Box::new(sink);
+            let old = core::mem::replace(&mut *active_sink, sink);
+            drop(active_sink);
+            drop(old);
         } else {
             let state = LoggerState {
-                sink: Mutex::new(Box::new(sink)),
+                sink: Mutex::new(sink),
                 clock,
                 live_listeners: Mutex::new(LiveLogListeners::default()),
             };
@@ -301,20 +344,19 @@ impl LoggerRuntime {
     #[doc(hidden)]
     pub fn try_flush(&self) -> CuResult<()> {
         if let Some(state) = LOGGER_STATE.get() {
-            lock_mutex(&state.sink).flush()?;
+            let mut active = lock_mutex(&state.sink);
+            #[cfg(feature = "std")]
+            if let Some(flush) = active.flush.clone() {
+                drop(active);
+                return flush();
+            }
+            active.stream.flush()?;
         }
         Ok(())
     }
 
     pub fn flush(&self) {
-        // no op in no_std TODO(gbin): check if it will be needed in no_std at some point.
-        if let Some(state) = LOGGER_STATE.get() {
-            let mut sink = lock_mutex(&state.sink);
-            let _ = sink.flush(); // ignore errors in no_std
-        } else {
-            #[cfg(feature = "std")]
-            eprintln!("cu29_log: Logger not initialized.");
-        }
+        let _ = self.try_flush();
     }
 }
 
@@ -324,7 +366,16 @@ impl Drop for LoggerRuntime {
         // Assume on no-std that there is no buffering. TODO(gbin): check if this hold true.
         if let Some(state) = LOGGER_STATE.get() {
             let mut sink = lock_mutex(&state.sink);
-            *sink = Box::new(DummyWriteStream);
+            let old = core::mem::replace(
+                &mut *sink,
+                ActiveSink {
+                    stream: Box::new(DummyWriteStream),
+                    #[cfg(feature = "std")]
+                    flush: None,
+                },
+            );
+            drop(sink);
+            drop(old);
         }
     }
 }
@@ -344,8 +395,8 @@ fn log_inner(
     entry.time = state.clock.now();
 
     let mut guard = lock_mutex(&state.sink);
-    guard.log(entry)?;
-    if let Some(bytes) = guard.last_log_bytes() {
+    guard.stream.log(entry)?;
+    if let Some(bytes) = guard.stream.last_log_bytes() {
         STRUCTURED_LOG_BYTES.fetch_add(bytes, Ordering::Relaxed);
     }
 

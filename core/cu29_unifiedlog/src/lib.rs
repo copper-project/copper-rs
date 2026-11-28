@@ -208,6 +208,10 @@ pub trait SectionStorage: Send + Sync {
     fn is_sealed(&self) -> bool {
         false
     }
+    #[doc(hidden)]
+    fn finish_section(&mut self) -> CuResult<usize> {
+        self.flush()
+    }
     /// Flushes the section to the underlying storage
     fn flush(&mut self) -> CuResult<usize>;
 }
@@ -276,6 +280,17 @@ pub trait UnifiedLogWrite<S: SectionStorage>: Send + Sync {
         entry_type: UnifiedLogType,
         requested_section_size: usize,
     ) -> CuResult<SectionHandle<S>>;
+
+    #[cfg(feature = "std")]
+    #[doc(hidden)]
+    fn writeback_driver(&self) -> Option<memmap::WritebackDriver> {
+        None
+    }
+
+    #[doc(hidden)]
+    fn finish_section(&mut self, section: &mut SectionHandle<S>) -> CuResult<()> {
+        self.try_flush_section(section)
+    }
 
     /// Flush the given section to the underlying storage.
     fn flush_section(&mut self, section: &mut SectionHandle<S>);
@@ -447,7 +462,7 @@ impl<E: Encode, S: SectionStorage, L: UnifiedLogWrite<S>> WriteStream<E> for Log
                 self.last_log_bytes = nb_bytes;
                 // Lifecycle sections are promptly closed, so sparse events cannot pin the ring.
                 if self.entry_type == UnifiedLogType::RuntimeLifecycle {
-                    self.current_section.storage.flush()?;
+                    self.current_section.storage.finish_section()?;
                 }
                 Ok(())
             }
@@ -472,7 +487,7 @@ impl<E: Encode, S: SectionStorage, L: UnifiedLogWrite<S>> WriteStream<E> for Log
                     } // It will retry but at least not completely crash.
                 };
 
-                logger_guard.try_flush_section(&mut self.current_section)?;
+                logger_guard.finish_section(&mut self.current_section)?;
                 self.current_section = logger_guard.add_section_with_context(
                     self.entry_type,
                     self.minimum_allocation_amount,
@@ -492,7 +507,7 @@ impl<E: Encode, S: SectionStorage, L: UnifiedLogWrite<S>> WriteStream<E> for Log
                 record_bytes(&mut self.current_section.header, result)?;
                 self.last_log_bytes = result;
                 if self.entry_type == UnifiedLogType::RuntimeLifecycle {
-                    self.current_section.storage.flush()?;
+                    self.current_section.storage.finish_section()?;
                 }
                 Ok(())
             }

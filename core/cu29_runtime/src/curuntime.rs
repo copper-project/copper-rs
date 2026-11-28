@@ -182,6 +182,8 @@ pub struct CuRuntimeBuilder<
     copperlist_sink: CLS,
     keyframe_sink: KFS,
     output_requirements: OutputRequirements,
+    #[cfg(feature = "std")]
+    writeback: Option<cu29_unifiedlog::memmap::WritebackDriver>,
     #[cfg(feature = "async-cl-io")]
     structured_log: Option<BufferedStructuredLog>,
 }
@@ -211,6 +213,8 @@ impl<'cfg, CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, 
             copperlist_sink,
             keyframe_sink,
             output_requirements,
+            #[cfg(feature = "std")]
+            writeback: None,
             #[cfg(feature = "async-cl-io")]
             structured_log: None,
         }
@@ -219,6 +223,15 @@ impl<'cfg, CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, 
     #[cfg(feature = "async-cl-io")]
     pub fn with_structured_log(mut self, log: BufferedStructuredLog) -> Self {
         self.structured_log = Some(log);
+        self
+    }
+
+    #[cfg(feature = "std")]
+    pub fn with_writeback(
+        mut self,
+        driver: Option<cu29_unifiedlog::memmap::WritebackDriver>,
+    ) -> Self {
+        self.writeback = driver;
         self
     }
 
@@ -588,6 +601,8 @@ fn flush_completed_output<P: CopperListTuple>(
 /// Manages the lifecycle and completed-list sink on the synchronous path.
 #[doc(hidden)]
 pub struct SyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usize> {
+    #[cfg(feature = "std")]
+    writeback: Option<cu29_unifiedlog::memmap::WritebackDriver>,
     #[cfg(feature = "telemetry")]
     manual: Option<crate::manual_output::ManualOutput<P>>,
     inner: Option<CuListsManager<P, NBCL>>,
@@ -608,6 +623,15 @@ pub struct SyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usiz
 }
 
 impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, NBCL> {
+    #[cfg(feature = "std")]
+    #[doc(hidden)]
+    pub fn service_writeback(&self) -> CuResult<()> {
+        if let Some(driver) = &self.writeback {
+            driver.service()?;
+        }
+        Ok(())
+    }
+
     #[doc(hidden)]
     pub fn close_output(&mut self) -> CuResult<()> {
         let result = self.finish_pending();
@@ -637,6 +661,8 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         Ok(Self {
             #[cfg(feature = "telemetry")]
             manual: None,
+            #[cfg(feature = "std")]
+            writeback: None,
             inner: (!P::DISTRIBUTED).then(CuListsManager::new),
             #[cfg(feature = "std")]
             free_pool: if P::DISTRIBUTED {
@@ -1143,13 +1169,14 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
     where
         P: CuListZeroedInit + AsyncCopperListPayload + 'static,
     {
-        Self::with_outputs(sink, keyframe_sink, None)
+        Self::with_outputs(sink, keyframe_sink, None, None)
     }
 
     fn with_outputs(
         sink: Option<Box<CompletedCopperListSink<P>>>,
         keyframe_sink: Option<Box<CompletedKeyFrameSink>>,
         structured_log: Option<BufferedStructuredLog>,
+        writeback: Option<cu29_unifiedlog::memmap::WritebackDriver>,
     ) -> CuResult<Self>
     where
         P: CuListZeroedInit + AsyncCopperListPayload + 'static,
@@ -1162,6 +1189,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
             ));
         }
 
+        let send_lists = sink.is_some() || keyframe_sink.is_some();
         let (
             pending_producer,
             completion_consumer,
@@ -1169,7 +1197,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
             worker_thread,
             worker_shutdown,
             worker_running,
-        ) = if sink.is_some() || keyframe_sink.is_some() {
+        ) = if send_lists || structured_log.is_some() || writeback.is_some() {
             let mut sink = sink;
             let mut keyframe_sink = keyframe_sink;
             let handoff_capacity = NBCL.max(1);
@@ -1191,6 +1219,13 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
                         let drained_text = worker_log
                             .as_ref()
                             .is_some_and(BufferedStructuredLog::drain_pending);
+                        let timeout = writeback.as_ref().map(|driver| match driver.service() {
+                            Ok(delay) => delay,
+                            Err(error) => {
+                                output_error.get_or_insert(error);
+                                std::time::Duration::from_millis(100)
+                            }
+                        });
                         let mut item = match pending_consumer.pop() {
                             Ok(culist) => culist,
                             Err(PopError::Empty) => {
@@ -1200,7 +1235,11 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
                                 // Destination I/O may have consumed an unpark token.
                                 // Check for a second text batch before sleeping.
                                 if !drained_text {
-                                    std::thread::park();
+                                    if let Some(delay) = timeout {
+                                        std::thread::park_timeout(delay);
+                                    } else {
+                                        std::thread::park();
+                                    }
                                 }
                                 continue;
                             }
@@ -1266,7 +1305,10 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
                     .unwrap_or_else(|_| Err(CuError::from("Runtime output flush panicked")));
                     combine_output_results(
                         output_error.map_or(Ok(()), Err),
-                        combine_output_results(flushed, structured),
+                        combine_output_results(
+                            combine_output_results(flushed, structured),
+                            writeback.as_ref().map_or(Ok(()), |driver| driver.drain()),
+                        ),
                     )
                 })
                 .map_err(|e| {
@@ -1278,7 +1320,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
                 log.set_worker(Some(worker_thread.clone()));
             }
             (
-                Some(pending_producer),
+                send_lists.then_some(pending_producer),
                 Some(completion_consumer),
                 Some(worker_handle),
                 Some(worker_thread),
@@ -2270,6 +2312,7 @@ where
             copperlist_sink,
             keyframe_sink,
             output_requirements,
+            writeback,
             #[cfg(feature = "async-cl-io")]
             structured_log,
         } = self;
@@ -2334,11 +2377,19 @@ where
             KeyFramesManager::capture_only(keyframe_sink.is_some(), keyframe_interval)?
         };
         #[cfg(feature = "async-cl-io")]
-        let copperlists_manager =
-            CopperListsManager::with_outputs(copperlist_sink, keyframe_sink, structured_log)?;
+        let copperlists_manager = CopperListsManager::with_outputs(
+            copperlist_sink,
+            keyframe_sink,
+            structured_log,
+            writeback,
+        )?;
         #[cfg(not(feature = "async-cl-io"))]
-        let copperlists_manager =
-            CopperListsManager::new_with_keyframes(copperlist_sink, keyframe_sink)?;
+        let copperlists_manager = {
+            let mut manager =
+                CopperListsManager::new_with_keyframes(copperlist_sink, keyframe_sink)?;
+            manager.writeback = writeback;
+            manager
+        };
         #[cfg(target_os = "none")]
         {
             let cl_size = core::mem::size_of::<CopperList<P>>();
@@ -4504,12 +4555,9 @@ mod tests {
             ))
             .unwrap();
         });
-        let mut manager = AsyncCopperListsManager::<Msgs, 2>::with_outputs(
-            Some(Box::new(RecordingWriter::default())),
-            None,
-            Some(text.clone()),
-        )
-        .unwrap();
+        let mut manager =
+            AsyncCopperListsManager::<Msgs, 2>::with_outputs(None, None, Some(text.clone()), None)
+                .unwrap();
         let entry = CuLogEntry::new(77, CuLogLevel::Info);
         let expected = bincode::encode_to_vec(&entry, bincode::config::standard()).unwrap();
         for _ in 0..2 {

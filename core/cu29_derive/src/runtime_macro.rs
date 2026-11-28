@@ -3003,6 +3003,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         } else {
             quote! { <Self as #app_trait<S, L>>::run_one_iteration(self, #sim_callback_arg) }
         };
+        let inline_writeback = (std && !cfg!(feature = "async-cl-io")).then(|| quote! {
+            let result = cu29::curuntime::combine_output_results(result, self.copper_runtime.copperlists_manager.service_writeback());
+        });
         let service_between_iterations = manual.then(|| quote! {
             let result = result.and_then(|()| {
                 if let Some(sender) = &mut self.manual_telemetry {
@@ -3059,6 +3062,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         #[cfg(feature = "macro_debug")]
         eprintln!("[build the run methods]");
+        let service_lane_writeback = (!cfg!(feature = "async-cl-io")).then(|| quote! { cl_manager.service_writeback()?; });
         let lane_executor_tokens = if parallel_rt_run_supported {
             match build_lane_executor_tokens(
                 lane_plan.expect("distributed plan"),
@@ -3230,6 +3234,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 let index = culist.index();
                                 free_copperlists[index] = Some(culist);
                             }
+                            #service_lane_writeback
                             monitor_result?;
                             if outcome == cu29::curuntime::ProcessStepOutcome::Continue {
                                 let (keyframe_bytes, dropped_keyframes_total) = #parallel_keyframe_finish;
@@ -3752,6 +3757,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
             #run_one_iteration {
                 let result: CuResult<()> = (|| { #clock_maintain #iteration_body })();
+                #inline_writeback
                 #service_between_iterations
                 if let Err(error) = &result {
                     self.copper_runtime.copperlists_manager.discard_current();
@@ -4237,6 +4243,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             )?;
         };
         let buffered_structured = std && cfg!(feature = "async-cl-io");
+        let writeback_builder = std.then(|| quote! {
+            .with_writeback({ let logger = unified_logger.lock().map_err(|_| CuError::from("Logger mutex poisoned"))?; logger.writeback_driver() })
+        });
         let buffered_builder = buffered_structured.then(|| quote!(.with_structured_log(structured_worker)));
         let (early_structured_logger_init, late_structured_logger_init) = if buffered_structured {
             let observe_record = if logstream_enabled {
@@ -4261,8 +4270,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let structured_worker = ::cu29::curuntime::BufferedStructuredLog::new(
                     local_structured_log_sink, #observe_record,
                 );
-                let logger_runtime = ::cu29::prelude::LoggerRuntime::init(
-                    clock.clone(), structured_worker.clone(), None::<::cu29::prelude::NullLog>,
+                let logger_runtime = ::cu29::prelude::LoggerRuntime::init_buffered(
+                    clock.clone(), structured_worker.clone(),
                 );
             };
             if logstream_enabled { (quote! {}, init) } else { (init, quote! {}) }
@@ -4394,6 +4403,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     keyframe_sink,
                     output_requirements,
                 )
+                #writeback_builder
                 #buffered_builder
                 .with_subsystem(#application_name::subsystem())
                 .with_instance_id(instance_id)
@@ -4536,6 +4546,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     let logs_flush = self.logger_runtime.try_flush();
                     cu29::curuntime::combine_output_results(cl_close, cu29::curuntime::combine_output_results(kf_close, logs_flush))?;
                     self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::ShutdownCompleted)?;
+                    if let Some(sink) = &mut self.runtime_lifecycle_sink { sink.flush()?; }
                     self.shutdown_completed = true;
                     self.runtime_lifecycle_sink.take();
                     Ok(())

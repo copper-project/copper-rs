@@ -168,6 +168,22 @@ pub trait ByteRegion: Send + Sync {
     fn read(&self, offset: u64, bytes: &mut [u8]) -> CuResult<()>;
     fn write(&mut self, offset: u64, bytes: &[u8]) -> CuResult<()>;
     fn flush(&mut self) -> CuResult<()>;
+    #[doc(hidden)]
+    fn checkpoint(&mut self) -> CuResult<()> {
+        self.flush()
+    }
+    #[doc(hidden)]
+    fn finish_section(&mut self) -> CuResult<()> {
+        self.flush()
+    }
+    #[doc(hidden)]
+    fn drain_pending(&mut self) -> CuResult<()> {
+        Ok(())
+    }
+    #[doc(hidden)]
+    fn service_append(&mut self) -> CuResult<()> {
+        Ok(())
+    }
     fn commit(&mut self) -> CuResult<()> {
         self.flush()
     }
@@ -199,6 +215,11 @@ pub trait ByteStorage: Send + Sync {
     fn len(&self) -> u64;
     fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+    #[cfg(feature = "std")]
+    #[doc(hidden)]
+    fn writeback_driver(&self) -> Option<crate::memmap::WritebackDriver> {
+        None
     }
     /// Finish pending writeback before publishing clean close.
     #[doc(hidden)]
@@ -704,6 +725,10 @@ impl<R: ByteRegion> SectionStorage for ByteSection<R> {
                 .written(old_position, (end - old_position) as usize);
             section.header = committed;
             section.position = end;
+            if let Err(error) = section.region.service_append() {
+                section.leases.poisoned.store(true, Ordering::Release);
+                return Err(encode_error(error));
+            }
             Ok((end - old_position) as usize)
         })();
         match &result {
@@ -720,7 +745,14 @@ impl<R: ByteRegion> SectionStorage for ByteSection<R> {
         result.and_then(|count| release.map(|()| SectionAppendOutcome::Appended(count)))
     }
     fn flush(&mut self) -> CuResult<usize> {
-        self.seal(ByteRegion::flush)
+        self.seal(ByteRegion::finish_section)?;
+        self.region.drain_pending().inspect_err(|_| {
+            self.leases.poisoned.store(true, Ordering::Release);
+        })?;
+        Ok(self.position as usize)
+    }
+    fn finish_section(&mut self) -> CuResult<usize> {
+        self.seal(ByteRegion::finish_section)
     }
 }
 
@@ -991,7 +1023,11 @@ impl<B: ByteStorage> ByteLogger<B> {
         let result = (|| {
             let mut region = self.storage.region(0, BLOCK)?;
             write_header(&mut region, &self.header)?;
-            region.flush()
+            if self.header.clean_close || self.append_pending {
+                region.flush()
+            } else {
+                region.checkpoint()
+            }
         })();
         if result.is_err() {
             self.faulted = true;
@@ -1532,6 +1568,7 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
                 cursor = next;
             }
             self.publish()?;
+            self.storage.drain()?;
         }
         let slot = self
             .leases
@@ -1607,6 +1644,21 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
         let handle = SectionHandle::create(header, storage)?;
         self.faulted = false;
         Ok(handle)
+    }
+    #[cfg(feature = "std")]
+    fn writeback_driver(&self) -> Option<crate::memmap::WritebackDriver> {
+        self.storage.writeback_driver()
+    }
+    fn finish_section(
+        &mut self,
+        section: &mut SectionHandle<ByteSection<B::Region>>,
+    ) -> CuResult<()> {
+        if self.faulted || self.leases.poisoned.load(Ordering::Acquire) {
+            return Err(CuError::from("Logger faulted after a storage failure"));
+        }
+        section.storage.finish_section()?;
+        section.mark_closed();
+        Ok(())
     }
     fn flush_section(&mut self, section: &mut SectionHandle<ByteSection<B::Region>>) {
         let _ = self.try_flush_section(section);
