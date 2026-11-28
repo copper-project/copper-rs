@@ -50,10 +50,14 @@ impl Display for CopperListState {
 }
 
 /// A cycle's messages and identifier. Lifecycle state exists only in memory;
-/// every serialization contains `id` followed by `msgs`.
+/// clock-enabled builds encode an optional clock correction between the ID and messages.
 #[derive(Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct CopperList<P: CopperListTuple> {
     pub id: u64,
+    /// Clock curve first effective for this recorded list.
+    #[cfg(feature = "clock-sync")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clock_snapshot: Option<cu29_clock::sync::ClockSnapshot>,
     // Runtime bookkeeping only; recorded lists reconstruct the serialization state.
     #[bincode(skip, default = "deserialized_state")]
     #[serde(skip, default = "deserialized_state")]
@@ -69,6 +73,8 @@ impl<P: CopperListTuple> Default for CopperList<P> {
     fn default() -> Self {
         CopperList {
             id: 0,
+            #[cfg(feature = "clock-sync")]
+            clock_snapshot: None,
             state: CopperListState::Free,
             msgs: P::default(),
         }
@@ -80,8 +86,36 @@ impl<P: CopperListTuple> CopperList<P> {
     pub fn new(id: u64, msgs: P) -> Self {
         CopperList {
             id,
+            #[cfg(feature = "clock-sync")]
+            clock_snapshot: None,
             state: CopperListState::Initialized,
             msgs,
+        }
+    }
+
+    /// Native record prefix shared with selective telemetry encoding.
+    #[doc(hidden)]
+    pub fn record_header(&self) -> impl Encode + '_ {
+        (
+            self.id,
+            #[cfg(feature = "clock-sync")]
+            &self.clock_snapshot,
+        )
+    }
+
+    #[doc(hidden)]
+    pub fn clock_correction(&self) -> Option<crate::clock_sync::ClockSyncRecord> {
+        #[cfg(feature = "clock-sync")]
+        {
+            self.clock_snapshot
+                .map(|snapshot| crate::clock_sync::ClockSyncRecord {
+                    culistid: self.id,
+                    snapshot,
+                })
+        }
+        #[cfg(not(feature = "clock-sync"))]
+        {
+            None
         }
     }
 
@@ -101,6 +135,10 @@ impl<P: CopperListTuple> CopperList<P> {
         P: CuListZeroedInit,
     {
         self.id = id;
+        #[cfg(feature = "clock-sync")]
+        {
+            self.clock_snapshot = None;
+        }
         self.state = CopperListState::Initialized;
         self.msgs.init_zeroed();
     }
@@ -118,6 +156,8 @@ impl<P: CopperListTuple> CopperList<P> {
         // the CopperList is formed before its message dataset is initialized.
         unsafe {
             core::ptr::addr_of_mut!((*dst).id).write(0);
+            #[cfg(feature = "clock-sync")]
+            core::ptr::addr_of_mut!((*dst).clock_snapshot).write(None);
             core::ptr::addr_of_mut!((*dst).state).write(CopperListState::Free);
             let msgs = core::ptr::addr_of_mut!((*dst).msgs);
             let initialized = P::init_in_place(&mut *msgs.cast::<core::mem::MaybeUninit<P>>());
@@ -513,9 +553,14 @@ mod tests {
 
     #[test]
     fn serialization_omits_runtime_state() {
-        let expected =
-            bincode::encode_to_vec((42u64, CuStampedDataSet(123)), bincode::config::standard())
-                .unwrap();
+        let expected = bincode::encode_to_vec(
+            (
+                CopperList::new(42, CuStampedDataSet(123)).record_header(),
+                CuStampedDataSet(123),
+            ),
+            bincode::config::standard(),
+        )
+        .unwrap();
         for state in [
             CopperListState::Free,
             CopperListState::Initialized,
@@ -528,9 +573,11 @@ mod tests {
             list.change_state(state);
             let bytes = bincode::encode_to_vec(&list, bincode::config::standard()).unwrap();
             assert_eq!(bytes, expected);
-            let old_bytes =
-                bincode::encode_to_vec((list.id, state, &list.msgs), bincode::config::standard())
-                    .unwrap();
+            let old_bytes = bincode::encode_to_vec(
+                (list.record_header(), state, &list.msgs),
+                bincode::config::standard(),
+            )
+            .unwrap();
             assert_eq!(old_bytes.len(), bytes.len() + 1);
             let (decoded, used): (CopperList<CuStampedDataSet>, usize) =
                 bincode::decode_from_slice(&bytes, bincode::config::standard()).unwrap();

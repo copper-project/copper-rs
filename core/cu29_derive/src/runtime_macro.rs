@@ -527,7 +527,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             if let Some(maintenance) = &mut self.clock_maintenance { maintenance.start()?; }
             let next_id = self.copper_runtime.copperlists_manager.next_cl_id();
             let record = self.clock_maintenance.as_mut().and_then(|maintenance| maintenance.take_record(next_id));
-            if let Some(record) = record { self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::ClockSync(record))?; }
+            if let Some(record) = record { self.copper_runtime.copperlists_manager.record_clock(record.snapshot); }
         });
         let clock_stop = (clock_sync_enabled && !sim_mode).then(|| quote! {
             if let Some(maintenance) = &mut self.clock_maintenance { maintenance.stop()?; }
@@ -536,7 +536,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             let clock_result = self.clock_maintenance.as_mut().map(|maintenance| maintenance.maintain()).transpose();
             let next_id = self.copper_runtime.copperlists_manager.next_cl_id();
             let record = self.clock_maintenance.as_mut().and_then(|maintenance| maintenance.take_record(next_id));
-            if let Some(record) = record { self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::ClockSync(record))?; }
+            if let Some(record) = record { self.copper_runtime.copperlists_manager.record_clock(record.snapshot); }
             clock_result?;
         });
 
@@ -4432,7 +4432,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         } else { quote! { let mut logger = logger.lock(); } };
         let seal_metadata = if cfg!(feature = "self-describing-logs") {
             let modules = mission_names.iter().map(|name| parse_str::<Ident>(name).unwrap()).collect::<Vec<_>>();
-            let layout = if cfg!(feature = "flat-copperlist-encoding") { quote! { Flat } } else { quote! { Compact } };
+            let layout = match (cfg!(feature = "flat-copperlist-encoding"), clock_sync_enabled) {
+                (true, true) => quote!(FlatClockSync),
+                (false, true) => quote!(CompactClockSync),
+                (true, false) => quote!(Flat),
+                (false, false) => quote!(Compact),
+            };
             quote! {
                 if let Some(error) = [#(super::#modules::VALUE_DECODE_CATALOG_ERROR),*].into_iter().flatten().next() {
                     return Err(CuError::from(error));
@@ -4678,6 +4683,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         } else { quote! { clock_mock.set_value(timestamp.as_nanos()); } };
 
+        let restore_embedded_clock = clock_sync_enabled.then(|| quote! {
+            if let Some(record) = copperlist.clock_correction() {
+                self.copper_runtime.copperlists_manager.record_clock(record.snapshot);
+                <Self as CuRecordedReplayApplication<S, L>>::restore_clock_sync(self, record)?;
+            }
+        });
         let recorded_replay_app_impl = if sim_mode {
             Some(quote! {
                 impl<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static>
@@ -4698,6 +4709,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             copperlist.id,
                             keyframe.map(|frame| frame.culistid),
                         )?;
+                        #restore_embedded_clock
                         let timestamp = if let Some(keyframe) = keyframe {
                             if !self.copper_runtime_mut().captures_keyframe(copperlist.id) {
                                 return Err(CuError::from(format!(

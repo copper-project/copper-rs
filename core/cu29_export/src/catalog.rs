@@ -39,6 +39,7 @@ pub struct CuDecodedLogSlot {
 /// A CopperList decoded to offline values. Experimental API.
 #[derive(Debug, serde::Serialize)]
 pub struct CuDecodedCopperList {
+    pub clock_snapshot: Option<cu29_clock::sync::ClockSnapshot>,
     /// Recorded cycle identifier.
     pub id: u64,
     /// Slots in native encoding order, including absent and uncaptured positions.
@@ -348,6 +349,18 @@ pub(crate) fn decode_copperlist_with_payload_sizes(
         offset: 0,
     };
     let id = cursor.read::<u64>()?;
+    let flat = matches!(
+        catalog.layout,
+        ValueDecodeCatalogLayout::Flat | ValueDecodeCatalogLayout::FlatClockSync
+    );
+    let clock_snapshot = if matches!(
+        catalog.layout,
+        ValueDecodeCatalogLayout::FlatClockSync | ValueDecodeCatalogLayout::CompactClockSync
+    ) {
+        cursor.read::<Option<cu29_clock::sync::ClockSnapshot>>()?
+    } else {
+        None
+    };
     let mut budget = ValueDecodeBudget::new(ValueDecodeLimits::default());
     let mut msgs = catalog
         .slots
@@ -361,7 +374,7 @@ pub(crate) fn decode_copperlist_with_payload_sizes(
             metadata: CuMsgMetadata::default(),
         })
         .collect::<Vec<_>>();
-    if catalog.layout == ValueDecodeCatalogLayout::Compact {
+    if !flat {
         compact_metadata(&mut cursor, &mut msgs).map_err(|error| {
             CuError::from(format!(
                 "CopperList #{id} metadata byte {}: {error}",
@@ -371,7 +384,7 @@ pub(crate) fn decode_copperlist_with_payload_sizes(
     }
     for (index, (slot, msg)) in catalog.slots.iter().zip(&mut msgs).enumerate() {
         let result = (|| {
-            if catalog.layout == ValueDecodeCatalogLayout::Flat {
+            if flat {
                 msg.captured_payload_present = match cursor.read::<u8>()? {
                     0 => false,
                     1 => true,
@@ -397,7 +410,7 @@ pub(crate) fn decode_copperlist_with_payload_sizes(
                 msg.payload = Some(value);
                 payload_size(index, used);
             }
-            if catalog.layout == ValueDecodeCatalogLayout::Flat {
+            if flat {
                 msg.tov = match cursor.read::<u32>()? {
                     0 => Tov::None,
                     1 => Tov::Time(cursor.time()?),
@@ -427,7 +440,14 @@ pub(crate) fn decode_copperlist_with_payload_sizes(
             ))
         })?;
     }
-    Ok((CuDecodedCopperList { id, msgs }, cursor.offset))
+    Ok((
+        CuDecodedCopperList {
+            id,
+            msgs,
+            clock_snapshot,
+        },
+        cursor.offset,
+    ))
 }
 
 fn compact_metadata(cursor: &mut Cursor<'_>, msgs: &mut [CuDecodedLogSlot]) -> CuResult<()> {

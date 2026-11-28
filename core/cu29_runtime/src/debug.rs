@@ -58,6 +58,8 @@ pub(crate) enum IndexedResolveMode {
 /// Metadata for one copperlist section (no payload kept).
 #[derive(Debug, Clone)]
 pub(crate) struct SectionIndexEntry {
+    #[cfg(feature = "clock-sync")]
+    pub(crate) corrections: Vec<crate::clock_sync::ClockSyncRecord>,
     pub(crate) pos: LogPosition,
     pub(crate) start_idx: usize,
     pub(crate) len: usize,
@@ -219,8 +221,7 @@ where
             &mut progress,
         )?;
         let log_reader = build_read_logger(log_base)?;
-        #[allow(unused_mut)]
-        let mut session = Self::new(
+        Ok(Self::new(
             log_reader,
             app,
             robot_clock,
@@ -230,14 +231,7 @@ where
             keyframes,
             build_callback,
             time_of,
-        );
-        #[cfg(feature = "clock-sync")]
-        {
-            session.clock_replay = crate::clock_sync::ClockReplay::new(
-                crate::clock_sync::load_clock_sync_records(log_base)?,
-            );
-        }
-        Ok(session)
+        ))
     }
 
     /// Build a session directly from a log, with an explicit cache size.
@@ -281,8 +275,7 @@ where
             &mut progress,
         )?;
         let log_reader = build_read_logger(log_base)?;
-        #[allow(unused_mut)]
-        let mut session = Self::new_with_cache_cap(
+        Ok(Self::new_with_cache_cap(
             log_reader,
             app,
             robot_clock,
@@ -293,14 +286,7 @@ where
             build_callback,
             time_of,
             cache_cap,
-        );
-        #[cfg(feature = "clock-sync")]
-        {
-            session.clock_replay = crate::clock_sync::ClockReplay::new(
-                crate::clock_sync::load_clock_sync_records(log_base)?,
-            );
-        }
-        Ok(session)
+        ))
     }
 
     /// Create a new session from prebuilt indices.
@@ -343,6 +329,15 @@ where
         time_of: TF,
         cache_cap: usize,
     ) -> Self {
+        #[cfg(feature = "clock-sync")]
+        let (sections, clock_replay) = {
+            let mut sections = sections;
+            let records = sections
+                .iter_mut()
+                .flat_map(|s| s.corrections.drain(..))
+                .collect();
+            (sections, crate::clock_sync::ClockReplay::new(records))
+        };
         Self {
             app,
             robot_clock,
@@ -352,7 +347,7 @@ where
             total_entries,
             keyframes,
             #[cfg(feature = "clock-sync")]
-            clock_replay: crate::clock_sync::ClockReplay::new(Vec::new()),
+            clock_replay,
             started: false,
             current_idx: None,
             last_keyframe: None,
@@ -1040,6 +1035,7 @@ fn scan_copperlist_section<
 >(
     section: &[u8],
     time_of: &TF,
+    #[cfg(feature = "clock-sync")] corrections: &mut Vec<crate::clock_sync::ClockSyncRecord>,
 ) -> CuResult<(usize, u64, u64, Option<CuTime>, Option<CuTime>)> {
     let mut cursor = std::io::Cursor::new(section);
     let mut count = 0usize;
@@ -1053,6 +1049,10 @@ fn scan_copperlist_section<
             standard(),
         ) {
             Ok(cl) => {
+                #[cfg(feature = "clock-sync")]
+                if let Some(record) = cl.clock_correction() {
+                    corrections.push(record);
+                }
                 let ts = time_of(&cl);
                 if ts.is_none() {
                     #[cfg(feature = "std")]
@@ -1223,10 +1223,18 @@ where
         let in_selected_run = run_id.is_none_or(|id| header.context.run_id == id);
         match header.entry_type {
             UnifiedLogType::CopperList if in_selected_run => {
-                let (len, first_id, last_id, first_ts, last_ts) =
-                    scan_copperlist_section::<P, _>(&data, time_of)?;
+                #[cfg(feature = "clock-sync")]
+                let mut corrections = Vec::new();
+                let (len, first_id, last_id, first_ts, last_ts) = scan_copperlist_section::<P, _>(
+                    &data,
+                    time_of,
+                    #[cfg(feature = "clock-sync")]
+                    &mut corrections,
+                )?;
                 if len > 0 {
                     sections.push(SectionIndexEntry {
+                        #[cfg(feature = "clock-sync")]
+                        corrections,
                         pos,
                         start_idx: total_entries,
                         len,

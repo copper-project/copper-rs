@@ -151,13 +151,11 @@ fn runtime_acquires_before_consumers_and_stops_reference() {
         UnifiedLogger::Read(reader) => reader,
         _ => panic!("Expected read logger"),
     };
-    let records = cu29::clock_sync::read_clock_sync_records(UnifiedLoggerIOReader::new(
-        read(),
-        UnifiedLogType::RuntimeLifecycle,
-    ))
+    let lifecycle_corrections = cu29::clock_sync::read_clock_sync_records(
+        UnifiedLoggerIOReader::new(read(), UnifiedLogType::RuntimeLifecycle),
+    )
     .unwrap();
-    assert!(!records.is_empty());
-    assert_eq!(records[0].culistid, 0);
+    assert!(lifecycle_corrections.is_empty());
     let mut stream = UnifiedLoggerIOReader::new(read(), UnifiedLogType::CopperList);
     let mut recorded = Vec::new();
     while let Ok(cl) = bincode::decode_from_std_read::<
@@ -174,6 +172,11 @@ fn runtime_acquires_before_consumers_and_stops_reference() {
         recorded.push(cl);
     }
     assert_eq!(recorded.len(), 5);
+    let records: Vec<_> = recorded
+        .iter()
+        .filter_map(CopperList::clock_correction)
+        .collect();
+    assert_eq!(records[0].culistid, 0);
     let (replay_clock, mock) = RobotClock::mock();
     let mut callback = |_: offline::ReplayStep<'_>| SimOverride::ExecuteByRuntime;
     let mut replay = offline::ReplayApp::builder()
@@ -224,6 +227,7 @@ fn runtime_acquires_before_consumers_and_stops_reference() {
     let mut replay_stream = UnifiedLoggerIOReader::new(reader, UnifiedLogType::CopperList);
     for expected in &recorded {
         let actual: CopperList<<Replay as CuRecordedReplayApplication<MmapSectionStorage, UnifiedLoggerWrite>>::RecordedDataSet> = bincode::decode_from_std_read(&mut replay_stream, bincode::config::standard()).unwrap();
+        assert_eq!(actual.clock_snapshot, expected.clock_snapshot);
         assert_eq!(
             bincode::encode_to_vec(&actual.msgs, bincode::config::standard()).unwrap(),
             bincode::encode_to_vec(&expected.msgs, bincode::config::standard()).unwrap()
