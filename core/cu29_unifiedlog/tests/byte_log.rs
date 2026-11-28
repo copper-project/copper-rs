@@ -684,3 +684,48 @@ fn reads_v2_catalog_by_section_link_with_stale_embedded_offset() {
         b"cat"
     );
 }
+
+#[test]
+fn append_uses_configured_stride_and_defers_tail_extension() {
+    let dir = test_dir();
+    let path = dir.path().join("short.copper");
+    let slab = dir.path().join("short_0.copper");
+    drop(writer(
+        &path,
+        8192,
+        2048,
+        false,
+        CapacityPolicy::StopWhenFull,
+    ));
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open(&slab)
+        .unwrap()
+        .set_len(2048)
+        .unwrap();
+    UnifiedLoggerRead::new(&path).unwrap().end_of_log().unwrap();
+    let build = || {
+        UnifiedLoggerBuilder::new()
+            .file_base_name(&path)
+            .preallocated_size(8192)
+            .write(true)
+            .create(true)
+            .append(true)
+            .build()
+            .unwrap()
+    };
+    drop(build());
+    assert_eq!(std::fs::metadata(&slab).unwrap().len(), 2048);
+    let UnifiedLogger::Write(mut logger) = build() else {
+        unreachable!()
+    };
+    let mut section = logger
+        .add_section(UnifiedLogType::CopperList, 8192)
+        .unwrap();
+    section.append(17u32).unwrap();
+    logger.try_flush_section(&mut section).unwrap();
+    assert_eq!(std::fs::metadata(&slab).unwrap().len(), 8192);
+    drop(section);
+    drop(logger);
+    assert_eq!(values(&path)[0].1, 17);
+}

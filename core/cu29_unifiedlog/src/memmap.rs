@@ -165,6 +165,8 @@ pub struct MmapStorage {
     slab_size: usize,
     maps: Vec<Arc<MappedFile>>,
     writable: bool,
+    // An unmapped append tail must be reopened without truncation, including on retry.
+    restore_tail: bool,
 }
 fn slab_path(path: &Path, index: usize) -> io::Result<PathBuf> {
     let stem = path
@@ -178,13 +180,10 @@ fn slab_path(path: &Path, index: usize) -> io::Result<PathBuf> {
     Ok(path.with_file_name(format!("{stem}_{index}.{extension}")))
 }
 impl MmapStorage {
-    fn open(path: &Path, writable: bool) -> io::Result<Self> {
-        let first = File::open(slab_path(path, 0)?)?;
-        let slab_size = first.metadata()?.len() as usize;
-        if slab_size < 512 || !slab_size.is_multiple_of(512) {
-            return Err(io::Error::other("Invalid backing slab size"));
-        }
-        let mut maps = Vec::new();
+    fn open(path: &Path, append_slab_size: Option<usize>) -> io::Result<Self> {
+        let writable = append_slab_size.is_some();
+        let mut stride = append_slab_size;
+        let mut maps: Vec<Arc<MappedFile>> = Vec::new();
         for index in 0.. {
             let file = match OpenOptions::new()
                 .read(true)
@@ -192,19 +191,29 @@ impl MmapStorage {
                 .open(slab_path(path, index)?)
             {
                 Ok(file) => file,
-                Err(e) if e.kind() == io::ErrorKind::NotFound => break,
+                Err(e) if index > 0 && e.kind() == io::ErrorKind::NotFound => break,
                 Err(e) => return Err(e),
             };
-            if file.metadata()?.len() != slab_size as u64 {
+            let length = usize::try_from(file.metadata()?.len())
+                .map_err(|_| io::Error::other("Slab exceeds address space"))?;
+            let slab_size = *stride.get_or_insert(length);
+            if length == 0
+                || !length.is_multiple_of(512)
+                || length > slab_size
+                || maps
+                    .last()
+                    .is_some_and(|previous| previous.length != slab_size)
+            {
                 return Err(io::Error::other("Inconsistent backing slab sizes"));
             }
             maps.push(Arc::new(MappedFile::new(file, writable)?));
         }
         Ok(Self {
             path: path.to_path_buf(),
-            slab_size,
+            slab_size: stride.expect("slab zero was opened"),
             maps,
             writable,
+            restore_tail: false,
         })
     }
     fn create(path: &Path, slab_size: usize) -> io::Result<Self> {
@@ -218,6 +227,7 @@ impl MmapStorage {
             slab_size,
             maps: Vec::new(),
             writable: true,
+            restore_tail: false,
         };
         storage.grow(slab_size as u64).map_err(io::Error::other)?;
         // Remove old suffixes only for this explicitly replaced log.
@@ -244,7 +254,9 @@ impl MmapStorage {
 impl ByteStorage for MmapStorage {
     type Region = MmapRegion;
     fn len(&self) -> u64 {
-        self.maps.len() as u64 * self.slab_size as u64
+        self.maps.last().map_or(0, |last| {
+            (self.maps.len() - 1) as u64 * self.slab_size as u64 + last.length as u64
+        })
     }
     fn grow(&mut self, end: u64) -> CuResult<()> {
         if end <= self.len() {
@@ -253,6 +265,15 @@ impl ByteStorage for MmapStorage {
         if !self.writable {
             return Err(CuError::from("Read-only storage cannot grow"));
         }
+        if self
+            .maps
+            .last()
+            .is_some_and(|map| map.length < self.slab_size)
+        {
+            // Windows requires the short view to be unmapped before extending the file.
+            self.maps.pop();
+            self.restore_tail = true;
+        }
         let count = end.div_ceil(self.slab_size as u64);
         while (self.maps.len() as u64) < count {
             let path = slab_path(&self.path, self.maps.len())
@@ -260,8 +281,8 @@ impl ByteStorage for MmapStorage {
             let file = OpenOptions::new()
                 .read(true)
                 .write(true)
-                .create(true)
-                .truncate(true)
+                .create(!self.restore_tail)
+                .truncate(!self.restore_tail)
                 .open(path)
                 .map_err(|e| CuError::new_with_cause("Cannot create backing slab", e))?;
             file.set_len(self.slab_size as u64)
@@ -270,6 +291,7 @@ impl ByteStorage for MmapStorage {
                 .push(Arc::new(MappedFile::new(file, true).map_err(|e| {
                     CuError::new_with_cause("Cannot map backing slab", e)
                 })?));
+            self.restore_tail = false;
         }
         Ok(())
     }
@@ -368,11 +390,10 @@ impl MmapUnifiedLoggerBuilder {
             * 512;
         let slab_size = slab_size.max(1024);
         let logger = if self.append {
-            let storage = MmapStorage::open(&path, true)?;
-            if storage.slab_size != slab_size {
-                return Err(io::Error::other("Append slab allocation size mismatch"));
-            }
-            let capacity = self.capacity.unwrap_or(storage.len());
+            let storage = MmapStorage::open(&path, Some(slab_size))?;
+            let capacity = self
+                .capacity
+                .unwrap_or(storage.maps.len() as u64 * slab_size as u64);
             ByteLogger::append(storage, self.policy, capacity)
         } else {
             ByteLogger::new(
@@ -398,7 +419,7 @@ pub struct MmapUnifiedLoggerRead {
 }
 impl MmapUnifiedLoggerRead {
     pub fn new(path: &Path) -> io::Result<Self> {
-        let storage = MmapStorage::open(path, false)?;
+        let storage = MmapStorage::open(path, None)?;
         let main_header = read_main(&storage).map_err(io::Error::other)?;
         let cursor = if main_header.metadata_offset != 0 {
             main_header.metadata_offset
