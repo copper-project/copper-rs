@@ -14,6 +14,8 @@ use std::path::{Path, PathBuf};
 #[path = "memmap_writeback.rs"]
 mod writeback;
 use writeback::Writeback;
+#[doc(hidden)]
+pub use writeback::WritebackDriver;
 
 const MAX_SPANS: usize = 64;
 enum Mapping {
@@ -145,7 +147,7 @@ impl ByteRegion for MmapRegion {
     }
     fn write(&mut self, offset: u64, bytes: &[u8]) -> CuResult<()> {
         self.write_fragment(offset, bytes)?;
-        self.written(offset, bytes.len());
+        self.mark(offset, bytes.len(), false);
         Ok(())
     }
     fn write_fragment(&mut self, offset: u64, bytes: &[u8]) -> CuResult<()> {
@@ -173,14 +175,32 @@ impl ByteRegion for MmapRegion {
         self.writeback.drain()
     }
 
+    fn checkpoint(&mut self) -> CuResult<()> {
+        self.writeback.inline()
+    }
+    fn finish_section(&mut self) -> CuResult<()> {
+        self.writeback.finish_section();
+        self.writeback.inline()
+    }
+    fn drain_pending(&mut self) -> CuResult<()> {
+        self.writeback.drain()
+    }
+    fn service_append(&mut self) -> CuResult<()> {
+        self.writeback.inline()
+    }
     fn written(&self, offset: u64, length: usize) {
+        self.mark(offset, length, true)
+    }
+}
+impl MmapRegion {
+    fn mark(&self, offset: u64, length: usize, payload: bool) {
         let mut position = self.first + offset as usize;
         let mut remaining = length;
         while remaining != 0 {
             let index = self.first_slab + position / self.slab_size;
             let local = position % self.slab_size;
             let count = remaining.min(self.slab_size - local);
-            self.writeback.mark(index, local, count);
+            self.writeback.mark(index, local, count, payload);
             remaining -= count;
             position += count;
         }
@@ -282,6 +302,9 @@ impl ByteStorage for MmapStorage {
     type Region = MmapRegion;
     fn len(&self) -> u64 {
         self.maps.len() as u64 * self.slab_size as u64
+    }
+    fn writeback_driver(&self) -> Option<WritebackDriver> {
+        Some(self.writeback.driver())
     }
     fn drain(&self) -> CuResult<()> {
         self.writeback.drain()
