@@ -1,6 +1,6 @@
 //! Mapped-file adapter for the byte-addressed section chain.
 use crate::byte_log::{
-    ByteLogger, ByteRegion, ByteSection, ByteStorage, read_main, read_section_header,
+    ByteLogger, ByteRegion, ByteSection, ByteStorage, publish_main, read_main, read_section_header,
 };
 use crate::{ApplicationMetadata, CapacityPolicy, MainHeader, SectionHeader, UnifiedLogRead};
 use alloc::sync::Arc;
@@ -167,6 +167,8 @@ pub struct MmapStorage {
     writable: bool,
     // An unmapped append tail must be reopened without truncation, including on retry.
     restore_tail: bool,
+    // Keep slab zero shared-locked while a reader can still use the old bounds.
+    _reader_guard: Option<File>,
 }
 fn slab_path(path: &Path, index: usize) -> io::Result<PathBuf> {
     let stem = path
@@ -182,6 +184,13 @@ fn slab_path(path: &Path, index: usize) -> io::Result<PathBuf> {
 impl MmapStorage {
     fn open(path: &Path, append_slab_size: Option<usize>) -> io::Result<Self> {
         let writable = append_slab_size.is_some();
+        let reader_guard = if writable {
+            None
+        } else {
+            let first = File::open(slab_path(path, 0)?)?;
+            first.lock_shared()?;
+            Some(first)
+        };
         let mut stride = append_slab_size;
         let mut maps: Vec<Arc<MappedFile>> = Vec::new();
         for index in 0.. {
@@ -214,6 +223,7 @@ impl MmapStorage {
             maps,
             writable,
             restore_tail: false,
+            _reader_guard: reader_guard,
         })
     }
     fn create(path: &Path, slab_size: usize) -> io::Result<Self> {
@@ -228,6 +238,7 @@ impl MmapStorage {
             maps: Vec::new(),
             writable: true,
             restore_tail: false,
+            _reader_guard: None,
         };
         storage.grow(slab_size as u64).map_err(io::Error::other)?;
         // Remove old suffixes only for this explicitly replaced log.
@@ -292,6 +303,57 @@ impl ByteStorage for MmapStorage {
                     CuError::new_with_cause("Cannot map backing slab", e)
                 })?));
             self.restore_tail = false;
+        }
+        Ok(())
+    }
+    fn finish_growing(&mut self, header: &MainHeader, end: u64) -> CuResult<()> {
+        if end >= self.len() {
+            return publish_main(self, header);
+        }
+        let guard = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(
+                slab_path(&self.path, 0)
+                    .map_err(|e| CuError::new_with_cause("Invalid slab path", e))?,
+            )
+            .map_err(|e| CuError::new_with_cause("Cannot open backing slab", e))?;
+        // Readers that opened before close can seek anywhere inside their mapped bounds.
+        // Keep those views valid, including on Unix where truncation would succeed.
+        if guard.try_lock().is_err() {
+            return publish_main(self, header);
+        }
+        // Publish the compact bounds first. An interruption at any later step
+        // leaves a readable log with some spare space still on disk.
+        let mut header = header.clone();
+        header.sections_end = end;
+        publish_main(self, &header)?;
+
+        let stride = self.slab_size as u64;
+        let retained = end.div_ceil(stride) as usize;
+        let last_len = (end - 1) % stride + 1;
+        let last_index = retained - 1;
+        let last_needs_trim = last_len != self.maps[last_index].length as u64;
+        let count = self.maps.len();
+        // Release our views before resizing on Windows. Delete suffixes from
+        // the end so even a partial cleanup leaves a contiguous slab family.
+        self.maps.truncate(last_index);
+        let trim = || -> io::Result<()> {
+            for index in (retained..count).rev() {
+                std::fs::remove_file(slab_path(&self.path, index)?)?;
+            }
+            if last_needs_trim && last_index == 0 {
+                guard.set_len(last_len)?;
+            } else if last_needs_trim {
+                OpenOptions::new()
+                    .write(true)
+                    .open(slab_path(&self.path, last_index)?)?
+                    .set_len(last_len)?;
+            }
+            Ok(())
+        };
+        if let Err(error) = trim() {
+            eprintln!("Failed to trim closed log: {error}");
         }
         Ok(())
     }
