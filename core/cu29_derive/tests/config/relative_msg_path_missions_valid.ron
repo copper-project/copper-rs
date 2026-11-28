@@ -1,0 +1,5 @@
+(
+    missions: [(id: "A"), (id: "B")],
+    tasks: [(id: "src", type: "tasks::Source")],
+    cnx: [(src: "src", dst: "__nc__", msg: "super::payloads::Count")],
+)

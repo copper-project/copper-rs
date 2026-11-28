@@ -419,6 +419,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             CuListSupportOptions {
                 cuconfig: &copper_config,
                 distributed: distributed_selected,
+                output_packs: extract_output_packs(&culist_plan),
             },
             Some(mission.as_str()),
             &culist_plan,

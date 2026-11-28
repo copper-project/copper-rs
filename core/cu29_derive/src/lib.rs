@@ -277,12 +277,14 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
         #extra_imports
     };
 
+    let mut payload_aliases = Vec::new();
     let with_uses = match &cuconfig.graphs {
         ConfigGraphs::Simple(graph) => {
-            let support = match build_gen_cumsgs_support(&cuconfig, graph, None) {
-                Ok(support) => support,
-                Err(e) => return return_error(e.to_string()),
-            };
+            let support =
+                match build_gen_cumsgs_support(&cuconfig, graph, None, &mut payload_aliases) {
+                    Ok(support) => support,
+                    Err(e) => return return_error(e.to_string()),
+                };
 
             quote! {
                 mod cumsgs {
@@ -308,7 +310,12 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
                     }
                 };
 
-                let support = match build_gen_cumsgs_support(&cuconfig, graph, Some(mission)) {
+                let support = match build_gen_cumsgs_support(
+                    &cuconfig,
+                    graph,
+                    Some(mission),
+                    &mut payload_aliases,
+                ) {
                     Ok(support) => support,
                     Err(e) => return return_error(e.to_string()),
                 };
@@ -338,13 +345,14 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
             }
         }
     };
-    with_uses.into()
+    quote! { #(#payload_aliases)* #with_uses }.into()
 }
 
 fn build_gen_cumsgs_support(
     cuconfig: &CuConfig,
     graph: &CuGraph,
     mission_label: Option<&str>,
+    payload_aliases: &mut Vec<proc_macro2::TokenStream>,
 ) -> CuResult<proc_macro2::TokenStream> {
     let channel_usage = collect_bridge_channel_usage(graph);
     let mut bridge_specs = build_bridge_specs(cuconfig, graph, &channel_usage);
@@ -384,10 +392,24 @@ fn build_gen_cumsgs_support(
         );
     }
 
+    // Resolve the configured types at the invocation site, including self and super paths.
+    let caller = if mission_label.is_some() {
+        quote!(super::super)
+    } else {
+        quote!(super)
+    };
+    let mut output_packs = extract_output_packs(&culist_plan);
+    for payload in output_packs.iter_mut().flat_map(|pack| &mut pack.msg_types) {
+        let alias = format_ident!("__CuPayload{}", payload_aliases.len());
+        payload_aliases.push(quote!(type #alias = #payload;));
+        *payload = parse_quote!(#caller::#alias);
+    }
+
     Ok(gen_culist_support(
         CuListSupportOptions {
             cuconfig,
             distributed: false,
+            output_packs,
         },
         mission_label,
         &culist_plan,
@@ -400,6 +422,7 @@ fn build_gen_cumsgs_support(
 
 /// Build the inner support of the copper list.
 struct CuListSupportOptions<'a> {
+    output_packs: Vec<OutputPack>,
     cuconfig: &'a CuConfig,
     distributed: bool,
 }
@@ -416,10 +439,10 @@ fn gen_culist_support(
     let CuListSupportOptions {
         cuconfig,
         distributed,
+        output_packs,
     } = options;
     #[cfg(feature = "macro_debug")]
     eprintln!("[Extract msgs types]");
-    let output_packs = extract_output_packs(runtime_plan);
     let slot_types: Vec<Type> = output_packs.iter().map(|pack| pack.slot_type()).collect();
 
     let culist_size = output_packs.len();
@@ -866,11 +889,11 @@ fn gen_culist_support(
                 let bridge_name = config_id_to_struct_member(spec.id.as_str());
                 let channel_name = config_id_to_struct_member(channel.id.as_str());
                 let fn_name = format_ident!("get_{}_rx_{}", bridge_name, channel_name);
-                let msg_type = &channel.msg_type;
+                let slot_type = output_packs[culist_index].slot_type();
 
                 methods.push(quote! {
                     #[allow(dead_code)]
-                    pub fn #fn_name(&self) -> &CuMsg<#msg_type> {
+                    pub fn #fn_name(&self) -> &#slot_type {
                         &self.0.#slot_index
                     }
                 });
