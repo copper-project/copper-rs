@@ -54,10 +54,12 @@ impl Writeback {
         let slab = &mut pending.slabs[index];
         let first = offset / self.page_size;
         let last = (offset + length - 1) / self.page_size;
-        for word in first / 64..=last / 64 {
+        let first_word = first / 64;
+        for (index, bits) in slab.dirty[first_word..=last / 64].iter_mut().enumerate() {
+            let word = first_word + index;
             let low = first.saturating_sub(word * 64);
             let high = (last - word * 64).min(63);
-            slab.dirty[word] |= (u64::MAX << low) & (u64::MAX >> (63 - high));
+            *bits |= (u64::MAX << low) & (u64::MAX >> (63 - high));
         }
         if !slab.queued {
             slab.queued = true;
