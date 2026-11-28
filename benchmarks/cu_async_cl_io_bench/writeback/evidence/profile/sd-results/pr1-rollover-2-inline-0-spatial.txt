@@ -1,0 +1,3 @@
+mode=sync-cl-io logging=true copperlist_count=2 payload_bytes=750000 spin_iters=0 section_mib=8 slab_mib=4 keyframe_interval=1000000 warmup=0 iterations=80
+throughput_hz=20.24 mean_us=28006.72 p50_us=428.24 p90_us=51745.68 p99_us=138626.40 p999_us=138626.40 max_us=254661.17 delta_p50_us=38781.08 delta_p90_us=106585.83 delta_p99_us=254201.00 delta_p999_us=254201.00 delta_max_us=254283.72
+persisted_copperlists=80 persisted_keyframes=1 persisted_bytes=60014956 dropped_copperlists=0 dropped_keyframes=0 structured_records=0 completed_ms=3997.602 persisted_hz=20.01

@@ -2,6 +2,18 @@
 
 The proposed 1 MiB or 100 ms policy increased deadline misses with inline logging and increased PID recording loss with asynchronous logging. Extending the age limit to 1 second recovered more data on both example workloads. The 1 kHz PID loop also had a worse async jitter tail at the longer interval.
 
+## Storage budget
+
+The same SD partition sustained **89.28 MB/s** at the median across three 2 GiB sequential writes. The individual runs measured 89.28, 89.68 and 88.87 MB/s including final sync. Each used an extent-preallocated temporary file, 1 MiB aligned blocking direct writes and queue depth one. The slowest 256 MiB window delivered 83.44 MB/s. A single 1 MiB write took up to 141.84 ms. [Raw runs and request timings](verification/linear-results)
+
+| Workload at its requested frequency | Offered logical rate | Share of median linear bandwidth | Observed partition writes per scheduled second |
+| --- | ---: | ---: | ---: |
+| 1 kHz PID | ~2.13 MB/s encoded | 2.4% | 4.4–9.3 MB/s |
+| 20 Hz, 750,000-byte payload | 15.00 MB/s payload | 16.8% | Unmeasured |
+| 20 Hz, two grayscale cameras and aligned windows | 25.07–34.14 MB/s pixels | 28.1–38.2% | 42.6–74.4 MB/s |
+
+All three fit within the measured sequential bandwidth. The PID estimate comes from inline trials that recovered all records. The camera rate counts both source images and the observed window lengths for every offered frame, including dropped CLs. In the inline camera runs, CL envelope overhead added less than 0.01 MB/s. The partition column includes filesystem traffic over each whole trial, divided by its scheduled duration. The largest camera value used about 83% of linear bandwidth on that basis. Bounded queues can still fill during a single slow write. [Per-trial budget](verification/bandwidth.csv)
+
 ## 1 kHz PID
 
 Each revision and mode ran three times for 30 seconds on the same ext4 SD card. Each CL contains about 2.13 KB of encoded measurements and PID output. Start-to-start jitter is the absolute deviation from the 1 ms period. Late finishes are counted against the original release schedule, including ticks that started late.
@@ -54,3 +66,7 @@ An additional paired comparison alternated the PR 2 binaries within each repetit
 All 12 late PID completions at 1 s occurred in one of the three runs. One tick took longer than 1 ms. The worst start lateness in that run was 1.36 ms. The example recorded timestamps in userspace and cannot attribute the late starts to a particular kernel wait.
 
 Every completed run reopened a clean log and recovered exactly the number of accepted CLs. The blocked-flush test also checked keyframe pairing, structured overflow reporting and ordered recovery. [Per-run metrics](verification/example-runs.csv) · [Pooled metrics](verification/example-groups.csv) · [Blocked-flush test](verification/barrier.log) · [Workloads, controls and reproduction](verification/METHOD.md)
+
+## Stalls outside a flush
+
+In a separate instrumented baseline 750 KB inline run, 129 of 1,200 ticks took over 50 ms. Of those, 21 had no overlapping mmap flush. All 21 spent more than 50 ms inside mapped writes. Eighteen exceeded 50 ms in small write fragments and three in large copies. At tick 138 a 12-byte write to the section commit at slab 0 offset 111,201,280 took 95.64 ms. The descriptor was 512 bytes earlier and the payload began 512 bytes later. Per-thread counters reported two minor faults and zero major faults during that tick’s copies. Those counters establish that faults occurred. Determining the precise kernel wait would require a kernel trace. [Missed ticks](verification/fragment-results/misses.csv) · [Raw fragment spans](verification/fragment-results/events.csv.gz)

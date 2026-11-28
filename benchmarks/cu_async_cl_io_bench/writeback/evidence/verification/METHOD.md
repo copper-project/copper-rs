@@ -16,6 +16,8 @@ Both examples run inline and with `cu29/async-cl-io`. The revision order rotates
 
 Partition counters record sectors read and written across each complete example trial, including recovery and temporary file cleanup. A sector is 512 bytes. The partition can also see filesystem metadata traffic and writeback from a preceding trial. These counters cannot attribute individual card writes to a logger request.
 
+The linear reference uses Linux `O_DIRECT` and one outstanding 1 MiB write at a time into a regular file on the same mount. Each of three fresh 2 GiB files is preallocated and synced before timing. Aligned writes cycle through 16 MiB of random data prepared in memory. The throughput denominator includes all writes and the final `fdatasync`. Per-write and 256 MiB-window timings are recorded separately. The benchmark deletes only its own temporary file after each trial. Rates in MB/s use decimal megabytes.
+
 The exploratory 1 s variant changes only `MAX_AGE` in PR 2, with the size threshold fixed at 1 MiB. Its separate comparison alternates the two builds within three repetitions of each example and output mode.
 
 ## Fixed-payload and rollover trials
@@ -41,6 +43,8 @@ python3 verification/build.py
 python3 verification/run-image.py "$CARD_DIR" pid
 python3 verification/run-image.py "$CARD_DIR" image
 python3 verification/run-age.py "$CARD_DIR"
+python3 verification/linear-write.py "$CARD_DIR"
+python3 verification/bandwidth.py
 python3 verification/report.py
 python3 verification/plot-jitter.py
 ```

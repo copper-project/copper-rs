@@ -10,7 +10,8 @@ import tempfile
 
 here = pathlib.Path(__file__).resolve().parent
 base = here.parent/"profile/base"
-dest = here/"copy-results"
+all_fragments = "--all" in sys.argv
+dest = here/("fragment-results" if all_fragments else "copy-results")
 dest.mkdir(exist_ok=True)
 with tempfile.TemporaryDirectory() as scratch:
     root = pathlib.Path(scratch)/"source"
@@ -37,10 +38,12 @@ with tempfile.TemporaryDirectory() as scratch:
                 drop(cu29_traits::timing::span("fault delta",map.bench_index,(minor_after-minor) as usize,(major_after-major) as usize));
             }
 """ + s[pos:]
+    if all_fragments:
+        s = s.replace("(count >= 65536).then", "(count > 0).then")
     mm.write_text(s)
     config = root/"benchmarks/cu_async_cl_io_bench/copperconfig.ron"
     config.write_text(re.sub(r"copperlist_count: \d+","copperlist_count: 2",config.read_text()))
-    target = dest/"target"
+    target = here/"copy-results/target"
     env = dict(os.environ,CARGO_TARGET_DIR=str(target),CARGO_BUILD_BUILD_DIR=str(target))
     subprocess.run(["cargo","build","--release","--offline","-p","cu-async-cl-io-bench"],cwd=root,env=env,check=True)
     with tempfile.TemporaryDirectory(dir=sys.argv[1]) as card, (dest/"output.txt").open("w") as out:
@@ -56,9 +59,9 @@ ticks=spans("tick")
 flush=spans("flush")
 with (dest/"misses.csv").open("w") as f:
     w=csv.writer(f)
-    w.writerow(["tick","duration_ms","flush_ms","payload_copy_ms","minor_faults_inside_copy","major_faults_inside_copy"])
+    w.writerow(["tick","duration_ms","flush_ms","payload_copy_ms","minor_faults_inside_copy","major_faults_inside_copy","small_fragment_ms","large_fragment_ms"])
     for i,(b,e,_,_) in enumerate(ticks):
         if e-b<=50_000_000: continue
         inside=[(c,d) for c,d in zip(copies,faults) if b<=c[0]<e]
         overlap=sum(max(0,min(e,y)-max(b,x)) for x,y,_,_ in flush)
-        w.writerow([i,(e-b)/1e6,overlap/1e6,sum(c[1]-c[0] for c,d in inside)/1e6,sum(d[2] for c,d in inside),sum(d[3] for c,d in inside)])
+        w.writerow([i,(e-b)/1e6,overlap/1e6,sum(c[1]-c[0] for c,d in inside)/1e6,sum(d[2] for c,d in inside),sum(d[3] for c,d in inside),sum(c[1]-c[0] for c,d in inside if c[3]<65536)/1e6,sum(c[1]-c[0] for c,d in inside if c[3]>=65536)/1e6])
