@@ -4737,6 +4737,62 @@ mod tests {
         manager.close_output().unwrap();
     }
 
+    #[cfg(all(feature = "std", feature = "async-cl-io", feature = "clock-sync"))]
+    #[test]
+    fn dropped_corrections_follow_the_next_accepted_copperlist() {
+        use cu29_clock::sync::{ClockDomain, ClockSync, SyncConfig};
+
+        let (started_tx, started_rx) = sync_channel(1);
+        let (release_tx, release_rx) = sync_channel(1);
+        let ids = Arc::new(Mutex::new(Vec::new()));
+        let mut manager = AsyncCopperListsManager::<Msgs, 2>::new(Some(Box::new(BlockingWriter {
+            ids: ids.clone(),
+            started: started_tx,
+            release: Arc::new(Mutex::new(release_rx)),
+        })))
+        .unwrap();
+        let domain = ClockDomain {
+            id: 0,
+            identity: *b"testroot",
+            session: 0,
+        };
+        let curve = |epoch| {
+            let clock = RobotClock::from_ref_time(epoch);
+            ClockSync::new(&clock, domain, SyncConfig::new(CuDuration::from_millis(1)))
+                .unwrap()
+                .snapshot()
+        };
+        let previous = curve(1_000_000);
+        let latest = curve(2_000_000);
+        assert_ne!(previous, latest);
+        for (id, correction) in [None, Some(previous), Some(latest), None]
+            .into_iter()
+            .enumerate()
+        {
+            if let Some(snapshot) = correction {
+                manager.record_clock(snapshot);
+            }
+            manager
+                .create()
+                .unwrap()
+                .change_state(CopperListState::Processing);
+            manager.end_of_processing(id as u64).unwrap();
+            if id == 0 || id == 3 {
+                started_rx
+                    .recv_timeout(std::time::Duration::from_secs(5))
+                    .unwrap();
+            }
+            if id >= 2 {
+                release_tx.send(()).unwrap();
+                manager.finish_pending().unwrap();
+            }
+        }
+        assert_eq!(manager.dropped_copperlists_total(), 2);
+        assert_eq!(*ids.lock().unwrap(), [0, 3]);
+        let retained = manager.free_pool.iter().find(|slot| slot.id == 3).unwrap();
+        assert_eq!(retained.clock_correction().unwrap().snapshot, latest);
+    }
+
     #[cfg(all(
         feature = "std",
         feature = "async-cl-io",
