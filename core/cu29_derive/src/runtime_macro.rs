@@ -3062,6 +3062,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         #[cfg(feature = "macro_debug")]
         eprintln!("[build the run methods]");
+        let service_lane_writeback = (!cfg!(feature = "async-cl-io")).then(|| quote! { cl_manager.service_writeback()?; });
         let lane_executor_tokens = if parallel_rt_run_supported {
             match build_lane_executor_tokens(
                 lane_plan.expect("distributed plan"),
@@ -3233,6 +3234,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 let index = culist.index();
                                 free_copperlists[index] = Some(culist);
                             }
+                            #service_lane_writeback
                             monitor_result?;
                             if outcome == cu29::curuntime::ProcessStepOutcome::Continue {
                                 let (keyframe_bytes, dropped_keyframes_total) = #parallel_keyframe_finish;
@@ -4268,8 +4270,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let structured_worker = ::cu29::curuntime::BufferedStructuredLog::new(
                     local_structured_log_sink, #observe_record,
                 );
-                let logger_runtime = ::cu29::prelude::LoggerRuntime::init(
-                    clock.clone(), structured_worker.clone(), None::<::cu29::prelude::NullLog>,
+                let logger_runtime = ::cu29::prelude::LoggerRuntime::init_buffered(
+                    clock.clone(), structured_worker.clone(),
                 );
             };
             if logstream_enabled { (quote! {}, init) } else { (init, quote! {}) }
