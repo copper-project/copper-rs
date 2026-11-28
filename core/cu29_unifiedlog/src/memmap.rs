@@ -262,6 +262,38 @@ impl MmapStorage {
         Ok(storage)
     }
 }
+#[cfg(windows)]
+fn mark_sparse(file: &File) -> io::Result<()> {
+    use std::os::windows::io::AsRawHandle;
+    use std::ptr::{null, null_mut};
+    use windows_sys::Win32::Foundation::{ERROR_INVALID_FUNCTION, ERROR_NOT_SUPPORTED};
+    use windows_sys::Win32::System::{IO::DeviceIoControl, Ioctl::FSCTL_SET_SPARSE};
+
+    let mut returned = 0;
+    // SAFETY: The file and byte count outlive the synchronous call. This control
+    // code sets the sparse flag when called without an input buffer.
+    if unsafe {
+        DeviceIoControl(
+            file.as_raw_handle(),
+            FSCTL_SET_SPARSE,
+            null(),
+            0,
+            null_mut(),
+            0,
+            &mut returned,
+            null_mut(),
+        )
+    } != 0
+    {
+        return Ok(());
+    }
+    let error = io::Error::last_os_error();
+    match error.raw_os_error().map(|code| code as u32) {
+        Some(ERROR_INVALID_FUNCTION | ERROR_NOT_SUPPORTED) => Ok(()),
+        _ => Err(error),
+    }
+}
+
 impl ByteStorage for MmapStorage {
     type Region = MmapRegion;
     fn len(&self) -> u64 {
@@ -296,6 +328,9 @@ impl ByteStorage for MmapStorage {
                 .truncate(!self.restore_tail)
                 .open(path)
                 .map_err(|e| CuError::new_with_cause("Cannot create backing slab", e))?;
+            #[cfg(windows)]
+            mark_sparse(&file)
+                .map_err(|e| CuError::new_with_cause("Cannot mark backing slab sparse", e))?;
             file.set_len(self.slab_size as u64)
                 .map_err(|e| CuError::new_with_cause("Cannot allocate backing slab", e))?;
             self.maps
