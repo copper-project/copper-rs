@@ -729,3 +729,83 @@ fn append_uses_configured_stride_and_defers_tail_extension() {
     drop(logger);
     assert_eq!(values(&path)[0].1, 17);
 }
+
+#[test]
+fn growing_writer_trims_to_retained_extents_and_can_append_again() {
+    let dir = test_dir();
+    for (section_size, expected_lengths) in [
+        (1536, vec![2048]),
+        (3584, vec![4096]),
+        (4096, vec![4096, 512]),
+    ] {
+        let path = dir.path().join("trim.copper");
+        let mut logger = writer(&path, 4096, 16384, false, CapacityPolicy::Grow);
+        let mut section = logger
+            .add_section(UnifiedLogType::CopperList, section_size)
+            .unwrap();
+        section.append(11u32).unwrap();
+        logger.try_flush_section(&mut section).unwrap();
+        drop(section);
+        drop(logger);
+        for (index, &length) in expected_lengths.iter().enumerate() {
+            assert_eq!(
+                std::fs::metadata(dir.path().join(format!("trim_{index}.copper")))
+                    .unwrap()
+                    .len(),
+                length
+            );
+        }
+        assert!(
+            !dir.path()
+                .join(format!("trim_{}.copper", expected_lengths.len()))
+                .exists()
+        );
+        assert_eq!(values(&path)[0].1, 11);
+
+        let mut logger = writer(&path, 4096, 16384, true, CapacityPolicy::Grow);
+        let mut section = logger
+            .add_section(UnifiedLogType::CopperList, 4096)
+            .unwrap();
+        section.append(12u32).unwrap();
+        logger.try_flush_section(&mut section).unwrap();
+        drop(section);
+        drop(logger);
+        assert_eq!(
+            values(&path).iter().map(|(_, v)| *v).collect::<Vec<_>>(),
+            [11, 12]
+        );
+    }
+}
+
+#[test]
+fn empty_growing_log_keeps_its_header_and_fixed_capacity_keeps_all_slabs() {
+    let dir = test_dir();
+    let path = dir.path().join("empty.copper");
+    for policy in [
+        CapacityPolicy::StopWhenFull,
+        CapacityPolicy::OverwriteOldest,
+        CapacityPolicy::Grow,
+    ] {
+        drop(writer(&path, 4096, 8192, false, policy));
+        let growing = policy == CapacityPolicy::Grow;
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().len(),
+            if growing { 512 } else { 4096 }
+        );
+        assert_eq!(dir.path().join("empty_1.copper").exists(), !growing);
+        UnifiedLoggerRead::new(&path).unwrap().end_of_log().unwrap();
+    }
+}
+
+#[test]
+fn active_reader_keeps_its_mapped_bounds_when_writer_exits() {
+    let dir = test_dir();
+    let path = dir.path().join("live.copper");
+    let logger = writer(&path, 8192, 8192, false, CapacityPolicy::Grow);
+    let reader = UnifiedLoggerRead::new(&path).unwrap();
+    drop(logger);
+    assert_eq!(reader.raw_main_header().sections_end, 8192);
+    assert_eq!(std::fs::metadata(&path).unwrap().len(), 8192);
+    drop(reader);
+    UnifiedLoggerRead::new(&path).unwrap().end_of_log().unwrap();
+}

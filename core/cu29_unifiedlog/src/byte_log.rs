@@ -194,6 +194,11 @@ pub trait ByteStorage: Send + Sync {
     }
     fn grow(&mut self, end: u64) -> CuResult<()>;
     fn region(&self, offset: u64, len: u64) -> CuResult<Self::Region>;
+    /// Release backing space after a growing writer has closed and is being dropped.
+    /// Fixed-size devices keep their full capacity.
+    fn finish_growing(&mut self, header: &MainHeader, _end: u64) -> CuResult<()> {
+        publish_main(self, header)
+    }
 }
 
 fn encode_error(_: CuError) -> EncodeError {
@@ -258,6 +263,15 @@ pub fn encoded_size<E: Encode>(value: &E) -> CuResult<u64> {
         .encode(&mut encoder)
         .map_err(|e| CuError::from("Cannot size metadata").add_cause(&e.to_string()))?;
     Ok(encoder.into_writer().bytes_written as u64)
+}
+
+pub(crate) fn publish_main<B: ByteStorage + ?Sized>(
+    storage: &B,
+    header: &MainHeader,
+) -> CuResult<()> {
+    let mut main = storage.region(0, BLOCK)?;
+    write_header(&mut main, header)?;
+    main.flush()
 }
 
 fn write_header<R: ByteRegion, E: Encode>(region: &mut R, value: &E) -> CuResult<()> {
@@ -832,7 +846,10 @@ impl<B: ByteStorage> ByteLogger<B> {
         if !header.clean_close && !after_reset {
             return Err(CuError::from("Cannot append: log was not cleanly closed"));
         }
-        if !capacity.is_multiple_of(BLOCK) || capacity <= header.sections_begin {
+        if !capacity.is_multiple_of(BLOCK)
+            || capacity < header.sections_begin
+            || (capacity == header.sections_begin && policy != CapacityPolicy::Grow)
+        {
             return Err(CuError::from("Invalid append capacity"));
         }
         let mut logger = Self::from_parts(storage, header, policy, capacity, true);
@@ -969,11 +986,7 @@ impl<B: ByteStorage> ByteLogger<B> {
         Ok(h)
     }
     fn publish(&mut self) -> CuResult<()> {
-        let result = (|| {
-            let mut region = self.storage.region(0, BLOCK)?;
-            write_header(&mut region, &self.header)?;
-            region.flush()
-        })();
+        let result = publish_main(&self.storage, &self.header);
         if result.is_err() {
             self.faulted = true;
         }
@@ -1151,6 +1164,10 @@ impl<B: ByteStorage> ByteLogger<B> {
         )
     }
     pub fn close(&mut self) -> CuResult<()> {
+        self.finish(false)
+    }
+
+    fn finish(&mut self, dropping: bool) -> CuResult<()> {
         if self.append_pending {
             return Ok(());
         }
@@ -1179,7 +1196,12 @@ impl<B: ByteStorage> ByteLogger<B> {
             cursor = self.data_header(cursor)?.next_section;
         }
         self.header.clean_close = true;
-        self.publish()?;
+        if dropping && self.policy == CapacityPolicy::Grow {
+            self.storage
+                .finish_growing(&self.header, self.allocation_end)?;
+        } else {
+            self.publish()?;
+        }
         self.faulted = false;
         Ok(())
     }
@@ -1614,7 +1636,7 @@ impl<B: ByteStorage> UnifiedLogWrite<ByteSection<B::Region>> for ByteLogger<B> {
 }
 impl<B: ByteStorage> Drop for ByteLogger<B> {
     fn drop(&mut self) {
-        let _ = self.close();
+        let _ = self.finish(true);
     }
 }
 
