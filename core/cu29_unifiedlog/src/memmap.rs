@@ -11,6 +11,10 @@ use std::fs::{File, OpenOptions};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
+#[path = "memmap_writeback.rs"]
+mod writeback;
+use writeback::Writeback;
+
 const MAX_SPANS: usize = 64;
 enum Mapping {
     Read(Mmap),
@@ -28,6 +32,27 @@ struct MappedFile {
 unsafe impl Send for MappedFile {}
 unsafe impl Sync for MappedFile {}
 impl MappedFile {
+    fn flush_range(&self, offset: usize, len: usize) -> CuResult<()> {
+        match &self.mapping {
+            Mapping::Write(mapping) => {
+                // SAFETY: flushing borrows the mapping handle, never the mapped bytes.
+                unsafe { &*mapping.get() }
+                    .flush_range(offset, len)
+                    .map_err(|e| CuError::new_with_cause("Cannot flush mapped section", e))
+            }
+            Mapping::Read(mapping) => {
+                let _ = mapping.len();
+                Ok(())
+            }
+        }
+    }
+    fn sync(&self) -> CuResult<()> {
+        #[cfg(feature = "mmap-fsync")]
+        self.file
+            .sync_all()
+            .map_err(|e| CuError::new_with_cause("Cannot sync backing file", e))?;
+        Ok(())
+    }
     fn new(file: File, writable: bool) -> io::Result<Self> {
         // SAFETY: Copper owns these backing files; external mutation is unsupported.
         let (mapping, pointer, length) = unsafe {
@@ -59,6 +84,8 @@ impl MappedFile {
 
 /// A range keeps mappings alive even after the logger is dropped.
 pub struct MmapRegion {
+    writeback: Arc<Writeback>,
+    first_slab: usize,
     maps: [Option<Arc<MappedFile>>; MAX_SPANS],
     first: usize,
     slab_size: usize,
@@ -117,6 +144,11 @@ impl ByteRegion for MmapRegion {
         })
     }
     fn write(&mut self, offset: u64, bytes: &[u8]) -> CuResult<()> {
+        self.write_fragment(offset, bytes)?;
+        self.written(offset, bytes.len());
+        Ok(())
+    }
+    fn write_fragment(&mut self, offset: u64, bytes: &[u8]) -> CuResult<()> {
         self.visit(offset, bytes.len(), |map, local, done, count| {
             let Mapping::Write(_) = &map.mapping else {
                 return Err(CuError::from("Read-only mapped storage"));
@@ -138,29 +170,26 @@ impl ByteRegion for MmapRegion {
         Ok(())
     }
     fn flush(&mut self) -> CuResult<()> {
-        for map in self.maps.iter().flatten() {
-            match &map.mapping {
-                Mapping::Write(mapping) => {
-                    // SAFETY: Flushing observes the mapping without creating payload slices.
-                    unsafe { &*mapping.get() }
-                        .flush()
-                        .map_err(|e| CuError::new_with_cause("Cannot flush mapped section", e))?;
-                    #[cfg(feature = "mmap-fsync")]
-                    map.file
-                        .sync_all()
-                        .map_err(|e| CuError::new_with_cause("Cannot sync backing file", e))?;
-                }
-                Mapping::Read(mapping) => {
-                    let _ = mapping.len();
-                }
-            }
+        self.writeback.drain()
+    }
+
+    fn written(&self, offset: u64, length: usize) {
+        let mut position = self.first + offset as usize;
+        let mut remaining = length;
+        while remaining != 0 {
+            let index = self.first_slab + position / self.slab_size;
+            let local = position % self.slab_size;
+            let count = remaining.min(self.slab_size - local);
+            self.writeback.mark(index, local, count);
+            remaining -= count;
+            position += count;
         }
-        Ok(())
     }
 }
 
 #[doc(hidden)]
 pub struct MmapStorage {
+    writeback: Arc<Writeback>,
     path: PathBuf,
     slab_size: usize,
     maps: Vec<Arc<MappedFile>>,
@@ -200,7 +229,14 @@ impl MmapStorage {
             }
             maps.push(Arc::new(MappedFile::new(file, writable)?));
         }
+        let writeback = Arc::new(Writeback::new());
+        if writable {
+            for map in &maps {
+                writeback.add(map.clone());
+            }
+        }
         Ok(Self {
+            writeback,
             path: path.to_path_buf(),
             slab_size,
             maps,
@@ -214,6 +250,7 @@ impl MmapStorage {
             ));
         }
         let mut storage = Self {
+            writeback: Arc::new(Writeback::new()),
             path: path.to_path_buf(),
             slab_size,
             maps: Vec::new(),
@@ -246,6 +283,9 @@ impl ByteStorage for MmapStorage {
     fn len(&self) -> u64 {
         self.maps.len() as u64 * self.slab_size as u64
     }
+    fn drain(&self) -> CuResult<()> {
+        self.writeback.drain()
+    }
     fn grow(&mut self, end: u64) -> CuResult<()> {
         if end <= self.len() {
             return Ok(());
@@ -270,6 +310,7 @@ impl ByteStorage for MmapStorage {
                 .push(Arc::new(MappedFile::new(file, true).map_err(|e| {
                     CuError::new_with_cause("Cannot map backing slab", e)
                 })?));
+            self.writeback.add(self.maps.last().unwrap().clone());
         }
         Ok(())
     }
@@ -292,6 +333,8 @@ impl ByteStorage for MmapStorage {
             *slot = Some(mapping.clone());
         }
         Ok(MmapRegion {
+            first_slab: begin,
+            writeback: self.writeback.clone(),
             maps,
             first: (offset % self.slab_size as u64) as usize,
             slab_size: self.slab_size,
