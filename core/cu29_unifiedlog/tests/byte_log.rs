@@ -809,3 +809,52 @@ fn active_reader_keeps_its_mapped_bounds_when_writer_exits() {
     drop(reader);
     UnifiedLoggerRead::new(&path).unwrap().end_of_log().unwrap();
 }
+
+#[cfg(windows)]
+#[test]
+fn sparse_volume_allocates_only_touched_ranges_while_writer_is_live() {
+    use std::os::windows::{ffi::OsStrExt, fs::MetadataExt, io::AsRawHandle};
+    use std::ptr::null_mut;
+    use windows_sys::Win32::Storage::FileSystem::{
+        FILE_ATTRIBUTE_SPARSE_FILE, GetCompressedFileSizeW, GetVolumeInformationByHandleW,
+    };
+    use windows_sys::Win32::System::SystemServices::FILE_SUPPORTS_SPARSE_FILES;
+
+    let dir = test_dir();
+    let path = dir.path().join("sparse.copper");
+    let size = 16 * 1024 * 1024;
+    let logger = writer(&path, size, 2 * size, false, CapacityPolicy::Grow);
+    let file = std::fs::File::open(&path).unwrap();
+    let mut flags = 0;
+    // SAFETY: Only the volume flags are requested from this live file handle.
+    assert_ne!(
+        unsafe {
+            GetVolumeInformationByHandleW(
+                file.as_raw_handle(),
+                null_mut(),
+                0,
+                null_mut(),
+                null_mut(),
+                &mut flags,
+                null_mut(),
+                0,
+            )
+        },
+        0
+    );
+    if flags & FILE_SUPPORTS_SPARSE_FILES == 0 {
+        return;
+    }
+    for index in 0..2 {
+        let slab = dir.path().join(format!("sparse_{index}.copper"));
+        let metadata = std::fs::metadata(&slab).unwrap();
+        assert_eq!(metadata.len(), size as u64);
+        assert_ne!(metadata.file_attributes() & FILE_ATTRIBUTE_SPARSE_FILE, 0);
+        let wide: Vec<_> = slab.as_os_str().encode_wide().chain(Some(0)).collect();
+        // SAFETY: The path is NUL-terminated. Both the logical and allocated
+        // sizes fit in the low word for this test, so the high word is optional.
+        let allocated = unsafe { GetCompressedFileSizeW(wide.as_ptr(), null_mut()) };
+        assert!(allocated < size as u32, "allocated {allocated} bytes");
+    }
+    drop(logger);
+}

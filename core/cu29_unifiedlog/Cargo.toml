@@ -17,10 +17,21 @@ repository.workspace = true
 cu29-traits = { workspace = true }
 bincode = { workspace = true }
 memmap2 = { version = "0.9", optional = true }
-page_size = { version = "0.6.0", optional = true }
 spin = { workspace = true }
 portable-atomic = { version = "1.11", default-features = false, features = [
   "fallback",
+] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", optional = true, features = [
+  "Win32_System_IO",
+  "Win32_System_Ioctl",
+] }
+
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys = { version = "0.61", features = [
+  "Win32_Storage_FileSystem",
+  "Win32_System_SystemServices",
 ] }
 
 [dev-dependencies]
@@ -29,6 +40,6 @@ tempfile = { workspace = true }
 [features]
 multi-build-log-append = []
 default = ["std", "compact"]
-std = ["dep:memmap2", "dep:page_size", "cu29-traits/std", "bincode/std"]
-compact = []                                                             # favor compactness over pure memory page alignment in the log
+std = ["dep:memmap2", "dep:windows-sys", "cu29-traits/std", "bincode/std"]
+compact = []                                                               # favor compactness over pure memory page alignment in the log
 mmap-fsync = ["std"]
