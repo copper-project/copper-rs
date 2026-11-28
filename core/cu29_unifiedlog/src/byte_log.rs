@@ -171,6 +171,14 @@ pub trait ByteRegion: Send + Sync {
     fn commit(&mut self) -> CuResult<()> {
         self.flush()
     }
+    /// Encoder fragments become eligible for writeback together on record success.
+    #[doc(hidden)]
+    fn write_fragment(&mut self, offset: u64, bytes: &[u8]) -> CuResult<()> {
+        self.write(offset, bytes)
+    }
+    /// Report bytes once their logical write has succeeded.
+    #[doc(hidden)]
+    fn written(&self, _offset: u64, _length: usize) {}
     /// Enable buffering for a newly allocated append-only CopperList section.
     #[doc(hidden)]
     fn begin_record_batching(&mut self) -> core::num::NonZeroUsize {
@@ -191,6 +199,11 @@ pub trait ByteStorage: Send + Sync {
     fn len(&self) -> u64;
     fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+    /// Finish pending writeback before publishing clean close.
+    #[doc(hidden)]
+    fn drain(&self) -> CuResult<()> {
+        Ok(())
     }
     fn grow(&mut self, end: u64) -> CuResult<()>;
     fn region(&self, offset: u64, len: u64) -> CuResult<Self::Region>;
@@ -215,7 +228,7 @@ impl<R: ByteRegion> Writer for RegionWriter<'_, R> {
             return Err(EncodeError::UnexpectedEnd);
         }
         self.region
-            .write(self.position, bytes)
+            .write_fragment(self.position, bytes)
             .map_err(encode_error)?;
         self.position = end;
         Ok(())
@@ -479,6 +492,53 @@ pub struct ByteSection<R: ByteRegion> {
     pending_records: usize,
 }
 impl<R: ByteRegion> ByteSection<R> {
+    fn seal(&mut self, finish: impl FnOnce(&mut R) -> CuResult<()>) -> CuResult<usize> {
+        if (self.append_only && self.header.is_open)
+            || core::mem::take(&mut self.write_reserved)
+            || (!self.append_only
+                && self.leases[self.slot]
+                    .compare_exchange(
+                        self.token(IDLE),
+                        self.token(BUSY),
+                        Ordering::AcqRel,
+                        Ordering::Acquire,
+                    )
+                    .is_ok())
+        {
+            self.write_reserved = false;
+            let guard = SectionWrite {
+                section: self,
+                released: false,
+                observing: false,
+            };
+            let section = &mut *guard.section;
+            let mut header = section.header.clone();
+            header.is_open = false;
+            let result = (|| {
+                if section.pending_records != 0 {
+                    section.region.commit()?;
+                }
+                write_commit(
+                    &mut section.region,
+                    &header,
+                    section.offset,
+                    section.generation as u64,
+                )?;
+                finish(&mut section.region)
+            })();
+            let state = if result.is_ok() {
+                section.header = header;
+                section.pending_records = 0;
+                SEALED
+            } else {
+                section.leases.poisoned.store(true, Ordering::Release);
+                IDLE
+            };
+            let release = guard.finish(state);
+            result.and(release)?;
+        }
+        Ok(self.position as usize)
+    }
     fn token(&self, state: usize) -> usize {
         self.generation * GENERATION_STRIDE + state
     }
@@ -639,6 +699,9 @@ impl<R: ByteRegion> SectionStorage for ByteSection<R> {
             } else {
                 section.pending_records += 1;
             }
+            section
+                .region
+                .written(old_position, (end - old_position) as usize);
             section.header = committed;
             section.position = end;
             Ok((end - old_position) as usize)
@@ -657,51 +720,7 @@ impl<R: ByteRegion> SectionStorage for ByteSection<R> {
         result.and_then(|count| release.map(|()| SectionAppendOutcome::Appended(count)))
     }
     fn flush(&mut self) -> CuResult<usize> {
-        if (self.append_only && self.header.is_open)
-            || core::mem::take(&mut self.write_reserved)
-            || (!self.append_only
-                && self.leases[self.slot]
-                    .compare_exchange(
-                        self.token(IDLE),
-                        self.token(BUSY),
-                        Ordering::AcqRel,
-                        Ordering::Acquire,
-                    )
-                    .is_ok())
-        {
-            self.write_reserved = false;
-            let guard = SectionWrite {
-                section: self,
-                released: false,
-                observing: false,
-            };
-            let section = &mut *guard.section;
-            let mut header = section.header.clone();
-            header.is_open = false;
-            let result = (|| {
-                if section.pending_records != 0 {
-                    section.region.commit()?;
-                }
-                write_commit(
-                    &mut section.region,
-                    &header,
-                    section.offset,
-                    section.generation as u64,
-                )?;
-                section.region.flush()
-            })();
-            let state = if result.is_ok() {
-                section.header = header;
-                section.pending_records = 0;
-                SEALED
-            } else {
-                section.leases.poisoned.store(true, Ordering::Release);
-                IDLE
-            };
-            let release = guard.finish(state);
-            result.and(release)?;
-        }
-        Ok(self.position as usize)
+        self.seal(ByteRegion::flush)
     }
 }
 
@@ -1134,6 +1153,7 @@ impl<B: ByteStorage> ByteLogger<B> {
             CuError::from("Cannot encode static metadata").add_cause(&e.to_string())
         })?;
         let used = encoder.into_writer().position - HEADER;
+        region.written(HEADER, used as usize);
         region.flush()?;
         initialize_section(
             &mut region,
@@ -1178,6 +1198,7 @@ impl<B: ByteStorage> ByteLogger<B> {
             self.close_idle(cursor)?;
             cursor = self.data_header(cursor)?.next_section;
         }
+        self.storage.drain()?;
         self.header.clean_close = true;
         self.publish()?;
         self.faulted = false;
