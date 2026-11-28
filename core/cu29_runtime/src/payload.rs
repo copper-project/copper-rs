@@ -168,23 +168,29 @@ where
     }
 }
 
+/// Decodes the slice length written by `Encode` and checks it against `N` before any
+/// element is read, so a corrupt length cannot trigger a large allocation.
+fn decode_array_vec_len<D: Decoder, const N: usize>(decoder: &mut D) -> Result<usize, DecodeError> {
+    let len = u64::decode(decoder)?;
+    let len = usize::try_from(len).map_err(|_| DecodeError::OutsideUsizeRange(len))?;
+    if len > N {
+        return Err(DecodeError::ArrayLengthMismatch {
+            required: N,
+            found: len,
+        });
+    }
+    Ok(len)
+}
+
 impl<Context, T, const N: usize> Decode<Context> for CuArrayVec<T, N>
 where
     T: Clone + Decode<Context> + 'static,
 {
     fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let inner = Vec::<T>::decode(decoder)?;
-        let actual_len = inner.len();
-        if actual_len > N {
-            return Err(DecodeError::ArrayLengthMismatch {
-                required: N,
-                found: actual_len,
-            });
-        }
-
+        let len = decode_array_vec_len::<D, N>(decoder)?;
         let mut array_vec = ArrayVec::new();
-        for item in inner {
-            array_vec.push(item); // Push elements one by one
+        for _ in 0..len {
+            array_vec.push(T::decode(decoder)?);
         }
         Ok(CuArrayVec(array_vec))
     }
@@ -197,18 +203,10 @@ where
     fn borrow_decode<D: BorrowDecoder<'de, Context = Context>>(
         decoder: &mut D,
     ) -> Result<Self, DecodeError> {
-        let inner = Vec::<T>::borrow_decode(decoder)?;
-        let actual_len = inner.len();
-        if actual_len > N {
-            return Err(DecodeError::ArrayLengthMismatch {
-                required: N,
-                found: actual_len,
-            });
-        }
-
+        let len = decode_array_vec_len::<D, N>(decoder)?;
         let mut array_vec = ArrayVec::new();
-        for item in inner {
-            array_vec.push(item); // Push elements one by one
+        for _ in 0..len {
+            array_vec.push(T::borrow_decode(decoder)?);
         }
         Ok(CuArrayVec(array_vec))
     }
