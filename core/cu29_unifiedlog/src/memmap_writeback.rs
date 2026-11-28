@@ -84,11 +84,13 @@ impl Writeback {
         let mut new_complete = 0;
         let first = offset / self.page_size;
         let last = (offset + length - 1) / self.page_size;
-        for word in first / 64..=last / 64 {
+        let first_word = first / 64;
+        for (index, bits) in slab.dirty[first_word..=last / 64].iter_mut().enumerate() {
+            let word = first_word + index;
             let low = first.saturating_sub(word * 64);
             let high = (last - word * 64).min(63);
             let mask = (u64::MAX << low) & (u64::MAX >> (63 - high));
-            slab.dirty[word] |= mask;
+            *bits |= mask;
             if payload {
                 let partial = word == last / 64
                     && !(offset + length).is_multiple_of(self.page_size)
