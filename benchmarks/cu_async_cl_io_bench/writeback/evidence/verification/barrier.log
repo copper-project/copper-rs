@@ -1,0 +1,1 @@
+worker held for 1 ms while producer completed 12 ticks and 10000 text submissions; recovered CL/keyframe IDs [0, 1], dropped 10 pairs, recovered 3276 ordered text lines, reported 6724 text drops, clean close

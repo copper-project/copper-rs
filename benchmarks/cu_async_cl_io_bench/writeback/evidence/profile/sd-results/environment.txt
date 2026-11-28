@@ -1,0 +1,15 @@
+Linux SD-benchmark-host 7.3.6-3-cachyos #1 SMP PREEMPT_DYNAMIC Thu, 26 Nov 2026 16:11:45 +0000 x86_64 GNU/Linux
+4096
+TARGET                                               SOURCE    FSTYPE OPTIONS
+CARD_MOUNT /dev/sdb1 ext4 rw,nosuid,nodev,relatime,errors=remount-ro
+NAME        MODEL                    TRAN FSTYPE      SIZE MOUNTPOINTS
+sdb         USB3.0 CRW -SD           usb            119.2G
+└─sdb1                                    ext4      119.2G
+rustc 1.100.0 (0ef1bc386 2026-11-09)
+binary: rustc
+commit-hash: 0ef1bc386059596dada8fb65b50425aab2ea637a
+commit-date: 2026-11-09
+host: x86_64-unknown-linux-gnu
+release: 1.100.0
+LLVM version: 23.1.5
+payload_bytes=750000 period_ms=50 iterations=1200 warmup=0 normal_slab_mib=256 normal_section_mib=8 stress_slab_mib=4 stress_section_kib=1536 mmap-fsync=off profile=release

@@ -1,0 +1,10 @@
+run,ticks,ticks_over_50ms,overruns_without_overlapping_flush,overruns_with_50ms_outside_flush,estimated_deadline_misses,peak_release_lateness_ms,max_interstart_gap_ms,max_outside_flush_ms
+base-normal-2-async-0,1200,0,0,0,0,0.624623,50.571883,0.0
+base-normal-2-inline-0,1200,269,163,180,635,4848.334172,315.007614,237.976141
+base-normal-8-inline-0,1200,112,5,5,173,257.657645,307.590881,83.759327
+pr1-normal-2-async-0,1200,0,0,0,0,0.157491,50.086439,0.0
+pr1-normal-2-inline-0,1200,109,0,0,268,184.721183,234.652047,31.561196
+pr1-normal-8-inline-0,1200,110,1,1,246,288.589437,338.53825,77.097452
+pr2-normal-2-async-0,1200,0,0,0,0,0.56956,50.509872,0.0
+pr2-normal-2-inline-0,1200,565,0,21,1173,2892.104527,351.657543,167.838235
+pr2-normal-8-inline-0,1200,536,0,0,986,988.520687,302.053964,27.325243

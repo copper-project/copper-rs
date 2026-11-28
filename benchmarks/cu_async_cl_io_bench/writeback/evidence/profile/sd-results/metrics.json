@@ -1,0 +1,1982 @@
+{
+  "base-normal-2-async-0-spatial": {
+    "revision": "cfa498792e36bd84e5012c4b166c1815db8c4dfc",
+    "times_ns": {
+      "submission": {
+        "mean": 2148.4875,
+        "p50": 2740,
+        "p95": 3580,
+        "p99": 5070,
+        "max": 5070
+      },
+      "record": {
+        "mean": 9350822.57142857,
+        "p50": 137210,
+        "p95": 122346533,
+        "p99": 130698625,
+        "max": 130698625
+      },
+      "flush": {
+        "mean": 27089227.333333332,
+        "p50": 7091638,
+        "p95": 67125702,
+        "p99": 84416076,
+        "max": 84416076
+      },
+      "tick": {
+        "mean": 8405.45,
+        "p50": 7440,
+        "p95": 9380,
+        "p99": 134489,
+        "max": 134489
+      },
+      "final_drain": {
+        "mean": 130642465,
+        "p50": 130642465,
+        "p95": 130642465,
+        "p99": 130642465,
+        "max": 130642465
+      }
+    },
+    "msync": {
+      "count": 30,
+      "request_bytes": {
+        "mean": 268435456,
+        "p50": 268435456,
+        "p95": 268435456,
+        "p99": 268435456,
+        "max": 268435456
+      },
+      "total_bytes": 8053063680,
+      "distinct_pages": 65536,
+      "order": {
+        "overlap": 29
+      },
+      "slab_switches": 0,
+      "mean_contiguous_run_bytes": 268435456,
+      "completion_inversions": 0
+    },
+    "over_50ms": 0,
+    "longest_flushes": [
+      {
+        "begin_ns": 3990452727,
+        "end_ns": 4074868803,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "publish",
+        "slab": 0,
+        "offset": 0,
+        "bytes": 268435456,
+        "ns": 84416076,
+        "overlapping_missed_ticks": 0
+      },
+      {
+        "begin_ns": 2503590768,
+        "end_ns": 2570716470,
+        "thread": "cu-output",
+        "kind": "flush",
+        "trigger": "publish",
+        "slab": 0,
+        "offset": 0,
+        "bytes": 268435456,
+        "ns": 67125702,
+        "overlapping_missed_ticks": 0
+      },
+      {
+        "begin_ns": 2440087255,
+        "end_ns": 2503270899,
+        "thread": "cu-output",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 0,
+        "offset": 0,
+        "bytes": 268435456,
+        "ns": 63183644,
+        "overlapping_missed_ticks": 0
+      },
+      {
+        "begin_ns": 1851845987,
+        "end_ns": 1914954572,
+        "thread": "cu-output",
+        "kind": "flush",
+        "trigger": "publish",
+        "slab": 0,
+        "offset": 0,
+        "bytes": 268435456,
+        "ns": 63108585,
+        "overlapping_missed_ticks": 0
+      },
+      {
+        "begin_ns": 3740064491,
+        "end_ns": 3802387449,
+        "thread": "cu-output",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 0,
+        "offset": 0,
+        "bytes": 268435456,
+        "ns": 62322958,
+        "overlapping_missed_ticks": 0
+      }
+    ],
+    "counts": {
+      "iterations": 80,
+      "persisted_copperlists": 70,
+      "persisted_keyframes": 1,
+      "dropped_copperlists": 10,
+      "dropped_keyframes": 0,
+      "offered": 80,
+      "accepted": 70
+    },
+    "peak_dirty_including_inflight_bytes": 8261632
+  },
+  "base-normal-2-async-0": {
+    "revision": "cfa498792e36bd84e5012c4b166c1815db8c4dfc",
+    "times_ns": {
+      "submission": {
+        "mean": 1872.1541666666667,
+        "p50": 1610,
+        "p95": 4130,
+        "p99": 4980,
+        "max": 5430
+      },
+      "record": {
+        "mean": 12826875.289855072,
+        "p50": 95020,
+        "p95": 65347046,
+        "p99": 190346323,
+        "max": 283671017
+      },
+      "flush": {
+        "mean": 49462909.598086126,
+        "p50": 61536935,
+        "p95": 121695364,
+        "p99": 240120550,
+        "max": 274074662
+      },
+      "tick": {
+        "mean": 4954.884166666667,
+        "p50": 3890,
+        "p95": 9040,
+        "p99": 10070,
+        "max": 152210
+      },
+      "final_drain": {
+        "mean": 98592159,
+        "p50": 98592159,
+        "p95": 98592159,
+        "p99": 98592159,
+        "max": 98592159
+      }
+    },
+    "msync": {
+      "count": 209,
+      "request_bytes": {
+        "mean": 268435456,
+        "p50": 268435456,
+        "p95": 268435456,
+        "p99": 268435456,
+        "max": 268435456
+      },
+      "total_bytes": 56103010304,
+      "distinct_pages": 262144,
+      "order": {
+        "overlap": 205
+      },
+      "slab_switches": 136,
+      "mean_contiguous_run_bytes": 268435456,
+      "completion_inversions": 0
+    },
+    "over_50ms": 0,
+    "longest_flushes": [
+      {
+        "begin_ns": 45103715113,
+        "end_ns": 45377789775,
+        "thread": "cu-output",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 2,
+        "offset": 0,
+        "bytes": 268435456,
+        "ns": 274074662,
+        "overlapping_missed_ticks": 0
+      },
+      {
+        "begin_ns": 59953703863,
+        "end_ns": 60227071164,
+        "thread": "cu-output",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 2,
+        "offset": 0,
+        "bytes": 268435456,
+        "ns": 273367301,
+        "overlapping_missed_ticks": 0
+      },
+      {
+        "begin_ns": 37040276143,
+        "end_ns": 37280396693,
+        "thread": "cu-output",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 1,
+        "offset": 0,
+        "bytes": 268435456,
+        "ns": 240120550,
+        "overlapping_missed_ticks": 0
+      },
+      {
+        "begin_ns": 9653722903,
+        "end_ns": 9833016686,
+        "thread": "cu-output",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 0,
+        "offset": 0,
+        "bytes": 268435456,
+        "ns": 179293783,
+        "overlapping_missed_ticks": 0
+      },
+      {
+        "begin_ns": 26003721030,
+        "end_ns": 26152480538,
+        "thread": "cu-output",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 1,
+        "offset": 0,
+        "bytes": 268435456,
+        "ns": 148759508,
+        "overlapping_missed_ticks": 0
+      }
+    ],
+    "counts": {
+      "iterations": 1200,
+      "persisted_copperlists": 1035,
+      "persisted_keyframes": 1,
+      "dropped_copperlists": 165,
+      "dropped_keyframes": 0,
+      "offered": 1200,
+      "accepted": 1035
+    }
+  },
+  "base-normal-2-inline-0-spatial": {
+    "revision": "cfa498792e36bd84e5012c4b166c1815db8c4dfc",
+    "times_ns": {
+      "submission": {
+        "mean": 10111850.75,
+        "p50": 107720,
+        "p95": 123348769,
+        "p99": 153255110,
+        "max": 153255110
+      },
+      "record": {
+        "mean": 10111683.625,
+        "p50": 107640,
+        "p95": 123348609,
+        "p99": 153254990,
+        "max": 153254990
+      },
+      "flush": {
+        "mean": 30440161.875,
+        "p50": 12200633,
+        "p95": 68216705,
+        "p99": 84904966,
+        "max": 84904966
+      },
+      "tick": {
+        "mean": 10113877.1125,
+        "p50": 108300,
+        "p95": 123352379,
+        "p99": 153256410,
+        "max": 153256410
+      },
+      "final_drain": {
+        "mean": 132435597,
+        "p50": 132435597,
+        "p95": 132435597,
+        "p99": 132435597,
+        "max": 132435597
+      }
+    },
+    "msync": {
+      "count": 32,
+      "request_bytes": {
+        "mean": 268435456,
+        "p50": 268435456,
+        "p95": 268435456,
+        "p99": 268435456,
+        "max": 268435456
+      },
+      "total_bytes": 8589934592,
+      "distinct_pages": 65536,
+      "order": {
+        "overlap": 31
+      },
+      "slab_switches": 0,
+      "mean_contiguous_run_bytes": 268435456,
+      "completion_inversions": 0
+    },
+    "over_50ms": 6,
+    "longest_flushes": [
+      {
+        "begin_ns": 3963101841,
+        "end_ns": 4048006807,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "publish",
+        "slab": 0,
+        "offset": 0,
+        "bytes": 268435456,
+        "ns": 84904966,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 3407783448,
+        "end_ns": 3476000153,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "publish",
+        "slab": 0,
+        "offset": 0,
+        "bytes": 268435456,
+        "ns": 68216705,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 3894791977,
+        "end_ns": 3962824282,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 0,
+        "offset": 0,
+        "bytes": 268435456,
+        "ns": 68032305,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 2308190526,
+        "end_ns": 2374585214,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "publish",
+        "slab": 0,
+        "offset": 0,
+        "bytes": 268435456,
+        "ns": 66394688,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 2855285269,
+        "end_ns": 2920868589,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "publish",
+        "slab": 0,
+        "offset": 0,
+        "bytes": 268435456,
+        "ns": 65583320,
+        "overlapping_missed_ticks": 1
+      }
+    ],
+    "counts": {
+      "iterations": 80,
+      "persisted_copperlists": 80,
+      "persisted_keyframes": 1,
+      "dropped_copperlists": 0,
+      "dropped_keyframes": 0,
+      "offered": 80,
+      "accepted": 80
+    },
+    "peak_dirty_including_inflight_bytes": 8261632
+  },
+  "base-normal-2-inline-0": {
+    "revision": "cfa498792e36bd84e5012c4b166c1815db8c4dfc",
+    "times_ns": {
+      "submission": {
+        "mean": 28887511.019166667,
+        "p50": 153749,
+        "p95": 149960689,
+        "p99": 226948992,
+        "max": 315005654
+      },
+      "record": {
+        "mean": 28887270.294166666,
+        "p50": 153699,
+        "p95": 149960059,
+        "p99": 226948362,
+        "max": 315005444
+      },
+      "flush": {
+        "mean": 50332810.09623431,
+        "p50": 61190604,
+        "p95": 137192747,
+        "p99": 177139459,
+        "max": 187719198
+      },
+      "tick": {
+        "mean": 28888838.26333333,
+        "p50": 155410,
+        "p95": 149961769,
+        "p99": 226950232,
+        "max": 315006904
+      },
+      "final_drain": {
+        "mean": 144314412,
+        "p50": 144314412,
+        "p95": 144314412,
+        "p99": 144314412,
+        "max": 144314412
+      }
+    },
+    "msync": {
+      "count": 239,
+      "request_bytes": {
+        "mean": 268435456,
+        "p50": 268435456,
+        "p95": 268435456,
+        "p99": 268435456,
+        "max": 268435456
+      },
+      "total_bytes": 64156073984,
+      "distinct_pages": 262144,
+      "order": {
+        "overlap": 235
+      },
+      "slab_switches": 164,
+      "mean_contiguous_run_bytes": 268435456,
+      "completion_inversions": 0
+    },
+    "over_50ms": 269,
+    "longest_flushes": [
+      {
+        "begin_ns": 29738790637,
+        "end_ns": 29926509835,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 1,
+        "offset": 0,
+        "bytes": 268435456,
+        "ns": 187719198,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 28741688799,
+        "end_ns": 28927562113,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 1,
+        "offset": 0,
+        "bytes": 268435456,
+        "ns": 185873314,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 29407189662,
+        "end_ns": 29584329121,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 1,
+        "offset": 0,
+        "bytes": 268435456,
+        "ns": 177139459,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 27769892357,
+        "end_ns": 27939873477,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 1,
+        "offset": 0,
+        "bytes": 268435456,
+        "ns": 169981120,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 28177890397,
+        "end_ns": 28334797986,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 1,
+        "offset": 0,
+        "bytes": 268435456,
+        "ns": 156907589,
+        "overlapping_missed_ticks": 1
+      }
+    ],
+    "counts": {
+      "iterations": 1200,
+      "persisted_copperlists": 1200,
+      "persisted_keyframes": 1,
+      "dropped_copperlists": 0,
+      "dropped_keyframes": 0,
+      "offered": 1200,
+      "accepted": 1200
+    }
+  },
+  "base-normal-8-inline-0": {
+    "revision": "cfa498792e36bd84e5012c4b166c1815db8c4dfc",
+    "times_ns": {
+      "submission": {
+        "mean": 11404545.441666666,
+        "p50": 88130,
+        "p95": 67901514,
+        "p99": 138390125,
+        "max": 307587971
+      },
+      "record": {
+        "mean": 11404316.966666667,
+        "p50": 87890,
+        "p95": 67901264,
+        "p99": 138389835,
+        "max": 307587741
+      },
+      "flush": {
+        "mean": 45194478.677824266,
+        "p50": 60749207,
+        "p95": 122436679,
+        "p99": 213628246,
+        "max": 267792691
+      },
+      "tick": {
+        "mean": 11406658.440833334,
+        "p50": 91720,
+        "p95": 67905264,
+        "p99": 138391485,
+        "max": 307589841
+      },
+      "final_drain": {
+        "mean": 119453066,
+        "p50": 119453066,
+        "p95": 119453066,
+        "p99": 119453066,
+        "max": 119453066
+      }
+    },
+    "msync": {
+      "count": 239,
+      "request_bytes": {
+        "mean": 268435456,
+        "p50": 268435456,
+        "p95": 268435456,
+        "p99": 268435456,
+        "max": 268435456
+      },
+      "total_bytes": 64156073984,
+      "distinct_pages": 262144,
+      "order": {
+        "overlap": 235
+      },
+      "slab_switches": 164,
+      "mean_contiguous_run_bytes": 268435456,
+      "completion_inversions": 0
+    },
+    "over_50ms": 112,
+    "longest_flushes": [
+      {
+        "begin_ns": 45156672227,
+        "end_ns": 45424464918,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 2,
+        "offset": 0,
+        "bytes": 268435456,
+        "ns": 267792691,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 54506681720,
+        "end_ns": 54723452210,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 3,
+        "offset": 0,
+        "bytes": 268435456,
+        "ns": 216770490,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 19306670317,
+        "end_ns": 19520298563,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 1,
+        "offset": 0,
+        "bytes": 268435456,
+        "ns": 213628246,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 19856683147,
+        "end_ns": 20059926854,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 1,
+        "offset": 0,
+        "bytes": 268435456,
+        "ns": 203243707,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 44606666171,
+        "end_ns": 44747724399,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 2,
+        "offset": 0,
+        "bytes": 268435456,
+        "ns": 141058228,
+        "overlapping_missed_ticks": 1
+      }
+    ],
+    "counts": {
+      "iterations": 1200,
+      "persisted_copperlists": 1200,
+      "persisted_keyframes": 1,
+      "dropped_copperlists": 0,
+      "dropped_keyframes": 0,
+      "offered": 1200,
+      "accepted": 1200
+    }
+  },
+  "pr1-normal-2-async-0-spatial": {
+    "revision": "748be92278fe54e2b7260f925b3711a3b6e50ec5",
+    "times_ns": {
+      "submission": {
+        "mean": 2115.725,
+        "p50": 1590,
+        "p95": 4550,
+        "p99": 5670,
+        "max": 5670
+      },
+      "record": {
+        "mean": 9301602.942857143,
+        "p50": 144490,
+        "p95": 124967154,
+        "p99": 127857526,
+        "max": 127857526
+      },
+      "flush": {
+        "mean": 15435237.764705881,
+        "p50": 3749959,
+        "p95": 62218863,
+        "p99": 63104540,
+        "max": 63104540
+      },
+      "tick": {
+        "mean": 8622.7,
+        "p50": 5320,
+        "p95": 10080,
+        "p99": 189839,
+        "max": 189839
+      },
+      "final_drain": {
+        "mean": 108718906,
+        "p50": 108718906,
+        "p95": 108718906,
+        "p99": 108718906,
+        "max": 108718906
+      }
+    },
+    "msync": {
+      "count": 51,
+      "request_bytes": {
+        "mean": 1034199.8431372549,
+        "p50": 4096,
+        "p95": 8257536,
+        "p99": 8257536,
+        "max": 8257536
+      },
+      "total_bytes": 52744192,
+      "distinct_pages": 12836,
+      "order": {
+        "overlap": 13,
+        "forward_gap": 22,
+        "backward": 15
+      },
+      "slab_switches": 0,
+      "mean_contiguous_run_bytes": 1034199.8431372549,
+      "completion_inversions": 0
+    },
+    "over_50ms": 0,
+    "longest_flushes": [
+      {
+        "begin_ns": 3740764104,
+        "end_ns": 3803868644,
+        "thread": "cu-output",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 0,
+        "offset": 52477952,
+        "bytes": 8257536,
+        "ns": 63104540,
+        "overlapping_missed_ticks": 0
+      },
+      {
+        "begin_ns": 3090820412,
+        "end_ns": 3153615854,
+        "thread": "cu-output",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 0,
+        "offset": 44089344,
+        "bytes": 8257536,
+        "ns": 62795442,
+        "overlapping_missed_ticks": 0
+      },
+      {
+        "begin_ns": 1790793072,
+        "end_ns": 1853011935,
+        "thread": "cu-output",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 0,
+        "offset": 27312128,
+        "bytes": 8257536,
+        "ns": 62218863,
+        "overlapping_missed_ticks": 0
+      },
+      {
+        "begin_ns": 2440767472,
+        "end_ns": 2501763059,
+        "thread": "cu-output",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 0,
+        "offset": 35700736,
+        "bytes": 8257536,
+        "ns": 60995587,
+        "overlapping_missed_ticks": 0
+      },
+      {
+        "begin_ns": 3997178371,
+        "end_ns": 4054822969,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "publish",
+        "slab": 0,
+        "offset": 60866560,
+        "bytes": 3006464,
+        "ns": 57644598,
+        "overlapping_missed_ticks": 0
+      }
+    ],
+    "counts": {
+      "iterations": 80,
+      "persisted_copperlists": 70,
+      "persisted_keyframes": 1,
+      "dropped_copperlists": 10,
+      "dropped_keyframes": 0,
+      "offered": 80,
+      "accepted": 70
+    },
+    "peak_dirty_including_inflight_bytes": 8261632
+  },
+  "pr1-normal-2-async-0": {
+    "revision": "748be92278fe54e2b7260f925b3711a3b6e50ec5",
+    "times_ns": {
+      "submission": {
+        "mean": 1674.7616666666668,
+        "p50": 1510,
+        "p95": 3780,
+        "p99": 4480,
+        "max": 5450
+      },
+      "record": {
+        "mean": 12629994.5748503,
+        "p50": 70330,
+        "p95": 125673529,
+        "p99": 146151525,
+        "max": 403072219
+      },
+      "flush": {
+        "mean": 32030650.06870229,
+        "p50": 26692934,
+        "p95": 63957287,
+        "p99": 150759691,
+        "max": 285995066
+      },
+      "tick": {
+        "mean": 4814.7108333333335,
+        "p50": 3650,
+        "p95": 8750,
+        "p99": 11030,
+        "max": 102450
+      },
+      "final_drain": {
+        "mean": 253970714,
+        "p50": 253970714,
+        "p95": 253970714,
+        "p99": 253970714,
+        "max": 253970714
+      }
+    },
+    "msync": {
+      "count": 393,
+      "request_bytes": {
+        "mean": 1917115.6030534352,
+        "p50": 4096,
+        "p95": 8257536,
+        "p99": 8257536,
+        "max": 8257536
+      },
+      "total_bytes": 753426432,
+      "distinct_pages": 183646,
+      "order": {
+        "overlap": 221,
+        "forward_gap": 131,
+        "backward": 38
+      },
+      "slab_switches": 134,
+      "mean_contiguous_run_bytes": 1917115.6030534352,
+      "completion_inversions": 0
+    },
+    "over_50ms": 0,
+    "longest_flushes": [
+      {
+        "begin_ns": 38641285539,
+        "end_ns": 38927280605,
+        "thread": "cu-output",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 1,
+        "offset": 228638720,
+        "bytes": 8257536,
+        "ns": 285995066,
+        "overlapping_missed_ticks": 0
+      },
+      {
+        "begin_ns": 55094033363,
+        "end_ns": 55333975991,
+        "thread": "cu-output",
+        "kind": "flush",
+        "trigger": "publish",
+        "slab": 2,
+        "offset": 178307072,
+        "bytes": 4096,
+        "ns": 239942628,
+        "overlapping_missed_ticks": 0
+      },
+      {
+        "begin_ns": 5791273635,
+        "end_ns": 5960460506,
+        "thread": "cu-output",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 0,
+        "offset": 77643776,
+        "bytes": 8257536,
+        "ns": 169186871,
+        "overlapping_missed_ticks": 0
+      },
+      {
+        "begin_ns": 59841291243,
+        "end_ns": 59992050934,
+        "thread": "cu-output",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 2,
+        "offset": 228638720,
+        "bytes": 8257536,
+        "ns": 150759691,
+        "overlapping_missed_ticks": 0
+      },
+      {
+        "begin_ns": 26091261448,
+        "end_ns": 26234806266,
+        "thread": "cu-output",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 1,
+        "offset": 69255168,
+        "bytes": 8257536,
+        "ns": 143544818,
+        "overlapping_missed_ticks": 0
+      }
+    ],
+    "counts": {
+      "iterations": 1200,
+      "persisted_copperlists": 1002,
+      "persisted_keyframes": 1,
+      "dropped_copperlists": 198,
+      "dropped_keyframes": 0,
+      "offered": 1200,
+      "accepted": 1002
+    }
+  },
+  "pr1-normal-2-inline-0-spatial": {
+    "revision": "748be92278fe54e2b7260f925b3711a3b6e50ec5",
+    "times_ns": {
+      "submission": {
+        "mean": 10598531.55,
+        "p50": 116419,
+        "p95": 123811576,
+        "p99": 180423360,
+        "max": 180423360
+      },
+      "record": {
+        "mean": 10598359.8,
+        "p50": 116309,
+        "p95": 123811386,
+        "p99": 180423260,
+        "max": 180423260
+      },
+      "flush": {
+        "mean": 18537490.509090908,
+        "p50": 4499795,
+        "p95": 66244043,
+        "p99": 67085490,
+        "max": 67085490
+      },
+      "tick": {
+        "mean": 10601658.05,
+        "p50": 118470,
+        "p95": 123813006,
+        "p99": 180424950,
+        "max": 180424950
+      },
+      "final_drain": {
+        "mean": 140537251,
+        "p50": 140537251,
+        "p95": 140537251,
+        "p99": 140537251,
+        "max": 140537251
+      }
+    },
+    "msync": {
+      "count": 55,
+      "request_bytes": {
+        "mean": 1095717.2363636363,
+        "p50": 4096,
+        "p95": 8257536,
+        "p99": 8257536,
+        "max": 8257536
+      },
+      "total_bytes": 60264448,
+      "distinct_pages": 14669,
+      "order": {
+        "overlap": 15,
+        "forward_gap": 23,
+        "backward": 16
+      },
+      "slab_switches": 0,
+      "mean_contiguous_run_bytes": 1095717.2363636363,
+      "completion_inversions": 0
+    },
+    "over_50ms": 7,
+    "longest_flushes": [
+      {
+        "begin_ns": 1694044880,
+        "end_ns": 1761130370,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 0,
+        "offset": 27312128,
+        "bytes": 8257536,
+        "ns": 67085490,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 3894055591,
+        "end_ns": 3960995942,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 0,
+        "offset": 60866560,
+        "bytes": 8257536,
+        "ns": 66940351,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 2244042342,
+        "end_ns": 2310286385,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 0,
+        "offset": 35700736,
+        "bytes": 8257536,
+        "ns": 66244043,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 1808634235,
+        "end_ns": 1874391090,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "publish",
+        "slab": 0,
+        "offset": 35700736,
+        "bytes": 4096,
+        "ns": 65756855,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 3344052107,
+        "end_ns": 3408227178,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 0,
+        "offset": 52477952,
+        "bytes": 8257536,
+        "ns": 64175071,
+        "overlapping_missed_ticks": 1
+      }
+    ],
+    "counts": {
+      "iterations": 80,
+      "persisted_copperlists": 80,
+      "persisted_keyframes": 1,
+      "dropped_copperlists": 0,
+      "dropped_keyframes": 0,
+      "offered": 80,
+      "accepted": 80
+    },
+    "peak_dirty_including_inflight_bytes": 8261632
+  },
+  "pr1-normal-2-inline-0": {
+    "revision": "748be92278fe54e2b7260f925b3711a3b6e50ec5",
+    "times_ns": {
+      "submission": {
+        "mean": 13683578.351666667,
+        "p50": 69220,
+        "p95": 140985771,
+        "p99": 170535627,
+        "max": 234646957
+      },
+      "record": {
+        "mean": 13683336.176666666,
+        "p50": 68950,
+        "p95": 140985491,
+        "p99": 170535357,
+        "max": 234646637
+      },
+      "flush": {
+        "mean": 33963770.66309013,
+        "p50": 31842794,
+        "p95": 77907055,
+        "p99": 101926366,
+        "max": 142480761
+      },
+      "tick": {
+        "mean": 13685394.864166666,
+        "p50": 70930,
+        "p95": 140990261,
+        "p99": 170540157,
+        "max": 234651257
+      },
+      "final_drain": {
+        "mean": 72746142,
+        "p50": 72746142,
+        "p95": 72746142,
+        "p99": 72746142,
+        "max": 72746142
+      }
+    },
+    "msync": {
+      "count": 466,
+      "request_bytes": {
+        "mean": 1936230.1802575106,
+        "p50": 4096,
+        "p95": 8257536,
+        "p99": 8257536,
+        "max": 8257536
+      },
+      "total_bytes": 902283264,
+      "distinct_pages": 219934,
+      "order": {
+        "overlap": 275,
+        "forward_gap": 149,
+        "backward": 38
+      },
+      "slab_switches": 170,
+      "mean_contiguous_run_bytes": 1936230.1802575106,
+      "completion_inversions": 0
+    },
+    "over_50ms": 109,
+    "longest_flushes": [
+      {
+        "begin_ns": 15530094816,
+        "end_ns": 15672575577,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "publish",
+        "slab": 0,
+        "offset": 0,
+        "bytes": 4096,
+        "ns": 142480761,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 8302444413,
+        "end_ns": 8419797263,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 0,
+        "offset": 127975424,
+        "bytes": 8257536,
+        "ns": 117352850,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 53402436274,
+        "end_ns": 53507808568,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 3,
+        "offset": 10534912,
+        "bytes": 8257536,
+        "ns": 105372294,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 14902413401,
+        "end_ns": 15007244768,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 0,
+        "offset": 228638720,
+        "bytes": 8257536,
+        "ns": 104831367,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 34152425901,
+        "end_ns": 34254352267,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 1,
+        "offset": 253804544,
+        "bytes": 8257536,
+        "ns": 101926366,
+        "overlapping_missed_ticks": 1
+      }
+    ],
+    "counts": {
+      "iterations": 1200,
+      "persisted_copperlists": 1200,
+      "persisted_keyframes": 1,
+      "dropped_copperlists": 0,
+      "dropped_keyframes": 0,
+      "offered": 1200,
+      "accepted": 1200
+    }
+  },
+  "pr1-normal-8-inline-0": {
+    "revision": "748be92278fe54e2b7260f925b3711a3b6e50ec5",
+    "times_ns": {
+      "submission": {
+        "mean": 12973694.681666667,
+        "p50": 67180,
+        "p95": 126346311,
+        "p99": 177271641,
+        "max": 338535511
+      },
+      "record": {
+        "mean": 12973437.899166666,
+        "p50": 67000,
+        "p95": 126346121,
+        "p99": 177271511,
+        "max": 338535291
+      },
+      "flush": {
+        "mean": 32757011.326180257,
+        "p50": 26694243,
+        "p95": 74065945,
+        "p99": 157461373,
+        "max": 201100674
+      },
+      "tick": {
+        "mean": 12975620.474166667,
+        "p50": 68630,
+        "p95": 126347961,
+        "p99": 177272901,
+        "max": 338537341
+      },
+      "final_drain": {
+        "mean": 81534920,
+        "p50": 81534920,
+        "p95": 81534920,
+        "p99": 81534920,
+        "max": 81534920
+      }
+    },
+    "msync": {
+      "count": 466,
+      "request_bytes": {
+        "mean": 1936230.1802575106,
+        "p50": 4096,
+        "p95": 8257536,
+        "p99": 8257536,
+        "max": 8257536
+      },
+      "total_bytes": 902283264,
+      "distinct_pages": 219934,
+      "order": {
+        "overlap": 275,
+        "forward_gap": 149,
+        "backward": 38
+      },
+      "slab_switches": 170,
+      "mean_contiguous_run_bytes": 1936230.1802575106,
+      "completion_inversions": 0
+    },
+    "over_50ms": 110,
+    "longest_flushes": [
+      {
+        "begin_ns": 38539314459,
+        "end_ns": 38740415133,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 2,
+        "offset": 52477952,
+        "bytes": 8257536,
+        "ns": 201100674,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 6639306553,
+        "end_ns": 6834218223,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 0,
+        "offset": 102809600,
+        "bytes": 8257536,
+        "ns": 194911670,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 25455114001,
+        "end_ns": 25641401642,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "publish",
+        "slab": 1,
+        "offset": 119586816,
+        "bytes": 4096,
+        "ns": 186287641,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 41442165641,
+        "end_ns": 41626433778,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "publish",
+        "slab": 2,
+        "offset": 102809600,
+        "bytes": 4096,
+        "ns": 184268137,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 17089322591,
+        "end_ns": 17246783964,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "section flush",
+        "slab": 0,
+        "offset": 262193152,
+        "bytes": 6242304,
+        "ns": 157461373,
+        "overlapping_missed_ticks": 1
+      }
+    ],
+    "counts": {
+      "iterations": 1200,
+      "persisted_copperlists": 1200,
+      "persisted_keyframes": 1,
+      "dropped_copperlists": 0,
+      "dropped_keyframes": 0,
+      "offered": 1200,
+      "accepted": 1200
+    }
+  },
+  "pr2-normal-2-async-0-spatial": {
+    "revision": "1f4659fc7f673ae793bb8342275325920aee8b33",
+    "times_ns": {
+      "submission": {
+        "mean": 1078.625,
+        "p50": 860,
+        "p95": 2970,
+        "p99": 4270,
+        "max": 4270
+      },
+      "record": {
+        "mean": 185811.86111111112,
+        "p50": 148119,
+        "p95": 328589,
+        "p99": 626829,
+        "max": 626829
+      },
+      "flush": {
+        "mean": 28543708.69387755,
+        "p50": 25375871,
+        "p95": 96010272,
+        "p99": 103720418,
+        "max": 103720418
+      },
+      "tick": {
+        "mean": 7364.225,
+        "p50": 2500,
+        "p95": 8690,
+        "p99": 162359,
+        "max": 162359
+      },
+      "final_drain": {
+        "mean": 175120846,
+        "p50": 175120846,
+        "p95": 175120846,
+        "p99": 175120846,
+        "max": 175120846
+      }
+    },
+    "msync": {
+      "count": 98,
+      "request_bytes": {
+        "mean": 554590.0408163265,
+        "p50": 753664,
+        "p95": 1503232,
+        "p99": 1503232,
+        "max": 1503232
+      },
+      "total_bytes": 54349824,
+      "distinct_pages": 13202,
+      "order": {
+        "overlap": 21,
+        "forward_gap": 45,
+        "backward": 31
+      },
+      "slab_switches": 0,
+      "mean_contiguous_run_bytes": 554590.0408163265,
+      "completion_inversions": 0
+    },
+    "over_50ms": 0,
+    "longest_flushes": [
+      {
+        "begin_ns": 3363242443,
+        "end_ns": 3466962861,
+        "thread": "cu-output",
+        "kind": "flush",
+        "trigger": "bytes",
+        "slab": 0,
+        "offset": 55480320,
+        "bytes": 1499136,
+        "ns": 103720418,
+        "overlapping_missed_ticks": 0
+      },
+      {
+        "begin_ns": 3963188521,
+        "end_ns": 4064410596,
+        "thread": "cu-output",
+        "kind": "flush",
+        "trigger": "bytes",
+        "slab": 0,
+        "offset": 63868928,
+        "bytes": 1499136,
+        "ns": 101222075,
+        "overlapping_missed_ticks": 0
+      },
+      {
+        "begin_ns": 1363188164,
+        "end_ns": 1462291927,
+        "thread": "cu-output",
+        "kind": "flush",
+        "trigger": "bytes",
+        "slab": 0,
+        "offset": 30314496,
+        "bytes": 1499136,
+        "ns": 99103763,
+        "overlapping_missed_ticks": 0
+      },
+      {
+        "begin_ns": 2213199844,
+        "end_ns": 2311213790,
+        "thread": "cu-output",
+        "kind": "flush",
+        "trigger": "bytes",
+        "slab": 0,
+        "offset": 40951808,
+        "bytes": 1499136,
+        "ns": 98013946,
+        "overlapping_missed_ticks": 0
+      },
+      {
+        "begin_ns": 2863233986,
+        "end_ns": 2959244258,
+        "thread": "cu-output",
+        "kind": "flush",
+        "trigger": "bytes",
+        "slab": 0,
+        "offset": 49340416,
+        "bytes": 1499136,
+        "ns": 96010272,
+        "overlapping_missed_ticks": 0
+      }
+    ],
+    "counts": {
+      "iterations": 80,
+      "persisted_copperlists": 72,
+      "persisted_keyframes": 1,
+      "dropped_copperlists": 8,
+      "dropped_keyframes": 0,
+      "offered": 80,
+      "accepted": 72
+    },
+    "peak_dirty_including_inflight_bytes": 1515520
+  },
+  "pr2-normal-2-async-0": {
+    "revision": "1f4659fc7f673ae793bb8342275325920aee8b33",
+    "times_ns": {
+      "submission": {
+        "mean": 1189.0133333333333,
+        "p50": 660,
+        "p95": 4230,
+        "p99": 5070,
+        "max": 18920
+      },
+      "record": {
+        "mean": 159712.46834061135,
+        "p50": 128309,
+        "p95": 296469,
+        "p99": 354469,
+        "max": 814927
+      },
+      "flush": {
+        "mean": 44711943.25227687,
+        "p50": 28427521,
+        "p95": 123849075,
+        "p99": 177593854,
+        "max": 312789485
+      },
+      "tick": {
+        "mean": 4473.06,
+        "p50": 4970,
+        "p95": 9370,
+        "p99": 11780,
+        "max": 156689
+      },
+      "final_drain": {
+        "mean": 235456019,
+        "p50": 235456019,
+        "p95": 235456019,
+        "p99": 235456019,
+        "max": 235456019
+      }
+    },
+    "msync": {
+      "count": 1098,
+      "request_bytes": {
+        "mean": 629109.0418943533,
+        "p50": 753664,
+        "p95": 1503232,
+        "p99": 1503232,
+        "max": 1503232
+      },
+      "total_bytes": 690761728,
+      "distinct_pages": 167885,
+      "order": {
+        "overlap": 307,
+        "forward_gap": 450,
+        "backward": 336,
+        "adjacent": 2
+      },
+      "slab_switches": 119,
+      "mean_contiguous_run_bytes": 629109.0418943533,
+      "completion_inversions": 0
+    },
+    "over_50ms": 0,
+    "longest_flushes": [
+      {
+        "begin_ns": 48962558083,
+        "end_ns": 49275347568,
+        "thread": "cu-output",
+        "kind": "flush",
+        "trigger": "bytes",
+        "slab": 2,
+        "offset": 47091712,
+        "bytes": 1499136,
+        "ns": 312789485,
+        "overlapping_missed_ticks": 0
+      },
+      {
+        "begin_ns": 50362465860,
+        "end_ns": 50586794660,
+        "thread": "cu-output",
+        "kind": "flush",
+        "trigger": "bytes",
+        "slab": 2,
+        "offset": 63868928,
+        "bytes": 1499136,
+        "ns": 224328800,
+        "overlapping_missed_ticks": 0
+      },
+      {
+        "begin_ns": 56062472791,
+        "end_ns": 56268771009,
+        "thread": "cu-output",
+        "kind": "flush",
+        "trigger": "section close",
+        "slab": 2,
+        "offset": 127975424,
+        "bytes": 4096,
+        "ns": 206298218,
+        "overlapping_missed_ticks": 0
+      },
+      {
+        "begin_ns": 36640247081,
+        "end_ns": 36839118909,
+        "thread": "cu-output",
+        "kind": "flush",
+        "trigger": "age",
+        "slab": 1,
+        "offset": 161529856,
+        "bytes": 4096,
+        "ns": 198871828,
+        "overlapping_missed_ticks": 0
+      },
+      {
+        "begin_ns": 36962426743,
+        "end_ns": 37159852865,
+        "thread": "cu-output",
+        "kind": "flush",
+        "trigger": "bytes",
+        "slab": 1,
+        "offset": 166780928,
+        "bytes": 1499136,
+        "ns": 197426122,
+        "overlapping_missed_ticks": 0
+      }
+    ],
+    "counts": {
+      "iterations": 1200,
+      "persisted_copperlists": 916,
+      "persisted_keyframes": 1,
+      "dropped_copperlists": 284,
+      "dropped_keyframes": 0,
+      "offered": 1200,
+      "accepted": 916
+    }
+  },
+  "pr2-normal-2-inline-0-spatial": {
+    "revision": "1f4659fc7f673ae793bb8342275325920aee8b33",
+    "times_ns": {
+      "submission": {
+        "mean": 2449906.0125,
+        "p50": 144230,
+        "p95": 399679,
+        "p99": 92650769,
+        "max": 92650769
+      },
+      "record": {
+        "mean": 2449768.1375,
+        "p50": 144070,
+        "p95": 399559,
+        "p99": 92650609,
+        "max": 92650609
+      },
+      "flush": {
+        "mean": 38206897.67021277,
+        "p50": 27151009,
+        "p95": 119744229,
+        "p99": 132372826,
+        "max": 132372826
+      },
+      "tick": {
+        "mean": 45178377.275,
+        "p50": 25796254,
+        "p95": 130125724,
+        "p99": 221593227,
+        "max": 221593227
+      },
+      "final_drain": {
+        "mean": 142151114,
+        "p50": 142151114,
+        "p95": 142151114,
+        "p99": 142151114,
+        "max": 142151114
+      }
+    },
+    "msync": {
+      "count": 94,
+      "request_bytes": {
+        "mean": 641677.6170212766,
+        "p50": 753664,
+        "p95": 1503232,
+        "p99": 1507328,
+        "max": 1507328
+      },
+      "total_bytes": 60317696,
+      "distinct_pages": 14669,
+      "order": {
+        "overlap": 18,
+        "forward_gap": 38,
+        "backward": 28,
+        "adjacent": 9
+      },
+      "slab_switches": 0,
+      "mean_contiguous_run_bytes": 709619.9529411765,
+      "completion_inversions": 0
+    },
+    "over_50ms": 33,
+    "longest_flushes": [
+      {
+        "begin_ns": 3285050152,
+        "end_ns": 3417422978,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "bytes",
+        "slab": 0,
+        "offset": 58478592,
+        "bytes": 1503232,
+        "ns": 132372826,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 2005908314,
+        "end_ns": 2137660611,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "bytes",
+        "slab": 0,
+        "offset": 39452672,
+        "bytes": 1499136,
+        "ns": 131752297,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 4132689349,
+        "end_ns": 4261264138,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "bytes",
+        "slab": 0,
+        "offset": 70004736,
+        "bytes": 1503232,
+        "ns": 128574789,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 3822735558,
+        "end_ns": 3949567593,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "bytes",
+        "slab": 0,
+        "offset": 66867200,
+        "bytes": 1503232,
+        "ns": 126832035,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 1645545413,
+        "end_ns": 1765289642,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "bytes",
+        "slab": 0,
+        "offset": 33312768,
+        "bytes": 1503232,
+        "ns": 119744229,
+        "overlapping_missed_ticks": 1
+      }
+    ],
+    "counts": {
+      "iterations": 80,
+      "persisted_copperlists": 80,
+      "persisted_keyframes": 1,
+      "dropped_copperlists": 0,
+      "dropped_keyframes": 0,
+      "offered": 80,
+      "accepted": 80
+    },
+    "peak_dirty_including_inflight_bytes": 1536000
+  },
+  "pr2-normal-2-inline-0": {
+    "revision": "1f4659fc7f673ae793bb8342275325920aee8b33",
+    "times_ns": {
+      "submission": {
+        "mean": 1895268.8958333333,
+        "p50": 82640,
+        "p95": 354238,
+        "p99": 74497909,
+        "max": 167830935
+      },
+      "record": {
+        "mean": 1895069.5408333333,
+        "p50": 82510,
+        "p95": 353998,
+        "p99": 74497569,
+        "max": 167830605
+      },
+      "flush": {
+        "mean": 50073265.70166667,
+        "p50": 32584094,
+        "p95": 126754723,
+        "p99": 197812928,
+        "max": 346280183
+      },
+      "tick": {
+        "mean": 51802777.711666666,
+        "p50": 33247048,
+        "p95": 160232944,
+        "p99": 224637684,
+        "max": 351657133
+      },
+      "final_drain": {
+        "mean": 190151910,
+        "p50": 190151910,
+        "p95": 190151910,
+        "p99": 190151910,
+        "max": 190151910
+      }
+    },
+    "msync": {
+      "count": 1200,
+      "request_bytes": {
+        "mean": 752947.2,
+        "p50": 753664,
+        "p95": 1503232,
+        "p99": 1503232,
+        "max": 1507328
+      },
+      "total_bytes": 903536640,
+      "distinct_pages": 219934,
+      "order": {
+        "overlap": 319,
+        "forward_gap": 383,
+        "backward": 298,
+        "adjacent": 196
+      },
+      "slab_switches": 172,
+      "mean_contiguous_run_bytes": 897255.8490566037,
+      "completion_inversions": 0
+    },
+    "over_50ms": 565,
+    "longest_flushes": [
+      {
+        "begin_ns": 26177153113,
+        "end_ns": 26523433296,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "bytes",
+        "slab": 1,
+        "offset": 108810240,
+        "bytes": 1503232,
+        "ns": 346280183,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 46037653870,
+        "end_ns": 46327584866,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "bytes",
+        "slab": 2,
+        "offset": 142364672,
+        "bytes": 1503232,
+        "ns": 289930996,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 30757776803,
+        "end_ns": 31042202637,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "bytes",
+        "slab": 1,
+        "offset": 175919104,
+        "bytes": 1503232,
+        "ns": 284425834,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 16597686696,
+        "end_ns": 16868593248,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "bytes",
+        "slab": 0,
+        "offset": 232390656,
+        "bytes": 1499136,
+        "ns": 270906552,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 36662154455,
+        "end_ns": 36908781413,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "section close",
+        "slab": 1,
+        "offset": 253804544,
+        "bytes": 4096,
+        "ns": 246626958,
+        "overlapping_missed_ticks": 1
+      }
+    ],
+    "counts": {
+      "iterations": 1200,
+      "persisted_copperlists": 1200,
+      "persisted_keyframes": 1,
+      "dropped_copperlists": 0,
+      "dropped_keyframes": 0,
+      "offered": 1200,
+      "accepted": 1200
+    }
+  },
+  "pr2-normal-8-inline-0": {
+    "revision": "1f4659fc7f673ae793bb8342275325920aee8b33",
+    "times_ns": {
+      "submission": {
+        "mean": 481300.7841666667,
+        "p50": 89939,
+        "p95": 331299,
+        "p99": 24288525,
+        "max": 27320933
+      },
+      "record": {
+        "mean": 481112.12583333335,
+        "p50": 89790,
+        "p95": 331069,
+        "p99": 24288275,
+        "max": 27320723
+      },
+      "flush": {
+        "mean": 44893699.89958506,
+        "p50": 29556048,
+        "p95": 105149918,
+        "p99": 174371250,
+        "max": 253353404
+      },
+      "tick": {
+        "mean": 45521345.03666667,
+        "p50": 33020573,
+        "p95": 134988810,
+        "p99": 193959233,
+        "max": 302050254
+      },
+      "final_drain": {
+        "mean": 42407955,
+        "p50": 42407955,
+        "p95": 42407955,
+        "p99": 42407955,
+        "max": 42407955
+      }
+    },
+    "msync": {
+      "count": 1205,
+      "request_bytes": {
+        "mean": 749931.7112033195,
+        "p50": 753664,
+        "p95": 1503232,
+        "p99": 1503232,
+        "max": 1507328
+      },
+      "total_bytes": 903667712,
+      "distinct_pages": 219934,
+      "order": {
+        "overlap": 327,
+        "forward_gap": 403,
+        "backward": 311,
+        "adjacent": 160
+      },
+      "slab_switches": 170,
+      "mean_contiguous_run_bytes": 862278.3511450381,
+      "completion_inversions": 0
+    },
+    "over_50ms": 536,
+    "longest_flushes": [
+      {
+        "begin_ns": 27557156435,
+        "end_ns": 27810509839,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "section close",
+        "slab": 1,
+        "offset": 144752640,
+        "bytes": 4096,
+        "ns": 253353404,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 33316971228,
+        "end_ns": 33548331272,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "bytes",
+        "slab": 1,
+        "offset": 237776896,
+        "bytes": 1503232,
+        "ns": 231360044,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 4317152078,
+        "end_ns": 4547576631,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "bytes",
+        "slab": 0,
+        "offset": 66867200,
+        "bytes": 1503232,
+        "ns": 230424553,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 44915422946,
+        "end_ns": 45113553550,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "bytes",
+        "slab": 2,
+        "offset": 157642752,
+        "bytes": 1499136,
+        "ns": 198130604,
+        "overlapping_missed_ticks": 1
+      },
+      {
+        "begin_ns": 51963227530,
+        "end_ns": 52159441574,
+        "thread": "main",
+        "kind": "flush",
+        "trigger": "age",
+        "slab": 2,
+        "offset": 262193152,
+        "bytes": 4096,
+        "ns": 196214044,
+        "overlapping_missed_ticks": 1
+      }
+    ],
+    "counts": {
+      "iterations": 1200,
+      "persisted_copperlists": 1200,
+      "persisted_keyframes": 1,
+      "dropped_copperlists": 0,
+      "dropped_keyframes": 0,
+      "offered": 1200,
+      "accepted": 1200
+    }
+  }
+}

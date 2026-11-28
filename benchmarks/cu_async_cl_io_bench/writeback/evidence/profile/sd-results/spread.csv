@@ -1,0 +1,55 @@
+configuration,repeats,metric,min,max
+base-normal-2-async,1,tick p99 ns,10070,10070
+base-normal-2-async,1,max tick ns,152210,152210
+base-normal-2-async,1,missed ticks,0,0
+base-normal-2-async,1,drops,165,165
+base-normal-2-async,1,final drain ns,98592159,98592159
+base-normal-2-async,1,total requested bytes,56103010304,56103010304
+base-normal-2-inline,1,tick p99 ns,226950232,226950232
+base-normal-2-inline,1,max tick ns,315006904,315006904
+base-normal-2-inline,1,missed ticks,269,269
+base-normal-2-inline,1,drops,0,0
+base-normal-2-inline,1,final drain ns,144314412,144314412
+base-normal-2-inline,1,total requested bytes,64156073984,64156073984
+base-normal-8-inline,1,tick p99 ns,138391485,138391485
+base-normal-8-inline,1,max tick ns,307589841,307589841
+base-normal-8-inline,1,missed ticks,112,112
+base-normal-8-inline,1,drops,0,0
+base-normal-8-inline,1,final drain ns,119453066,119453066
+base-normal-8-inline,1,total requested bytes,64156073984,64156073984
+pr1-normal-2-async,1,tick p99 ns,11030,11030
+pr1-normal-2-async,1,max tick ns,102450,102450
+pr1-normal-2-async,1,missed ticks,0,0
+pr1-normal-2-async,1,drops,198,198
+pr1-normal-2-async,1,final drain ns,253970714,253970714
+pr1-normal-2-async,1,total requested bytes,753426432,753426432
+pr1-normal-2-inline,1,tick p99 ns,170540157,170540157
+pr1-normal-2-inline,1,max tick ns,234651257,234651257
+pr1-normal-2-inline,1,missed ticks,109,109
+pr1-normal-2-inline,1,drops,0,0
+pr1-normal-2-inline,1,final drain ns,72746142,72746142
+pr1-normal-2-inline,1,total requested bytes,902283264,902283264
+pr1-normal-8-inline,1,tick p99 ns,177272901,177272901
+pr1-normal-8-inline,1,max tick ns,338537341,338537341
+pr1-normal-8-inline,1,missed ticks,110,110
+pr1-normal-8-inline,1,drops,0,0
+pr1-normal-8-inline,1,final drain ns,81534920,81534920
+pr1-normal-8-inline,1,total requested bytes,902283264,902283264
+pr2-normal-2-async,1,tick p99 ns,11780,11780
+pr2-normal-2-async,1,max tick ns,156689,156689
+pr2-normal-2-async,1,missed ticks,0,0
+pr2-normal-2-async,1,drops,284,284
+pr2-normal-2-async,1,final drain ns,235456019,235456019
+pr2-normal-2-async,1,total requested bytes,690761728,690761728
+pr2-normal-2-inline,1,tick p99 ns,224637684,224637684
+pr2-normal-2-inline,1,max tick ns,351657133,351657133
+pr2-normal-2-inline,1,missed ticks,565,565
+pr2-normal-2-inline,1,drops,0,0
+pr2-normal-2-inline,1,final drain ns,190151910,190151910
+pr2-normal-2-inline,1,total requested bytes,903536640,903536640
+pr2-normal-8-inline,1,tick p99 ns,193959233,193959233
+pr2-normal-8-inline,1,max tick ns,302050254,302050254
+pr2-normal-8-inline,1,missed ticks,536,536
+pr2-normal-8-inline,1,drops,0,0
+pr2-normal-8-inline,1,final drain ns,42407955,42407955
+pr2-normal-8-inline,1,total requested bytes,903667712,903667712
